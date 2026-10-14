@@ -12,7 +12,7 @@ import { MarkdownText } from '../MarkdownText'
 import { OmpMark, PiMark, PrimeMark } from '../ui'
 import { InlineText } from './syntax'
 import { TranscriptImage } from './TranscriptImage'
-import { ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
+import { LiveWorkVerb, ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
 
 function imageSource(part: Extract<MessagePart, { type: 'image' }>): string | undefined {
   if (part.dataTruncated || !part.data || !part.mimeType || !/^image\/(png|jpeg|gif|webp)$/i.test(part.mimeType) || !/^[a-z\d+/=\s]+$/i.test(part.data)) return undefined
@@ -175,7 +175,7 @@ export const AssistantMessage = memo(
           {renderNarrativeWithActivity(after, 'after', showReasoning, showTools, message.streaming)}
           {message.streaming && !hasVisibleActivity ? (
             <div className="streaming-state" aria-live="polite">
-              <ThinkingDots /> {HARNESS_SHORT_NAMES[harness]} is working
+              <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
             </div>
           ) : null}
           {!message.streaming ? <MessageActions message={message} text={copyableText} /> : null}

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { CaretDown, CaretRight, Check, CircleNotch, Record as RecordIcon, WarningCircle } from '../icons'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { coalesceAssistantTurns } from '../Transcript'
@@ -520,6 +520,47 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     }
   }, [active?.id, active?.status, active?.activity, active?.turns, candidateSessionPath, sessionKey])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const pinnedToBottomRef = useRef(true)
+  const previousTargetRef = useRef<string | null>(null)
+  const matchedDiskTranscript =
+    active !== undefined &&
+    candidateSessionPath !== undefined &&
+    diskTranscript !== null &&
+    diskTranscript.sessionKey === sessionKey &&
+    diskTranscript.specId === active.id &&
+    diskTranscript.path === candidateSessionPath &&
+    diskTranscript.messages.length > 0
+      ? diskTranscript.messages
+      : null
+  const rawTranscript = active ? (matchedDiskTranscript ?? active.messages) : []
+  const renderedMessages = useMemo(() => coalesceAssistantTurns(rawTranscript), [rawTranscript])
+  const scrollTargetKey = active ? `${sessionKey ?? ''}:${active.id}:${matchedDiskTranscript ? 'disk' : 'inline'}` : null
+
+  useEffect(() => {
+    if (!scrollTargetKey) {
+      previousTargetRef.current = null
+      return
+    }
+    const switchedTarget = previousTargetRef.current !== scrollTargetKey
+    if (switchedTarget) {
+      previousTargetRef.current = scrollTargetKey
+      pinnedToBottomRef.current = true
+    }
+    if (!switchedTarget && !pinnedToBottomRef.current) return
+    const scrollToBottom = () => {
+      const scroller = scrollRef.current
+      if (!scroller) return
+      if (typeof scroller.scrollTo === 'function') {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' })
+      }
+      scroller.scrollTop = scroller.scrollHeight
+    }
+    scrollToBottom()
+    const frame = requestAnimationFrame(scrollToBottom)
+    return () => cancelAnimationFrame(frame)
+  }, [scrollTargetKey, renderedMessages, active?.activity, active?.status])
+
   if (!specialists.length || !active) {
     return (
       <div className="inspector-scroll scroll-area specialists-panel">
@@ -531,17 +572,6 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     )
   }
 
-  const matchedDiskTranscript =
-    candidateSessionPath !== undefined &&
-    diskTranscript !== null &&
-    diskTranscript.sessionKey === sessionKey &&
-    diskTranscript.specId === active.id &&
-    diskTranscript.path === candidateSessionPath &&
-    diskTranscript.messages.length > 0
-      ? diskTranscript.messages
-      : null
-  const rawTranscript = matchedDiskTranscript ?? active.messages
-  const renderedMessages = coalesceAssistantTurns(rawTranscript)
   const metaBadges = [
     active.model,
     active.thinking ? `think:${active.thinking}` : undefined,
@@ -572,7 +602,14 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           )
         })}
       </div>
-      <div className="inspector-scroll scroll-area specialists-panel__body">
+      <div
+        ref={scrollRef}
+        className="inspector-scroll scroll-area specialists-panel__body"
+        onScroll={() => {
+          const scroller = scrollRef.current
+          if (scroller) pinnedToBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120
+        }}
+      >
         <header className="specialist-header">
           <div className="specialist-header__top">
             <div className="specialist-header__title">

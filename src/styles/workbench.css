@@ -88,4 +88,4 @@ body.is-resizing-horizontal, body.is-resizing-horizontal * { cursor: row-resize 
 .pi-mark svg { width: 82%; height: 82%; display: block; pointer-events: none; }
 .pi-welcome-mark { display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #f4f8fb; filter: drop-shadow(0 10px 26px rgba(2,10,22,.34)) drop-shadow(0 0 18px rgba(56,189,248,.12)); }
 .pi-welcome-mark svg { width: 100%; height: 100%; display: block; pointer-events: none; }
-.ph-duotone { flex-shrink: 0; }
+.ph-icon { flex-shrink: 0; }

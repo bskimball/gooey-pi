@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { Composer } from '../../src/components/Composer'
 import { groupModelsByProvider } from '../../src/hooks/useProviderCatalog'
-import type { BrowserAnnotation, PrimeModelDescriptor, PrimeProviderDescriptor, PromptDeliveryIntent, PromptImage, SessionRecord, TerminalPromptContext, TerminalSelectionContext } from '../../src/types/api'
+import type { BrowserAnnotation, PrimeModelDescriptor, PrimeProviderDescriptor, PromptDeliveryIntent, PromptImage, SessionRecord, SkillRecord, TerminalPromptContext, TerminalSelectionContext } from '../../src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -74,9 +74,10 @@ interface RenderOptions {
   getTerminalContext?: () => TerminalPromptContext | undefined
   onClearTerminalSelection?: Mock<() => void>
   sessions?: SessionRecord[]
+  skills?: SkillRecord[]
 }
 
-function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async () => undefined), onRemoveAnnotation = vi.fn(), onClearAnnotations = vi.fn(), terminalSelection, getTerminalContext, onClearTerminalSelection = vi.fn(), sessions = [] }: RenderOptions = {}) {
+function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async () => undefined), onRemoveAnnotation = vi.fn(), onClearAnnotations = vi.fn(), terminalSelection, getTerminalContext, onClearTerminalSelection = vi.fn(), sessions = [], skills = [] }: RenderOptions = {}) {
   act(() =>
     root.render(
       <Composer
@@ -91,7 +92,7 @@ function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async
         fastAvailable
         imageInputSupported
         messageEnterAction="queue"
-        skills={[]}
+        skills={skills}
         sessions={sessions}
         annotations={annotations}
         terminalSelection={terminalSelection}
@@ -126,6 +127,30 @@ const clickSend = async () => {
     await Promise.resolve()
   })
 }
+
+describe('Composer skill mentions', () => {
+  it('sends the exact catalog skill file so the agent can load an explicitly invoked skill', async () => {
+    const skill: SkillRecord = {
+      id: '9acaa400e83a609a1d6be9bb61dc04da',
+      name: 'improve-codebase-architecture',
+      description: 'Review codebase architecture',
+      kind: 'skill',
+      location: 'user',
+      path: '/home/user/.pi/agent/skills/improve-codebase-architecture/SKILL.md',
+      enabled: true,
+    }
+    const { onSend } = renderComposer({ skills: [skill, { ...skill, id: 'disabled', name: 'disabled-skill', path: '/disabled/SKILL.md', enabled: false }] })
+    await setDraft('Use @improve-codebase-architecture and @disabled-skill')
+    await clickSend()
+
+    const [prompt] = onSend.mock.calls[0]
+    expect(prompt.startsWith('Use @improve-codebase-architecture and @disabled-skill\n\n')).toBe(true)
+    expect(prompt).toContain(`catalog id "${skill.id}"`)
+    expect(prompt).toContain(`Read the skill file at ${JSON.stringify(skill.path)}`)
+    expect(prompt).toContain('relative paths from the directory containing that skill file')
+    expect(prompt).not.toContain('/disabled/SKILL.md')
+  })
+})
 
 describe('Composer session mentions', () => {
   it('closes an accepted mention and only reopens it after editing back into the query', async () => {

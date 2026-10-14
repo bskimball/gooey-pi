@@ -8,7 +8,7 @@ import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
-import { LiveElapsed, ThinkingDots, WorkDisclosure } from './transcript/timeline'
+import { LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
 export { tokenizeSyntax } from './transcript/syntax'
@@ -71,7 +71,7 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
           ? <WorkDisclosure message={message} parts={message.parts} showReasoning={showReasoning} showTools={showTools} running />
           : <>
             {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} streaming /> : null)}
-            <div className="streaming-state" aria-live="polite"><ThinkingDots /> {HARNESS_SHORT_NAMES[harness]} is working <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
+            <div className="streaming-state" aria-live="polite"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /> <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
           </>}
       </div>
     </article>
@@ -120,7 +120,7 @@ export function Transcript({ messages, git, harness = 'prime', loading, active =
             : <div className={`message message--${message.role}`}>{message.parts.map((part, partIndex) => part.type === 'text' ? <span key={partIndex}>{part.text}</span> : null)}</div>}
         </ErrorBoundary>)}
         {active && !activeAssistantId ? <article className="message message--assistant transcript-active-placeholder" aria-live="polite">
-          <div className="assistant-mark"><AssistantMark harness={harness} /></div><div className="streaming-state"><ThinkingDots /> {HARNESS_SHORT_NAMES[harness]} is working</div>
+          <div className="assistant-mark"><AssistantMark harness={harness} /></div><div className="streaming-state"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /></div>
         </article> : null}
         <div />
       </div>

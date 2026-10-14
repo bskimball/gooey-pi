@@ -142,7 +142,7 @@
   --shadow-popover: 0 16px 40px rgba(2, 8, 18, .52), 0 2px 10px rgba(2, 8, 18, .32);
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 /* `clip` rather than `hidden`: an overflow:hidden box is still a scroll container, so
    focusing a control that sits below the fold - a checkbox near the bottom of Settings -
    lets the browser scroll the whole shell out of view, with no scrollbar and no wheel

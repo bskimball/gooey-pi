@@ -721,7 +721,7 @@ export const Composer = memo(function Composer({
                 title={fastAvailable ? `Use ${agentName} priority service tier` : `The installed ${agentName} RPC runtime does not expose fast mode`}
                 onClick={() => onFastChange(!fast)}
               >
-                <Lightning size={12} weight={fast ? 'fill' : 'duotone'} /> <span className="fast-mode-toggle__label">Fast</span>
+                <Lightning size={12} /> <span className="fast-mode-toggle__label">Fast</span>
               </button>
             ) : null}
             <CheckoutPicker catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} onExecute={onExecuteCheckout} />

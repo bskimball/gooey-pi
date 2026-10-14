@@ -1,10 +1,15 @@
-import { createElement } from 'react'
+// @vitest-environment jsdom
+
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { Transcript } from '../../src/components/Transcript'
-import { LiveElapsed } from '../../src/components/transcript/timeline'
+import { LiveElapsed, LiveWorkVerb } from '../../src/components/transcript/timeline'
 import { replayPrimeEvents } from '../../src/lib/events/reduce'
 import type { TranscriptMessage } from '../../src/types/api'
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('../../src/components/ui', async () => {
   const actual = await vi.importActual<typeof import('../../src/components/ui')>('../../src/components/ui')
@@ -40,12 +45,13 @@ describe('transcript rendering', () => {
     expect(html).toContain('activity-line--reasoning')
     expect(html).toContain('work-disclosure__rail')
     expect(html).toContain('work-disclosure__status')
-    expect(html).toContain('role="status"><span>Thinking</span>')
+    expect(html).toContain('role="status"><span class="sr-only">Thinking</span><span class="live-work-verb" aria-hidden="true">Thinking</span>')
     expect(html).toContain('Checking <strong>the workspace</strong> now.')
     expect(html).not.toContain('**the workspace**')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('thinking-dots')
-    expect(html.match(/thinking-dots[\s\S]*?<span><\/span><span><\/span><span><\/span>/)).not.toBeNull()
+    expect(html).toContain('thinking-dots__wave')
+    expect(html.match(/thinking-dots__wave[\s\S]*?thinking-dots__wave-swell[\s\S]*?thinking-dots__shark[\s\S]*?thinking-dots__wave-main[\s\S]*?thinking-dots__wave-crest/)).not.toBeNull()
   })
 
   it.each([
@@ -61,7 +67,7 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('activity-line--reasoning')
     expect(html.includes('activity-line--tool')).toBe(showTools)
-    expect(html).toContain('role="status"><span>Working</span>')
+    expect(html).toContain('role="status"><span class="sr-only">Working</span><span class="live-work-verb" aria-hidden="true">Working</span>')
   })
 
   it.each([[true, 'Working'], [false, 'Thinking']] as const)(
@@ -75,7 +81,7 @@ describe('transcript rendering', () => {
           { type: 'toolResult', name: 'read_file', text: 'done' },
         ],
       }], false, showTools)
-      expect(html).toContain(`role="status"><span>${status}</span>`)
+      expect(html).toContain(`role="status"><span class="sr-only">${status}</span>`)
     },
   )
 
@@ -86,12 +92,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read_file' },
       { type: 'tool_execution_update', toolCallId: 'tool-1', toolName: 'read_file', partialResult: 'halfway' },
     ])
-    expect(render(updating, false, false)).toContain('role="status"><span>Working</span>')
+    expect(render(updating, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
 
     const finished = replayPrimeEvents(updating, [
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
-    expect(render(finished, false, false)).toContain('role="status"><span>Thinking</span>')
+    expect(render(finished, false, false)).toContain('role="status"><span class="sr-only">Thinking</span>')
   })
 
   it('keeps late results at their call site and follows newer reasoning or narrative', () => {
@@ -103,12 +109,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
     expect(reasoning[0].parts.map((part) => part.type)).toEqual(['thinking', 'toolCall', 'toolResult', 'thinking'])
-    expect(render(reasoning)).toContain('role="status"><span>Thinking</span>')
+    expect(render(reasoning)).toContain('role="status"><span class="sr-only">Thinking</span>')
 
     const narrative = replayPrimeEvents(reasoning, [
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Final answer.' } },
     ])
-    expect(render(narrative, false, false)).toContain('role="status"><span>Working</span>')
+    expect(render(narrative, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
   })
 
   it('keeps external active work readable until the whole agent turn is done', () => {
@@ -176,7 +182,7 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Current response')
     expect(html).toContain('Pick this up')
-    expect(html.match(new RegExp(`${shortName} is working`, 'g'))).toHaveLength(1)
+    expect(html.match(new RegExp(`<span class="sr-only">${shortName} is working</span>`, 'g'))).toHaveLength(1)
     expect(html).not.toContain('transcript-active-placeholder')
   })
 
@@ -467,6 +473,45 @@ describe('transcript rendering', () => {
     const statusStart = html.indexOf('work-disclosure__status')
     expect(timelineEnd).toBeGreaterThan(-1)
     expect(statusStart).toBeGreaterThan(timelineEnd)
+  })
+
+  it('cycles decorative work verbs while keeping the screen-reader status label stable until mode changes', () => {
+    vi.useFakeTimers()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      act(() => {
+        root.render(createElement(LiveWorkVerb, { mode: 'Thinking' }))
+      })
+      expect(container.querySelector('.sr-only')?.textContent).toBe('Thinking')
+      expect(container.querySelector('.live-work-verb')?.getAttribute('aria-hidden')).toBe('true')
+      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Thinking')
+
+      act(() => {
+        vi.advanceTimersByTime(2_600)
+      })
+      expect(container.querySelector('.sr-only')?.textContent).toBe('Thinking')
+      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Sounding')
+
+      act(() => {
+        root.render(createElement(LiveWorkVerb, { mode: 'Working' }))
+      })
+      expect(container.querySelector('.sr-only')?.textContent).toBe('Working')
+      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Working')
+
+      act(() => {
+        vi.advanceTimersByTime(2_600)
+      })
+      expect(container.querySelector('.sr-only')?.textContent).toBe('Working')
+      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Cresting')
+    } finally {
+      act(() => {
+        root.unmount()
+      })
+      container.remove()
+      vi.useRealTimers()
+    }
   })
 
 })

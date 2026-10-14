@@ -9,7 +9,7 @@ import './styles.css'
 const root = document.getElementById('root')
 if (!root) throw new Error('GooeyPi root element was not found')
 
-const ICON_CONTEXT = { weight: 'duotone' as const }
+const ICON_CONTEXT = { weight: 'regular' as const }
 
 createRoot(root).render(
   <StrictMode>

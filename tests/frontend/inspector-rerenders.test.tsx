@@ -273,5 +273,44 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     expect(container.textContent).toContain('Chain step 1 full disk transcript')
     expect(container.textContent).toContain('Branch summary notice')
     expect(container.querySelector('.specialist-header__source')).toBeNull()
+
+    const bodyScroller = container.querySelector<HTMLDivElement>('.specialists-panel__body')
+    expect(bodyScroller).not.toBeNull()
+    Object.defineProperty(bodyScroller!, 'scrollHeight', { configurable: true, value: 640 })
+    Object.defineProperty(bodyScroller!, 'clientHeight', { configurable: true, value: 240 })
+    bodyScroller!.scrollTop = 640
+
+    const updatedSessionBMessages: TranscriptMessage[] = [
+      ...sessionBMessages,
+      {
+        id: 'm-b-2',
+        role: 'assistant',
+        parts: [
+          { type: 'toolCall', id: 'wait-b', name: 'task_wait', args: { id: 'task_1' } },
+          {
+            type: 'toolResult',
+            name: 'task_wait',
+            text: 'task_1 settled sidekick · 1 turn\n\nNew specialist output at bottom',
+            details: { worker: { id: 'task_1', instanceId: 'inst-session-b', agent: 'sidekick', latestText: 'New specialist output at bottom' } },
+          },
+        ],
+      },
+    ]
+    Object.defineProperty(bodyScroller!, 'scrollHeight', { configurable: true, value: 920 })
+
+    await act(async () => {
+      root.render(
+        <SpecialistsPanel
+          messages={updatedSessionBMessages}
+          selectedId="task_1"
+          onSelect={vi.fn()}
+          homeDir="/home/test"
+          sessionKey="session-B"
+        />,
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).toContain('New specialist output at bottom')
+    expect(bodyScroller!.scrollTop).toBe(920)
   })
 })
