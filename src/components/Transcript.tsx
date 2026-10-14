@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
-import { LoaderCircle } from 'lucide-react'
+import { CircleNotch } from './icons'
 import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
 import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownText } from './MarkdownText'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
-import { OmpMark, PiMark, PrimeMark } from './ui'
+import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { LiveElapsed, ThinkingDots, WorkDisclosure } from './transcript/timeline'
@@ -62,7 +62,7 @@ function AssistantMark({ harness, size = 24 }: { harness: HarnessId; size?: numb
 }
 
 function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: { message: TranscriptMessage; harness: HarnessId; showReasoning: boolean; showTools: boolean }) {
-  const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage')
+  const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
   return (
     <article className="message message--assistant">
       <div className="assistant-mark"><AssistantMark harness={harness} /></div>
@@ -70,7 +70,7 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
         {visibleActivity
           ? <WorkDisclosure message={message} parts={message.parts} showReasoning={showReasoning} showTools={showTools} running />
           : <>
-            {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} /> : null)}
+            {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} streaming /> : null)}
             <div className="streaming-state" aria-live="polite"><ThinkingDots /> {HARNESS_SHORT_NAMES[harness]} is working <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
           </>}
       </div>
@@ -96,9 +96,9 @@ export function Transcript({ messages, git, harness = 'prime', loading, active =
     <div ref={scrollRef} className={transcriptClasses} aria-busy={loading} onScroll={updatePinnedState}>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       <div className="transcript__inner">
-        {loading ? <div className="transcript-loading"><LoaderCircle className="spin" size={16} /> Loading session…</div> : null}
+        {loading ? <div className="transcript-loading"><CircleNotch className="spin" size={16} /> Loading session…</div> : null}
         {!loading && messages.length === 0 ? <div className="session-welcome">
-          <AssistantMark harness={harness} size={34} />
+          <PiWelcomeMark size={88} />
           <h1>What should we work on?</h1>
           <p>{HARNESS_SHORT_NAMES[harness]} can inspect this project, edit files, run tools, and keep working across sessions.</p>
           <div className="prompt-suggestions">

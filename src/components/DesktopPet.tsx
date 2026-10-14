@@ -1,4 +1,4 @@
-import { AudioWaveform, Mic, MicOff, X } from 'lucide-react'
+import { Microphone, MicrophoneSlash, Waveform, X } from './icons'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PetDefinition, PrimeWorkApi } from '@/types/api'
@@ -215,8 +215,8 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
       </div>
       {voiceActive && voiceStatus ? <span className="desktop-pet__voice-status" role="status">{voiceStatus}</span> : null}
       <div className="desktop-pet__voice-controls" aria-label="Realtime voice controls">
-        {!voiceActive && onOpenVoice ? <button ref={voiceControlRef} type="button" aria-label="Open realtime voice" title="Open realtime voice" onClick={onOpenVoice}><AudioWaveform size={15} /></button> : null}
-        {voiceActive && onToggleVoiceMute ? <button ref={voiceControlRef} type="button" aria-label={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} title={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={onToggleVoiceMute}>{voiceMuted ? <MicOff size={15} /> : <Mic size={15} />}</button> : null}
+        {!voiceActive && onOpenVoice ? <button ref={voiceControlRef} type="button" aria-label="Open realtime voice" title="Open realtime voice" onClick={onOpenVoice}><Waveform size={15} /></button> : null}
+        {voiceActive && onToggleVoiceMute ? <button ref={voiceControlRef} type="button" aria-label={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} title={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={onToggleVoiceMute}>{voiceMuted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button> : null}
         {voiceActive && onCloseVoice ? <button type="button" aria-label="Close realtime voice" title="Close realtime voice" onClick={onCloseVoice}><X size={16} /></button> : null}
       </div>
       {voiceError ? <p className="desktop-pet__voice-error" role="alert">{voiceError}</p> : null}
@@ -230,7 +230,7 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
         >
           <span ref={dismissTargetRef} className="pet-dismiss-drawer__hitbox" aria-hidden="true" />
           <span className="pet-dismiss-drawer__visual">
-            <span className="pet-dismiss-drawer__target"><X size={28} strokeWidth={2.7} /></span>
+            <span className="pet-dismiss-drawer__target"><X size={28} /></span>
           </span>
         </div>,
         document.body,

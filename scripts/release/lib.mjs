@@ -270,7 +270,7 @@ export function assertAsarLayout(entries) {
   ]
   const missing = required.filter((entry) => !normalized.has(entry))
   if (missing.length) throw new Error(`ASAR is missing required runtime entries: ${missing.join(', ')}`)
-  const forbiddenPrefixes = ['node_modules/@xterm/', 'node_modules/lucide-react/', 'node_modules/react/', 'node_modules/react-dom/', 'node_modules/react-markdown/', 'node_modules/remark-gfm/']
+  const forbiddenPrefixes = ['node_modules/@xterm/', 'node_modules/@phosphor-icons/', 'node_modules/react/', 'node_modules/react-dom/', 'node_modules/react-markdown/', 'node_modules/remark-gfm/']
   const forbidden = [...normalized].find((entry) => forbiddenPrefixes.some((prefix) => entry.startsWith(prefix)))
   if (forbidden) throw new Error(`Renderer-only dependency was duplicated into the ASAR: ${forbidden}`)
 }

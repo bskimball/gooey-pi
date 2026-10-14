@@ -88,7 +88,9 @@ export function reconcileActiveHarness(
 ): Promise<AppSettings> {
   const detected = detectedHarnesses(statuses)
   return store.update((state) => {
-    if (detected.length && !detected.includes(state.settings.activeHarness)) {
+    if (statuses.pi.path) {
+      state.settings.activeHarness = 'pi'
+    } else if (detected.length && !detected.includes(state.settings.activeHarness)) {
       state.settings.activeHarness = detected[0]
     }
     return structuredClone(state.settings)

@@ -1,5 +1,5 @@
-import { ChevronDown, X } from 'lucide-react'
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode, type RefObject, type SelectHTMLAttributes } from 'react'
+import { CaretDown, Check, GlobeSimple, X } from './icons'
+import { Children, isValidElement, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SelectHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -16,24 +16,7 @@ export function IconButton({ label, size = 'regular', className = '', children, 
 }
 
 export function BrowserGlobe({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      className="browser-globe"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <ellipse cx="12" cy="12" rx="3.65" ry="9" />
-      <path d="M3 12h18" />
-    </svg>
-  )
+  return <GlobeSimple className="browser-globe" size={size} />
 }
 
 interface SelectControlProps extends SelectHTMLAttributes<HTMLSelectElement> {
@@ -42,14 +25,151 @@ interface SelectControlProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string
 }
 
-export function SelectControl({ icon, compact, className = '', label, children, ...props }: SelectControlProps) {
+export function SelectControl({ icon, compact, className = '', label, value, disabled, onChange, children }: SelectControlProps) {
+  const [open, setOpen] = useState(false)
+  const menuId = useId()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const options = Children.toArray(children).flatMap((child) => {
+    if (!isValidElement<{ value?: string | number; disabled?: boolean; title?: string; children?: ReactNode }>(child)) return []
+    const optionValue = String(child.props.value ?? '')
+    const optionLabel = typeof child.props.children === 'string' || typeof child.props.children === 'number'
+      ? String(child.props.children)
+      : optionValue
+    return [{ value: optionValue, label: optionLabel, detail: child.props.title, disabled: Boolean(child.props.disabled) }]
+  })
+  const selectedValue = String(value ?? options[0]?.value ?? '')
+  const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0]
+
+  const close = (restoreFocus = false) => {
+    setOpen(false)
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) setOpen(false)
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        close(true)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [open])
+
+  const focusOption = (targetIndex: number) => {
+    requestAnimationFrame(() => {
+      const items = rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')
+      if (!items?.length) return
+      const bounded = ((targetIndex % items.length) + items.length) % items.length
+      items[bounded]?.focus()
+    })
+  }
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      const enabledOptions = options.filter((option) => !option.disabled)
+      if (!enabledOptions.length) return
+      if (!open) {
+        setOpen(true)
+        const currentIndex = Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
+        focusOption(currentIndex)
+        return
+      }
+      const items = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])]
+      const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+      const currentIndex = activeIndex >= 0 ? activeIndex : Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
+      if (event.key === 'Home') focusOption(0)
+      else if (event.key === 'End') focusOption(items.length - 1)
+      else focusOption(currentIndex + (event.key === 'ArrowDown' ? 1 : -1))
+    }
+  }
+
   return (
-    <label className={`select-control ${compact ? 'select-control--compact' : ''} ${className}`} title={label}>
-      <span className="select-control__icon" aria-hidden="true">{icon}</span>
+    <div
+      ref={rootRef}
+      className={`select-control ${compact ? 'select-control--compact' : ''} ${className}`}
+      title={label}
+      onKeyDown={handleKeyDown}
+      onMouseDown={(event) => {
+        const target = event.target as HTMLElement | null
+        if (!target?.closest('.select-control__menu') && !target?.closest('.select-control__trigger')) {
+          event.preventDefault()
+        }
+      }}
+      onBlur={(event) => {
+        if (open && !event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+      }}
+      onClick={(event) => {
+        if (disabled) return
+        const target = event.target as HTMLElement | null
+        if (target?.closest('.select-control__menu') || target?.closest('.select-control__trigger')) return
+        triggerRef.current?.focus()
+        setOpen((current) => !current)
+      }}
+    >
+      {icon ? <span className="select-control__icon" aria-hidden="true">{icon}</span> : null}
       <span className="sr-only">{label}</span>
-      <select aria-label={label} {...props}>{children}</select>
-      <ChevronDown className="select-control__chevron" size={12} aria-hidden="true" />
-    </label>
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        className="select-control__trigger"
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? menuId : undefined}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selectedOption?.label ?? selectedValue}
+      </button>
+      <CaretDown className="select-control__chevron" size={11} aria-hidden="true" />
+      {open && !disabled ? (
+        <div className="worktree-picker__menu select-control__menu" id={menuId} role="listbox" aria-label={label}>
+          <div className="worktree-picker__heading">{label}</div>
+          <div className="worktree-picker__options">
+            {options.map((option) => {
+              const selected = option.value === selectedValue
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  disabled={option.disabled}
+                  className={`worktree-picker__option ${selected ? 'is-active' : ''}`}
+                  key={option.value}
+                  onClick={() => {
+                    close(true)
+                    onChange?.({ target: { value: option.value }, currentTarget: { value: option.value } } as ChangeEvent<HTMLSelectElement>)
+                  }}
+                >
+                  <span className="worktree-picker__check">{selected ? <Check size={13} /> : null}</span>
+                  <span className="worktree-picker__option-copy">
+                    <strong>{option.label}</strong>
+                    {option.detail ? <span>{option.detail}</span> : null}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -196,15 +316,93 @@ export function PrimeMark({ size = 24 }: { size?: number }) {
 }
 
 export function PiMark({ size = 24 }: { size?: number }) {
-  // A plain geometric π: overhanging crossbar with two inset legs, drawn in
-  // currentColor so the tile styling matches the other harness marks.
+  // Option 2 ("The Apex Fang"): a razor-edged shark-tooth "A" silhouette with
+  // a rolling wave-trough crossbar and under-crest accent.
   return (
     <span className="pi-mark" style={{ width: size, height: size }} role="img" aria-label="Pi">
-      <svg viewBox="0 0 120 90" fill="none" focusable="false" aria-hidden="true">
-        <rect x="12" y="12" width="96" height="13" rx="2.5" fill="currentColor" />
-        <rect x="31" y="25" width="13" height="53" rx="2.5" fill="currentColor" />
-        <rect x="76" y="25" width="13" height="43" rx="2.5" fill="currentColor" />
-        <path d="M76 68 h13 v4 a6 6 0 0 1 -6 6 h-1 a6 6 0 0 1 -6 -6 z" fill="currentColor" />
+      <svg viewBox="0 0 100 100" fill="none" focusable="false" aria-hidden="true">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M50 8 C60 24 74 51 86 81 C87.6 85 84 88.8 80 86.8 L67 80 C61 68 55.5 64 50 64 C44.5 64 39 68 33 80 L20 86.8 C16 88.8 12.4 85 14 81 C26 51 40 24 50 8 Z M50 27 C45 37 40.5 46 37.5 54.5 C45 49.5 55 49.5 62.5 54.5 C59.5 46 55 37 50 27 Z"
+          fill="currentColor"
+        />
+        <path
+          d="M27 89 C37 78 46 76 54 81.5 C60.5 85.8 66.5 84.5 73 79.5 C66.5 90 56.5 92.5 47 87.8 C39.5 84 33.5 85.2 27 89 Z"
+          fill="#38bdf8"
+        />
+      </svg>
+    </span>
+  )
+}
+
+export function PiWelcomeMark({ size = 88 }: { size?: number }) {
+  // Option 3 ("Seigaiha Fin Mon"): Japanese circular kamon crest with layered
+  // concentric Seigaiha ocean waves and a swept shark dorsal fin slicing upward.
+  const clipId = useId()
+  return (
+    <span className="pi-welcome-mark" style={{ width: size, height: size }} role="img" aria-label="Apex wave crest">
+      <svg viewBox="0 0 160 160" fill="none" focusable="false" aria-hidden="true">
+        <defs>
+          <clipPath id={clipId}>
+            <circle cx="80" cy="80" r="67" />
+          </clipPath>
+        </defs>
+        <circle cx="80" cy="80" r="74" fill="#0b1119" />
+        <g clipPath={`url(#${clipId})`}>
+          {/* Distant moon / sun disc in upper-left sky */}
+          <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" />
+          <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" />
+
+          {/* Swept shark dorsal fin slicing through the center */}
+          <path
+            d="M42 106 C45 68 63 38 99 20 C90 42 87 63 95 83 L86 87 L96 104 Z"
+            fill="currentColor"
+          />
+          {/* Woodblock inner bevel and gill-slit hatches on the dorsal fin */}
+          <path
+            d="M55 96 C58 68 71 44 93 26"
+            stroke="#0b1119"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M66 78 L78 72 M63 86 L77 80 M60 94 L76 88"
+            stroke="#0b1119"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+
+          {/* Left Seigaiha concentric wave mound */}
+          <circle cx="34" cy="118" r="42" fill="#0b1119" />
+          <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
+          <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
+          <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
+          <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+
+          {/* Right Seigaiha concentric wave mound */}
+          <circle cx="126" cy="118" r="42" fill="#0b1119" />
+          <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
+          <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
+          <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
+          <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+
+          {/* Foreground center Seigaiha wave crest */}
+          <circle cx="80" cy="136" r="46" fill="#0b1119" />
+          <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" />
+          <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" />
+          <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" />
+          <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" />
+          <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" />
+
+          {/* Ukiyo-e spray droplets around the fin */}
+          <circle cx="105" cy="54" r="2.2" fill="currentColor" />
+          <circle cx="111" cy="62" r="1.6" fill="#7dd3fc" />
+          <circle cx="36" cy="70" r="1.8" fill="#7dd3fc" />
+        </g>
+        {/* Kamon outer and inner crest rings */}
+        <circle cx="80" cy="80" r="73" stroke="currentColor" strokeWidth="3.5" />
+        <circle cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
       </svg>
     </span>
   )

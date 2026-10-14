@@ -546,8 +546,8 @@ describe('Composer context usage and stop control', () => {
     expect(dial?.textContent).toBe('—')
     expect(dial?.hasAttribute('aria-valuenow')).toBe(false)
     expect(dial?.title).toContain('unavailable')
-    expect(container.querySelector('button[aria-label="Stop Prime"] .lucide-square')).not.toBeNull()
-    expect(container.querySelector('.lucide-circle-stop')).toBeNull()
+    expect(container.querySelector('button[aria-label="Stop Prime"] .ph-square')).not.toBeNull()
+    expect(container.querySelector('.ph-stop-circle')).toBeNull()
   })
 })
 

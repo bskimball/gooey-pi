@@ -236,10 +236,29 @@ describe('pi session path authorization', () => {
 
   it('validates candidate shapes without touching the filesystem', () => {
     expect(isPiSessionPath('/root', `/root/${BUCKET}/${NAME_A}`)).toBe(true)
+    expect(isPiSessionPath('/root', `/root/rpc-workers/worker-1/${NAME_A}`)).toBe(true)
     expect(isPiSessionPath('/root', `/root/${NAME_A}`)).toBe(false)
     expect(isPiSessionPath('/root', `/root/${BUCKET}/deep/${NAME_A}`)).toBe(false)
     expect(isPiSessionPath('/root', `/elsewhere/${BUCKET}/${NAME_A}`)).toBe(false)
     expect(isPiSessionPath('/root', `/root/${BUCKET}/session.txt`)).toBe(false)
+  })
+
+  it('resolves rpc-workers/<instanceId>/worker.jsonl to the worker transcript file', async () => {
+    const { root, project, service } = setup()
+    const workerDir = join(root, 'rpc-workers', 'instance-123')
+    mkdirSync(workerDir, { recursive: true })
+    const actualFile = join(workerDir, NAME_A)
+    writePiSession(actualFile, {
+      cwd: project,
+      entries: [
+        piEntry('message', 'u1', null, { message: { role: 'user', content: 'Inspect repo' } }),
+        piEntry('message', 'a1', 'u1', { message: { role: 'assistant', content: 'Repo looks clean' } }),
+      ],
+    })
+    const loaded = await service.read(join(workerDir, 'worker.jsonl'))
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0]?.parts).toMatchObject([{ type: 'text', text: 'Inspect repo' }])
+    expect(loaded[1]?.parts).toMatchObject([{ type: 'text', text: 'Repo looks clean' }])
   })
 })
 

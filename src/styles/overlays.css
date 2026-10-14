@@ -1,6 +1,6 @@
 /* Modal and palette */
-.modal-backdrop, .palette-backdrop { position: fixed; z-index: 200; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(12,12,11,.32); backdrop-filter: blur(2px); animation: fade-in 130ms ease-out; }
-.modal { width: min(100%, 500px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: modal-in 150ms ease-out; }
+.modal-backdrop, .palette-backdrop { position: fixed; z-index: 200; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6, 11, 18, .46); backdrop-filter: blur(4px); animation: fade-in 130ms ease-out; }
+.modal { width: min(100%, 500px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: modal-in 150ms ease-out; }
 .modal__header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); }
 .modal__header h2 { margin: 0; font-size: 14px; font-weight: 560; }
 .modal__body { padding: 16px; color: var(--text-secondary); font-size: 12px; }
@@ -32,7 +32,7 @@
 .extension-questionnaire__submit > button:not(:disabled):hover, .extension-questionnaire__submit > button:not(:disabled):focus-visible { color: var(--text); border-color: var(--success); background: var(--success-soft); }
 .extension-questionnaire__submit > button:disabled { cursor: not-allowed; opacity: .55; }
 .extension-questionnaire__submit p { margin: 0; color: var(--text-secondary); font-size: 11px; }
-.command-palette { width: min(100%, 580px); align-self: flex-start; margin-top: min(14vh, 110px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: palette-in 150ms ease-out; }
+.command-palette { width: min(100%, 580px); align-self: flex-start; margin-top: min(14vh, 110px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: palette-in 150ms ease-out; }
 .command-search { height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--text-tertiary); }
 .command-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; }
 .command-search > button { padding: 0; background: transparent; }

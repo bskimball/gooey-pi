@@ -1,4 +1,4 @@
-import { Check, ChevronDown, FolderGit2 } from 'lucide-react'
+import { CaretDown, Check, FolderSimpleStar } from './icons'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CheckoutAction, CheckoutCatalog } from '@/types/api'
 
@@ -78,9 +78,9 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, onExec
         disabled={!enabled}
         onClick={() => setOpen((current) => !current)}
       >
-        <FolderGit2 size={12} />
+        <FolderSimpleStar size={12} />
         <span className="worktree-picker__label">{label}</span>
-        <ChevronDown className="worktree-picker__chevron" size={11} />
+        <CaretDown className="worktree-picker__chevron" size={11} />
       </button>
       {open && catalog ? (
         <div className="worktree-picker__menu" id={menuId} role="menu" aria-label={strategy === 'worktree' ? 'Git worktrees' : 'Git branches'}>

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../src/App'
 import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../src/hooks/useBrowserAnnotations'
 import type { InspectorProps } from '../../src/components/Inspector'
+import { SpecialistsPanel } from '../../src/components/inspector/SpecialistsPanel'
+import type { TranscriptMessage } from '../../src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -151,5 +153,125 @@ describe('useBrowserAnnotations identity', () => {
     const updated = seen[seen.length - 1]
     expect(updated).not.toBe(stable)
     expect(updated.annotations).toHaveLength(1)
+  })
+})
+
+describe('SpecialistsPanel transcript scoping and loading', () => {
+  it('isolates cached worker transcripts across parent sessions and loads task / chain step session files', async () => {
+    const readSession = vi.fn(async (filePath: string): Promise<TranscriptMessage[]> => {
+      if (filePath.includes('inst-session-a')) {
+        return [
+          { id: 'sys-a', role: 'system', parts: [{ type: 'text', text: '' }] },
+          { id: 'u-a', role: 'user', parts: [{ type: 'text', text: 'Session A full prompt' }] },
+          { id: 'a-a', role: 'assistant', parts: [{ type: 'text', text: 'Session A full disk transcript' }] },
+        ]
+      }
+      if (filePath.includes('inst-chain-step-1')) {
+        return [
+          { id: 'sys-c1', role: 'system', parts: [{ type: 'text', text: '' }] },
+          { id: 'u-c1', role: 'user', parts: [{ type: 'text', text: 'Chain step 1 prompt' }] },
+          { id: 'sys-c1-note', role: 'system', parts: [{ type: 'text', text: 'Branch summary notice' }] },
+          { id: 'a-c1', role: 'assistant', parts: [{ type: 'text', text: 'Chain step 1 full disk transcript' }] },
+        ]
+      }
+      throw new Error('Transcript not found')
+    })
+    Object.defineProperty(window, 'prime', {
+      configurable: true,
+      value: { sessions: { read: readSession } },
+    })
+
+    const sessionAMessages: TranscriptMessage[] = [
+      {
+        id: 'm-a',
+        role: 'assistant',
+        parts: [
+          { type: 'toolCall', id: 'call-a', name: 'task_start', args: { agent: 'sidekick', prompt: 'Session A prompt' } },
+          { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', instanceId: 'inst-session-a', agent: 'sidekick' } } },
+        ],
+      },
+    ]
+    const sessionBMessages: TranscriptMessage[] = [
+      {
+        id: 'm-b',
+        role: 'assistant',
+        parts: [
+          { type: 'toolCall', id: 'call-b', name: 'task_start', args: { agent: 'sidekick', prompt: 'Session B prompt' } },
+          { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', instanceId: 'inst-session-b', agent: 'sidekick' } } },
+          { type: 'toolCall', id: 'chain-b', name: 'task_chain', args: { steps: [{ agent: 'scout', prompt: 'Step 1' }, { agent: 'machinist', prompt: 'Step 2' }] } },
+          {
+            type: 'toolResult',
+            name: 'task_chain',
+            text: 'step 1 ok scout · 2s\nstep 2 ok machinist · 3s',
+            details: {
+              steps: [
+                { step: 1, agent: 'scout', instanceId: 'inst-chain-step-1', status: 'ok', report: 'Scout report' },
+                { step: 2, agent: 'machinist', status: 'ok', report: 'Machinist report' },
+              ],
+            },
+          },
+        ],
+      },
+    ]
+
+    await act(async () => {
+      root.render(
+        <SpecialistsPanel
+          messages={sessionAMessages}
+          selectedId="task_1"
+          onSelect={vi.fn()}
+          homeDir="/home/test"
+          sessionKey="session-A"
+        />,
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).toContain('Session A full disk transcript')
+    expect(container.querySelector('.specialist-header__source')).toBeNull()
+    const sessionATurns = [...container.querySelectorAll('.specialist-turn')]
+    expect(sessionATurns).toHaveLength(2)
+    expect(sessionATurns[0]?.classList.contains('specialist-turn--user')).toBe(true)
+    expect(sessionATurns[1]?.classList.contains('specialist-turn--assistant')).toBe(true)
+
+    // Switch to session B where task_1's disk read fails: must never show Session A's transcript.
+    await act(async () => {
+      root.render(
+        <SpecialistsPanel
+          messages={sessionBMessages}
+          selectedId="task_1"
+          onSelect={vi.fn()}
+          homeDir="/home/test"
+          sessionKey="session-B"
+        />,
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).not.toContain('Session A full disk transcript')
+    expect(container.querySelector('.specialist-header__source')).not.toBeNull()
+    const workOrderToggle = container.querySelector<HTMLButtonElement>('.specialist-turn--user .specialist-turn__toggle')
+    expect(workOrderToggle).not.toBeNull()
+    expect(workOrderToggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.textContent).not.toContain('Session B prompt')
+
+    await act(async () => { workOrderToggle?.click() })
+    expect(workOrderToggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).toContain('Session B prompt')
+
+    // Select chain step 1 in session B, which has an instanceId on disk.
+    await act(async () => {
+      root.render(
+        <SpecialistsPanel
+          messages={sessionBMessages}
+          selectedId="chain-b-step-1"
+          onSelect={vi.fn()}
+          homeDir="/home/test"
+          sessionKey="session-B"
+        />,
+      )
+    })
+    await act(async () => {})
+    expect(container.textContent).toContain('Chain step 1 full disk transcript')
+    expect(container.textContent).toContain('Branch summary notice')
+    expect(container.querySelector('.specialist-header__source')).toBeNull()
   })
 })

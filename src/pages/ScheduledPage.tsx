@@ -1,24 +1,24 @@
 import {
-  AlertTriangle,
+  ArrowClockwise,
   ArrowLeft,
-  CalendarClock,
+  CalendarDots,
+  CaretRight,
   Check,
-  CheckCircle2,
-  ChevronRight,
-  CircleDot,
-  Clock3,
-  FolderKanban,
+  CheckCircle,
+  Clock,
+  ClockCounterClockwise,
   Gauge,
-  History,
+  Kanban,
   Pause,
-  Pencil,
+  PencilSimple,
   Play,
   Plus,
-  Repeat2,
-  RotateCw,
-  Sparkles,
-  Trash2,
-} from 'lucide-react'
+  Record as RecordIcon,
+  Repeat,
+  Sparkle,
+  Trash,
+  Warning,
+} from '@/components/icons'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type {
   AutomationScheduleRecord,
@@ -286,18 +286,18 @@ function statusLabel(item: AutomationScheduleRecord) {
 }
 
 function statusIcon(item: AutomationScheduleRecord, size = 16) {
-  if (needsAttention(item)) return <AlertTriangle size={size} />
+  if (needsAttention(item)) return <Warning size={size} />
   if (item.status === 'paused') return <Pause size={size} />
   if (item.status === 'completed') return <Check size={size} />
-  return <RotateCw size={size} />
+  return <ArrowClockwise size={size} />
 }
 
 function runIcon(status: ScheduleRunRecord['status']) {
-  if (status === 'failed' || status === 'interrupted') return <AlertTriangle size={14} />
-  if (status === 'succeeded') return <CheckCircle2 size={14} />
-  if (status === 'running') return <RotateCw size={14} />
-  if (status === 'queued') return <Clock3 size={14} />
-  return <CircleDot size={14} />
+  if (status === 'failed' || status === 'interrupted') return <Warning size={14} />
+  if (status === 'succeeded') return <CheckCircle size={14} />
+  if (status === 'running') return <ArrowClockwise size={14} />
+  if (status === 'queued') return <Clock size={14} />
+  return <RecordIcon size={14} />
 }
 
 
@@ -451,7 +451,7 @@ export function ScheduledPage({
     )}>
       <form id="schedule-editor-form" className="schedule-editor" onSubmit={(event) => void save(event)}>
         <div className="schedule-editor__lead">
-          <Sparkles size={15} />
+          <Sparkle size={15} />
           <p>{HARNESS_SHORT_NAMES[harness]} runs this prompt unattended. You can always pause it or open the session produced by a run.</p>
         </div>
         <div className="schedule-editor__copy">
@@ -460,18 +460,18 @@ export function ScheduledPage({
         </div>
         <div className="schedule-editor__grid">
           <fieldset className="schedule-fieldset">
-            <legend><FolderKanban size={14} /> Destination</legend>
+            <legend><Kanban size={14} /> Destination</legend>
             <div className="schedule-radio-grid">
               <label className={form.targetKind === 'project' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'project'} onChange={() => setForm((current) => ({ ...current, targetKind: 'project' }))} /><span><strong>New session</strong><small>Start fresh in a project</small></span></label>
               <label className={form.targetKind === 'session' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'session'} onChange={() => setForm((current) => ({ ...current, targetKind: 'session' }))} /><span><strong>Existing session</strong><small>Continue a thread</small></span></label>
             </div>
             <label className="field"><span>Authorized project</span><select value={form.projectId} disabled={saving || !authorizedProjects.length} onChange={(event) => setProject(event.target.value)}><option value="">Choose a project</option>{authorizedProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
             {form.targetKind === 'session' ? <label className="field"><span>Session</span><select value={form.sessionId} disabled={saving || !eligibleSessions.length} onChange={(event) => setForm((current) => ({ ...current, sessionId: event.target.value }))}><option value="">Choose a session</option>{eligibleSessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}</select></label> : null}
-            {!authorizedProjects.length ? <p className="schedule-field-note schedule-field-note--warning"><AlertTriangle size={13} /> Add or authorize a project before scheduling work.</p> : <p className="schedule-field-note">{selectedProject?.primaryFolder}</p>}
+            {!authorizedProjects.length ? <p className="schedule-field-note schedule-field-note--warning"><Warning size={13} /> Add or authorize a project before scheduling work.</p> : <p className="schedule-field-note">{selectedProject?.primaryFolder}</p>}
           </fieldset>
 
           <fieldset className="schedule-fieldset">
-            <legend><CalendarClock size={14} /> Timing</legend>
+            <legend><CalendarDots size={14} /> Timing</legend>
             <div className="schedule-radio-grid schedule-radio-grid--timing">
               <label className={form.timingKind === 'once' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'once'} onChange={() => setForm((current) => ({ ...current, timingKind: 'once' }))} /><span><strong>Once</strong><small>One future run</small></span></label>
               <label className={form.timingKind === 'recurring' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'recurring'} onChange={() => setForm((current) => ({ ...current, timingKind: 'recurring' }))} /><span><strong>Recurring</strong><small>Repeat on a cadence</small></span></label>
@@ -502,7 +502,7 @@ export function ScheduledPage({
         </fieldset>
 
         <section className="schedule-preview" aria-live="polite" aria-label="Upcoming schedule preview">
-          <div><span><Clock3 size={14} /> Next occurrences</span>{previewing ? <small>Checking server…</small> : null}</div>
+          <div><span><Clock size={14} /> Next occurrences</span>{previewing ? <small>Checking server…</small> : null}</div>
           {previewError ? <p className="schedule-preview__error">Preview unavailable: {previewError}</p> : preview?.occurrences.length ? <ol>{preview.occurrences.slice(0, 5).map((occurrence) => <li key={occurrence}><i /><span>{formatDateTime(occurrence)}</span><small>{formatRelative(occurrence)}</small></li>)}</ol> : <p>{currentTiming ? 'No future occurrences returned.' : 'Complete the timing fields to preview runs.'}</p>}
         </section>
         {formError ? <p className="page-inline-error" role="alert">{formError}</p> : null}
@@ -524,14 +524,14 @@ export function ScheduledPage({
         </header>
         <div className="schedule-detail__actions" aria-label="Schedule actions">
           <button type="button" className="button button--primary" disabled={busy || selected.status === 'completed'} onClick={() => void perform(`run:${selected.id}`, () => onRunNow(selected.id), 'Run queued.')}><Play size={13} />{action === `run:${selected.id}` ? 'Queuing…' : 'Run now'}</button>
-          <button type="button" className="button" disabled={busy} onClick={() => openEdit(selected)}><Pencil size={13} /> Edit</button>
-          {selected.status === 'active' || selected.status === 'blocked' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`pause:${selected.id}`, () => onPause(selected.id), 'Schedule paused.')}><Pause size={13} />{action === `pause:${selected.id}` ? 'Pausing…' : 'Pause'}</button> : selected.status === 'paused' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`resume:${selected.id}`, () => onResume(selected.id), 'Schedule resumed.')}><RotateCw size={13} />{action === `resume:${selected.id}` ? 'Resuming…' : 'Resume'}</button> : null}
-          <button type="button" className="button schedule-delete" disabled={busy} onClick={() => deleteSchedule(selected)}><Trash2 size={13} /> Delete</button>
+          <button type="button" className="button" disabled={busy} onClick={() => openEdit(selected)}><PencilSimple size={13} /> Edit</button>
+          {selected.status === 'active' || selected.status === 'blocked' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`pause:${selected.id}`, () => onPause(selected.id), 'Schedule paused.')}><Pause size={13} />{action === `pause:${selected.id}` ? 'Pausing…' : 'Pause'}</button> : selected.status === 'paused' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`resume:${selected.id}`, () => onResume(selected.id), 'Schedule resumed.')}><ArrowClockwise size={13} />{action === `resume:${selected.id}` ? 'Resuming…' : 'Resume'}</button> : null}
+          <button type="button" className="button schedule-delete" disabled={busy} onClick={() => deleteSchedule(selected)}><Trash size={13} /> Delete</button>
         </div>
         {error ? <p className="page-inline-error" role="alert">Schedule catalog unavailable: {error}</p> : null}
         {actionError ? <p className="page-inline-error" role="alert">{actionError}</p> : null}
-        {actionNotice ? <p className="schedule-action-notice" role="status"><CheckCircle2 size={14} />{actionNotice}</p> : null}
-        {selected.blockedReason ? <div className="schedule-blocked" role="status"><AlertTriangle size={16} /><div><strong>Schedule needs attention</strong><p>{selected.blockedReason}</p></div></div> : null}
+        {actionNotice ? <p className="schedule-action-notice" role="status"><CheckCircle size={14} />{actionNotice}</p> : null}
+        {selected.blockedReason ? <div className="schedule-blocked" role="status"><Warning size={16} /><div><strong>Schedule needs attention</strong><p>{selected.blockedReason}</p></div></div> : null}
 
         <div className="schedule-detail__grid">
           <section className="schedule-detail__card schedule-detail__card--prompt"><span className="schedule-detail__eyebrow">Instruction</span><p>{selected.prompt}</p></section>
@@ -541,16 +541,16 @@ export function ScheduledPage({
         </div>
 
         <section className="schedule-history">
-          <header><div><History size={15} /><h2>Run history</h2></div><span>{selected.runs.length} total · latest 8</span></header>
+          <header><div><ClockCounterClockwise size={15} /><h2>Run history</h2></div><span>{selected.runs.length} total · latest 8</span></header>
           {recentRuns.length ? <div className="schedule-history__list">{recentRuns.map((run) => {
             const runSession = run.sessionId ? sessionMap.get(run.sessionId) : undefined
             return <article key={run.id} className={`schedule-run schedule-run--${run.status}`}>
               <div className="schedule-run__icon">{runIcon(run.status)}</div>
               <div className="schedule-run__main"><div><strong>{run.status}</strong><span>{run.trigger}</span></div><p>{run.error ?? `Scheduled for ${formatRunDate(run.scheduledFor)}`}</p></div>
               <time dateTime={run.queuedAt}>{formatRunDate(run.finishedAt ?? run.startedAt ?? run.queuedAt)}</time>
-              {run.sessionFile ? <button type="button" className="schedule-session-link" onClick={() => onOpenSession(run.sessionFile!)}>Open {runSession?.title ?? 'session'} <ChevronRight size={13} /></button> : <span className="schedule-run__no-session">No session</span>}
+              {run.sessionFile ? <button type="button" className="schedule-session-link" onClick={() => onOpenSession(run.sessionFile!)}>Open {runSession?.title ?? 'session'} <CaretRight size={13} /></button> : <span className="schedule-run__no-session">No session</span>}
             </article>
-          })}</div> : <div className="schedule-history__empty"><History size={20} /><p>No runs yet. Run it now or wait for the first occurrence.</p></div>}
+          })}</div> : <div className="schedule-history__empty"><ClockCounterClockwise size={20} /><p>No runs yet. Run it now or wait for the first occurrence.</p></div>}
         </section>
         {editorModal}
       </div></div>
@@ -573,15 +573,15 @@ export function ScheduledPage({
         const targetSession = item.target.kind === 'session' ? sessionMap.get(item.target.sessionId) : undefined
         return <button type="button" key={item.id} className="schedule-row" onClick={() => { setSelectedId(item.id); setActionError(''); setActionNotice('') }} aria-label={`Open ${item.title}`}>
           <span className={`schedule-row__status schedule-row__status--${needsAttention(item) ? 'attention' : item.status}`}>{statusIcon(item)}</span>
-          <span className="schedule-row__main"><span><strong>{item.title}</strong><i className={`schedule-state schedule-state--${needsAttention(item) ? 'attention' : item.status}`}>{statusLabel(item)}</i></span><small>{item.prompt}</small><span className="schedule-row__tags"><span><FolderKanban size={11} />{targetSession?.title ?? project?.name ?? 'Unavailable target'}</span><span><Repeat2 size={11} />{timingLabel(item.timing)}</span><span><Gauge size={11} />{models.find((model) => model.key === item.execution.model)?.name ?? item.execution.model}</span></span></span>
+          <span className="schedule-row__main"><span><strong>{item.title}</strong><i className={`schedule-state schedule-state--${needsAttention(item) ? 'attention' : item.status}`}>{statusLabel(item)}</i></span><small>{item.prompt}</small><span className="schedule-row__tags"><span><Kanban size={11} />{targetSession?.title ?? project?.name ?? 'Unavailable target'}</span><span><Repeat size={11} />{timingLabel(item.timing)}</span><span><Gauge size={11} />{models.find((model) => model.key === item.execution.model)?.name ?? item.execution.model}</span></span></span>
           <span className="schedule-row__next"><small>Next</small><strong>{item.nextRunAt ? formatDateTime(item.nextRunAt) : '—'}</strong><span>{item.nextRunAt ? formatRelative(item.nextRunAt) : 'No future run'}</span></span>
-          <ChevronRight className="schedule-row__chevron" size={16} />
+          <CaretRight className="schedule-row__chevron" size={16} />
         </button>
-      })}</div> : <EmptyState icon={<CalendarClock size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <button type="button" className="button button--primary" onClick={openCreate}><Plus size={13} /> Create schedule</button>}> {schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
+      })}</div> : <EmptyState icon={<CalendarDots size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <button type="button" className="button button--primary" onClick={openCreate}><Plus size={13} /> Create schedule</button>}> {schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
       {nativeHeartbeats.length ? <section className="native-heartbeats" aria-labelledby="native-heartbeats-title">
         <div className="native-heartbeats__header"><div><span className="schedule-page__kicker">Prime Agent</span><h2 id="native-heartbeats-title">Agent heartbeats</h2></div><small>Auto-discovered; the owning runtime is authoritative</small></div>
         <div className="native-heartbeats__list">{nativeHeartbeats.map((heartbeat) => <article key={heartbeat.id} className="native-heartbeat">
-          <span className={`schedule-row__status schedule-row__status--${heartbeat.status}`}><CalendarClock size={15} /></span>
+          <span className={`schedule-row__status schedule-row__status--${heartbeat.status}`}><CalendarDots size={15} /></span>
           <div className="native-heartbeat__main"><span><strong>{heartbeat.label || (heartbeat.source === 'heartbeat' ? 'Thread heartbeat' : 'Agent heartbeat')}</strong><i className={`schedule-state schedule-state--${heartbeat.status}`}>{heartbeat.status}</i></span><p>{heartbeat.prompt}</p><small>{heartbeat.schedule}{heartbeat.nextRunAt ? ` · next ${formatRelative(heartbeat.nextRunAt)}` : ''}</small></div>
           <div className="native-heartbeat__actions">{heartbeat.status === 'active' ? <button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'pause'), 'Heartbeat paused.')}>Pause</button> : <button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'resume'), 'Heartbeat resumed.')}>Resume</button>}<button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'stop'), 'Heartbeat stopped.')}>Stop</button></div>
         </article>)}</div>

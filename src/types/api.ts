@@ -7,7 +7,7 @@ export const BROWSER_PARTITION = 'persist:prime-work-browser'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type WorkspaceView = 'session' | 'projects' | 'activity' | 'scheduled' | 'plugins' | 'settings'
-export type InspectorTab = 'summary' | 'changes' | 'browser' | 'files'
+export type InspectorTab = 'summary' | 'specialists' | 'changes' | 'browser' | 'files'
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'complete' | 'failed' | 'unknown'
 
 export const HARNESS_IDS = ['omp', 'prime', 'pi'] as const
@@ -145,7 +145,7 @@ export type MessagePart =
   | { type: 'text'; partId?: string; text: string }
   | { type: 'thinking'; partId?: string; text: string }
   | { type: 'toolCall'; partId?: string; id?: string; name: string; args?: unknown }
-  | { type: 'toolResult'; partId?: string; name?: string; text: string; isError?: boolean; streaming?: boolean }
+  | { type: 'toolResult'; partId?: string; name?: string; text: string; isError?: boolean; streaming?: boolean; details?: unknown }
   | { type: 'agentMessage'; partId?: string; text: string; agentName?: string }
   | { type: 'image'; partId?: string; mimeType?: string; data?: string; dataTruncated?: boolean }
   | {
@@ -173,6 +173,8 @@ export interface TranscriptMessage {
   agentName?: string
   startedAt?: string | number
   completedAt?: string | number
+  /** Latest assistant attempt failure, separate from response content. */
+  errorMessage?: string
   parts: MessagePart[]
   streaming?: boolean
 }

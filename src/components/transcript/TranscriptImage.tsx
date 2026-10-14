@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X } from '../icons'
 import { useAppShellOverlay, useFocusTrap } from '../ui'
 
 interface TranscriptImageProps {

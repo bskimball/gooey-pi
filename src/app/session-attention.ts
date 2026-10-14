@@ -5,9 +5,17 @@ interface SessionLifecycleChange {
   markUnread?: boolean
 }
 
+const BLOCKING_EXTENSION_UI_METHODS = new Set(['select', 'confirm', 'input', 'editor'])
+
 export function sessionLifecycleChange(event: Record<string, unknown>): SessionLifecycleChange | undefined {
   const type = typeof event.type === 'string' ? event.type : ''
-  if (type === 'extension_ui_request') return { status: 'waiting', markUnread: true }
+  if (type === 'extension_ui_request') {
+    const method = event.method
+    if (method === undefined || (typeof method === 'string' && BLOCKING_EXTENSION_UI_METHODS.has(method))) {
+      return { status: 'waiting', markUnread: true }
+    }
+    return undefined
+  }
   if (type === 'agent_start' || type === 'turn_start') return { status: 'running', markUnread: false }
   if (type === 'compaction_start') return { status: 'running', markUnread: false }
   if (type === 'compaction_end' && event.willRetry !== true && (event.reason === 'manual' || event.reason === 'requested')) return { status: 'complete', markUnread: false }

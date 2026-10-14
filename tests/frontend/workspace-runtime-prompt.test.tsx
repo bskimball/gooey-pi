@@ -4,6 +4,9 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkspaceRuntime } from '../../src/hooks/useWorkspaceRuntime'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
+import { DEFAULT_SETTINGS } from '../../src/lib/data'
+import { createSingleFlightAdmission } from '../../src/lib/workspace'
 import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../src/types/api'
 
 const project: ProjectRecord = {
@@ -17,6 +20,7 @@ const session: SessionRecord = {
 
 type Workspace = ReturnType<typeof useWorkspaceRuntime>
 let latest: Workspace
+const noop = () => undefined
 
 function Probe({
   bridge,
@@ -38,7 +42,7 @@ function Probe({
     initialSession,
     sessions,
     initialMessages: [],
-    reportError: () => undefined,
+    reportError: noop,
   })
   return null
 }
@@ -231,5 +235,78 @@ describe('prompt admission versus background transcript reads', () => {
 
     expect(latest.messages.map((message) => message.id)).toEqual(['record-1'])
     expect(latest.loadingSession).toBe(false)
+  })
+
+  it('does not insert an optimistic streaming assistant into a replacement workspace when followUp resolves after a switch', async () => {
+    const runningSession: SessionRecord = { ...session, status: 'running' }
+    const otherSession: SessionRecord = { ...session, id: 'other', filePath: '/sessions/other.jsonl', status: 'idle' }
+    const followUp = vi.fn(async () => {
+      latest.activateWorkspace(project, otherSession)
+      return false
+    })
+    const start = vi.fn(async () => ({ runtimeId: 'started', harness: 'prime' as const, cwd: '/project', sessionFile: '/sessions/session.jsonl', isStreaming: false }))
+    const bridge = {
+      sessions: {
+        read: vi.fn(async (filePath: string) => filePath === otherSession.filePath
+          ? [{ id: 'other-existing', role: 'assistant' as const, timestamp: 1, parts: [{ type: 'text' as const, text: 'Replacement workspace transcript' }] }]
+          : []),
+        followUp,
+        list: vi.fn(async () => [runningSession, otherSession]),
+      },
+      agent: {
+        list: vi.fn(async () => []),
+        start,
+        stop: vi.fn(async () => true),
+        command: vi.fn(async () => ({})),
+      },
+      projects: {
+        grantInferred: vi.fn(async () => project),
+      },
+    } as unknown as PrimeWorkApi
+
+    await act(async () => {
+      root.render(createElement(Probe, { bridge, initialSession: runningSession, sessions: [runningSession, otherSession] }))
+    })
+    await flush()
+
+    const admission = createSingleFlightAdmission()
+    const actions = createWorkspaceActions(() => ({
+      bridge,
+      initialized: true,
+      projects: [project],
+      sessions: [runningSession, otherSession],
+      activeProject: project,
+      workspace: latest,
+      settingsState: { settings: DEFAULT_SETTINGS } as WorkspaceActionsDeps['settingsState'],
+      layout: {} as WorkspaceActionsDeps['layout'],
+      provider: { model: 'prime/test-model', effort: 'medium', fast: false, selectedModel: { input: ['text'] } } as unknown as WorkspaceActionsDeps['provider'],
+      pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
+      submissionAdmissionRef: { current: admission },
+      gitRequestRef: { current: 0 },
+      demoTimerRef: { current: [] },
+      setProjects: () => undefined,
+      setSessions: () => undefined,
+      setGitSnapshot: () => undefined,
+      setView: () => undefined,
+      setPaletteOpen: () => undefined,
+      setToast: () => undefined,
+      setSubmitting: () => undefined,
+      refreshSchedules: async () => undefined,
+      refreshHeartbeats: async () => undefined,
+      resetBrowserView: () => undefined,
+      closeTerminalForSession: () => undefined,
+      clearSessionAttention: () => undefined,
+      reportError: () => undefined,
+    }))
+
+    await act(async () => {
+      await actions.sendPrompt('steer the running session', [], 'steer')
+    })
+    await flush()
+
+    expect(followUp).toHaveBeenCalledTimes(1)
+    expect(start).not.toHaveBeenCalled()
+    expect(latest.messages.map((message) => message.id)).toEqual(['other-existing'])
+    expect(latest.messages.some((message) => message.streaming)).toBe(false)
   })
 })

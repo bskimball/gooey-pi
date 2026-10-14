@@ -2,7 +2,7 @@ import type { MessagePart, QueuedPrompt, TranscriptMessage } from '@/types/api'
 import { applyCompactionEvent, isCompactionEvent } from './compaction'
 import { nextTranscriptId, withPartId } from './ids'
 import { fallbackModelFromRecord, fallbackNoticeText } from './model-fallback'
-import { agentMessagePart, record, resultText, string } from './parse'
+import { agentMessagePart, record, resultDetails, resultText, string } from './parse'
 
 export interface PrimeEventReplayStats {
   messageScans: number
@@ -34,6 +34,7 @@ function effectiveToolId(id: string | undefined, name: string): string {
   return id ?? `tool-fallback:${name}`
 }
 
+const MAX_ERROR_CHARS = 256 * 1024
 const EMPTY_TURN_FALLBACK = 'Completed without a text response.'
 const LOCAL_STEER_PICKUP = Symbol('gooeypi-steer-pickup')
 const LOCAL_STEER_ACCEPTED = Symbol('gooeypi-steer-accepted')
@@ -131,6 +132,7 @@ export function replayPrimeEvents(
     if (tailIndex < 0 || next[tailIndex].role !== 'assistant') return undefined
     const message = draftMessage(tailIndex)
     message.streaming = true
+    message.errorMessage = undefined
     message.completedAt = undefined
     streaming.add(tailIndex)
     lastStreamingAssistant = tailIndex
@@ -162,7 +164,7 @@ export function replayPrimeEvents(
       message.streaming = false
       message.completedAt = completedAt
       const parts = partDrafts.get(index)
-      if (addFallback && (parts?.length ?? message.parts.length) === 0) {
+      if (addFallback && !message.errorMessage && (parts?.length ?? message.parts.length) === 0) {
         appendNode(draftParts(index), withPartId({ type: 'text', text: EMPTY_TURN_FALLBACK }))
       }
     }
@@ -275,6 +277,32 @@ export function replayPrimeEvents(
       }
       continue
     }
+    if (type === 'message_end') {
+      const message = record(raw.message)
+      if (message?.role !== 'assistant') continue
+      const index = assistantIndex()
+      draftMessage(index).errorMessage = message.stopReason === 'error'
+        ? string(message.errorMessage)?.slice(0, MAX_ERROR_CHARS) : undefined
+      if (message.stopReason === 'error') {
+        dropTailFallback(index)
+        finalizeStreaming(Date.now(), false)
+      }
+      continue
+    }
+    if (type === 'auto_retry_end') {
+      if (raw.success !== true) {
+        const index = lastStreamingAssistant >= 0 ? lastStreamingAssistant : next.length - 1
+        if (index >= 0 && next[index].role === 'assistant') {
+          const message = draftMessage(index)
+          message.errorMessage = string(raw.finalError)?.slice(0, MAX_ERROR_CHARS) ?? message.errorMessage
+          message.streaming = false
+          message.completedAt = Date.now()
+          dropTailFallback(index)
+        }
+        finalizeStreaming(Date.now(), false)
+      }
+      continue
+    }
     if (type === 'message_update') {
       const delta = record(raw.assistantMessageEvent) ?? record(raw.delta)
       const deltaType = string(delta?.type)
@@ -303,7 +331,8 @@ export function replayPrimeEvents(
       upsertToolDraft(index, id, name, raw.args)
       const draft = draftParts(index)
       const call = draft.firstToolById.get(id)
-      if (call) setToolResult(draft, call, { type: 'toolResult', name, text: resultText(raw.partialResult), streaming: true })
+      const details = resultDetails(raw.partialResult)
+      if (call) setToolResult(draft, call, { type: 'toolResult', name, text: resultText(raw.partialResult), streaming: true, ...(details ? { details } : {}) })
       continue
     }
     if (type === 'tool_execution_end') {
@@ -312,7 +341,8 @@ export function replayPrimeEvents(
       const id = effectiveToolId(string(raw.toolCallId), name)
       const draft = draftParts(index)
       const call = draft.firstToolById.get(id)
-      const resultPart: MessagePart = { type: 'toolResult', name, text: resultText(raw.result), isError: raw.isError === true }
+      const details = resultDetails(raw.result)
+      const resultPart: MessagePart = { type: 'toolResult', name, text: resultText(raw.result), isError: raw.isError === true, ...(details ? { details } : {}) }
       if (call) setToolResult(draft, call, resultPart)
       else {
         appendNode(draft, withPartId({ type: 'toolCall', id, name }))

@@ -1,14 +1,14 @@
 import {
-  ChevronDown,
-  ChevronRight,
-  Code2,
-  FileJson2,
+  ArrowsClockwise,
+  CaretDown,
+  CaretRight,
+  Code,
+  FileJs,
   FileText,
   Folder,
   FolderOpen,
-  RefreshCw,
-  Search,
-} from 'lucide-react'
+  MagnifyingGlass,
+} from '../icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename } from '@/lib/data'
 import { errorMessage } from '@/lib/errors'
@@ -28,14 +28,14 @@ export interface FileTreeNode {
 
 export function getFileIcon(filename: string) {
   if (filename.endsWith('.json')) {
-    return <FileJson2 size={13} />
+    return <FileJs size={13} />
   }
   if (
     /\.(tsx?|jsx?|vue|svelte|html|css|scss|py|rs|go|c|cpp|h|java|php|rb|sh|bash|zsh|sql|ya?ml|toml)$/i.test(
       filename,
     )
   ) {
-    return <Code2 size={13} />
+    return <Code size={13} />
   }
   return <FileText size={13} />
 }
@@ -309,7 +309,7 @@ export function FilesPanel({
   return (
     <div className="files-panel">
       <div className="files-search">
-        <Search size={13} />
+        <MagnifyingGlass size={13} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -327,7 +327,7 @@ export function FilesPanel({
           )
         ) : null}
         <IconButton size="small" label="Refresh project files" onClick={() => void load()}>
-          <RefreshCw className={loading ? 'spin' : ''} size={13} />
+          <ArrowsClockwise className={loading ? 'spin' : ''} size={13} />
         </IconButton>
       </div>
 
@@ -379,7 +379,7 @@ export function FilesPanel({
                   >
                     <span className="file-tree__chevron">
                       {node.children.length > 0 ? (
-                        isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />
+                        isExpanded ? <CaretDown size={13} /> : <CaretRight size={13} />
                       ) : (
                         <span className="file-tree__expander-placeholder" />
                       )}

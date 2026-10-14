@@ -1,4 +1,4 @@
-import { Check, Laptop, Moon, Sun } from 'lucide-react'
+import { Check, Laptop, Moon, Sun } from '@/components/icons'
 import type { KeyboardEvent } from 'react'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import type { InterfaceFontScale, LocalePreference, ThemeMode } from '@/types/api'

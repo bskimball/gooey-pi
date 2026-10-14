@@ -1,4 +1,4 @@
-import { Brain, Check, ChevronDown, Search } from 'lucide-react'
+import { Brain, CaretDown, Check, MagnifyingGlass } from './icons'
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { PrimeModelDescriptor, PrimeProviderDescriptor } from '@/types/api'
 
@@ -129,7 +129,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
       >
         <Brain size={14} />
         <span>{selected?.name ?? 'No model available'}</span>
-        <ChevronDown size={11} aria-hidden="true" />
+        <CaretDown size={11} aria-hidden="true" />
       </button>
       {open ? (
         <div
@@ -148,7 +148,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
           }}
         >
           <div className="model-picker__search">
-            <Search size={14} aria-hidden="true" />
+            <MagnifyingGlass size={14} aria-hidden="true" />
             <input
               ref={searchRef}
               type="search"

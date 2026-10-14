@@ -524,15 +524,153 @@ describe('streaming markdown parse throttling', () => {
   })
 
   it('summarizes the transcript with a single reverse walk that stops at the first text part', async () => {
-    const { summarizeTranscript } = await import('../../src/components/inspector/SummaryPanel')
+    const { summarizeTranscript, extractPiSessionWidgets } = await import('../../src/components/inspector/SummaryPanel')
     const messages: TranscriptMessage[] = [
       { id: 'user-1', role: 'user', timestamp: 1, parts: [{ type: 'text', text: 'ask' }] },
-      { id: 'assistant-1', role: 'assistant', timestamp: 2, parts: [{ type: 'toolCall', id: 'a', name: 'Read' }, { type: 'text', text: 'first answer' }] },
+      { id: 'assistant-1', role: 'assistant', timestamp: 2, parts: [
+        { type: 'toolCall', id: 'a', name: 'Read' },
+        { type: 'toolCall', id: 'todo-1', name: 'todo_write', args: { todos: [{ id: '1', content: 'Setup GUI', status: 'in_progress' }] } },
+        { type: 'toolCall', id: 'task-1', name: 'task_start', args: { agent: 'librarian', prompt: 'Inspect pi-gui' } },
+        { type: 'toolResult', name: 'task_start', text: 'started task_1' },
+        { type: 'text', text: 'first answer' },
+      ] },
       { id: 'assistant-2', role: 'assistant', timestamp: 3, parts: [{ type: 'text', text: 'final answer' }, { type: 'toolCall', id: 'b', name: 'Write' }] },
       { id: 'tool-1', role: 'tool', timestamp: 4, parts: [{ type: 'toolResult', name: 'Write', text: 'done' }] },
     ]
-    expect(summarizeTranscript(messages)).toEqual({ toolCount: 2, lastText: 'final answer' })
+    expect(summarizeTranscript(messages)).toEqual({ toolCount: 4, lastText: 'final answer' })
     expect(summarizeTranscript([])).toEqual({ toolCount: 0, lastText: undefined })
+    expect(extractPiSessionWidgets(messages)).toEqual({
+      todos: [{ id: '1', content: 'Setup GUI', status: 'in_progress', note: undefined }],
+      specialists: [{ id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'running' }],
+    })
+    const settledMessages: TranscriptMessage[] = [
+      ...messages,
+      { id: 'assistant-3', role: 'assistant', timestamp: 5, parts: [
+        { type: 'toolCall', id: 'wait-1', name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult', name: 'task_wait', text: 'task_1 settled (generation 1).\nlifecycle: settled' },
+        { type: 'toolCall', id: 'sync-1', name: 'task', args: { agent: 'oracle', prompt: 'Review diff' } },
+        { type: 'toolResult', name: 'task', text: 'progress update', streaming: true },
+      ] },
+    ]
+    expect(extractPiSessionWidgets(settledMessages).specialists).toEqual([
+      { id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
+      { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
+    ])
+    const chainAndSendMessages: TranscriptMessage[] = [
+      ...settledMessages,
+      { id: 'assistant-4', role: 'assistant', timestamp: 6, parts: [
+        { type: 'toolCall', id: 'send-followup', name: 'task_send', args: { id: 'task_1', mode: 'follow_up', message: 'Queued note' } },
+        { type: 'toolResult', name: 'task_send', text: 'task_1 follow_up queued.\nlifecycle: settled' },
+      ] },
+    ]
+    expect(extractPiSessionWidgets(chainAndSendMessages).specialists).toEqual([
+      { id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
+      { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
+    ])
+    const promptMessages: TranscriptMessage[] = [
+      ...chainAndSendMessages,
+      { id: 'assistant-5', role: 'assistant', timestamp: 7, parts: [
+        { type: 'toolCall', id: 'send-1', name: 'task_send', args: { id: 'task_1', mode: 'prompt', message: 'Check repo licenses' } },
+        { type: 'toolResult', name: 'task_send', text: 'task_1 accepted new prompt (generation 2).\nlifecycle: running' },
+      ] },
+    ]
+    expect(extractPiSessionWidgets(promptMessages).specialists).toEqual([
+      { id: 'task_1', agent: 'librarian', mission: 'Check repo licenses', status: 'running' },
+      { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
+    ])
+    const promptAndReuseMessages: TranscriptMessage[] = [
+      ...promptMessages,
+      { id: 'assistant-6', role: 'assistant', timestamp: 8, parts: [
+        { type: 'toolCall', id: 'wait-2', name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult', name: 'task_wait', text: 'task_1 settled (generation 2).\nlifecycle: settled' },
+        { type: 'toolCall', id: 'reuse-1', name: 'task_start', args: { agent: 'sidekick', prompt: 'Reuse context' } },
+        { type: 'toolResult', name: 'task_start', text: 'reused task_1 Fusion sidekick context (generation 3; new unit, prompt 1).' },
+        { type: 'toolCall', id: 'sidekick-2', name: 'task_start', args: { agent: 'sidekick', prompt: 'Audit IPC surface' } },
+        { type: 'toolResult', name: 'task_start', text: 'started task_2 (sidekick) model=default generation=1' },
+        { type: 'toolCall', id: 'wait-live', name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult', name: 'task_wait', text: 'task_1 lifecycle=running agent=sidekick generation=3 turns=2/10 last_event_age=1s\nactivity: running bash: npx vitest run (1s)', streaming: true },
+        { type: 'toolCall', id: 'chain-1', name: 'task_chain', args: { steps: [
+          { agent: 'scout', prompt: 'Map auth' },
+          { agent: 'machinist', prompt: 'Patch auth' },
+        ] } },
+        { type: 'toolResult', name: 'task_chain', text: 'step 1 ok scout · 4s\nstep 2 failed machinist · 8s', isError: true },
+      ] },
+    ]
+    expect(extractPiSessionWidgets(promptAndReuseMessages).specialists).toEqual([
+      { id: 'task_1', agent: 'sidekick', mission: 'Reuse context', status: 'running', activity: 'bash: npx vitest run (1s)' },
+      { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
+      { id: 'task_2', agent: 'sidekick', mission: 'Audit IPC surface', status: 'running' },
+      { id: 'chain-1-step-1', agent: 'scout', mission: 'Map auth', status: 'done' },
+      { id: 'chain-1-step-2', agent: 'machinist', mission: 'Patch auth', status: 'error' },
+    ])
+    const statusIdleMessages: TranscriptMessage[] = [
+      ...promptAndReuseMessages,
+      { id: 'assistant-7', role: 'assistant', timestamp: 9, parts: [
+        { type: 'toolCall', id: 'status-1', name: 'task_status', args: { id: 'task_1' } },
+        { type: 'toolResult', name: 'task_status', text: 'task_1  lifecycle=running  agent=sidekick\nmission: Check settled worker cleanup\nrunning: (none)' },
+      ] },
+    ]
+    expect(extractPiSessionWidgets(statusIdleMessages).specialists[0]).toEqual({
+      id: 'task_1',
+      agent: 'sidekick',
+      mission: 'Reuse context',
+      status: 'running',
+    })
+
+    const { extractPiSpecialistSessions } = await import('../../src/components/inspector/SpecialistsPanel')
+    const detailedMessages: TranscriptMessage[] = [
+      {
+        id: 'assistant-detail',
+        role: 'assistant',
+        timestamp: 10,
+        parts: [
+          { type: 'toolCall', id: 'start-detailed', name: 'task_start', args: { agent: 'sidekick', prompt: 'Audit src/components/Inspector.tsx' } },
+          {
+            type: 'toolResult',
+            name: 'task_start',
+            text: 'started task_1',
+            details: {
+              worker: {
+                instanceId: 'inst-42',
+                id: 'task_1',
+                agent: 'sidekick',
+                model: 'openai-codex/gpt-5.4',
+                thinking: 'high',
+                generation: 1,
+                turns: 2,
+                maxTurns: 30,
+                activities: [
+                  { id: 'act-1', tool: 'read', summary: '{"path":"src/components/Inspector.tsx"}', status: 'completed', duration: 14 },
+                ],
+              },
+            },
+          },
+          { type: 'toolCall', id: 'wait-detailed', name: 'task_wait', args: { id: 'task_1' } },
+          {
+            type: 'toolResult',
+            name: 'task_wait',
+            text: 'task_1 settled (generation 1).\nlifecycle: settled\n--- result ---\nInspector audit complete: PASS.',
+          },
+        ],
+      },
+    ]
+    const sessions = extractPiSpecialistSessions(detailedMessages)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]).toMatchObject({
+      id: 'task_1',
+      agent: 'sidekick',
+      instanceId: 'inst-42',
+      model: 'openai-codex/gpt-5.4',
+      thinking: 'high',
+      status: 'done',
+    })
+    expect(sessions[0]?.messages).toHaveLength(2)
+    expect(sessions[0]?.messages[0]?.parts).toMatchObject([{ type: 'text', text: 'Audit src/components/Inspector.tsx' }])
+    expect(sessions[0]?.messages[1]?.parts).toEqual([
+      { type: 'toolCall', id: 'act-1', name: 'read', args: { path: 'src/components/Inspector.tsx' } },
+      { type: 'toolResult', name: 'read', text: '{"path":"src/components/Inspector.tsx"}\n\nDuration: 14ms', isError: false, streaming: false },
+      { type: 'text', text: 'Inspector audit complete: PASS.' },
+    ])
   })
 })
 

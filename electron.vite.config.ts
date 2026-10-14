@@ -33,9 +33,9 @@ export default defineConfig({
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined
             if (id.includes('/@xterm/')) return 'terminal-vendor'
+            if (id.includes('/@phosphor-icons/')) return 'icons-vendor'
             if (id.includes('/react-markdown/') || id.includes('/remark-') || id.includes('/unified/')) return 'markdown-vendor'
             if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor'
-            if (id.includes('/lucide-react/')) return 'icons-vendor'
             return undefined
           },
         },

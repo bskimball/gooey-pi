@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { Warning } from './icons'
 import type { RuntimeInfo } from '@/types/api'
 
 export interface ExecutingModelChipProps {
@@ -13,7 +13,7 @@ export function ExecutingModelChip({ executingModel }: ExecutingModelChipProps) 
       role="status"
       title={`Provider fallback: running on ${executingModel.label} instead of the selected model.`}
     >
-      <AlertTriangle size={12} /> Running on {executingModel.label}
+      <Warning size={12} /> Running on {executingModel.label}
     </span>
   )
 }

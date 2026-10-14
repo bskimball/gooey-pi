@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
+import { type PiBehaviorMode, piModeFromStatusText, publishActivePiBehaviorMode, readDefaultPiBehaviorMode, savePiBehaviorMode } from '@/lib/harness'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface UseExtensionUiOptions {
@@ -44,19 +45,24 @@ export function useExtensionUi({
   const [extensionUi, setExtensionUi] = useState<PendingExtensionUi | null>(null)
   const extensionUiRef = useRef<PendingExtensionUi | null>(null)
   const pendingByRuntimeRef = useRef<Map<string, PendingExtensionUi>>(new Map())
+  const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
   const timerByRuntimeRef = useRef<Map<string, number>>(new Map())
   const timedOutQuestionnairesRef = useRef<Set<string>>(new Set())
   const activeRuntimeIdRef = useRef(activeRuntimeId)
   useLayoutEffect(() => { activeRuntimeIdRef.current = activeRuntimeId })
 
   const showPendingForActiveRuntime = useCallback(() => {
-    const visible = pendingExtensionUiForRuntime(pendingByRuntimeRef.current, activeRuntimeIdRef.current)
+    const currentRuntimeId = activeRuntimeIdRef.current
+    const visible = pendingExtensionUiForRuntime(pendingByRuntimeRef.current, currentRuntimeId)
     extensionUiRef.current = visible
     setExtensionUi(visible)
+    const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
+    publishActivePiBehaviorMode(runtimeMode ?? readDefaultPiBehaviorMode())
   }, [])
 
-  const clearExtensionUi = useCallback((runtimeId?: string) => {
+  const clearExtensionUi = useCallback((runtimeId?: string, clearMode = false) => {
     const targetRuntimeId = runtimeId ?? extensionUiRef.current?.runtimeId
+    if (clearMode && runtimeId) modeByRuntimeRef.current.delete(runtimeId)
     if (!targetRuntimeId) return
     const timer = timerByRuntimeRef.current.get(targetRuntimeId)
     if (timer !== undefined) window.clearTimeout(timer)
@@ -85,6 +91,10 @@ export function useExtensionUi({
     clearExtensionUi(pending.runtimeId)
     if ('cancelled' in response && response.cancelled) {
       if (!bridge) return
+      if (pending.request.method !== 'questionnaire') {
+        cancelPending(pending)
+        return
+      }
       try {
         await bridge.agent.stop(pending.runtimeId)
         setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
@@ -97,12 +107,14 @@ export function useExtensionUi({
       }
       return
     }
-    setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: true } : current)
-    const pendingSession = runtimeSessionsRef.current.get(pending.runtimeId)
-    if (pendingSession) {
-      setSessions((items) => items.map((session) => session.filePath === pendingSession
-        ? { ...session, status: 'running', unread: false }
-        : session))
+    if (pending.request.method === 'questionnaire') {
+      setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: true } : current)
+      const pendingSession = runtimeSessionsRef.current.get(pending.runtimeId)
+      if (pendingSession) {
+        setSessions((items) => items.map((session) => session.filePath === pendingSession
+          ? { ...session, status: 'running', unread: false }
+          : session))
+      }
     }
     if (!bridge) return
     try {
@@ -150,6 +162,30 @@ export function useExtensionUi({
   }, [cancelPending, clearExtensionUi])
 
   const showExtensionUi = useCallback((runtimeId: string, rawEvent: Record<string, unknown>) => {
+    if (rawEvent.type === 'runtime_exit') {
+      modeByRuntimeRef.current.delete(runtimeId)
+      return
+    }
+    if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === 'mode') {
+      const mode = piModeFromStatusText(rawEvent.statusText)
+      if (mode) {
+        modeByRuntimeRef.current.set(runtimeId, mode)
+        if (activeRuntimeIdRef.current === runtimeId) {
+          savePiBehaviorMode(mode)
+        } else if (mode !== 'apex-orchestrate') {
+          try {
+            if (typeof window !== 'undefined') window.localStorage?.setItem('gooeypi:pi-behavior-mode', mode)
+          } catch { /* ignore storage errors */ }
+        }
+      }
+      return
+    }
+    if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'notify' && typeof rawEvent.message === 'string') {
+      if ((rawEvent.notifyType === 'error' || rawEvent.notifyType === 'warning') && activeRuntimeIdRef.current === runtimeId) {
+        reportError(rawEvent.message)
+      }
+      return
+    }
     const request = parseExtensionUiRequest(rawEvent)
     if (!request || !bridge) return
 

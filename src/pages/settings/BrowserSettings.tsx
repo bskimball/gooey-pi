@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { ArrowCounterClockwise } from '@/components/icons'
 import type { SettingsSectionProps } from './contracts'
 import { browserHomeValidation, normalizeBrowserHome } from './draft-state'
 import { DraftSettingField } from './DraftSettingField'
@@ -29,7 +29,7 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
         <h2>Browser data</h2>
         <div className="danger-row">
           <span><strong>Clear browsing data</strong><small>Remove cookies, cache, permissions, and browsing history.</small></span>
-          <button type="button" className="button" onClick={onRequestReset}><RotateCcw size={13} /> Clear data</button>
+          <button type="button" className="button" onClick={onRequestReset}><ArrowCounterClockwise size={13} /> Clear data</button>
         </div>
       </section>
     </>

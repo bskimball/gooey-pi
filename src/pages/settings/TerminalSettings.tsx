@@ -1,4 +1,4 @@
-import { Keyboard } from 'lucide-react'
+import { Keyboard } from '@/components/icons'
 import type { SettingsSectionProps } from './contracts'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { terminalShellValidation } from './draft-state'

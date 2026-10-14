@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { requestFailureMessage } from '@/app/workspace'
 import { clearComposerDraft } from '@/lib/composer-draft'
 import { errorMessage } from '@/lib/errors'
-import { HARNESS_AGENT_NAMES } from '@/lib/harness'
+import { HARNESS_AGENT_NAMES, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
 import { parseMcpAuthenticationCommand } from '@/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/session-actions'
 import type { DEFAULT_SETTINGS } from '@/lib/data'
@@ -288,6 +288,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const { bridge, sessions, workspace, provider, settingsState, submissionAdmissionRef, demoTimerRef, setSessions, setSubmitting, setView, setToast, reportError } = getDeps()
     const commandHarness = workspace.workspaceRef?.current?.project?.harness ?? settingsState.settings.activeHarness
     const compactCommand = parseCompactCommand(prompt)
+    const modeCommand = parsePiModeCommand(prompt, commandHarness)
     const mcpCommand = parseMcpCommand(prompt, commandHarness)
     if (mcpCommand?.type === 'open' && images.length === 0) {
       setView('plugins')
@@ -303,6 +304,10 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       reportError('/compact does not accept attachments. Remove the attachment and try again.')
       return
     }
+    if (modeCommand && images.length > 0) {
+      reportError('/mode does not accept attachments. Remove the attachment and try again.')
+      return
+    }
     const currentWorkspace = workspace.workspaceRef.current
     const currentRuntime = workspace.runtime
     const currentOwner = workspace.runtimeOwnerRef.current
@@ -316,6 +321,10 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       if (queuedFlushPromptId) workspace.removeQueuedPrompt(queuedFlushPromptId)
     }
     if (ownsStreamingRuntime && currentRuntime && bridge) {
+      if (modeCommand) {
+        setToast('Stop active agent work before switching modes.')
+        return
+      }
       if (compactCommand) {
         // Compacting mid-turn would abort the running turn, so it waits for the
         // idle flush like any queued prompt.
@@ -393,6 +402,12 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           if (admitted.sessionFile) setSessions((items) => items.map((session) => session.filePath === admitted.sessionFile ? { ...session, lastUserMessageAt: sentAtIso } : session))
         }
         if (!bridge) {
+          if (modeCommand) {
+            const nextMode = piModeFromCommand(modeCommand)
+            if (nextMode) savePiBehaviorMode(nextMode)
+            completeQueuedFlush()
+            return
+          }
           appendUserMessage()
           const assistantId = `assistant-${Date.now()}`
           workspace.setMessages((items) => [...items, { id: assistantId, role: 'assistant', timestamp: Date.now(), startedAt: Date.now(), streaming: true, parts: [{ type: 'thinking', text: 'Reviewing the request and current workspace context.' }] }])
@@ -418,6 +433,10 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             return
           }
         }
+        if (modeCommand && (activeRuntime?.isStreaming || selectedSession?.status === 'running')) {
+          setToast('Stop active agent work before switching modes.')
+          return
+        }
         if ((intent === 'queue' || compactCommand) && images.length === 0 && (activeRuntime?.isStreaming || selectedSession?.status === 'running')) {
           if (!queuedFlushPromptId) queuedPromptId = workspace.queuePrompt(prompt, compactCommand ? 'queue' : intent)
           if (compactCommand && intent === 'steer') setToast('Compaction will run when the current turn finishes.')
@@ -425,22 +444,36 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         }
         let startedRuntime = false
         let startedSessionNeedsTitle = false
+        const assistantId = `assistant-${sentAt}`
+        const beginOptimisticPrompt = () => {
+          if (startedPrompt || workspace.workspaceRef.current.generation !== generation) return
+          startedPrompt = true
+          appendUserMessage()
+          workspace.setMessages((items) => [...items, { id: assistantId, role: 'assistant', timestamp: sentAt, startedAt: sentAt, streaming: true, parts: [] }])
+        }
         if (!activeRuntime) {
           workspace.attachRuntime(undefined, generation)
           if (images.length > 0 && selected.sessionFile && selectedSession?.status === 'running') {
             throw new Error('Image attachments cannot be queued while this session is active outside GooeyPi. Wait for it to finish, then try again.')
           }
-          if (images.length === 0 && selected.sessionFile && selectedSession?.status === 'running'
-            && await followUpExternalSession(selected.sessionFile)) {
-            if (intent === 'steer') appendUserMessage()
-            completeQueuedFlush()
-            return
+          if (images.length === 0 && selected.sessionFile && selectedSession?.status === 'running') {
+            if (await followUpExternalSession(selected.sessionFile)) {
+              if (intent === 'steer') appendUserMessage()
+              completeQueuedFlush()
+              return
+            }
+            if (workspace.workspaceRef.current.generation !== generation) return
           }
           try {
             if (!provider.model) throw new Error(`No model is available for ${HARNESS_AGENT_NAMES[activeHarness]}. Enable or connect a provider, then try again.`)
+            if (!compactCommand && !modeCommand) beginOptimisticPrompt()
             activeRuntime = await bridge.agent.start({ cwd: selected.cwd, sessionPath: selected.sessionFile, model: provider.model, thinking: provider.effort, fast: provider.fast, harness: activeHarness })
           } catch (startError) {
             if (images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
+              startedPrompt = false
+              if (workspace.workspaceRef.current.generation === generation) {
+                workspace.setMessages((items) => items.filter((item) => item.id !== assistantId && (intent === 'steer' || item.id !== userMessage.id)))
+              }
               if (intent === 'steer') appendUserMessage()
               completeQueuedFlush()
               return
@@ -473,6 +506,12 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             ...(compactCommand.customInstructions ? { customInstructions: compactCommand.customInstructions } : {}),
           })
           completeQueuedFlush()
+        } else if (modeCommand) {
+          await bridge.agent.command(activeRuntime.runtimeId, {
+            type: 'prompt',
+            message: modeCommand,
+          })
+          completeQueuedFlush()
         } else if (activeRuntime.isStreaming) {
           // Follow-ups are daemon-owned. Steers get a renderer-only pending
           // row so pickup can move them into history without redelivery.
@@ -490,18 +529,21 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           }
           completeQueuedFlush()
         } else {
-          startedPrompt = true
-          appendUserMessage()
+          beginOptimisticPrompt()
           workspace.setRuntime({ ...activeRuntime, isStreaming: true })
-          workspace.setMessages((items) => [...items, { id: `assistant-${Date.now()}`, role: 'assistant', timestamp: Date.now(), streaming: true, parts: [] }])
-          await bridge.agent.command(activeRuntime.runtimeId, {
+          const response = await bridge.agent.command(activeRuntime.runtimeId, {
             type: 'prompt',
             message: prompt,
             streamingBehavior: streamingBehaviorForIntent(intent),
             ...(images.length ? { images } : {}),
           })
+          const disposition = (response.data as { disposition?: unknown } | undefined)?.disposition
+          if (disposition === 'handled') {
+            workspace.setRuntime((current) => current?.runtimeId === activeRuntime.runtimeId ? { ...current, isStreaming: false } : current)
+            workspace.setMessages((items) => items.filter((item) => item.id !== assistantId || item.parts.length > 0))
+          }
           completeQueuedFlush()
-          if (startedRuntime && startedSessionNeedsTitle) {
+          if (startedRuntime && startedSessionNeedsTitle && disposition !== 'handled') {
             void titleStartedSession({
               bridge,
               harness: activeHarness,

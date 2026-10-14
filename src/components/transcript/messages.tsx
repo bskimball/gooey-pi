@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronRight, Copy, Target } from 'lucide-react'
+import { CaretDown, CaretRight, Check, Copy, Crosshair } from '../icons'
 import type { HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { splitAnnotationBlock } from '@/lib/browser-annotations'
 import { splitCapabilityRouting } from '@/lib/capability-mentions'
@@ -165,6 +165,7 @@ export const AssistantMessage = memo(
           <AssistantHarnessMark harness={harness} />
         </div>
         <div className="message__content">
+          {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
           {renderNarrative(before, 'before', message.streaming)}
           {hasVisibleActivity ? (
             <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} />
@@ -301,10 +302,10 @@ export const AgentMessage = memo(function AgentMessage({ message }: { message: T
   return (
     <article className={`message message--agent ${open ? 'is-open' : ''}`}>
       <button type="button" className="agent-message__summary" aria-expanded={open} aria-controls={contentId} aria-label={label} onClick={() => setOpen((value) => !value)}>
-        <PrimeMark size={18} />
+        <PiMark size={18} />
         <span className="agent-message__label">Message from agent</span>
         {message.agentName ? <span className="agent-message__name">{message.agentName}</span> : null}
-        {open ? <ChevronDown className="agent-message__chevron" size={13} /> : <ChevronRight className="agent-message__chevron" size={13} />}
+        {open ? <CaretDown className="agent-message__chevron" size={13} /> : <CaretRight className="agent-message__chevron" size={13} />}
       </button>
       {open ? (
         <div className="agent-message__content" id={contentId}>
@@ -324,10 +325,10 @@ export const GoalMessage = memo(function GoalMessage({ message }: { message: Tra
     <article className={`message message--goal ${open ? 'is-open' : ''}`}>
       <button type="button" className="goal-message__summary" aria-expanded={open} aria-controls={contentId} aria-label="Goal summary" onClick={() => setOpen((value) => !value)}>
         <span className="goal-message__icon">
-          <Target size={15} />
+          <Crosshair size={15} />
         </span>
         <span className="goal-message__label">Goal summary</span>
-        {open ? <ChevronDown className="goal-message__chevron" size={13} /> : <ChevronRight className="goal-message__chevron" size={13} />}
+        {open ? <CaretDown className="goal-message__chevron" size={13} /> : <CaretRight className="goal-message__chevron" size={13} />}
       </button>
       {open ? (
         <div className="goal-message__content" id={contentId}>

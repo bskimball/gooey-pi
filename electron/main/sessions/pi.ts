@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { appendFileSync, readFileSync } from 'node:fs'
+import { readdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { isRecord } from '../validation'
+import { dirname, join, relative, sep } from 'node:path'
+import { isPathWithin, isRecord } from '../validation'
 import type { SessionServiceOptions } from '../sessions'
 import type { SessionCatalogIo } from './catalog'
 import {
@@ -44,7 +45,34 @@ export function createPiCatalogIo(): SessionCatalogIo {
   return createBucketedCatalogIo()
 }
 
-export const isPiSessionPath = isBucketedSessionPath
+export function isPiSessionPath(sessionRootRealPath: string, sessionRealPath: string): boolean {
+  if (isBucketedSessionPath(sessionRootRealPath, sessionRealPath)) return true
+  if (!isPathWithin(sessionRootRealPath, sessionRealPath) || !sessionRealPath.endsWith('.jsonl')) return false
+  const segments = relative(sessionRootRealPath, sessionRealPath).split(sep)
+  return segments.length === 3 &&
+    segments[0] === 'rpc-workers' &&
+    segments[1]!.length > 0 &&
+    !segments[1]!.startsWith('.') &&
+    segments[2]!.length > 0 &&
+    !segments[2]!.startsWith('.')
+}
+
+export async function resolvePiSessionCandidate(sessionRootRealPath: string, requestedPath: string): Promise<string> {
+  if (!requestedPath.endsWith(`${sep}worker.jsonl`) && !requestedPath.endsWith('/worker.jsonl')) return requestedPath
+  try {
+    const workerDir = await realpath(dirname(requestedPath))
+    const segments = relative(sessionRootRealPath, workerDir).split(sep)
+    if (segments.length !== 2 || segments[0] !== 'rpc-workers' || !segments[1] || segments[1].startsWith('.')) return requestedPath
+    const entries = (await readdir(workerDir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl') && !entry.name.startsWith('.'))
+      .map((entry) => entry.name)
+      .sort()
+    const latest = entries.at(-1)
+    return latest ? join(workerDir, latest) : requestedPath
+  } catch {
+    return requestedPath
+  }
+}
 
 const piMetadataParser = createBucketedMetadataParser((state, value) => {
   if (value.type === 'model_change') {
@@ -119,6 +147,7 @@ export function piSessionServiceOptions(sessionRoot = piSessionRoot()): SessionS
     metadataReader: createPiSessionMetadataReader(),
     transcriptReader: readPiTranscript,
     isSessionPathAuthorized: isPiSessionPath,
+    resolveSessionCandidate: resolvePiSessionCandidate,
     // Session files sit one bucket directory below the root; bounded one-level
     // watchers keep catalog refresh behavior identical across platforms.
     recursiveWatch: true,

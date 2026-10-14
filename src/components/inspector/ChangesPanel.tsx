@@ -1,4 +1,4 @@
-import { ArrowDownToLine, File, FileCode2, GitBranch, LoaderCircle, RefreshCw, Sparkles, Undo2 } from 'lucide-react'
+import { ArrowLineDown, ArrowsClockwise, ArrowUUpLeft, CircleNotch, File, FileCode, GitBranch, Sparkle } from '../icons'
 import { memo, useEffect, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
 import type { GitStatus } from '@/types/api'
@@ -19,7 +19,7 @@ function generateCommitSummary(files: GitStatus['files']): string {
 }
 
 const DiffView = memo(function DiffView({ text }: { text: string }) {
-  if (!text) return <div className="diff-placeholder"><FileCode2 size={22} /><span>Select a changed file to inspect its diff.</span></div>
+  if (!text) return <div className="diff-placeholder"><FileCode size={22} /><span>Select a changed file to inspect its diff.</span></div>
   const { lines, truncated } = boundLines(text, MAX_RENDERED_DIFF_CHARACTERS, MAX_RENDERED_DIFF_LINES)
   return <pre className="diff-view">{lines.map((line, index) => <span key={index} className={line.startsWith('+') && !line.startsWith('+++') ? 'diff-line diff-line--add' : line.startsWith('-') && !line.startsWith('---') ? 'diff-line diff-line--remove' : line.startsWith('@@') ? 'diff-line diff-line--hunk' : 'diff-line'}><i>{index + 1}</i><code>{line || ' '}</code></span>)}{truncated ? <span className="diff-line diff-line--truncated"><i>…</i><code>Diff truncated in the desktop view. Open the file or use Git for the complete diff.</code></span> : null}</pre>
 })
@@ -97,14 +97,14 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
     return <EmptyState
       icon={<GitBranch size={24} />}
       title="Git status unavailable"
-      action={<button type="button" className="button" onClick={() => void onRefreshGit()}><RefreshCw size={13} /> Try again</button>}
+      action={<button type="button" className="button" onClick={() => void onRefreshGit()}><ArrowsClockwise size={13} /> Try again</button>}
     >{git.error}</EmptyState>
   }
   return (
     <div className="changes-panel">
       <div className="changes-toolbar">
         <div><strong><GitBranch size={13} /> {git.branch ?? 'Repository'}</strong>{git.ahead ? <small>{git.ahead} ahead</small> : null}</div>
-        <IconButton label="Refresh changes" onClick={() => void onRefreshGit()}><RefreshCw size={14} /></IconButton>
+        <IconButton label="Refresh changes" onClick={() => void onRefreshGit()}><ArrowsClockwise size={14} /></IconButton>
       </div>
       {readOnly ? <div className="changes-read-only" role="note"><span>This project is read-only because it was discovered from session history.</span>{onGrantProject ? <button type="button" className="button button--compact" onClick={() => void onGrantProject()}>Add project</button> : null}</div> : null}
       <div className="changes-scopes"><Segmented value={scope} label="Diff scope" options={[{ value: 'unstaged', label: 'Unstaged' }, { value: 'staged', label: 'Staged' }]} onChange={(value) => { setActionError(''); setScope(value as 'unstaged' | 'staged') }} /><button type="button" className="button button--compact" disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => setCommitOpen(true)}>Commit</button></div>
@@ -116,11 +116,11 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
           {visibleFiles.length === 0 ? <p className="file-changes__empty">No {scope} changes.</p> : null}
         </div>
         <div className="diff-pane scroll-area">
-          {selectedPath ? <div className="diff-header"><div><FileCode2 size={13} /><span>{selectedPath}</span></div><div>{scope === 'unstaged' ? <button type="button" disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}><ArrowDownToLine size={12} /> Stage</button> : <button type="button" disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}><Undo2 size={12} /> Unstage</button>}<button type="button" className="danger-action" disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}><Undo2 size={12} /> Undo changes</button></div></div> : null}
-          {loading ? <div className="diff-loading"><LoaderCircle className="spin" size={15} /> Loading diff…</div> : <DiffView text={diff} />}
+          {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><span>{selectedPath}</span></div><div>{scope === 'unstaged' ? <button type="button" disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}><ArrowLineDown size={12} /> Stage</button> : <button type="button" disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}><ArrowUUpLeft size={12} /> Unstage</button>}<button type="button" className="danger-action" disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}><ArrowUUpLeft size={12} /> Undo changes</button></div></div> : null}
+          {loading ? <div className="diff-loading"><CircleNotch className="spin" size={15} /> Loading diff…</div> : <DiffView text={diff} />}
         </div>
       </div>
-      {commitOpen ? <Modal title="Commit staged changes" onClose={() => setCommitOpen(false)} footer={<><button className="button" type="button" onClick={() => setCommitOpen(false)}>Cancel</button><button className="button button--primary" type="button" disabled={readOnly || !commitMessage.trim()} onClick={() => void commit()}>Commit changes</button></>}><label className="field"><span>Commit message</span><div className="commit-message-input"><input autoFocus value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Describe this change" /><button type="button" className="button button--compact" onClick={fillCommitSummary} title="Generate a summary from staged files"><Sparkles size={13} /> Generate summary</button></div></label><p className="muted-copy">This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
+      {commitOpen ? <Modal title="Commit staged changes" onClose={() => setCommitOpen(false)} footer={<><button className="button" type="button" onClick={() => setCommitOpen(false)}>Cancel</button><button className="button button--primary" type="button" disabled={readOnly || !commitMessage.trim()} onClick={() => void commit()}>Commit changes</button></>}><label className="field"><span>Commit message</span><div className="commit-message-input"><input autoFocus value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Describe this change" /><button type="button" className="button button--compact" onClick={fillCommitSummary} title="Generate a summary from staged files"><Sparkle size={13} /> Generate summary</button></div></label><p className="muted-copy">This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
       {confirmUndo ? <Modal title="Undo file changes?" onClose={() => setConfirmUndo(null)} footer={<><button className="button" type="button" onClick={() => setConfirmUndo(null)}>Cancel</button><button className="button button--danger" type="button" disabled={readOnly} onClick={() => { const path = confirmUndo; void mutate('restore', [path]).then((ok) => { if (ok) setConfirmUndo(null) }) }}>Undo changes</button></>}><p>This discards the staged and unstaged changes to <code>{confirmUndo}</code> and restores the file to its last commit. A new untracked file will be deleted.</p></Modal> : null}
     </div>
   )

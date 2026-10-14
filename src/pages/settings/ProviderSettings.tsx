@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink, Gauge, KeyRound, LogIn, LogOut, RefreshCw, Search, Zap } from 'lucide-react'
+import { ArrowsClockwise, ArrowSquareOut, CaretRight, Gauge, Key, Lightning, MagnifyingGlass, SignIn, SignOut } from '@/components/icons'
 import { useMemo, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
 import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '@/types/api'
@@ -119,14 +119,14 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
 
   return (
     <section className="settings-group provider-settings">
-      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>{externalAuth ? 'Hide all' : 'Disable all'}</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>{externalAuth ? 'Show all' : 'Enable all'}</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><RefreshCw size={13} /></button></div></div>
+      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>{externalAuth ? 'Hide all' : 'Disable all'}</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>{externalAuth ? 'Show all' : 'Enable all'}</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></button></div></div>
       <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{externalAuth ? `${availableModelCount.toLocaleString()} models are shown in GooeyPi; ${agentName} checks credentials when you launch one` : `${availableModelCount.toLocaleString()} models are available with your current ${agentName} credentials`}</small> : null}</div>
       {catalog?.warning ? <p className="provider-catalog-warning" role="status">{catalog.warning}</p> : null}
       <div className="provider-catalog-tabs" role="tablist" aria-label="Provider catalogue view">
         <button type="button" role="tab" aria-selected={view === 'providers'} className={view === 'providers' ? 'is-active' : ''} onClick={() => { setView('providers'); setQuery('') }}>Providers <span>{providerCount.toLocaleString()}</span></button>
         <button type="button" role="tab" aria-selected={view === 'models'} className={view === 'models' ? 'is-active' : ''} onClick={() => { setView('models'); setQuery('') }}>Models <span>{modelCount.toLocaleString()}</span></button>
       </div>
-      <label className="provider-search"><Search size={13} /><input value={query} placeholder={view === 'providers' ? 'Search providers' : 'Search models'} aria-label={view === 'providers' ? 'Search providers' : 'Search models'} onChange={(event) => setQuery(event.target.value)} /></label>
+      <label className="provider-search"><MagnifyingGlass size={13} /><input value={query} placeholder={view === 'providers' ? 'Search providers' : 'Search models'} aria-label={view === 'providers' ? 'Search providers' : 'Search models'} onChange={(event) => setQuery(event.target.value)} /></label>
       {error ? <p className="settings-error" role="alert">{error}</p> : null}
       {view === 'providers' ? <div className="provider-list">
         {providers.map((provider) => {
@@ -134,11 +134,11 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
           return <div className="provider-row" key={provider.id}>
             <label className="provider-row__toggle" title={provider.enabled ? `Hide provider in ${agentName}` : `Show provider in ${agentName}`}><input type="checkbox" aria-label={`Show ${provider.name} provider`} checked={provider.enabled} disabled={busy} onChange={(event) => void run(provider.id, () => onSetEnabled(provider.id, event.target.checked))} /><i aria-hidden="true"><span /></i></label>
             <div className="provider-row__identity"><strong>{provider.name}</strong><small>{externalAuth ? `${provider.authLabel ?? `Credentials managed by the ${harness} CLI`} · ${provider.availableModelCount.toLocaleString()} models` : authDescription(provider)}</small></div>
-            {externalAuth ? <div className="provider-row__actions"><button type="button" className="button" onClick={onOpenDocs}><ExternalLink size={13} /> Credential setup</button></div> : <div className="provider-row__actions">
-              {provider.authMethod === 'oauth' ? <button type="button" className="button" disabled={busy} onClick={() => void run(provider.id, () => onStartOAuth(provider.id))}><LogIn size={13} /> {provider.configured ? 'Reconnect' : 'Connect'}</button> : null}
-              {provider.authMethod === 'api_key' ? <button type="button" className="button" disabled={busy} onClick={() => { setError(''); setApiKeyError(''); setApiKey(''); setApiKeyProvider(provider) }}><KeyRound size={13} /> {provider.configured ? 'Replace key' : 'Add key'}</button> : null}
-              {provider.authMethod === 'external' ? <button type="button" className="button" onClick={onOpenDocs}><ExternalLink size={13} /> Setup</button> : null}
-              {provider.configured && provider.authSource === 'stored' ? <button type="button" className="button button--icon" aria-label={`Log out of ${provider.name}`} disabled={busy} onClick={() => void run(provider.id, () => onLogout(provider.id))}><LogOut size={13} /></button> : null}
+            {externalAuth ? <div className="provider-row__actions"><button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Credential setup</button></div> : <div className="provider-row__actions">
+              {provider.authMethod === 'oauth' ? <button type="button" className="button" disabled={busy} onClick={() => void run(provider.id, () => onStartOAuth(provider.id))}><SignIn size={13} /> {provider.configured ? 'Reconnect' : 'Connect'}</button> : null}
+              {provider.authMethod === 'api_key' ? <button type="button" className="button" disabled={busy} onClick={() => { setError(''); setApiKeyError(''); setApiKey(''); setApiKeyProvider(provider) }}><Key size={13} /> {provider.configured ? 'Replace key' : 'Add key'}</button> : null}
+              {provider.authMethod === 'external' ? <button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Setup</button> : null}
+              {provider.configured && provider.authSource === 'stored' ? <button type="button" className="button button--icon" aria-label={`Log out of ${provider.name}`} disabled={busy} onClick={() => void run(provider.id, () => onLogout(provider.id))}><SignOut size={13} /></button> : null}
             </div>}
           </div>
         })}
@@ -147,12 +147,12 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
           const collapsed = collapsedModelProviders.has(provider.id)
           const contentId = `provider-models-${provider.id.replace(/[^a-z0-9_-]/gi, '-')}`
           return <div className={`provider-model-group${provider.enabled ? '' : ' is-disabled'}${collapsed ? ' is-collapsed' : ''}`} key={provider.id}>
-          <button type="button" className="provider-model-group__heading" aria-expanded={!collapsed} aria-controls={contentId} onClick={() => toggleModelProvider(provider.id)}><strong>{provider.name}</strong><small>{models.filter((model) => model.enabled !== false).length.toLocaleString()} of {models.length.toLocaleString()} on</small><ChevronRight className="provider-model-group__chevron" size={13} aria-hidden="true" /></button>
+          <button type="button" className="provider-model-group__heading" aria-expanded={!collapsed} aria-controls={contentId} onClick={() => toggleModelProvider(provider.id)}><strong>{provider.name}</strong><small>{models.filter((model) => model.enabled !== false).length.toLocaleString()} of {models.length.toLocaleString()} on</small><CaretRight className="provider-model-group__chevron" size={13} aria-hidden="true" /></button>
           <div id={contentId} className="provider-model-group__models" hidden={collapsed}>{models.map((model) => <div className={`provider-model-row${model.enabled === false ? ' is-disabled' : ''}`} key={model.key}>
             <div className="provider-row__identity"><strong>{model.name}</strong><small>{model.id}</small></div>
             <div className="provider-model-row__capabilities">
               {model.reasoning ? <span title={`${model.availableThinkingLevels.length} reasoning levels`}><Gauge size={11} /> Reasoning</span> : null}
-              {model.fastModeSupported ? <span><Zap size={11} /> Fast</span> : null}
+              {model.fastModeSupported ? <span><Lightning size={11} /> Fast</span> : null}
               <span className={model.available && model.enabled !== false ? 'is-available' : ''}>{model.enabled === false ? (externalAuth ? 'Hidden' : 'Disabled') : externalAuth ? 'Shown' : model.available ? 'Available' : 'Needs credentials'}</span>
             </div>
             <label className="provider-row__toggle provider-model-row__toggle" title={model.enabled === false ? `Show model in ${agentName}` : `Hide model in ${agentName}`}><input type="checkbox" aria-label={`Show ${model.name} model`} checked={model.enabled !== false} disabled={busyProvider === `model:${model.key}`} onChange={(event) => void run(`model:${model.key}`, () => onSetModelEnabled(model.key, event.target.checked))} /><i aria-hidden="true"><span /></i></label>

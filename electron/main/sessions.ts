@@ -57,6 +57,8 @@ export interface SessionServiceOptions {
   transcriptReader?: TranscriptReader
   /** Containment rule applied to realpathed candidates; defaults to root containment plus a `.jsonl` suffix. */
   isSessionPathAuthorized?: SessionPathAuthorizer
+  /** Optional pre-realpath resolution for virtual worker session paths under the session root. */
+  resolveSessionCandidate?: (sessionRootRealPath: string, requestedPath: string) => Promise<string>
   /**
    * Also watch a bounded set of session directories exactly one level below
    * the root (for harnesses that bucket sessions).
@@ -88,6 +90,7 @@ export class SessionService {
   private readonly transcriptAdmission: AdmissionQueue
   private readonly transcriptReader: TranscriptReader
   private readonly isSessionPathAuthorized: SessionPathAuthorizer
+  private readonly resolveSessionCandidate?: (sessionRootRealPath: string, requestedPath: string) => Promise<string>
   private readonly watchDirectory: SessionWatchFactory
   private readonly renameFile: ((filePath: string, title: string) => boolean) | undefined
   private readonly changeListeners = new Set<(event: SessionChangeEvent) => void>()
@@ -123,6 +126,7 @@ export class SessionService {
     this.metadataReader = options.metadataReader ?? createSessionMetadataReader()
     this.transcriptReader = options.transcriptReader ?? readTranscript
     this.isSessionPathAuthorized = options.isSessionPathAuthorized ?? authorizePrimeSessionPath
+    this.resolveSessionCandidate = options.resolveSessionCandidate
     this.watchDirectory = options.watchDirectory ?? watchSessionDirectory
     this.catalog = new SessionMetadataCatalog(
       () => this.sessionRoot,
@@ -276,7 +280,10 @@ export class SessionService {
   async requireSessionPath(value: unknown): Promise<string> {
     const requested = requireString(value, 'filePath', { min: 1, max: 4096 })
     const root = await realpath(this.sessionRoot)
-    const path = await realpath(requested)
+    const candidate = this.resolveSessionCandidate
+      ? await this.resolveSessionCandidate(root, requested)
+      : requested
+    const path = await realpath(candidate)
     if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the Prime session directory')
     return path
   }

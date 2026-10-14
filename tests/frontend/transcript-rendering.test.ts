@@ -426,4 +426,47 @@ describe('transcript rendering', () => {
     expect(renderToStaticMarkup(createElement(LiveElapsed, {}))).toBe('')
   })
 
+  it('renders the Seigaiha Fin Mon welcome emblem on blank chat and the Apex Fang mark on pi messages', () => {
+    const emptyHtml = renderToStaticMarkup(createElement(Transcript, {
+      messages: [],
+      git,
+      harness: 'pi',
+      onOpenChanges: noop,
+      onSuggestion: noop,
+    }))
+    expect(emptyHtml).toContain('session-welcome')
+    expect(emptyHtml).toContain('pi-welcome-mark')
+    expect(emptyHtml).toContain('aria-label="Apex wave crest"')
+
+    const replyHtml = renderToStaticMarkup(createElement(Transcript, {
+      messages: [{ id: 'reply-1', role: 'assistant', timestamp: 1_000, parts: [{ type: 'text', text: 'Ready.' }] }],
+      git,
+      harness: 'pi',
+      onOpenChanges: noop,
+      onSuggestion: noop,
+    }))
+    expect(replyHtml).toContain('pi-mark')
+    expect(replyHtml).toContain('viewBox="0 0 100 100"')
+  })
+
+  it('anchors the live thinking/working status indicator below active timeline items', () => {
+    const html = render([{
+      id: 'running-bottom-status',
+      role: 'assistant',
+      timestamp: 1_000,
+      startedAt: 1_000,
+      streaming: true,
+      parts: [
+        { type: 'thinking', text: 'Inspecting files first.' },
+        { type: 'toolCall', id: 'tool-1', name: 'read_file', args: { path: 'src/App.tsx' } },
+        { type: 'toolResult', name: 'read_file', text: 'done' },
+      ],
+    }], true)
+
+    const timelineEnd = html.indexOf('src/App.tsx')
+    const statusStart = html.indexOf('work-disclosure__status')
+    expect(timelineEnd).toBeGreaterThan(-1)
+    expect(statusStart).toBeGreaterThan(timelineEnd)
+  })
+
 })

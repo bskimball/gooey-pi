@@ -1527,9 +1527,9 @@ test.describe('Prime Work desktop smoke', () => {
   test('removes a project from the sidebar through its context menu', async () => {
     const projectRow = page.locator('.project-row').first()
     await expect(projectRow).toBeVisible()
-    await expect(page.locator('.sidebar__primary .lucide-notebook-pen')).toHaveCount(1)
-    await expect(page.locator('.project-row__new-session .lucide-notebook-pen')).toHaveCount(1)
-    await expect(page.locator('.sidebar__section-heading .lucide-folder-plus')).toHaveCount(1)
+    await expect(page.locator('.sidebar__primary .ph-note-pencil')).toHaveCount(1)
+    await expect(page.locator('.project-row__new-session .ph-note-pencil')).toHaveCount(1)
+    await expect(page.locator('.sidebar__section-heading .ph-folder-plus')).toHaveCount(1)
     await expect(page.getByTitle('New session (⌘N)')).toHaveCount(2)
     await expect(page.getByTitle('Add project')).toHaveCount(1)
     await expect(projectRow.getByTitle('New session in Multi-folder fixture')).toHaveCount(1)
@@ -1740,19 +1740,19 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     expect(await nativeSelectTheme()).toMatchObject({
       scheme: 'light',
-      optionColor: 'rgb(32, 32, 30)',
+      optionColor: 'rgb(15, 23, 42)',
       optionBackground: 'rgb(255, 255, 255)',
-      themeColor: '#20201e',
+      themeColor: '#0f172a',
       themeBackground: '#ffffff',
     })
     await page.getByRole('button', { name: /Dark/ }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     expect(await nativeSelectTheme()).toMatchObject({
       scheme: 'dark',
-      optionColor: 'rgb(241, 241, 238)',
-      optionBackground: 'rgb(34, 34, 32)',
-      themeColor: '#f1f1ee',
-      themeBackground: '#222220',
+      optionColor: 'rgb(241, 245, 249)',
+      optionBackground: 'rgb(20, 31, 45)',
+      themeColor: '#f1f5f9',
+      themeBackground: '#141f2d',
     })
     await page.getByRole('button', { name: /System/ }).click()
   })

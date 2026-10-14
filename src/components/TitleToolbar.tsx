@@ -1,10 +1,10 @@
 import {
-  AudioWaveform,
   GitBranch,
-  PanelLeft,
-  PanelRight,
+  SidebarLeft,
+  SidebarRight,
   Terminal,
-} from 'lucide-react'
+  Waveform,
+} from './icons'
 import type { ApplicationMenuName, ProjectRecord, WorkspaceView } from '@/types/api'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
@@ -63,7 +63,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {windowsMenus.map(({ name, label }) => <button key={name} type="button" className="windows-app-menu__button" onClick={(event) => openApplicationMenu(name, event)}>{label}</button>)}
       </nav> : null}
       <div className="title-toolbar__nav no-drag">
-        {!sidebarOpen ? <IconButton label={`Show sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><PanelLeft size={16} /></IconButton> : null}
+        {!sidebarOpen ? <IconButton label={`Show sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
       </div>
       <div className="title-toolbar__identity">
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>
@@ -73,11 +73,11 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
           ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}
-        {view === 'session' && onToggleVoice ? <IconButton className={voiceOpen ? 'is-active voice-toggle--active' : ''} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><AudioWaveform size={17} /></IconButton> : null}
+        {view === 'session' && onToggleVoice ? <IconButton className={voiceOpen ? 'is-active voice-toggle--active' : ''} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><Waveform size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className={terminalOpen ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
-        {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><PanelRight size={16} /></IconButton> : null}
-        {view !== 'session' && sidebarOpen ? <IconButton label={`Hide sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><PanelLeft size={16} /></IconButton> : null}
+        {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
+        {view !== 'session' && sidebarOpen ? <IconButton label={`Hide sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
       </div>
     </header>
   )

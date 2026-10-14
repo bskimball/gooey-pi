@@ -196,6 +196,8 @@ export function safeChildEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.Proc
     'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH', 'LD_PRELOAD', 'FORCE_COLOR',
   ]) delete env[key]
   env.NO_COLOR = '1'
+  env.PI_UI_CHROME ??= '0'
+  env.PI_APEX_UI ??= '0'
   return env
 }
 
@@ -316,15 +318,21 @@ function versionManagerRuntimeDirs(
       .filter((directory): directory is string => Boolean(directory && win32.isAbsolute(directory)))
   }
   const root = env.NVM_DIR && posix.isAbsolute(env.NVM_DIR) ? env.NVM_DIR : posix.join(home, '.nvm')
-  const versionsRoot = posix.join(root, 'versions', 'node')
-  try {
-    return readdirSync(versionsRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map((entry) => entry.name)
-      .sort((left, right) => right.localeCompare(left, 'en', { numeric: true }))
-      .slice(0, 64)
-      .map((version) => posix.join(versionsRoot, version, 'bin'))
-  } catch { return [] }
+  const dataHome = env.XDG_DATA_HOME && posix.isAbsolute(env.XDG_DATA_HOME) ? env.XDG_DATA_HOME : posix.join(home, '.local', 'share')
+  const roots = [posix.join(root, 'versions', 'node'), posix.join(dataHome, 'mise', 'installs', 'node')]
+  const dirs: string[] = []
+  for (const versionsRoot of roots) {
+    try {
+      const bins = readdirSync(versionsRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map((entry) => entry.name)
+        .sort((left, right) => right.localeCompare(left, 'en', { numeric: true }))
+        .slice(0, 64)
+        .map((version) => posix.join(versionsRoot, version, 'bin'))
+      dirs.push(...bins)
+    } catch { /* ignore absent version manager root */ }
+  }
+  return dirs
 }
 
 export function restrictedGitEnvironment(): NodeJS.ProcessEnv {

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Bot, ExternalLink, History, MessageCirclePlus, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowsClockwise, ArrowSquareOut, ChatCircleText, ClockCounterClockwise, Robot, ShieldCheck, X } from '../icons'
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { annotationMarkersScript, annotationPickerScript, annotationTakeScript } from '@/lib/annotation-picker'
 import { MAX_BROWSER_ANNOTATIONS, sanitizeCapturedElement } from '@/lib/browser-annotations'
@@ -374,7 +374,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
                 onSelectAgentTab?.(tab.tabId)
               }}
             >
-              <Bot size={11} aria-hidden />
+              <Robot size={11} aria-hidden />
               <span>{agentTabLabel(tab)}</span>
               <button
                 type="button"
@@ -399,7 +399,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
           <ArrowRight size={14} />
         </IconButton>
         <IconButton label={loading ? 'Stop loading' : 'Reload'} onClick={() => (loading ? webviewRef.current?.stop() : webviewRef.current?.reload())}>
-          {loading ? <X size={14} /> : <RefreshCw size={14} />}
+          {loading ? <X size={14} /> : <ArrowsClockwise size={14} />}
         </IconButton>
         <form
           className="address-field"
@@ -411,14 +411,14 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
           <ShieldCheck size={12} />
           <input value={address} onChange={(event) => setAddress(event.target.value)} aria-label="Browser address" spellCheck={false} />
           <button type="button" aria-label="Browser history" onClick={() => setHistoryOpen((value) => !value)}>
-            <History size={13} />
+            <ClockCounterClockwise size={13} />
           </button>
         </form>
         <IconButton className={picking || pendingElement ? 'is-active annotation-active' : ''} label={picking ? 'Stop annotating' : 'Annotate page'} aria-pressed={picking} onClick={toggleAnnotation}>
-          <MessageCirclePlus size={15} />
+          <ChatCircleText size={15} />
         </IconButton>
         <IconButton label="Open in default browser" onClick={() => onOpenExternal(currentUrl)}>
-          <ExternalLink size={14} />
+          <ArrowSquareOut size={14} />
         </IconButton>
       </div>
       {historyOpen ? (
@@ -441,7 +441,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
                   setHistoryOpen(false)
                 }}
               >
-                <History size={12} />
+                <ClockCounterClockwise size={12} />
                 <span>{url}</span>
               </button>
             ))}
@@ -451,14 +451,14 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
         {webview}
         {picking ? (
           <div className="annotation-hint" role="status">
-            <MessageCirclePlus size={12} /> Click an element in the page to comment on it
+            <ChatCircleText size={12} /> Click an element in the page to comment on it
           </div>
         ) : null}
         {pendingElement ? (
           <div className="annotation-layer">
             <div className="annotation-popover">
               <div>
-                <MessageCirclePlus size={14} />
+                <ChatCircleText size={14} />
                 <strong>Comment on element {count + 1}</strong>
                 <button
                   type="button"
@@ -513,7 +513,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
         ) : null}
         {count ? (
           <div className="annotation-count">
-            <MessageCirclePlus size={12} /> {count} of {MAX_BROWSER_ANNOTATIONS} annotation{count === 1 ? '' : 's'}
+            <ChatCircleText size={12} /> {count} of {MAX_BROWSER_ANNOTATIONS} annotation{count === 1 ? '' : 's'}
             {staleCount ? ` · ${staleCount} from earlier pages` : ''}
           </div>
         ) : null}
@@ -535,7 +535,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
               <ArrowRight size={14} />
             </IconButton>
             <IconButton label="Reload" onClick={() => onNavigateAgentTab?.(activeAgentTab.tabId, 'reload')}>
-              <RefreshCw size={14} />
+              <ArrowsClockwise size={14} />
             </IconButton>
             <form
               className="address-field"
@@ -545,7 +545,7 @@ export function BrowserPanel({ home, navigationRequest, onNavigationRequestHandl
                 onNavigateAgentTab?.(activeAgentTab.tabId, 'url', normalizeUrl(agentAddress))
               }}
             >
-              <Bot size={12} aria-hidden />
+              <Robot size={12} aria-hidden />
               <input
                 value={agentAddress}
                 onChange={(event) => {

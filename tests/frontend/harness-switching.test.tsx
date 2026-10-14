@@ -403,9 +403,9 @@ describe('provider fallback runtime state', () => {
   })
 })
 
-describe('sidebar brand switcher', () => {
+describe('sidebar brand header', () => {
   const noop = () => undefined
-  function renderSidebar(onSelectHarness: (harness: HarnessId) => void, activeHarness: HarnessId = 'prime', appMeta = meta) {
+  function renderSidebar(onSelectHarness: (harness: HarnessId) => void, activeHarness: HarnessId = 'pi', appMeta = meta) {
     return act(async () => {
       root.render(
         <Sidebar
@@ -430,51 +430,19 @@ describe('sidebar brand switcher', () => {
     })
   }
 
-  it('lists only harnesses with a detected executable', async () => {
+  it('renders a static Pi brand header without a harness switcher dropdown', async () => {
     const onSelectHarness = vi.fn()
-    await renderSidebar(onSelectHarness)
+    await renderSidebar(onSelectHarness, 'pi', allDetectedMeta)
 
-    const trigger = container.querySelector<HTMLButtonElement>('.brand-switcher__trigger')
-    expect(trigger).not.toBeNull()
-    expect(trigger!.getAttribute('aria-haspopup')).toBe('menu')
-    expect(trigger!.getAttribute('aria-expanded')).toBe('false')
-    expect(trigger!.textContent).toContain('Prime')
-
-    await click(trigger!)
-    const menu = container.querySelector('[role="menu"]')
-    expect(menu).not.toBeNull()
-    const options = [...menu!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
-    expect(options.map((option) => option.textContent)).toEqual(['Prime Work'])
-    expect(options[0].getAttribute('aria-checked')).toBe('true')
-
-    await click(options[0])
-    expect(onSelectHarness).not.toHaveBeenCalled()
+    const brand = container.querySelector<HTMLElement>('.sidebar__brand')
+    expect(brand).not.toBeNull()
+    expect(brand!.getAttribute('aria-label')).toBe('Pi Work')
+    expect(brand!.textContent).toBe('')
+    expect(brand!.querySelector('.pi-mark')).not.toBeNull()
+    expect(container.querySelector('.brand-switcher__trigger')).toBeNull()
     expect(container.querySelector('[role="menu"]')).toBeNull()
-  })
-
-  it('switches to Pi from the brand switcher', async () => {
-    const onSelectHarness = vi.fn()
-    await renderSidebar(onSelectHarness, 'prime', allDetectedMeta)
-
-    await click(container.querySelector('.brand-switcher__trigger')!)
-    const options = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')]
-    await click(options[0])
-    expect(onSelectHarness).toHaveBeenCalledWith('pi')
-    expect(container.querySelector('[role="menu"]')).toBeNull()
-  })
-
-  it('closes on Escape without selecting and shows shared navigation for OMP', async () => {
-    const onSelectHarness = vi.fn()
-    await renderSidebar(onSelectHarness, 'omp', allDetectedMeta)
-
     expect([...container.querySelectorAll('nav.sidebar__primary button span')].map((item) => item.textContent)).toContain('Scheduled')
     expect(container.textContent).toContain('Capabilities')
-
-    await click(container.querySelector('.brand-switcher__trigger')!)
-    expect(container.querySelector('[role="menu"]')).not.toBeNull()
-    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
-    expect(container.querySelector('[role="menu"]')).toBeNull()
-    expect(onSelectHarness).not.toHaveBeenCalled()
   })
 })
 

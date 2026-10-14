@@ -1,13 +1,14 @@
 /* Settings */
-.settings-page { height: 100%; display: grid; grid-template-columns: 190px minmax(0, 1fr); }
-.settings-nav { padding: 20px 10px; border-right: 1px solid var(--border); background: var(--surface-subtle); }
-.settings-nav button { width: 100%; height: 33px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 7px; color: var(--text-secondary); background: transparent; text-align: left; }
-.settings-nav button:hover, .settings-nav button.is-active { color: var(--text); background: var(--surface-hover); }
+.settings-page { height: 100%; display: grid; grid-template-columns: 196px minmax(0, 1fr); }
+.settings-nav { padding: 20px 10px; border-right: 1px solid var(--border); background: var(--surface-subtle); display: flex; flex-direction: column; gap: 2px; }
+.settings-nav button { width: 100%; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border-radius: 8px; color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
+.settings-nav button:hover { color: var(--text); background: var(--surface-hover); }
+.settings-nav button.is-active { color: var(--text); background: var(--surface-selected); }
 .settings-nav__close { margin-bottom: 12px; }
 .settings-nav button span { flex: 1; }
 .settings-nav button > svg:last-child { opacity: 0; }
 .settings-nav button.is-active > svg:last-child { opacity: 1; color: var(--text-tertiary); }
-.settings-content { overflow: auto; }
+.settings-content { overflow: auto; background: radial-gradient(92% 40% at 50% 0%, color-mix(in srgb, var(--prime-soft) 24%, transparent), transparent 70%), var(--canvas); }
 .settings-content__inner { width: min(100%, 720px); margin: 0 auto; padding: 36px 32px 70px; }
 .settings-content header { margin-bottom: 28px; }
 .settings-content header h1 { margin: 0 0 5px; font-size: 22px; line-height: 1.2; font-weight: 560; letter-spacing: -.015em; }

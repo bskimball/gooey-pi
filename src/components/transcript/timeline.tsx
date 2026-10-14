@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  CaretDown,
+  CaretRight,
+  ChatCircle,
+  ChatCircleDots,
   Check,
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
+  CircleNotch,
   Copy,
-  FileCode2,
+  FileCode,
   GitFork,
-  Globe2,
-  Layers3,
-  LoaderCircle,
-  MessageCircle,
-  MessageCircleQuestion,
-  TerminalSquare,
+  Globe,
+  Stack,
+  TerminalWindow,
+  WarningCircle,
   Wrench,
-} from 'lucide-react'
+} from '../icons'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
@@ -50,11 +50,11 @@ export function classifyTool(name: string): ToolKind {
 }
 
 function toolIcon(kind: ToolKind): ReactNode {
-  if (kind === 'question') return <MessageCircleQuestion size={14} />
-  if (kind === 'terminal') return <TerminalSquare size={14} />
-  if (kind === 'web') return <Globe2 size={14} />
+  if (kind === 'question') return <ChatCircleDots size={14} />
+  if (kind === 'terminal') return <TerminalWindow size={14} />
+  if (kind === 'web') return <Globe size={14} />
   if (kind === 'git') return <GitFork size={14} />
-  if (kind === 'file') return <FileCode2 size={14} />
+  if (kind === 'file') return <FileCode size={14} />
   return <Wrench size={14} />
 }
 
@@ -68,7 +68,31 @@ function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): string {
   const raw = part.args
   if (raw && typeof raw === 'object') {
     const args = raw as Record<string, unknown>
-    const preferred = args.question ?? args.command ?? args.query ?? args.url ?? args.path ?? args.cwd
+    if (part.name === 'todo_write' && Array.isArray(args.todos)) {
+      const total = args.todos.length
+      const done = args.todos.filter((item) => item && typeof item === 'object' && (item as Record<string, unknown>).status === 'completed').length
+      const active = args.todos.find((item) => item && typeof item === 'object' && (item as Record<string, unknown>).status === 'in_progress') as Record<string, unknown> | undefined
+      const label = typeof active?.content === 'string' ? ` · ${active.content}` : ''
+      return boundText(`${done}/${total} done${label}`.replace(/\s+/g, ' ').trim(), 180, '…')
+    }
+    if ((part.name === 'task' || part.name === 'task_start') && typeof args.agent === 'string') {
+      const promptText = typeof args.prompt === 'string' ? `: ${args.prompt}` : ''
+      return boundText(`${args.agent}${promptText}`.replace(/\s+/g, ' ').trim(), 180, '…')
+    }
+    if (part.name === 'task_chain' && Array.isArray(args.steps)) {
+      const steps = args.steps.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && typeof (item as Record<string, unknown>).agent === 'string'))
+      if (steps.length > 0) {
+        const agents = steps.map((step) => String(step.agent)).join(' → ')
+        const firstPrompt = typeof steps[0]?.prompt === 'string' ? `: ${steps[0].prompt}` : ''
+        return boundText(`${agents}${firstPrompt}`.replace(/\s+/g, ' ').trim(), 180, '…')
+      }
+    }
+    if (part.name === 'task_send' && typeof args.id === 'string') {
+      const mode = typeof args.mode === 'string' ? ` (${args.mode})` : ''
+      const messageText = typeof args.message === 'string' ? `: ${args.message}` : ''
+      return boundText(`${args.id}${mode}${messageText}`.replace(/\s+/g, ' ').trim(), 180, '…')
+    }
+    const preferred = args.question ?? args.command ?? args.query ?? args.pattern ?? args.url ?? args.path ?? args.operation ?? args.id ?? args.action ?? args.code ?? args.cwd
     if (typeof preferred === 'string') return boundText(preferred.replace(/\s+/g, ' ').trim(), 180, '…')
   }
   return boundText(serialize(raw).replace(/\s+/g, ' ').trim(), 180, '…')
@@ -143,8 +167,8 @@ function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall
         <span className="activity-line__icon">{toolIcon(kind)}</span>
         <span className="activity-line__kind">{kind === 'question' ? 'Question' : part.name}</span>
         {preview ? <code className="activity-tool__preview"><SyntaxText text={preview} /></code> : null}
-        <span className="activity-tool__state">{failed ? <><CircleAlert size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><LoaderCircle className="spin" size={12} /> running</>}</span>
-        {canExpand ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
+        <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><CircleNotch className="spin" size={12} /> running</>}</span>
+        {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
       </button>
       {open && visibleOutput ? (
         <div className="activity-tool__details">
@@ -161,7 +185,7 @@ function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall
 }
 
 function StandaloneToolResult({ part }: { part: Extract<MessagePart, { type: 'toolResult' }> }) {
-  return <div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <CircleAlert size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div>
+  return <div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div>
 }
 
 function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agentMessage' }> }) {
@@ -169,10 +193,10 @@ function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agent
   const canExpand = Boolean(part.text)
   return <div className="activity-line activity-line--agent">
     <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className="activity-line__icon"><MessageCircle size={14} /></span>
+      <span className="activity-line__icon"><ChatCircle size={14} /></span>
       <span className="activity-line__kind">Message from agent</span>
       {part.agentName ? <span className="activity-agent__name">{part.agentName}</span> : null}
-      {canExpand ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
+      {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
     </button>
     {open && part.text ? <div className="activity-agent__details"><MarkdownText text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></div> : null}
   </div>
@@ -195,20 +219,20 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
       ? 'Context compacted'
       : part.status === 'cancelled' ? 'Context compaction cancelled' : part.outcome === 'skipped' ? 'Context compaction skipped' : 'Context compaction failed'
   const state = part.status === 'running'
-    ? <><LoaderCircle className="spin" size={12} /> running</>
+    ? <><CircleNotch className="spin" size={12} /> running</>
     : part.status === 'done'
       ? <><Check size={12} /> {part.willRetry ? 'continuing' : 'done'}</>
-      : <><CircleAlert size={12} /> {part.status === 'cancelled' ? 'cancelled' : 'needs attention'}</>
+      : <><WarningCircle size={12} /> {part.status === 'cancelled' ? 'cancelled' : 'needs attention'}</>
   const details = part.error || part.summary
   const tokenLabel = part.tokensBefore === undefined ? '' : `${part.tokensBefore.toLocaleString()} tokens before`
   return <div className={`activity-line activity-line--compaction is-${part.status}`}>
     <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className="activity-line__icon">{part.status === 'running' ? <LoaderCircle className="spin" size={13} /> : part.status === 'done' ? <Layers3 size={13} /> : <CircleAlert size={13} />}</span>
+      <span className="activity-line__icon">{part.status === 'running' ? <CircleNotch className="spin" size={13} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
       <span className="activity-line__kind">{label}</span>
       <span className="activity-compaction__reason">{compactionReasonLabel(part.reason)}</span>
       {tokenLabel ? <span className="activity-compaction__tokens">{tokenLabel}</span> : null}
       <span className="activity-tool__state">{state}</span>
-      {canExpand ? open ? <ChevronDown size={13} /> : <ChevronRight size={13} /> : null}
+      {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
     </button>
     {open && details ? <div className={`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`}><MarkdownText text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></div> : null}
   </div>
@@ -265,8 +289,8 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
     return <section className="work-disclosure is-running" aria-label="Agent work activity">
       <span className="work-disclosure__rail" aria-hidden="true" />
       <div className="work-disclosure__live">
-        <div className="work-disclosure__status" role="status"><span>{status}</span><LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots /></div>
         <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} streaming />
+        <div className="work-disclosure__status" role="status"><span>{status}</span><LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots /></div>
       </div>
     </section>
   }
@@ -276,7 +300,7 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
   return (
     <section className="work-disclosure">
       <button type="button" className="work-disclosure__button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}<span>Worked for {duration}</span>
+        {open ? <CaretDown size={13} /> : <CaretRight size={13} />}<span>Worked for {duration}</span>
       </button>
       {open ? <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
     </section>

@@ -8,6 +8,7 @@ import { useAgentEvents } from '../../src/hooks/useAgentEvents'
 import { useAppSettings } from '../../src/hooks/useAppSettings'
 import { useBootstrap } from '../../src/hooks/useBootstrap'
 import { useExtensionUi } from '../../src/hooks/useExtensionUi'
+import { readSavedPiBehaviorMode } from '../../src/lib/harness'
 import { usePluginSkills } from '../../src/hooks/usePluginSkills'
 import { useWorkspaceRuntime } from '../../src/hooks/useWorkspaceRuntime'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
@@ -772,6 +773,46 @@ describe('extension UI runtime ownership', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('tracks behavior mode status per runtime and cancels non-questionnaire dialogs without stopping the runtime', async () => {
+    const command = vi.fn().mockResolvedValue({})
+    const stop = vi.fn().mockResolvedValue(true)
+    const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+    const runtimeSessionsRef = { current: new Map<string, string>() }
+    const setSessions = vi.fn()
+    const setRuntime = vi.fn()
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useExtensionUi>
+    function ExtensionProbe({ activeRuntimeId }: { activeRuntimeId?: string }) {
+      state = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef, setSessions, setRuntime, reportError })
+      return <Probe />
+    }
+
+    await act(async () => { root.render(<ExtensionProbe activeRuntimeId="runtime-a" />) })
+    await act(async () => {
+      state.showExtensionUi('runtime-b', {
+        type: 'extension_ui_request', id: 'status-b', method: 'setStatus', statusKey: 'mode', statusText: 'Apex',
+      })
+      state.showExtensionUi('runtime-a', {
+        type: 'extension_ui_request', id: 'status-a', method: 'setStatus', statusKey: 'mode', statusText: 'Apex Orchestrate',
+      })
+    })
+    expect(readSavedPiBehaviorMode()).toBe('apex-orchestrate')
+
+    await act(async () => { root.render(<ExtensionProbe activeRuntimeId="runtime-b" />) })
+    expect(readSavedPiBehaviorMode()).toBe('apex')
+
+    await act(async () => {
+      state.showExtensionUi('runtime-b', {
+        type: 'extension_ui_request', id: 'mode-select', method: 'select', title: 'Behavior mode', options: ['apex — Apex', 'fusion — Fusion'],
+      })
+    })
+    await act(async () => { await state.respondToExtensionUi({ cancelled: true }) })
+    expect(stop).not.toHaveBeenCalled()
+    expect(command).toHaveBeenCalledWith('runtime-b', {
+      type: 'extension_ui_response', id: 'mode-select', cancelled: true,
+    })
   })
 })
 

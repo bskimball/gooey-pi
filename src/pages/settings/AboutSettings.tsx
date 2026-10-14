@@ -1,4 +1,4 @@
-import { CircleHelp } from 'lucide-react'
+import { Question } from '@/components/icons'
 import { GooeyPiMark } from '@/components/ui'
 import type { AppMeta } from '@/types/api'
 
@@ -15,7 +15,7 @@ export function AboutSettings({ meta, onOpenDocs }: AboutSettingsProps) {
       <section className="settings-group">
         <div className="settings-row"><span><strong>Platform</strong><small>{meta?.platform ?? 'macOS'}</small></span></div>
         <div className="settings-row"><span><strong>Home directory</strong><small className="mono">{meta?.homeDir ?? '—'}</small></span></div>
-        <div className="settings-row"><span><strong>Help and documentation</strong></span><button className="button" type="button" onClick={onOpenDocs}><CircleHelp size={13} /> Open docs</button></div>
+        <div className="settings-row"><span><strong>Help and documentation</strong></span><button className="button" type="button" onClick={onOpenDocs}><Question size={13} /> Open docs</button></div>
       </section>
     </>
   )

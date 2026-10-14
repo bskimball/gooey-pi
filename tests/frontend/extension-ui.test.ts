@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseExtensionUiRequest } from '../../src/lib/extension-ui'
+import { parsePiModeCommand, piModeFromCommand, piModeFromStatusText } from '../../src/lib/harness'
 import { pendingExtensionUiForRuntime, type PendingExtensionUi } from '../../src/hooks/useExtensionUi'
 
 describe('extension UI request parsing', () => {
@@ -107,5 +108,15 @@ describe('pending extension UI ownership', () => {
     expect(pendingExtensionUiForRuntime(pending, 'runtime-b')).toBe(background)
     expect(pendingExtensionUiForRuntime(pending, 'runtime-missing')).toBeNull()
     expect(pendingExtensionUiForRuntime(pending)).toBeNull()
+  })
+
+  it('parses Pi behavior mode commands and status labels', () => {
+    expect(parsePiModeCommand('/mode fusion', 'pi')).toBe('/mode fusion')
+    expect(parsePiModeCommand('/orchestrate on', 'pi')).toBe('/orchestrate on')
+    expect(parsePiModeCommand('/mode fusion', 'prime')).toBeUndefined()
+    expect(piModeFromStatusText('Apex Orchestrate')).toBe('apex-orchestrate')
+    expect(piModeFromStatusText('Fusion')).toBe('fusion')
+    expect(piModeFromCommand('/mode apex-orchestrate')).toBe('apex-orchestrate')
+    expect(piModeFromCommand('/orchestrate off')).toBe('apex')
   })
 })

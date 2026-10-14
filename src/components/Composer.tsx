@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, ChevronDown, Clock3, Command, Edit3, Gauge, ImageIcon, LoaderCircle, MessageCirclePlus, Mic, Paperclip, Plus, Square, SquareTerminal, Trash2, X, Zap } from 'lucide-react'
+import { ArrowUp, At, CaretDown, ChatCircleText, CircleNotch, Clock, Command, Gauge, Image as ImageIcon, Lightning, Microphone, Paperclip, PencilSimpleLine, Plus, Square, TerminalWindow, Trash, X } from './icons'
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type {
@@ -28,6 +28,7 @@ import { appendTerminalContextToPrompt } from '@/lib/terminal-context'
 import { appendSessionRouting, findSessionMentions } from '@/lib/session-mentions'
 import { clearComposerDraft, readComposerDraft, saveComposerDraft, takeComposerDraft } from '@/lib/composer-draft'
 import { contextDialLabel } from '@/lib/format-cost'
+import { isPiBehaviorMode, PI_BEHAVIOR_MODE_EVENT, PI_BEHAVIOR_MODE_OPTIONS, type PiBehaviorMode, readSavedPiBehaviorMode } from '@/lib/harness'
 import { messageActionForKey } from '@/lib/message-shortcuts'
 import { useComposerImages } from '@/hooks/useComposerImages'
 import { useDictation } from '@/hooks/useDictation'
@@ -109,6 +110,12 @@ const primeCommands = [
   { command: '/mcp', detail: 'View MCP integrations and local servers' },
 ]
 
+const piCommands = [
+  ...commands,
+  { command: '/mode', detail: 'Switch Pi, Apex, Apex Orchestrate, Fusion, or Work' },
+  { command: '/orchestrate', detail: 'Toggle Apex Orchestrate mode' },
+]
+
 const reasoningLabels: Record<PrimeThinkingLevel, string> = {
   off: 'Off',
   minimal: 'Minimal',
@@ -177,6 +184,7 @@ export const Composer = memo(function Composer({
   const [activeSuggestion, setActiveSuggestion] = useState(0)
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
   const [terminalSelectionOpen, setTerminalSelectionOpen] = useState(false)
+  const [piMode, setPiMode] = useState<PiBehaviorMode>(readSavedPiBehaviorMode)
   const imageAttachments = useComposerImages({ shortName })
   const { images, imagesRef, unsupportedFiles, unsupportedFilesRef, error: attachmentError, setError: setAttachmentError, processing: processingImages } = imageAttachments
   const dictation = useDictation(voice, transcriptionProvider, setAttachmentError)
@@ -230,8 +238,14 @@ export const Composer = memo(function Composer({
   }, [sessions, value])
   useEffect(() => {
     mountedRef.current = true
+    const onModeChange = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (isPiBehaviorMode(detail)) setPiMode(detail)
+    }
+    window.addEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
     return () => {
       mountedRef.current = false
+      window.removeEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
     }
   }, [])
   useEffect(() => {
@@ -393,40 +407,18 @@ export const Composer = memo(function Composer({
 
   const suggestions =
     menu === 'command'
-      ? (harness === 'prime' ? primeCommands : commands)
+      ? (harness === 'prime' ? primeCommands : harness === 'pi' ? piCommands : commands)
           .filter((item) => item.command.startsWith(value))
-          .map((item) => ({
-            key: item.command,
-            label: item.command,
-            detail: item.detail,
-            icon: <Command size={14} />,
-            choose: () => {
-              setValue(`${item.command} `)
-              setMenu(null)
-              textareaRef.current?.focus()
-            },
-          }))
+          .map((item) => ({ key: item.command, label: item.command, detail: item.detail, icon: <Command size={14} />, choose: () => { setValue(`${item.command} `); setMenu(null); textareaRef.current?.focus() } }))
       : menu === 'mention'
         ? [
-            ...sessions.filter((session) => session.title.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((session) => ({
-              key: `session:${session.harness}:${session.id}`,
-              label: `@${session.title}`,
-              detail: `${session.harness.toUpperCase()} session · ${session.status}`,
-              icon: <MessageCirclePlus size={14} />,
-              choose: () => insertMention(session.title, session),
-            })),
-            ...enabledSkills.filter((skill) => skill.name.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((skill) => ({
-              key: `skill:${skill.id}`,
-              label: `@${skill.name}`,
-              detail: skill.description,
-              icon: <AtSign size={14} />,
-              choose: () => insertMention(skill.name),
-            })),
+            ...sessions.filter((session) => session.title.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((session) => ({ key: `session:${session.harness}:${session.id}`, label: `@${session.title}`, detail: `${session.harness.toUpperCase()} session · ${session.status}`, icon: <ChatCircleText size={14} />, choose: () => insertMention(session.title, session) })),
+            ...enabledSkills.filter((skill) => skill.name.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((skill) => ({ key: `skill:${skill.id}`, label: `@${skill.name}`, detail: skill.description, icon: <At size={14} />, choose: () => insertMention(skill.name) })),
           ].slice(0, 8)
         : menu === 'add'
           ? [
               { key: 'files', label: 'Add files', detail: 'Attach images, audio, video, or other files', icon: <Paperclip size={14} />, choose: () => { setMenu(null); fileInputRef.current?.click() } },
-              { key: 'mention', label: 'Mention a session or skill', detail: 'Reference sidebar work or an enabled capability', icon: <AtSign size={14} />, choose: () => insert('@') },
+              { key: 'mention', label: 'Mention a session or skill', detail: 'Reference sidebar work or an enabled capability', icon: <At size={14} />, choose: () => insert('@') },
             ]
           : []
 
@@ -452,7 +444,7 @@ export const Composer = memo(function Composer({
       {queuedMessages.length || harnessQueuedMessageCount ? (
         <section className="composer-queue" aria-label="Queued messages" aria-live="polite">
           <div className="composer-queue__header">
-            <span><Clock3 size={13} />Queued messages</span>
+            <span><Clock size={13} />Queued messages</span>
             <strong>{queuedMessages.length + harnessQueuedMessageCount}</strong>
           </div>
           <div className="composer-queue__list">
@@ -461,8 +453,8 @@ export const Composer = memo(function Composer({
                 <span className="composer-queue__text">{queued.text}</span>
                 <span className="composer-queue__actions">
                   <button type="button" className="composer-queue__action" aria-label={`Send queued message immediately: ${queued.text}`} title="Send queued message immediately" onClick={() => { void sendQueuedMessageImmediately(queued) }}><ArrowUp size={13} /></button>
-                  <button type="button" className="composer-queue__action" aria-label={`Edit queued message: ${queued.text}`} title="Edit queued message" onClick={() => { onEditQueuedMessage?.(queued); setValue(queued.text); requestAnimationFrame(() => textareaRef.current?.focus()) }}><Edit3 size={13} /></button>
-                  <button type="button" className="composer-queue__action composer-queue__action--delete" aria-label={`Delete queued message: ${queued.text}`} title="Delete queued message" onClick={() => onDeleteQueuedMessage?.(queued)}><Trash2 size={13} /></button>
+                  <button type="button" className="composer-queue__action" aria-label={`Edit queued message: ${queued.text}`} title="Edit queued message" onClick={() => { onEditQueuedMessage?.(queued); setValue(queued.text); requestAnimationFrame(() => textareaRef.current?.focus()) }}><PencilSimpleLine size={13} /></button>
+                  <button type="button" className="composer-queue__action composer-queue__action--delete" aria-label={`Delete queued message: ${queued.text}`} title="Delete queued message" onClick={() => onDeleteQueuedMessage?.(queued)}><Trash size={13} /></button>
                 </span>
               </div>
             ))}
@@ -586,7 +578,7 @@ export const Composer = memo(function Composer({
         {terminalSelectionOpen && terminalSelection?.text ? (
           <div className="composer-terminal-selection" role="region" aria-label="Selected terminal text">
             <div>
-              <SquareTerminal size={14} aria-hidden="true" />
+              <TerminalWindow size={14} aria-hidden="true" />
               <strong>{terminalSelection.label}</strong>
               {terminalSelection.truncated ? <small>start truncated</small> : null}
             </div>
@@ -604,9 +596,9 @@ export const Composer = memo(function Composer({
                   aria-label={`Inspect ${annotations.length} page annotation${annotations.length === 1 ? '' : 's'}`}
                   onClick={() => setAnnotationsOpen((open) => !open)}
                 >
-                  <MessageCirclePlus size={13} />
+                  <ChatCircleText size={13} />
                   <span>{annotations.length}</span>
-                  <ChevronDown size={11} className={annotationsOpen ? 'is-open' : ''} />
+                  <CaretDown size={11} className={annotationsOpen ? 'is-open' : ''} />
                 </button>
                 <button
                   type="button"
@@ -630,9 +622,9 @@ export const Composer = memo(function Composer({
                   aria-label={`Inspect selected text from ${terminalSelection.label}`}
                   onClick={() => setTerminalSelectionOpen((open) => !open)}
                 >
-                  <SquareTerminal size={13} />
+                  <TerminalWindow size={13} />
                   <span>{terminalSelection.label}</span>
-                  <small>selected</small><ChevronDown size={11} className={terminalSelectionOpen ? 'is-open' : ''} />
+                  <small>selected</small><CaretDown size={11} className={terminalSelectionOpen ? 'is-open' : ''} />
                 </button>
                 <button type="button" className="composer-attachment__clear" aria-label="Clear terminal selection" onClick={onClearTerminalSelection}><X size={12} /></button>
               </div>
@@ -710,12 +702,16 @@ export const Composer = memo(function Composer({
             <ModelPicker value={model} modelsByProvider={modelsByProvider} providers={providers} onChange={onModelChange} />
             <ExecutingModelChip executingModel={executingModel} />
             <SelectControl label="Reasoning effort" compact icon={<Gauge size={12} />} value={effort} onChange={(event) => onEffortChange(event.target.value as PrimeThinkingLevel)}>
-              {reasoningLevels.map((level) => (
-                <option key={level} value={level}>
-                  {reasoningLabels[level]}
-                </option>
-              ))}
+              {reasoningLevels.map((level) => <option key={level} value={level}>{reasoningLabels[level]}</option>)}
             </SelectControl>
+            {harness === 'pi' ? (
+              <SelectControl label="Behavior mode" compact icon={<Command size={12} />} value={piMode} disabled={disabled || loading} onChange={(event) => {
+                void Promise.resolve(onSend(`/mode ${event.target.value}`, [], 'queue')).catch(() => undefined)
+              }}>
+                {PI_BEHAVIOR_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
+                <option value="configure" title="Choose lead and sidekick models">Configure Fusion…</option>
+              </SelectControl>
+            ) : null}
             {fastSupported ? (
               <button
                 type="button"
@@ -725,7 +721,7 @@ export const Composer = memo(function Composer({
                 title={fastAvailable ? `Use ${agentName} priority service tier` : `The installed ${agentName} RPC runtime does not expose fast mode`}
                 onClick={() => onFastChange(!fast)}
               >
-                <Zap size={12} fill={fast ? 'currentColor' : 'none'} /> <span className="fast-mode-toggle__label">Fast</span>
+                <Lightning size={12} weight={fast ? 'fill' : 'duotone'} /> <span className="fast-mode-toggle__label">Fast</span>
               </button>
             ) : null}
             <CheckoutPicker catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} onExecute={onExecuteCheckout} />
@@ -753,7 +749,7 @@ export const Composer = memo(function Composer({
               disabled={!voice || loading || disabled || submitting || dictation.state === 'connecting' || dictation.state === 'transcribing'}
               onClick={() => { if (dictation.state === 'recording') void finishDictation(false); else void dictation.start() }}
             >
-              {dictation.state === 'recording' ? <Square size={10} fill="currentColor" /> : dictation.state === 'connecting' || dictation.state === 'transcribing' ? <LoaderCircle className="is-spinning" size={15} /> : <Mic size={15} />}
+              {dictation.state === 'recording' ? <Square size={10} fill="currentColor" /> : dictation.state === 'connecting' || dictation.state === 'transcribing' ? <CircleNotch className="is-spinning" size={15} /> : <Microphone size={15} />}
             </button>
             {dictation.state === 'recording' ? (
               <button type="button" className="send-button" aria-label="Transcribe and send message" onClick={() => void finishDictation(true)}><ArrowUp size={17} /></button>

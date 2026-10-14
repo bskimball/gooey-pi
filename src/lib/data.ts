@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'system',
   interfaceFontScale: 110,
   projectSortMode: 'recent',
-  activeHarness: 'omp',
+  activeHarness: 'pi',
   ompApprovalMode: 'inherit',
   petEnabled: true,
   petId: 'orb',

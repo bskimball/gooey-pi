@@ -1,4 +1,4 @@
-import { Mic, MicOff, X } from 'lucide-react'
+import { Microphone, MicrophoneSlash, X } from './icons'
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { HarnessId, PrimeWorkApi, VoiceTaskStarted, VoiceToolRequest } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
@@ -285,7 +285,7 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
           <div className="voice-orb__core" aria-hidden="true"><i /><i /><i /></div>
           <span className="voice-orb__status">{status}</span>
           <div className="voice-orb__controls">
-            <button type="button" aria-label={muted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={toggleMute}>{muted ? <MicOff size={15} /> : <Mic size={15} />}</button>
+            <button type="button" aria-label={muted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={toggleMute}>{muted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button>
             <button type="button" aria-label="Close realtime voice" onClick={onClose}><X size={16} /></button>
           </div>
         </div>

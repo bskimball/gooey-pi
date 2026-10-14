@@ -22,6 +22,10 @@ export function resultText(value: unknown): string {
   try { return JSON.stringify(value, null, 2) } catch { return String(value) }
 }
 
+export function resultDetails(value: unknown): UnknownRecord | undefined {
+  return record(record(value)?.details)
+}
+
 export function agentMessagePart(raw: Record<string, unknown>): Extract<MessagePart, { type: 'agentMessage' }> | undefined {
   if (raw.customType !== 'agent_message') return undefined
   const details = record(raw.details)

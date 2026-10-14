@@ -112,11 +112,13 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
   }
   if (message.role === 'toolResult' || message.role === 'tool') {
     const text = parts.filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text').map((part) => part.text).join('\n')
+    const details = isRecord(message.details) ? boundedArgs(message.details) : undefined
     return [{
       type: 'toolResult',
       name: typeof message.toolName === 'string' ? boundedString(message.toolName, 512) : undefined,
       text: boundedString(text, MAX_PART_TOOL_CHARS),
       isError: message.isError === true,
+      ...(details !== undefined ? { details } : {}),
     }]
   }
   if (message.role === 'bashExecution') {
@@ -139,6 +141,8 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
   const bounded: TranscriptMessage[] = []
 
   for (const message of transcript.slice(-MAX_TRANSCRIPT_MESSAGES).reverse()) {
+    const errorMessage = message.errorMessage === undefined ? undefined : boundedString(message.errorMessage, Math.min(MAX_PART_TEXT_CHARS, textBudget))
+    textBudget -= errorMessage?.length ?? 0
     const parts: MessagePart[] = []
     for (const part of [...message.parts].reverse()) {
       if (partBudget <= 0) break
@@ -155,7 +159,14 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
         if (toolBudget > 0) {
           const text = boundedString(part.text, toolBudget)
           toolBudget -= text.length
-          next = { ...part, text }
+          let details: unknown
+          if (part.details !== undefined && argsBudget > 0) {
+            const serialized = typeof part.details === 'string' ? part.details : JSON.stringify(part.details)
+            if (serialized.length <= argsBudget) details = part.details
+            else details = boundedString(serialized, argsBudget)
+            argsBudget -= Math.min(serialized.length, argsBudget)
+          }
+          next = { ...part, text, ...(details !== undefined ? { details } : { details: undefined }) }
         }
       } else if (part.type === 'toolCall') {
         let args: unknown
@@ -192,7 +203,7 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
         partBudget -= 1
       }
     }
-    if (parts.length) bounded.push({ ...message, parts: parts.reverse() })
+    if (parts.length || errorMessage) bounded.push({ ...message, errorMessage, parts: parts.reverse() })
   }
   return bounded.reverse()
 }
@@ -419,13 +430,16 @@ async function readTranscriptWithDialect(dialect: TranscriptDialect, filePath: s
       continue
     }
     if (role === 'assistant') {
+      const errorMessage = message.stopReason === 'error' && typeof message.errorMessage === 'string'
+        ? boundedString(message.errorMessage, MAX_PART_TEXT_CHARS) : undefined
       if (activeAssistant) {
         appendAssistantParts(parts)
+        activeAssistant.errorMessage = errorMessage
         activeAssistant.completedAt = completedAt ?? activeAssistant.completedAt
       } else {
         beginAssistantTurn()
         registerToolCalls(0, parts)
-        activeAssistant = { id: safeId, role, timestamp, startedAt: timestamp, completedAt, parts }
+        activeAssistant = { id: safeId, role, timestamp, startedAt: timestamp, completedAt, errorMessage, parts }
         transcript.push(activeAssistant)
       }
       continue

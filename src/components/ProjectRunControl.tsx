@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, CircleAlert, LoaderCircle, Play, RotateCcw, Square } from 'lucide-react'
+import { ArrowCounterClockwise, CaretDown, CheckCircle, CircleNotch, Play, Square, WarningCircle } from './icons'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ProjectRecord } from '@/types/api'
 
@@ -80,10 +80,10 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }
   const setupStatus = (() => {
     const scripts = project.scripts
     if (!setup.trim()) return null
-    if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><LoaderCircle className="spin" size={12} /> Setup running</span>
+    if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><CircleNotch className="spin" size={12} /> Setup running</span>
     if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className="project-run-menu__status">Runs automatically after save</span>
-    if (scripts.setupLastExitCode === 0) return <span className="project-run-menu__status is-success"><CheckCircle2 size={12} /> Setup completed</span>
-    if (scripts.setupLastExitCode !== undefined) return <span className="project-run-menu__status is-error"><CircleAlert size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
+    if (scripts.setupLastExitCode === 0) return <span className="project-run-menu__status is-success"><CheckCircle size={12} /> Setup completed</span>
+    if (scripts.setupLastExitCode !== undefined) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
     return <span className="project-run-menu__status">Setup did not finish</span>
   })()
 
@@ -94,7 +94,7 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }
           {running ? <Square size={11} fill="currentColor" /> : <Play size={15} />}
         </button>
         <button type="button" title="Configure project scripts" className="project-run-split__menu" aria-label="Configure project scripts" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}>
-          <ChevronDown size={13} />
+          <CaretDown size={13} />
         </button>
       </div>
       {open ? (
@@ -112,8 +112,8 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }
           </label>
           {error ? <p className="project-run-menu__error" role="alert">{error}</p> : null}
           <footer>
-            <button type="button" className="button button--quiet" disabled={!project.scripts?.setup.trim() || running || saving} onClick={() => startScript('setup')}><RotateCcw size={13} /> Run setup again</button>
-            <button type="button" className="button button--primary" disabled={saving} onClick={() => void save()}>{saving ? <LoaderCircle className="spin" size={13} /> : null} Save</button>
+            <button type="button" className="button button--quiet" disabled={!project.scripts?.setup.trim() || running || saving} onClick={() => startScript('setup')}><ArrowCounterClockwise size={13} /> Run setup again</button>
+            <button type="button" className="button button--primary" disabled={saving} onClick={() => void save()}>{saving ? <CircleNotch className="spin" size={13} /> : null} Save</button>
           </footer>
         </section>
       ) : null}

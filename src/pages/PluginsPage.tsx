@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, BookOpen, Check, ChevronRight, FileCode2, FileText, GitFork, Globe2, Package, Palette, Plus, RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Trash2, WandSparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowsClockwise, BookOpen, CaretRight, Check, FileCode, FileText, GitFork, Globe, MagicWand, MagnifyingGlass, Package, Palette, Plus, ShieldCheck, SlidersHorizontal, Sparkle, Trash, Warning, X } from '@/components/icons'
 import { useMemo, useState } from 'react'
 import type { CapabilityMutationInput, ExtensionInstallInput, HarnessId, McpConnectionInput, McpStateInput, PluginWarning, SkillRecord } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
@@ -32,9 +32,9 @@ function SkillIcon({ skill }: { skill: SkillRecord }) {
   if (skill.icon === 'github') return <GitFork {...common}/>
   if (skill.icon === 'palette') return <Palette {...common}/>
   if (skill.icon === 'book-open') return <BookOpen {...common}/>
-  if (skill.kind === 'mcp') return <Globe2 {...common}/>
+  if (skill.kind === 'mcp') return <Globe {...common}/>
   if (skill.kind === 'prompt') return <FileText {...common}/>
-  if (skill.kind === 'skill') return <WandSparkles {...common}/>
+  if (skill.kind === 'skill') return <MagicWand {...common}/>
   return <Package {...common}/>
 }
 
@@ -265,7 +265,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       if (skill.kind === 'package') return mutate(skill, 'enable')
       return setMcp(skill, true)
     }
-    return <button type="button" className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={updating} title={skill.availability?.detail} onClick={() => { if (skill.enabled) setConfirmDisable(skill); else void enable() }}>{updating ? <RefreshCw className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</button>
+    return <button type="button" className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={updating} title={skill.availability?.detail} onClick={() => { if (skill.enabled) setConfirmDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</button>
   }
 
   return (
@@ -274,8 +274,8 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
         <header className="plugin-header">
           <div><span className="eyebrow">{HARNESS_SHORT_NAMES[harness]} capabilities</span><h1>Extend {HARNESS_SHORT_NAMES[harness]}</h1><p>Manage packages, extensions, MCP servers, and reusable skills for this harness.</p></div>
           <div>
-            <button type="button" className="button" onClick={() => void onRefresh()}><RefreshCw className={loading ? 'spin' : ''} size={13}/> Refresh</button>
-            <button type="button" className="button" onClick={() => setFilter('installed')}><Settings2 size={13}/> Manage</button>
+            <button type="button" className="button" onClick={() => void onRefresh()}><ArrowsClockwise className={loading ? 'spin' : ''} size={13}/> Refresh</button>
+            <button type="button" className="button" onClick={() => setFilter('installed')}><SlidersHorizontal size={13}/> Manage</button>
             <button type="button" className="button button--primary" onClick={openAdd}><Plus size={14}/> Add</button>
           </div>
         </header>
@@ -284,20 +284,20 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
           <button type="button" className={tab === 'skills' ? 'is-active' : ''} onClick={() => setTab('skills')}>Skills</button>
         </div>
         <div className="directory-tools">
-          <label className="page-search"><Search size={14}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`}/></label>
+          <label className="page-search"><MagnifyingGlass size={14}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`}/></label>
           <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Directory filter">
             <option value="all">All sources</option><option value="installed">Installed</option><option value="bundled">Bundled</option><option value="user">Personal</option><option value="project">Project</option><option value="system">System</option>
           </select>
         </div>
         {warnings.map((warning) => (
           <p key={`${warning.scope}:${warning.path}`} className="page-inline-error" role="alert">
-            <AlertTriangle size={13} /> {warning.scope === 'project' ? 'Project' : 'Personal'} {warning.message} ({warning.path})
+            <Warning size={13} /> {warning.scope === 'project' ? 'Project' : 'Personal'} {warning.message} ({warning.path})
           </p>
         ))}
-        {capabilityAlert ? <p className="page-inline-error" role="alert"><AlertTriangle size={13}/> {capabilityAlert}</p> : null}
-        {computerUseAlert ? <p className="page-inline-error" role="alert"><AlertTriangle size={13}/> {computerUseAlert}</p> : null}
-        {harness === 'pi' && mcpSupportAlert ? <p className="page-inline-error" role="alert"><AlertTriangle size={13}/> {mcpSupportAlert}</p> : null}
-        {harness === 'pi' && mcpSupportNotice ? <p className="connection-warning" role="status">{mcpSupportUpdating ? <RefreshCw className="spin" size={13}/> : <ShieldCheck size={13}/>} {mcpSupportNotice}</p> : null}
+        {capabilityAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {capabilityAlert}</p> : null}
+        {computerUseAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {computerUseAlert}</p> : null}
+        {harness === 'pi' && mcpSupportAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {mcpSupportAlert}</p> : null}
+        {harness === 'pi' && mcpSupportNotice ? <p className="connection-warning" role="status">{mcpSupportUpdating ? <ArrowsClockwise className="spin" size={13}/> : <ShieldCheck size={13}/>} {mcpSupportNotice}</p> : null}
         {harness === 'pi' && !piMcpAdapterInstalled ? <p className="connection-warning"><ShieldCheck size={13}/> Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers.</p> : null}
         <p className="connection-warning"><ShieldCheck size={13}/> {NETWORK_MCP_UNAVAILABLE_DETAIL}</p>
         <div className="directory-heading"><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span>{visible.length} shown</span></div>
@@ -308,12 +308,12 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
               <span className={`directory-icon directory-icon--${skill.kind}`}><SkillIcon skill={skill}/></span>
               <div><div><h3>{skill.name}</h3><span>{skill.location}</span></div><p id={statusDetail ? capabilityDetailId(skill) : undefined}>{skill.description}{statusDetail ? ` ${statusDetail}` : ''}</p></div>
               <div className="capability-actions">
-                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <button type="button" className="plugin-remove" aria-label={`Remove ${skill.name}`} disabled={capabilityUpdating === skill.id} onClick={() => setConfirmRemove(skill)}><Trash2 size={13}/></button> : null}
+                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <button type="button" className="plugin-remove" aria-label={`Remove ${skill.name}`} disabled={capabilityUpdating === skill.id} onClick={() => setConfirmRemove(skill)}><Trash size={13}/></button> : null}
                 {capabilityControl(skill)}
               </div>
             </article>
           })}</div>
-        ) : <EmptyState icon={<Sparkles size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
+        ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
 
         {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => setConfirmDisable(null)} footer={<><button type="button" className="button" onClick={() => setConfirmDisable(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</button></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
         {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => setConfirmRemove(null)} footer={<><button type="button" className="button" onClick={() => setConfirmRemove(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</button></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? harness === 'prime' ? 'only the server definition. Prime authorization is unchanged and must be managed directly in Prime Agent.' : 'only the server definition; harness-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
@@ -329,15 +329,15 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
             {addKind === null ? (
               <div className="capability-choice-list">
                 <button type="button" disabled={harness === 'prime' || harness === 'pi' && !piMcpAdapterInstalled} onClick={() => selectAddKind('mcp')}>
-                  <span><Globe2 size={17}/></span><span><strong>Add MCP</strong><small>{harness === 'prime' ? 'Prime MCP setup is managed outside GooeyPi' : harness === 'pi' && !piMcpAdapterInstalled ? 'Enable Pi MCP Adapter first' : 'Add a local stdio server; network servers stay externally managed'}</small></span><ChevronRight size={15}/>
+                  <span><Globe size={17}/></span><span><strong>Add MCP</strong><small>{harness === 'prime' ? 'Prime MCP setup is managed outside GooeyPi' : harness === 'pi' && !piMcpAdapterInstalled ? 'Enable Pi MCP Adapter first' : 'Add a local stdio server; network servers stay externally managed'}</small></span><CaretRight size={15}/>
                 </button>
                 <button type="button" onClick={() => selectAddKind('bundle')}>
-                  <span><Package size={17}/></span><span><strong>Add {harness === 'omp' ? 'Plugin' : 'Package'}</strong><small>{PACKAGE_HELP[harness]}</small></span><ChevronRight size={15}/>
+                  <span><Package size={17}/></span><span><strong>Add {harness === 'omp' ? 'Plugin' : 'Package'}</strong><small>{PACKAGE_HELP[harness]}</small></span><CaretRight size={15}/>
                 </button>
                 <button type="button" onClick={() => selectAddKind('extension')}>
-                  <span><FileCode2 size={17}/></span><span><strong>Add Extension</strong><small>Install one local JavaScript or TypeScript extension module for {HARNESS_SHORT_NAMES[harness]}.</small></span><ChevronRight size={15}/>
+                  <span><FileCode size={17}/></span><span><strong>Add Extension</strong><small>Install one local JavaScript or TypeScript extension module for {HARNESS_SHORT_NAMES[harness]}.</small></span><CaretRight size={15}/>
                 </button>
-                <p className="capability-compatibility-note"><AlertTriangle size={13}/><span>Not every third-party package, plugin, or extension will work in GooeyPi. If something fails, <button type="button" onClick={() => onOpenExternal(GITHUB_ISSUES_URL)}>create a GitHub issue</button>.</span></p>
+                <p className="capability-compatibility-note"><Warning size={13}/><span>Not every third-party package, plugin, or extension will work in GooeyPi. If something fails, <button type="button" onClick={() => onOpenExternal(GITHUB_ISSUES_URL)}>create a GitHub issue</button>.</span></p>
               </div>
             ) : addKind === 'bundle' ? (
               <div className="add-tool-form">

@@ -342,4 +342,72 @@ describe('Composer sendSignal', () => {
     })
     expect(onSend).not.toHaveBeenCalled()
   })
+
+  it('opens the custom SelectControl popover from the chevron, supports keyboard navigation, and dispatches Pi mode changes', async () => {
+    const onSend = vi.fn<(prompt: string, images: PromptImage[], intent: PromptDeliveryIntent) => Promise<void>>(async () => undefined)
+    const onEffortChange = vi.fn()
+    act(() =>
+      root.render(
+        <Composer
+          busy={false}
+          harness="pi"
+          model="provider/vision"
+          effort="medium"
+          modelsByProvider={modelsByProvider}
+          providers={providers}
+          reasoningLevels={['low', 'medium', 'high']}
+          fast={false}
+          fastSupported={false}
+          fastAvailable
+          imageInputSupported
+          messageEnterAction="queue"
+          skills={[]}
+          onModelChange={vi.fn()}
+          onEffortChange={onEffortChange}
+          onFastChange={vi.fn()}
+          onSend={onSend}
+          onStop={vi.fn()}
+        />,
+      ),
+    )
+
+    const modeControl = [...container.querySelectorAll<HTMLElement>('.select-control')].find((el) => el.getAttribute('title') === 'Behavior mode')!
+    const modeTrigger = modeControl.querySelector<HTMLButtonElement>('[role="combobox"]')!
+    const modeChevron = modeControl.querySelector<HTMLElement>('.select-control__chevron')!
+
+    await act(async () => {
+      const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+      modeChevron.dispatchEvent(mousedown)
+      modeChevron.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull()
+    expect(document.activeElement).toBe(modeTrigger)
+
+    await act(async () => {
+      const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+      const prevented = !modeChevron.dispatchEvent(mousedown)
+      if (!prevented) modeTrigger.blur()
+      modeChevron.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(modeControl.querySelector('[role="listbox"]')).toBeNull()
+
+    await act(async () => {
+      modeChevron.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull()
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(modeControl.querySelector('[role="listbox"]')).toBeNull()
+
+    await act(async () => {
+      modeTrigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    const fusionOption = [...modeControl.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((opt) => opt.textContent?.includes('Fusion') && !opt.textContent?.includes('Configure'))!
+    await act(async () => {
+      fusionOption.click()
+    })
+    expect(onSend).toHaveBeenCalledWith('/mode fusion', [], 'queue')
+  })
 })

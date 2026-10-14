@@ -2,27 +2,32 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { IconContext } from './components/icons'
 import { saveComposerDraftFromDom } from './lib/composer-draft'
 import './styles.css'
 
 const root = document.getElementById('root')
 if (!root) throw new Error('GooeyPi root element was not found')
 
+const ICON_CONTEXT = { weight: 'duotone' as const }
+
 createRoot(root).render(
   <StrictMode>
-    <ErrorBoundary
-      onCatch={saveComposerDraftFromDom}
-      fallback={(
-        <div className="empty-state app-error-fallback" role="alert">
-          <h2>GooeyPi hit an unexpected error</h2>
-          <p>Reload to continue. Any message you were typing is preserved.</p>
-          <div className="empty-state__action">
-            <button type="button" className="button button--primary" onClick={() => window.location.reload()}>Reload GooeyPi</button>
+    <IconContext.Provider value={ICON_CONTEXT}>
+      <ErrorBoundary
+        onCatch={saveComposerDraftFromDom}
+        fallback={(
+          <div className="empty-state app-error-fallback" role="alert">
+            <h2>GooeyPi hit an unexpected error</h2>
+            <p>Reload to continue. Any message you were typing is preserved.</p>
+            <div className="empty-state__action">
+              <button type="button" className="button button--primary" onClick={() => window.location.reload()}>Reload GooeyPi</button>
+            </div>
           </div>
-        </div>
-      )}
-    >
-      <App />
-    </ErrorBoundary>
+        )}
+      >
+        <App />
+      </ErrorBoundary>
+    </IconContext.Provider>
   </StrictMode>,
 )

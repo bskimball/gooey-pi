@@ -41,6 +41,13 @@ describe('HarnessDiscoveryService', () => {
     await userSelection
     await expect(reconciliation).resolves.toMatchObject({ activeHarness: 'omp' })
     expect(state.settings.activeHarness).toBe('omp')
+
+    await expect(reconcileActiveHarness(store, {
+      omp: { path: '/bin/omp', version: '1' },
+      prime: { path: '/bin/prime-agent', version: '1' },
+      pi: { path: '/bin/pi', version: '1' },
+    })).resolves.toMatchObject({ activeHarness: 'pi' })
+    expect(state.settings.activeHarness).toBe('pi')
   })
 
   it('publishes one atomic status snapshot using the current runtime overrides', async () => {

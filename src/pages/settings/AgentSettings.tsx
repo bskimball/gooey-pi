@@ -1,4 +1,4 @@
-import { Bot, Keyboard, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ArrowsClockwise, Keyboard, Robot, ShieldCheck } from '@/components/icons'
 import { useState } from 'react'
 import { HARNESS_IDS, OMP_APPROVAL_MODES, type HarnessId, type OmpApprovalMode } from '@/types/api'
 import { errorMessage } from '@/lib/errors'
@@ -58,7 +58,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
         <div className="settings-group__heading">
           <h2>Runtime</h2>
           <button type="button" className="button button--compact" disabled={refreshing} onClick={() => { void refreshHarnesses() }}>
-            <RefreshCw className={refreshing ? 'spin' : ''} size={13} />{refreshing ? 'Refreshing…' : 'Refresh harnesses'}
+            <ArrowsClockwise className={refreshing ? 'spin' : ''} size={13} />{refreshing ? 'Refreshing…' : 'Refresh harnesses'}
           </button>
         </div>
         {refreshError ? <p className="settings-error" role="alert">{refreshError}</p> : null}
@@ -67,7 +67,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
           const status = meta?.harnesses[harness]
           return (
             <div className="runtime-card" key={harness}>
-              <span className={status?.path ? 'is-online' : ''}><Bot size={17} /></span>
+              <span className={status?.path ? 'is-online' : ''}><Robot size={17} /></span>
               <div>
                 <strong>{status?.path ? `${name} is ready` : `${name} not detected`}</strong>
                 <small title={status?.problem ? `${status.problem.path}: ${status.problem.reason}` : undefined}>{status?.path ?? (status?.problem ? `${status.problem.path}: ${status.problem.reason}` : `Install ${name}, then refresh harnesses.`)}</small>

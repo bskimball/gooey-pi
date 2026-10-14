@@ -40,6 +40,12 @@ describe('provider auto-retry session lifecycle', () => {
     expect(sessionLifecycleChange({ type: 'auto_retry_end', success: false, attempt: 3 })).toMatchObject({ status: 'failed' })
     expect(sessionLifecycleChange({ type: 'auto_retry_end', success: true, attempt: 1 })).toBeUndefined()
   })
+
+  it('ignores non-blocking extension_ui_request status/widget notifications while keeping dialogs waiting', () => {
+    expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'mode', statusText: 'Apex' })).toBeUndefined()
+    expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'notify', message: 'Saved' })).toBeUndefined()
+    expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'select', id: 'q1', title: 'Choose', options: ['a'] })).toMatchObject({ status: 'waiting', markUnread: true })
+  })
 })
 
 describe('provider auto-retry transcript continuity', () => {
@@ -83,5 +89,32 @@ describe('provider auto-retry transcript continuity', () => {
     ]
     const result = replayPrimeEvents(streamingAssistant('partial answer'), events)
     expect(result[0]).toMatchObject({ streaming: false })
+  })
+})
+
+describe('assistant provider error visibility', () => {
+  const failure = { type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: '429 ResourceExhausted', content: [] } }
+  it.each([undefined, 'Partial response'])('shows a non-retried error without success fallback %s', (text) => {
+    const events = [failure, { type: 'agent_end' }]
+    for (const result of [replayPrimeEvents(streamingAssistant(text), events), events.reduce((messages, event) => applyPrimeEvent(messages, event), streamingAssistant(text))]) {
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ streaming: false, errorMessage: '429 ResourceExhausted' })
+      expect(result[0].parts).toEqual(text ? [{ type: 'text', text }] : [])
+    }
+  })
+  it('keeps one final reason on exhausted retries with sequential/batched parity', () => {
+    const events = [failure, { type: 'agent_end' }, { type: 'auto_retry_start' }, { type: 'agent_end' }, { type: 'auto_retry_end', success: false, finalError: 'Final provider reason' }]
+    for (const result of [replayPrimeEvents(streamingAssistant(), events), events.reduce((messages, event) => applyPrimeEvent(messages, event), streamingAssistant())]) {
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ streaming: false, errorMessage: 'Final provider reason', parts: [] })
+    }
+  })
+  it('clears stale failures on retry and successful recovery', () => {
+    const failed = replayPrimeEvents(streamingAssistant(), [failure, { type: 'agent_end' }])
+    const retrying = applyPrimeEvent(failed, { type: 'auto_retry_start' })
+    expect(retrying[0].errorMessage).toBeUndefined()
+    const result = replayPrimeEvents(retrying, [delta('Recovered'), { type: 'message_end', message: { role: 'assistant', stopReason: 'stop' } }, { type: 'auto_retry_end', success: true }, { type: 'agent_end' }])
+    expect(result[0]).toMatchObject({ streaming: false, parts: [{ type: 'text', text: 'Recovered' }] })
+    expect(result[0].errorMessage).toBeUndefined()
   })
 })

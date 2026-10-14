@@ -1,4 +1,4 @@
-import { Check, KeyRound, Laptop, LoaderCircle, Mic2, Radio, RefreshCw, Server, ShieldAlert, ShieldCheck, Trash2, Waves } from 'lucide-react'
+import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
 import { useEffect, useState } from 'react'
 import { Modal } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
@@ -136,13 +136,13 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
   return (
     <>
       <header className="voice-settings-header">
-        <span className="voice-settings-header__icon"><Mic2 size={19} /></span>
+        <span className="voice-settings-header__icon"><MicrophoneStage size={19} /></span>
         <div><h1>Voice</h1><p>Connect a speech service, choose a model, then use the microphone or realtime orb.</p></div>
       </header>
 
       {serviceState === 'restart-required' ? (
         <div className="voice-bridge-notice" role="status">
-          <RefreshCw size={17} />
+          <ArrowsClockwise size={17} />
           <span><strong>Restart GooeyPi to finish enabling Voice</strong><small>This app window is connected to an older desktop process without the Voice handlers. Quit GooeyPi completely with {shortcutLabel(platform, ['Primary', 'Q'])}, then reopen it.</small></span>
         </div>
       ) : null}
@@ -154,7 +154,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
         </div>
         {serviceState === 'ready' && status && !secureStorageAvailable ? (
           <div className="voice-storage-notice" role="alert">
-            <ShieldAlert size={17} />
+            <ShieldWarning size={17} />
             <span><strong>Keys will work only until GooeyPi quits</strong><small>{status.storage.message} You can still add a key for this session. GooeyPi will keep it only in desktop memory and will not save it to disk.</small></span>
           </div>
         ) : null}
@@ -169,8 +169,8 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
                   <span className="voice-connection-card__title"><strong>{item.name}</strong><i>{serviceState === 'checking' ? 'Checking…' : serviceState === 'restart-required' ? 'Restart required' : serviceState === 'error' ? 'Unavailable' : configured ? source === 'environment' ? 'Environment key' : source === 'session' ? 'Session only' : 'Connected' : source === 'saved' && !secureStorageAvailable ? 'Storage locked' : 'Not connected'}</i></span>
                   <small>{item.detail}</small>
                 </div>
-                {serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential(item.id)}><KeyRound size={13} /> {configured ? 'Replace key' : 'Add key'}</button> : null}
-                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <button type="button" className="button button--icon" aria-label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash2 size={13} /></button> : null}
+                {serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential(item.id)}><Key size={13} /> {configured ? 'Replace key' : 'Add key'}</button> : null}
+                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <button type="button" className="button button--icon" aria-label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash size={13} /></button> : null}
               </article>
             )
           })}
@@ -200,7 +200,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           {settings.voiceTranscriptionProvider === 'deepgram' ? <ModelSelect label="Dictation model" description="Choose a general or audio-specific Nova model." value={settings.voiceDeepgramTranscriptionModel} options={DEEPGRAM_MODELS} onChange={(value) => update('voiceDeepgramTranscriptionModel', value)} /> : null}
           {settings.voiceTranscriptionProvider === 'self-hosted' ? (
             <div className="voice-self-hosted-setup">
-              <span className="voice-local-setup__intro"><Server size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
+              <span className="voice-local-setup__intro"><HardDrives size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
               <label className="voice-path-field">
                 <span><strong>Server URL</strong><small>Enter the server base URL or its full /v1/audio/transcriptions endpoint.</small></span>
                 <input aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" spellCheck={false} onChange={(event) => { setSelfHostedUrl(event.target.value); setSelfHostedTestState('idle'); setSelfHostedMessage('') }} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
@@ -213,15 +213,15 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
                 <span><strong>Access token</strong><small>Optional. Stored with the same OS-backed protection as your other voice keys.</small></span>
                 <span className="voice-self-hosted-auth__actions">
                   <i>{status?.configured['self-hosted'] ? status.source['self-hosted'] === 'session' ? 'Session only' : status.source['self-hosted'] === 'environment' ? 'Environment token' : 'Token saved' : status?.source['self-hosted'] === 'saved' ? 'Storage locked' : 'No token'}</i>
-                  {voice && serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential('self-hosted')}><KeyRound size={13} /> {status?.configured['self-hosted'] ? 'Replace token' : 'Add token'}</button> : null}
-                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <button type="button" className="button button--icon" aria-label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash2 size={13} /></button> : null}
+                  {voice && serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential('self-hosted')}><Key size={13} /> {status?.configured['self-hosted'] ? 'Replace token' : 'Add token'}</button> : null}
+                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <button type="button" className="button button--icon" aria-label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash size={13} /></button> : null}
                 </span>
               </div>
               <div className="voice-self-hosted-connect">
                 <span><strong>Connection check</strong><small>Uploads a tenth of a second of silence to verify the actual transcription route and model.</small></span>
-                <button type="button" className="button button--primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? <LoaderCircle className="is-spinning" size={13} /> : <Server size={13} />} {selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</button>
+                <button type="button" className="button button--primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? <CircleNotch className="is-spinning" size={13} /> : <HardDrives size={13} />} {selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</button>
               </div>
-              {selfHostedMessage ? <p className={`voice-self-hosted-result is-${selfHostedTestState}`} role={selfHostedTestState === 'error' ? 'alert' : 'status'}>{selfHostedTestState === 'connected' ? <Check size={13} /> : <ShieldAlert size={13} />}{selfHostedMessage}</p> : null}
+              {selfHostedMessage ? <p className={`voice-self-hosted-result is-${selfHostedTestState}`} role={selfHostedTestState === 'error' ? 'alert' : 'status'}>{selfHostedTestState === 'connected' ? <Check size={13} /> : <ShieldWarning size={13} />}{selfHostedMessage}</p> : null}
               <p className="voice-self-hosted-note">Plain HTTP is allowed on this computer and private-network addresses. Use HTTPS for public hosts.</p>
             </div>
           ) : null}
@@ -235,11 +235,11 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
           {settings.voiceTranscriptionProvider === 'self-hosted' ? (
             <div className={`voice-requirement${selfHostedUrl.trim() ? ' is-ready' : ''}`}>
-              <span>{selfHostedUrl.trim() ? <Check size={13} /> : <Server size={13} />}{selfHostedUrl.trim() ? 'Self-hosted server configured' : 'Server URL required'}</span>
+              <span>{selfHostedUrl.trim() ? <Check size={13} /> : <HardDrives size={13} />}{selfHostedUrl.trim() ? 'Self-hosted server configured' : 'Server URL required'}</span>
             </div>
           ) : selectedCredential ? (
             <div className={`voice-requirement${selectedConfigured ? ' is-ready' : ''}`}>
-              <span>{selectedConfigured ? <Check size={13} /> : <KeyRound size={13} />}{selectedConfigured ? `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} is connected` : `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} key required`}</span>
+              <span>{selectedConfigured ? <Check size={13} /> : <Key size={13} />}{selectedConfigured ? `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} is connected` : `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} key required`}</span>
               {!selectedConfigured && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential(selectedCredential)}>Add key</button> : null}
             </div>
           ) : <div className="voice-requirement is-ready"><span><Check size={13} />Runs locally with no API key</span></div>}
@@ -248,14 +248,14 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
       <section className="voice-section" aria-labelledby="voice-realtime-title">
         <div className="voice-section__heading">
-          <span><Radio size={15} /></span>
+          <span><Broadcast size={15} /></span>
           <div><h2 id="voice-realtime-title">Realtime orb</h2><p>The draggable voice agent. It uses your OpenAI connection.</p></div>
         </div>
         <div className="voice-setup-card">
           <ModelSelect label="Realtime model" description="Handles conversation, web search, and task delegation." value={settings.voiceRealtimeModel} options={REALTIME_MODELS} onChange={(value) => update('voiceRealtimeModel', value)} />
           <ModelSelect label="Speaking voice" description="The voice you hear when the orb responds." value={settings.voiceRealtimeVoice} options={REALTIME_VOICES} onChange={(value) => update('voiceRealtimeVoice', value)} />
           <div className={`voice-requirement${status?.configured.openai ? ' is-ready' : ''}`}>
-            <span>{status?.configured.openai ? <Check size={13} /> : <KeyRound size={13} />}{status?.configured.openai ? 'OpenAI is connected' : 'OpenAI key required'}</span>
+            <span>{status?.configured.openai ? <Check size={13} /> : <Key size={13} />}{status?.configured.openai ? 'OpenAI is connected' : 'OpenAI key required'}</span>
             {!status?.configured.openai && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential('openai')}>Add key</button> : null}
           </div>
           {secureStorageAvailable ? <p className="voice-realtime-note">Saved API keys are encrypted using your operating system’s internal keychain. When you open the voice agent, your system may ask for your password to retrieve the key.</p> : null}

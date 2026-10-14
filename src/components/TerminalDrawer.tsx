@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, Plus, Terminal as TerminalIcon, Trash2, X } from 'lucide-react'
+import { ArrowsInSimple, ArrowsOutSimple, Plus, Terminal as TerminalIcon, Trash, X } from './icons'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -434,8 +434,8 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
         </div>
         <div className="terminal-actions">
           <span className="terminal-cwd" title={cwd}>{cwd?.split('/').at(-1) ?? 'No project'}</span>
-          <IconButton label="Clear terminal" onClick={() => viewRefs.current.get(activeTabId)?.clear()}><Trash2 size={13}/></IconButton>
-          <IconButton label={maximized ? 'Restore terminal' : 'Maximize terminal'} onClick={() => setMaximized((value) => !value)}>{maximized ? <Minimize2 size={13}/> : <Maximize2 size={13}/>}</IconButton>
+          <IconButton label="Clear terminal" onClick={() => viewRefs.current.get(activeTabId)?.clear()}><Trash size={13}/></IconButton>
+          <IconButton label={maximized ? 'Restore terminal' : 'Maximize terminal'} onClick={() => setMaximized((value) => !value)}>{maximized ? <ArrowsInSimple size={13}/> : <ArrowsOutSimple size={13}/>}</IconButton>
           <IconButton label="Close terminal" onClick={onClose}><X size={14}/></IconButton>
         </div>
       </div>

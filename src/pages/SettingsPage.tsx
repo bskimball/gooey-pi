@@ -1,4 +1,4 @@
-import { ArrowLeft, AudioLines, Bot, Boxes, ChevronRight, Info, LockKeyhole, PawPrint, Settings2, Sun, Terminal } from 'lucide-react'
+import { ArrowLeft, CaretRight, Cube, Info, LockKey, PawPrint, Robot, SlidersHorizontal, Sun, Terminal, Waveform } from '@/components/icons'
 import { useEffect, useState, type ComponentType } from 'react'
 import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
@@ -18,15 +18,15 @@ import { TerminalSettings } from './settings/TerminalSettings'
 import { VoiceSettings } from './settings/VoiceSettings'
 
 const sections: Array<{ id: SettingsSection; label: MessageKey; icon: ComponentType<{ size?: number }> }> = [
-  { id: 'general', label: 'settings.general', icon: Settings2 },
+  { id: 'general', label: 'settings.general', icon: SlidersHorizontal },
   { id: 'appearance', label: 'settings.appearance', icon: Sun },
-  { id: 'agent', label: 'settings.harness', icon: Bot },
-  { id: 'providers', label: 'settings.providers', icon: Boxes },
-  { id: 'voice', label: 'settings.voice', icon: AudioLines },
+  { id: 'agent', label: 'settings.harness', icon: Robot },
+  { id: 'providers', label: 'settings.providers', icon: Cube },
+  { id: 'voice', label: 'settings.voice', icon: Waveform },
   { id: 'pets', label: 'settings.pets', icon: PawPrint },
   { id: 'browser', label: 'settings.browser', icon: BrowserGlobe },
   { id: 'terminal', label: 'settings.terminal', icon: Terminal },
-  { id: 'privacy', label: 'settings.privacy', icon: LockKeyhole },
+  { id: 'privacy', label: 'settings.privacy', icon: LockKey },
   { id: 'about', label: 'settings.about', icon: Info },
 ]
 
@@ -100,7 +100,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, onC
           const Icon = item.icon
           return (
             <button type="button" key={item.id} className={section === item.id ? 'is-active' : ''} onClick={() => setSection(item.id)}>
-              <Icon size={14} /><span>{t(item.label)}</span><ChevronRight size={12} />
+              <Icon size={14} /><span>{t(item.label)}</span><CaretRight size={12} />
             </button>
           )
         })}
