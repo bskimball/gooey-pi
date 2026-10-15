@@ -253,6 +253,21 @@ describe('Composer skill mentions', () => {
     expect(prompt).not.toContain('browser-skill/SKILL.md')
   })
 
+  it('puts the exact @prompt first when sessions and other prompts only start with the query', async () => {
+    renderComposer({
+      sessions: [
+        sessionRecord('poteto notes zeta', '019f0000-0000-7000-8000-000000000001'),
+        sessionRecord('poteto notes alpha', '019f0000-0000-7000-8000-000000000002'),
+      ],
+      skills: [
+        skillRecord('poteto-bug-fix', { id: 'poteto-bug-fix', kind: 'prompt', path: undefined }),
+        skillRecord('poteto', { id: 'poteto', kind: 'prompt', path: undefined }),
+      ],
+    })
+    await setDraft('@poteto')
+    expect(optionLabels()).toEqual(['@poteto', '@poteto-bug-fix', '@poteto notes zeta', '@poteto notes alpha'])
+  })
+
   it('routes an @session and a same-named $skill independently', async () => {
     const skill = skillRecord('Ownership')
     const { onSend } = renderComposer({ sessions: [sessionRecord('Ownership')], skills: [skill, skillRecord('Ownership', { id: 'ownership-mcp', kind: 'mcp', path: undefined })] })
