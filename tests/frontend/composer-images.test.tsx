@@ -325,7 +325,8 @@ describe('Composer image ingestion', () => {
 
     act(() => (container.querySelector('button[aria-label="Add context"]') as HTMLButtonElement).click())
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Add files')
-    expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Mention a session or skill')
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Use a skill')
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Mention a session or capability')
     act(() => (Array.from(container.querySelectorAll<HTMLButtonElement>('.composer-menu button')).find((button) => button.textContent?.includes('Add files')) as HTMLButtonElement).click())
     expect(click).toHaveBeenCalledOnce()
     expect(input?.multiple).toBe(true)

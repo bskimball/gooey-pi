@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.{ts,tsx}'],
+    // Vitest 5 defaults clearMocks to true; suites assert on import-time mock calls.
+    clearMocks: false,
     coverage: {
       provider: 'v8',
       include: coverageInventory.includePatterns,

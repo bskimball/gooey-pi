@@ -1,4 +1,4 @@
-import { ArrowUp, At, CaretDown, ChatCircleText, CircleNotch, Clock, Command, Gauge, Image as ImageIcon, Lightning, Microphone, Paperclip, PencilSimpleLine, Plus, Square, TerminalWindow, Trash, X } from './icons'
+import { ArrowUp, At, CaretDown, ChatCircleText, CircleNotch, Clock, Command, Gauge, Image as ImageIcon, Lightning, Microphone, Paperclip, PencilSimpleLine, Plus, Sparkle, Square, TerminalWindow, Trash, X } from './icons'
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type {
@@ -23,7 +23,7 @@ import type {
   VoiceTranscriptionProvider,
 } from '@/types/api'
 import { appendAnnotationsToPrompt } from '@/lib/browser-annotations'
-import { appendCapabilityRouting } from '@/lib/capability-mentions'
+import { appendCapabilityRouting, capabilitiesForMention, capabilityTrigger, findMentionQuery, type MentionTrigger } from '@/lib/capability-mentions'
 import { appendTerminalContextToPrompt } from '@/lib/terminal-context'
 import { appendSessionRouting, findSessionMentions } from '@/lib/session-mentions'
 import { clearComposerDraft, readComposerDraft, saveComposerDraft, takeComposerDraft } from '@/lib/composer-draft'
@@ -215,17 +215,16 @@ export const Composer = memo(function Composer({
   }, [draftKey, effort, fast, model, value])
 
   useEffect(() => {
-    const mentionMatch = /(?:^|\s)@([^@\n]*)$/.exec(value)
-    const mentionStart = mentionMatch ? value.length - mentionMatch[1].length - 1 : -1
+    const mention = findMentionQuery(value)
     const acceptedMention = acceptedMentionRef.current
     const suppressAcceptedMention = Boolean(
-      mentionMatch
+      mention
       && acceptedMention
-      && mentionStart === acceptedMention.start
+      && mention.start === acceptedMention.start
       && value.slice(acceptedMention.start, acceptedMention.start + acceptedMention.text.length) === acceptedMention.text,
     )
     if (acceptedMention && !suppressAcceptedMention) acceptedMentionRef.current = null
-    setMenu(value.startsWith('/') && !value.includes(' ') ? 'command' : mentionMatch && !suppressAcceptedMention ? 'mention' : null)
+    setMenu(value.startsWith('/') && !value.includes(' ') ? 'command' : mention && !suppressAcceptedMention ? 'mention' : null)
   }, [value])
   useEffect(() => {
     setSessionReferenceIds((current) => {
@@ -302,14 +301,14 @@ export const Composer = memo(function Composer({
       return
     }
     const submittedImages = currentImages.map(({ type, data, mimeType }) => ({ type, data, mimeType }))
-    // Recognized @ mentions carry explicit routing semantics; annotations then
+    // Recognized mentions carry explicit routing semantics; annotations then
     // ride along inside the prompt as their own delimited plain-text block.
     const referencedSessions = findSessionMentions(prompt, sessions, sessionReferenceIds)
     const sessionTitles = new Set(referencedSessions.map(({ session }) => session.title.trim().toLocaleLowerCase()))
     const promptWithSessions = appendSessionRouting(prompt, sessions, sessionReferenceIds)
-    // If a session and capability share a display name, the session chosen
-    // from the combined menu wins instead of silently routing both.
-    const promptWithCapabilities = appendCapabilityRouting(promptWithSessions, enabledSkills.filter((skill) => !sessionTitles.has(skill.name.trim().toLocaleLowerCase())))
+    // If a session and @capability share a display name, the session chosen
+    // from the combined menu wins; $skills use their own trigger.
+    const promptWithCapabilities = appendCapabilityRouting(promptWithSessions, enabledSkills.filter((skill) => capabilityTrigger(skill) === '$' || !sessionTitles.has(skill.name.trim().toLocaleLowerCase())))
     const promptWithAnnotations = appendAnnotationsToPrompt(promptWithCapabilities, currentAnnotations)
     const promptWithContext = appendTerminalContextToPrompt(promptWithAnnotations, currentTerminalContext)
     const frame = `${JSON.stringify({ type: intent === 'steer' ? 'steer' : 'follow_up', message: promptWithContext, ...(submittedImages.length ? { images: submittedImages } : {}), id: '00000000-0000-0000-0000-000000000000' })}\n`
@@ -370,20 +369,19 @@ export const Composer = memo(function Composer({
     setMenu(null)
     textarea?.focus()
   }
-  const insertMention = (label: string, session?: SessionRecord) => {
+  const mention = findMentionQuery(value)
+  const mentionQuery = mention?.query.toLocaleLowerCase().trim() ?? ''
+  const mentionsSkills = mention?.trigger === '$'
+  const mentionCapabilities = mention ? capabilitiesForMention(enabledSkills, mention) : []
+  const insertMention = (trigger: MentionTrigger, label: string, session?: SessionRecord) => {
     const textarea = textareaRef.current
-    const match = /(?:^|\s)@([^@\n]*)$/.exec(value)
-    if (!match) { insert(`@${label} `); return }
-    const query = match[1]
-    const start = value.length - query.length
-    const mentionStart = start - 1
-    const acceptedText = `@${label} `
+    if (!mention) { insert(`${trigger}${label} `); return }
+    const start = mention.start + 1
+    acceptedMentionRef.current = { start: mention.start, text: `${trigger}${label} ` }
     if (textarea) {
       textarea.setRangeText(`${label} `, start, value.length, 'end')
-      acceptedMentionRef.current = { start: mentionStart, text: acceptedText }
       setValue(textarea.value)
     } else {
-      acceptedMentionRef.current = { start: mentionStart, text: acceptedText }
       setValue(`${value.slice(0, start)}${label} `)
     }
     if (session) {
@@ -394,22 +392,23 @@ export const Composer = memo(function Composer({
     textarea?.focus()
   }
 
-  const mentionQuery = /(?:^|\s)@([^@\n]*)$/.exec(value)?.[1]?.toLocaleLowerCase().trim() ?? ''
-
   const suggestions =
     menu === 'command'
       ? (harness === 'prime' ? primeCommands : harness === 'pi' ? piCommands : commands)
           .filter((item) => item.command.startsWith(value))
           .map((item) => ({ key: item.command, label: item.command, detail: item.detail, icon: <Command size={14} />, choose: () => { setValue(`${item.command} `); setMenu(null); textareaRef.current?.focus() } }))
+      : menu === 'mention' && mentionsSkills
+        ? mentionCapabilities.slice(0, 8).map((skill) => ({ key: `skill:${skill.id}`, label: `$${skill.name}`, detail: skill.description, icon: <Sparkle size={14} />, choose: () => insertMention('$', skill.name) }))
       : menu === 'mention'
         ? [
-            ...sessions.filter((session) => session.title.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((session) => ({ key: `session:${session.harness}:${session.id}`, label: `@${session.title}`, detail: `${session.harness.toUpperCase()} session · ${session.status}`, icon: <ChatCircleText size={14} />, choose: () => insertMention(session.title, session) })),
-            ...enabledSkills.filter((skill) => skill.name.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((skill) => ({ key: `skill:${skill.id}`, label: `@${skill.name}`, detail: skill.description, icon: <At size={14} />, choose: () => insertMention(skill.name) })),
+            ...sessions.filter((session) => session.title.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((session) => ({ key: `session:${session.harness}:${session.id}`, label: `@${session.title}`, detail: `${session.harness.toUpperCase()} session · ${session.status}`, icon: <ChatCircleText size={14} />, choose: () => insertMention('@', session.title, session) })),
+            ...mentionCapabilities.slice(0, 6).map((skill) => ({ key: `capability:${skill.id}`, label: `@${skill.name}`, detail: skill.description, icon: <At size={14} />, choose: () => insertMention('@', skill.name) })),
           ].slice(0, 8)
         : menu === 'add'
           ? [
               { key: 'files', label: 'Add files', detail: 'Attach images, audio, video, or other files', icon: <Paperclip size={14} />, choose: () => { setMenu(null); fileInputRef.current?.click() } },
-              { key: 'mention', label: 'Mention a session or skill', detail: 'Reference sidebar work or an enabled capability', icon: <At size={14} />, choose: () => insert('@') },
+              { key: 'skill', label: 'Use a skill', detail: 'Invoke an enabled skill with $', icon: <Sparkle size={14} />, choose: () => insert('$') },
+              { key: 'mention', label: 'Mention a session or capability', detail: 'Reference sidebar work or an enabled extension with @', icon: <At size={14} />, choose: () => insert('@') },
             ]
           : []
 
@@ -468,7 +467,7 @@ export const Composer = memo(function Composer({
             value={value}
             disabled={disabled || loading}
             rows={2}
-            placeholder={disabled ? 'Add a project to begin' : loading ? 'Loading session…' : submitting ? `Starting ${shortName}…` : `Ask ${shortName} anything, @ for sessions and skills, / for commands`}
+            placeholder={disabled ? 'Add a project to begin' : loading ? 'Loading session…' : submitting ? `Starting ${shortName}…` : `Ask ${shortName} anything, $ for skills, @ for sessions, / for commands`}
             aria-label={`Message ${shortName}`}
             role="combobox"
             aria-autocomplete="list"
@@ -496,7 +495,8 @@ export const Composer = memo(function Composer({
                 setActiveSuggestion((current) => (event.key === 'ArrowDown' ? (current + 1) % suggestions.length : (current - 1 + suggestions.length) % suggestions.length))
                 return
               }
-              if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && menu && suggestions.length) {
+              // Tab completes like Enter, but leaves focus traversal alone in the Add context action menu.
+              if ((event.key === 'Enter' || (event.key === 'Tab' && menu !== 'add')) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && menu && suggestions.length) {
                 event.preventDefault()
                 chooseSuggestion(activeSuggestion)
                 return
@@ -524,7 +524,7 @@ export const Composer = memo(function Composer({
           />
         </div>
         {menu && suggestions.length ? (
-          <div ref={menuRef} id={menuId} className="composer-menu" role="listbox" aria-label={menu === 'command' ? 'Commands' : menu === 'mention' ? 'Sessions and skills' : 'Add context'}>
+          <div ref={menuRef} id={menuId} className="composer-menu" role="listbox" aria-label={menu === 'command' ? 'Commands' : menu === 'mention' ? (mentionsSkills ? 'Skills' : 'Sessions and capabilities') : 'Add context'}>
             {suggestions.map((suggestion, index) => (
               <button
                 id={`${menuId}-option-${index}`}

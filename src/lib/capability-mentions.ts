@@ -1,5 +1,8 @@
 import type { SkillRecord } from '@/types/api'
 
+/** `$` invokes skills; `@` references sessions and every other capability kind. */
+export type MentionTrigger = '@' | '$'
+
 export interface CapabilityMention {
   start: number
   end: number
@@ -7,11 +10,43 @@ export interface CapabilityMention {
   skill: SkillRecord
 }
 
+export interface MentionQuery {
+  trigger: MentionTrigger
+  /** Index of the trigger character. */
+  start: number
+  query: string
+}
+
+export const capabilityTrigger = (skill: SkillRecord): MentionTrigger => (skill.kind === 'skill' ? '$' : '@')
+
 export const CAPABILITY_ROUTING_BEGIN = '===== BEGIN GOOEYPI CAPABILITY ROUTING ====='
 export const CAPABILITY_ROUTING_END = '===== END GOOEYPI CAPABILITY ROUTING ====='
 
 const boundaryBefore = (value: string | undefined): boolean => value === undefined || /[\s([{"'`]/.test(value)
 const boundaryAfter = (value: string | undefined): boolean => value === undefined || /[\s.,!?;:()[\]{}"'`]/.test(value)
+
+const MENTION_QUERY_PATTERNS: Record<MentionTrigger, RegExp> = {
+  '@': /(?:^|\s)@([^@\n]*)$/,
+  $: /(?:^|\s)\$([^$\n]*)$/,
+}
+
+/** Finds the open mention being typed at the end of the draft; the later trigger wins. */
+export function findMentionQuery(value: string): MentionQuery | null {
+  let found: MentionQuery | null = null
+  for (const trigger of ['@', '$'] as const) {
+    const match = MENTION_QUERY_PATTERNS[trigger].exec(value)
+    if (!match) continue
+    const start = value.length - match[1].length - 1
+    if (!found || start > found.start) found = { trigger, start, query: match[1] }
+  }
+  return found
+}
+
+/** Lists the capabilities a typed mention can complete to: skills for `$`, everything else for `@`. */
+export function capabilitiesForMention(skills: readonly SkillRecord[], mention: MentionQuery): SkillRecord[] {
+  const query = mention.query.toLocaleLowerCase().trim()
+  return skills.filter((skill) => capabilityTrigger(skill) === mention.trigger && skill.name.toLocaleLowerCase().includes(query))
+}
 
 function mentionCandidates(skills: readonly SkillRecord[]): SkillRecord[] {
   const seen = new Set<string>()
@@ -19,22 +54,26 @@ function mentionCandidates(skills: readonly SkillRecord[]): SkillRecord[] {
     .filter((skill) => skill.enabled && skill.name.trim())
     .sort((left, right) => right.name.length - left.name.length)
     .filter((skill) => {
-      const key = skill.name.trim().toLocaleLowerCase()
+      // Skills and other capabilities live under different triggers, so a
+      // shared display name must not hide either one.
+      const key = `${capabilityTrigger(skill)}${skill.name.trim().toLocaleLowerCase()}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
 }
 
-/** Resolves visible @ mentions against the enabled catalog without treating email addresses as capabilities. */
+/** Resolves visible $skill and @capability mentions against the enabled catalog without treating email addresses as capabilities. */
 export function findCapabilityMentions(value: string, skills: readonly SkillRecord[]): CapabilityMention[] {
   const candidates = mentionCandidates(skills)
   const lowerValue = value.toLocaleLowerCase()
   const mentions: CapabilityMention[] = []
   for (let index = 0; index < value.length; index += 1) {
-    if (value[index] !== '@' || !boundaryBefore(value[index - 1])) continue
+    const trigger = value[index]
+    if ((trigger !== '@' && trigger !== '$') || !boundaryBefore(value[index - 1])) continue
     const skill = candidates.find((candidate) => {
-      const token = `@${candidate.name.trim()}`.toLocaleLowerCase()
+      if (capabilityTrigger(candidate) !== trigger) return false
+      const token = `${trigger}${candidate.name.trim()}`.toLocaleLowerCase()
       return lowerValue.startsWith(token, index) && boundaryAfter(value[index + token.length])
     })
     if (!skill) continue
@@ -67,7 +106,7 @@ export function appendCapabilityRouting(prompt: string, skills: readonly SkillRe
   const visiblePrompt = prompt
     .replaceAll(CAPABILITY_ROUTING_BEGIN, '[capability routing boundary omitted]')
     .replaceAll(CAPABILITY_ROUTING_END, '[capability routing boundary omitted]')
-  return `${visiblePrompt}\n\n${CAPABILITY_ROUTING_BEGIN}\nThe user explicitly invoked the following @ capabilities. Follow this routing for the request:\n${unique.map((mention) => `- ${routingInstruction(mention)}`).join('\n')}\n${CAPABILITY_ROUTING_END}`
+  return `${visiblePrompt}\n\n${CAPABILITY_ROUTING_BEGIN}\nThe user explicitly invoked the following capabilities. Follow this routing for the request:\n${unique.map((mention) => `- ${routingInstruction(mention)}`).join('\n')}\n${CAPABILITY_ROUTING_END}`
 }
 
 export function splitCapabilityRouting(text: string): { text: string; block: string | null } {

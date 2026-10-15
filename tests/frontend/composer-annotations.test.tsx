@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { Composer } from '../../src/components/Composer'
+import { appendCapabilityRouting, CAPABILITY_ROUTING_BEGIN, CAPABILITY_ROUTING_END, capabilitiesForMention, findCapabilityMentions, findMentionQuery, splitCapabilityRouting } from '../../src/lib/capability-mentions'
 import { groupModelsByProvider } from '../../src/hooks/useProviderCatalog'
 import type { BrowserAnnotation, PrimeModelDescriptor, PrimeProviderDescriptor, PromptDeliveryIntent, PromptImage, SessionRecord, SkillRecord, TerminalPromptContext, TerminalSelectionContext } from '../../src/types/api'
 
@@ -128,28 +129,203 @@ const clickSend = async () => {
   })
 }
 
+const skillRecord = (name: string, overrides: Partial<SkillRecord> = {}): SkillRecord => ({
+  id: `id-${name}`,
+  name,
+  description: `${name} description`,
+  kind: 'skill',
+  location: 'user',
+  path: `/home/user/.pi/agent/skills/${name}/SKILL.md`,
+  enabled: true,
+  ...overrides,
+})
+const sessionRecord = (title: string, id = '019f0000-0000-7000-8000-000000000009'): SessionRecord => ({
+  id, harness: 'prime', filePath: `/sessions/${id}.jsonl`, projectPath: '/project', title,
+  createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
+})
+const composerTextarea = () => container.querySelector('textarea') as HTMLTextAreaElement
+const optionLabels = () => [...container.querySelectorAll('[role="option"] strong')].map((option) => option.textContent)
+/** Dispatches a cancelable keydown and reports whether the composer consumed it. */
+const pressKey = async (key: string, init: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+  await act(async () => { composerTextarea().dispatchEvent(event) })
+  return event.defaultPrevented
+}
+
 describe('Composer skill mentions', () => {
-  it('invokes the selected skill file without requiring catalog-ID verification', async () => {
-    const skill: SkillRecord = {
-      id: '9acaa400e83a609a1d6be9bb61dc04da',
-      name: 'improve-codebase-architecture',
-      description: 'Review codebase architecture',
-      kind: 'skill',
-      location: 'user',
-      path: '/home/user/.pi/agent/skills/improve-codebase-architecture/SKILL.md',
-      enabled: true,
-    }
-    const { onSend } = renderComposer({ skills: [skill, { ...skill, id: 'disabled', name: 'disabled-skill', path: '/disabled/SKILL.md', enabled: false }] })
-    await setDraft('Use @improve-codebase-architecture and @disabled-skill')
+  it('invokes the selected $skill file without requiring catalog-ID verification', async () => {
+    const skill = skillRecord('improve-codebase-architecture', { id: '9acaa400e83a609a1d6be9bb61dc04da' })
+    const { onSend } = renderComposer({ skills: [skill, skillRecord('disabled-skill', { path: '/disabled/SKILL.md', enabled: false })] })
+    await setDraft('Use $improve-codebase-architecture and $disabled-skill')
     await clickSend()
 
     const [prompt] = onSend.mock.calls[0]
-    expect(prompt.startsWith('Use @improve-codebase-architecture and @disabled-skill\n\n')).toBe(true)
+    expect(prompt.startsWith('Use $improve-codebase-architecture and $disabled-skill\n\n')).toBe(true)
     expect(prompt).not.toContain(skill.id)
+    expect(prompt).toContain(`- $improve-codebase-architecture: Read the skill file at ${JSON.stringify(skill.path)}`)
     expect(prompt).toContain('No catalog lookup or catalog-ID verification is required')
-    expect(prompt).toContain(`Read the skill file at ${JSON.stringify(skill.path)}`)
     expect(prompt).toContain('relative paths from the directory containing that skill file')
     expect(prompt).not.toContain('/disabled/SKILL.md')
+  })
+
+  it('lists only enabled skills for $ and accepts the arrow-highlighted one with Tab', async () => {
+    const { onSend } = renderComposer({
+      sessions: [sessionRecord('Unicorn session')],
+      skills: [skillRecord('unslop'), skillRecord('unit test writer'), skillRecord('untracked', { enabled: false }), skillRecord('unity-bridge', { kind: 'extension', path: undefined })],
+    })
+    const textarea = composerTextarea()
+    textarea.focus()
+    await setDraft('Use $un')
+    expect(container.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Skills')
+    expect(optionLabels()).toEqual(['$unslop', '$unit test writer'])
+
+    expect(await pressKey('ArrowDown')).toBe(true)
+    expect(await pressKey('Tab')).toBe(true)
+    expect(textarea.value).toBe('Use $unit test writer ')
+    expect(textarea.selectionStart).toBe(textarea.value.length)
+    expect(document.activeElement).toBe(textarea)
+    expect(textarea.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('.composer-menu')).toBeNull()
+    expect(onSend).not.toHaveBeenCalled()
+
+    await act(async () => {
+      textarea.setRangeText('now', textarea.selectionStart, textarea.selectionEnd, 'end')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(textarea.getAttribute('aria-expanded')).toBe('false')
+    await clickSend()
+    const [prompt] = onSend.mock.calls[0]
+    expect(prompt).toContain(`- $unit test writer: Read the skill file at ${JSON.stringify('/home/user/.pi/agent/skills/unit test writer/SKILL.md')}`)
+  })
+
+  it('accepts $ completions with Enter or a click without sending, and Escape closes the menu', async () => {
+    const { onSend } = renderComposer({ skills: [skillRecord('unslop')] })
+    const textarea = composerTextarea()
+    await setDraft('$uns')
+    expect(await pressKey('Enter')).toBe(true)
+    expect(textarea.value).toBe('$unslop ')
+    expect(onSend).not.toHaveBeenCalled()
+
+    await setDraft('then $un')
+    await act(async () => (container.querySelector('[role="option"]') as HTMLButtonElement).click())
+    expect(textarea.value).toBe('then $unslop ')
+
+    await setDraft('again $un')
+    expect(textarea.getAttribute('aria-expanded')).toBe('true')
+    await pressKey('Escape')
+    expect(container.querySelector('.composer-menu')).toBeNull()
+    expect(textarea.value).toBe('again $un')
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('keeps an accepted $skill closed until the user edits back into its query', async () => {
+    renderComposer({ skills: [skillRecord('unslop')] })
+    const textarea = composerTextarea()
+    await setDraft('$uns')
+    await pressKey('Tab')
+    expect(textarea.value).toBe('$unslop ')
+    await act(async () => {
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
+      textarea.setRangeText('', '$unslop'.length, '$unslop '.length, 'end')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(textarea.value).toBe('$unslop')
+    expect(textarea.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('keeps @ for sessions and non-skill capabilities only, with Tab acceptance and stable session ids', async () => {
+    const { onSend } = renderComposer({
+      sessions: [sessionRecord('Browser notes', '019f0000-0000-7000-8000-00000000000a')],
+      skills: [skillRecord('browser-skill'), skillRecord('Browser', { id: 'prime-work-browser', kind: 'extension', path: undefined })],
+    })
+    const textarea = composerTextarea()
+    await setDraft('Ask @brow')
+    expect(container.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Sessions and capabilities')
+    expect(optionLabels()).toEqual(['@Browser notes', '@Browser'])
+    expect(await pressKey('Tab')).toBe(true)
+    expect(textarea.value).toBe('Ask @Browser notes ')
+    expect(onSend).not.toHaveBeenCalled()
+
+    await setDraft('Ask @Browser notes with @browser-skill')
+    await clickSend()
+    const [prompt] = onSend.mock.calls[0]
+    expect(prompt).toContain('prime session UUID 019f0000-0000-7000-8000-00000000000a')
+    expect(prompt).not.toContain('browser-skill/SKILL.md')
+  })
+
+  it('routes an @session and a same-named $skill independently', async () => {
+    const skill = skillRecord('Ownership')
+    const { onSend } = renderComposer({ sessions: [sessionRecord('Ownership')], skills: [skill, skillRecord('Ownership', { id: 'ownership-mcp', kind: 'mcp', path: undefined })] })
+    await setDraft('Ask @Ownership to apply $Ownership')
+    await clickSend()
+    const [prompt] = onSend.mock.calls[0]
+    expect(prompt).toContain('prime session UUID 019f0000-0000-7000-8000-000000000009')
+    expect(prompt).toContain(`- $Ownership: Read the skill file at ${JSON.stringify(skill.path)}`)
+    // The session chosen from the @ menu wins over the same-named @ capability.
+    expect(prompt).not.toContain('"ownership-mcp"')
+  })
+
+  it('completes slash commands with Tab', async () => {
+    renderComposer()
+    await setDraft('/rev')
+    expect(await pressKey('Tab')).toBe(true)
+    expect(composerTextarea().value).toBe('/review ')
+  })
+
+  it('leaves Tab alone without a completion, with modifiers, during IME composition, and in the Add context menu', async () => {
+    renderComposer({ skills: [skillRecord('unslop')] })
+    const textarea = composerTextarea()
+    await setDraft('plain text')
+    expect(await pressKey('Tab')).toBe(false)
+    await setDraft('$zzz')
+    expect(textarea.getAttribute('aria-expanded')).toBe('false')
+    expect(await pressKey('Tab')).toBe(false)
+
+    await setDraft('$uns')
+    for (const modifier of ['shiftKey', 'ctrlKey', 'altKey', 'metaKey'] as const) {
+      expect(await pressKey('Tab', { [modifier]: true })).toBe(false)
+    }
+    expect(await pressKey('Tab', { isComposing: true })).toBe(false)
+    expect(textarea.value).toBe('$uns')
+
+    await setDraft('')
+    act(() => (container.querySelector('button[aria-label="Add context"]') as HTMLButtonElement).click())
+    expect(container.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Add context')
+    expect(await pressKey('Tab')).toBe(false)
+    expect(textarea.value).toBe('')
+  })
+})
+
+describe('capability mention parsing', () => {
+  const skills = [skillRecord('unslop'), skillRecord('HOMEWORK'), skillRecord('Browser', { id: 'prime-work-browser', kind: 'extension', path: undefined })]
+
+  it('finds the open trigger at the end of the draft, preferring the later one', () => {
+    expect(findMentionQuery('Use $unit te')).toEqual({ trigger: '$', start: 4, query: 'unit te' })
+    expect(findMentionQuery('@Fix $5')).toEqual({ trigger: '$', start: 5, query: '5' })
+    expect(findMentionQuery('$unslop then @Brow')).toEqual({ trigger: '@', start: 13, query: 'Brow' })
+    expect(findMentionQuery('mail me@example')).toBeNull()
+    expect(findMentionQuery('cost$5')).toBeNull()
+  })
+
+  it('routes only recognized triggers with word boundaries', () => {
+    const texts = (value: string) => findCapabilityMentions(value, skills).map((mention) => mention.text)
+    expect(texts('Use $unslop, then @Browser.')).toEqual(['$unslop', '@Browser'])
+    expect(texts('mail me@unslop.com or me$unslop, @unslop, $Browser')).toEqual([])
+    expect(texts('echo $HOME and pay $5 for $unslopped')).toEqual([])
+    expect(appendCapabilityRouting('echo $HOME costs $5', skills)).toBe('echo $HOME costs $5')
+  })
+
+  it('keeps same-named skills and capabilities under their own triggers', () => {
+    const shared = [skillRecord('Browser'), skillRecord('Browser', { id: 'prime-work-browser', kind: 'extension', path: undefined })]
+    expect(findCapabilityMentions('$Browser and @Browser', shared).map((mention) => mention.skill.kind)).toEqual(['skill', 'extension'])
+    expect(capabilitiesForMention(shared, { trigger: '$', start: 0, query: 'bro' }).map((skill) => skill.kind)).toEqual(['skill'])
+    expect(capabilitiesForMention(shared, { trigger: '@', start: 0, query: 'bro' }).map((skill) => skill.kind)).toEqual(['extension'])
+  })
+
+  it('still reads routing blocks persisted with the previous @-only header', () => {
+    const legacy = `Use @unslop\n\n${CAPABILITY_ROUTING_BEGIN}\nThe user explicitly invoked the following @ capabilities. Follow this routing for the request:\n- @unslop: Read the skill file at "/x/SKILL.md"\n${CAPABILITY_ROUTING_END}`
+    expect(splitCapabilityRouting(legacy).text).toBe('Use @unslop')
+    expect(splitCapabilityRouting(appendCapabilityRouting('Use $unslop', skills)).text).toBe('Use $unslop')
   })
 })
 

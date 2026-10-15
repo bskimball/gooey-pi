@@ -1,6 +1,8 @@
 # Session collaboration
 
-GooeyPi lets top-level sessions in the same harness and working directory coordinate without turning them into parent/child subagents. In the composer, type `@` and part of a sidebar session title, then select the result. The visible `@title` is sent with a model-only routing block containing the stable session UUID. A session's context menu also exposes **Copy session UUID** for explicit coordination prompts.
+GooeyPi lets top-level sessions in the same harness and working directory coordinate without turning them into parent/child subagents. In the composer, type `@` and part of a sidebar session title, then press Tab or Enter (or click) to accept the highlighted result. The visible `@title` is sent with a model-only routing block containing the stable session UUID. A session's context menu also exposes **Copy session UUID** for explicit coordination prompts.
+
+Skills use `$` instead: type `$` and part of an enabled skill name, then press Tab or Enter. The visible `$name` is sent with a model-only block pointing at that skill's file. `@` still lists sessions and other enabled capabilities such as extensions and MCP servers.
 
 Every Prime, OMP, and pi runtime receives six app-owned tools:
 
