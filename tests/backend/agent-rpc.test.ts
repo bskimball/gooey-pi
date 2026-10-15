@@ -1114,3 +1114,151 @@ describe('framed RPC transport stdio failure', () => {
     expect(failures).toEqual([pipeError])
   })
 })
+
+describe('prompt deadlines and blocking extension dialogs', () => {
+  // The prompt's message selects how the fake agent's extension command behaves.
+  const DIALOG_AGENT = `#!/usr/bin/env node
+const readline = require('node:readline')
+const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
+const select = (id, extra = {}) => send({ type: 'extension_ui_request', id, method: 'select', title: 'Fusion lead model', options: ['a', 'b'], ...extra })
+let prompt = null
+const awaiting = new Set()
+const answers = []
+const finish = () => send({ id: prompt.id, type: 'response', command: 'prompt', success: true, data: { answers } })
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const command = JSON.parse(line)
+  if (command.type === 'prompt') {
+    prompt = command
+    if (command.message === 'two-steps') { awaiting.add('step-1'); select('step-1') }
+    else if (command.message === 'parallel') { awaiting.add('q-1'); awaiting.add('q-2'); select('q-1'); select('q-2') }
+    else if (command.message === 'stall-after-dialog') { awaiting.add('stall'); select('stall') }
+    else if (command.message === 'expiring-dialog') select('expiring', { timeout: 100 })
+    else if (command.message === 'notify-only') {
+      send({ type: 'extension_ui_request', id: 'note', method: 'notify', message: 'working' })
+      send({ type: 'extension_ui_request', id: 'status', method: 'setStatus', statusKey: 'mode', statusText: 'fusion' })
+    }
+  } else if (command.type === 'extension_ui_response' && awaiting.delete(command.id)) {
+    answers.push(command.cancelled ? 'cancelled:' + command.id : command.value)
+    if (command.id === 'step-1') { awaiting.add('step-2'); select('step-2') }
+    else if (command.id === 'stall') { /* the command never completes */ }
+    else if (awaiting.size === 0) finish()
+  } else if (command.type === 'exit') process.exit(3)
+})
+setInterval(() => {}, 1000)
+`
+  const DEADLINE_MS = 150
+  const runtimes: RpcRuntime[] = []
+
+  afterEach(async () => {
+    await Promise.all(runtimes.splice(0).map((runtime) => runtime.stop()))
+  })
+
+  const dialogRuntime = () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-dialog-'))
+    dirs.push(cwd)
+    const executable = join(cwd, 'dialog-agent.cjs')
+    writeFileSync(executable, DIALOG_AGENT)
+    chmodSync(executable, 0o755)
+    const events: string[] = []
+    const runtime = new RpcRuntime(executable, [], cwd, (envelope) => {
+      const event = (envelope as unknown as { event: { type?: unknown; id?: unknown } }).event
+      if (event.type === 'extension_ui_request') events.push(String(event.id))
+    }, () => undefined, {}, { pollIntervalMs: 60_000 })
+    runtimes.push(runtime)
+    const request = (runtime as unknown as { request(command: RpcObject, timeoutMs: number): Promise<RpcObject> }).request.bind(runtime)
+    const answer = (id: string, value: string) => runtime.command({ type: 'extension_ui_response', id, value })
+    const cancel = (id: string) => runtime.command({ type: 'extension_ui_response', id, cancelled: true })
+    return { runtime, request, events, answer, cancel }
+  }
+  const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+
+  it('holds the prompt deadline through each step of a multi-step dialog and returns the real response', async () => {
+    const { request, events, answer } = dialogRuntime()
+    const prompt = request({ type: 'prompt', message: 'two-steps' }, DEADLINE_MS)
+    await waitUntil(() => events.includes('step-1'))
+    await sleep(DEADLINE_MS * 3)
+    await answer('step-1', 'openai/gpt-6.1-sol')
+    await waitUntil(() => events.includes('step-2'))
+    await sleep(DEADLINE_MS * 3)
+    await answer('step-2', 'medium')
+
+    await expect(prompt).resolves.toMatchObject({ command: 'prompt', success: true, data: { answers: ['openai/gpt-6.1-sol', 'medium'] } })
+  })
+
+  it('holds the prompt deadline until every concurrent dialog closes, including cancellation', async () => {
+    const { request, events, answer, cancel } = dialogRuntime()
+    let settled = false
+    const prompt = request({ type: 'prompt', message: 'parallel' }, DEADLINE_MS).finally(() => { settled = true })
+    await waitUntil(() => events.includes('q-1') && events.includes('q-2'))
+    await answer('q-1', 'first')
+    await sleep(DEADLINE_MS * 3)
+    expect(settled).toBe(false)
+    await cancel('q-2')
+
+    await expect(prompt).resolves.toMatchObject({ success: true, data: { answers: ['first', 'cancelled:q-2'] } })
+  })
+
+  it('restarts the normal deadline after the last dialog closes when the prompt then stalls', async () => {
+    const { request, events, answer } = dialogRuntime()
+    const prompt = request({ type: 'prompt', message: 'stall-after-dialog' }, DEADLINE_MS)
+    const failure = prompt.then(() => ({ error: undefined, at: Date.now() }), (error: unknown) => ({ error, at: Date.now() }))
+    await waitUntil(() => events.includes('stall'))
+    await sleep(DEADLINE_MS * 3)
+    const answeredAt = Date.now()
+    await answer('stall', 'chosen')
+
+    const { error, at } = await failure
+    expect(String(error)).toMatch(/RPC command prompt timed out after delivery/)
+    expect(at - answeredAt).toBeGreaterThanOrEqual(DEADLINE_MS - 20)
+  })
+
+  it('still times out a prompt that only emits fire-and-forget extension UI', async () => {
+    const { request } = dialogRuntime()
+    await expect(request({ type: 'prompt', message: 'notify-only' }, DEADLINE_MS)).rejects.toThrow(/RPC command prompt timed out after delivery/)
+  })
+
+  it('stops holding the prompt once a dialog passes its own timeout', async () => {
+    const { request, events } = dialogRuntime()
+    const prompt = request({ type: 'prompt', message: 'expiring-dialog' }, DEADLINE_MS)
+    await waitUntil(() => events.includes('expiring'))
+    await expect(prompt).rejects.toThrow(/RPC command prompt timed out after delivery/)
+  })
+
+  it('keeps non-prompt deadlines while a dialog is open', async () => {
+    const { request, events, answer } = dialogRuntime()
+    const prompt = request({ type: 'prompt', message: 'two-steps' }, DEADLINE_MS)
+    await waitUntil(() => events.includes('step-1'))
+    await expect(request({ type: 'sleepy' }, DEADLINE_MS)).rejects.toThrow(/RPC command sleepy timed out after delivery/)
+    await answer('step-1', 'x')
+    await waitUntil(() => events.includes('step-2'))
+    await answer('step-2', 'y')
+    await expect(prompt).resolves.toMatchObject({ success: true })
+  })
+
+  it('keeps a public prompt command alive while the user spends over a minute in the dialog', async () => {
+    const { runtime, events, answer } = dialogRuntime()
+    const settle = () => new Promise((resolveTick) => setImmediate(resolveTick))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const prompt = runtime.command({ type: 'prompt', message: 'two-steps' })
+      while (!events.includes('step-1')) await settle()
+      await vi.advanceTimersByTimeAsync(65_000)
+      await answer('step-1', 'openai/gpt-6.1-sol')
+      while (!events.includes('step-2')) await settle()
+      await vi.advanceTimersByTimeAsync(65_000)
+      await answer('step-2', 'medium')
+
+      await expect(prompt).resolves.toMatchObject({ command: 'prompt', success: true, data: { answers: ['openai/gpt-6.1-sol', 'medium'] } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails a dialog-held prompt promptly when the agent exits', async () => {
+    const { request, events } = dialogRuntime()
+    const prompt = request({ type: 'prompt', message: 'two-steps' }, 60_000)
+    await waitUntil(() => events.includes('step-1'))
+    void request({ type: 'exit' }, 60_000).catch(() => undefined)
+    await expect(prompt).rejects.toThrow(/RPC exited \(3\)/)
+  })
+})

@@ -201,6 +201,19 @@ export function safeChildEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.Proc
   return env
 }
 
+/** Desktop-owned root sessions must not inherit a parent agent's sidekick identity. */
+export function rootRuntimeEnvironment(extraEnvironment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = safeChildEnvironment(extraEnvironment)
+  // PI_SUBAGENT=1, for example, prevents Pi's modes extension from registering /mode.
+  for (const key of [
+    'PI_SUBAGENT', 'PI_SUBAGENT_AGENT', 'PI_SUBAGENT_MODEL', 'PI_FUSION_SIDEKICK', 'PI_ASYNC_RPC',
+    'PI_BEHAVIOR_MODE', 'PI_SESSION_ID', 'PI_SESSION_FILE', 'PI_INTERCOM_SESSION_ID',
+  ]) {
+    if (!(key in extraEnvironment)) delete env[key]
+  }
+  return env
+}
+
 /**
  * Makes an absolute executable's own directory available to `/usr/bin/env`
  * shebangs without evaluating a shell profile. Finder-launched macOS apps get

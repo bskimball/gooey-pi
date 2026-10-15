@@ -47,6 +47,13 @@ export function parsePiModeCommand(prompt: string, harness: HarnessId): string |
   return undefined
 }
 
+/** Checks Pi's `get_commands` response without accepting a same-named prompt or skill. */
+export function hasPiExtensionCommand(response: Record<string, unknown>, name: string): boolean {
+  const commands: unknown = typeof response.data === 'object' && response.data !== null ? Reflect.get(response.data, 'commands') : undefined
+  return Array.isArray(commands) && commands.some((command: unknown) => typeof command === 'object' && command !== null
+    && Reflect.get(command, 'name') === name && Reflect.get(command, 'source') === 'extension')
+}
+
 export function piModeFromCommand(command: string): PiBehaviorMode | undefined {
   const match = /^\/(mode|orchestrate)(?:\s+(\S+))?$/i.exec(command.trim())
   if (!match) return undefined

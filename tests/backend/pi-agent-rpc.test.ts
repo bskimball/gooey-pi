@@ -33,6 +33,7 @@ const readline = require('node:readline')
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
 send({ type: 'fake_argv', argv: process.argv.slice(2) })
 send({ type: 'fake_cwd', cwd: process.cwd() })
+send({ type: 'fake_env', env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PI_'))) })
 readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
   if (command.type === 'get_state') {
@@ -199,6 +200,28 @@ describe('pi RPC handshake', () => {
     expect(realpathSync(reported)).toBe(realpathSync(fake.cwd))
     const argv = (events.find((event) => event.type === 'fake_argv') as { argv: string[] }).argv
     expect(argv).not.toContain('--cwd')
+  })
+
+  it('does not inherit a parent agent session identity but keeps user Pi configuration', async () => {
+    const inherited = {
+      PI_SUBAGENT: '1', PI_SUBAGENT_AGENT: 'sidekick', PI_SUBAGENT_MODEL: 'openai/gpt', PI_FUSION_SIDEKICK: '1', PI_ASYNC_RPC: '1',
+      PI_BEHAVIOR_MODE: 'fusion', PI_SESSION_ID: 'parent-session', PI_SESSION_FILE: '/parent.jsonl', PI_INTERCOM_SESSION_ID: 'parent-intercom',
+      PI_CODING_AGENT_DIR: '/home/user/.pi/agent',
+    }
+    for (const [key, value] of Object.entries(inherited)) vi.stubEnv(key, value)
+    try {
+      const fake = fakePiAgent()
+      const manager = piManager(fake.executable)
+      const events: Array<Record<string, unknown>> = []
+      manager.setEventSink(({ event }) => events.push(event))
+
+      await manager.start({ cwd: fake.cwd })
+
+      await waitUntil(() => events.some((event) => event.type === 'fake_env'))
+      const env = (events.find((event) => event.type === 'fake_env') as { env: Record<string, string> }).env
+      for (const key of Object.keys(inherited).filter((key) => key !== 'PI_CODING_AGENT_DIR')) expect(env[key]).toBeUndefined()
+      expect(env.PI_CODING_AGENT_DIR).toBe('/home/user/.pi/agent')
+    } finally { vi.unstubAllEnvs() }
   })
 
   it('spawns with --session, split provider/model flags, and scoped extensions', async () => {

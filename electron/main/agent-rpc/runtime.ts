@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import type { PrimeContextUsage, PrimeEventEnvelope, PrimeModelDescriptor, PrimeServiceTier, RuntimeInfo } from '../../../src/types/api'
 import { emptySessionActionSnapshot, parseSessionActionSnapshot } from '../../../src/lib/session-actions'
+import { blockingExtensionUiRequestId } from '../../../src/lib/extension-ui'
 import { RPC_READ_FRAME_LIMIT_BYTES } from '../jsonl-limits'
-import { killProcessTree, prepareExecutableSpawn, safeChildEnvironment, waitForProcessExit } from '../process-utils'
+import { killProcessTree, prepareExecutableSpawn, rootRuntimeEnvironment, waitForProcessExit } from '../process-utils'
 import { canonicalSessionPath } from '../session-paths'
 import { errorMessage, isRecord } from '../validation'
 import { redactedStderrTail } from '../lib/process-detail'
@@ -75,6 +76,9 @@ export class RpcRuntime {
   readonly runtimeId = randomUUID()
   private readonly pending = new Map<string, PendingRequest>()
   private readonly uncertainDeliveries = new Set<string>()
+  // Pi answers an extension command's prompt only after its dialogs close, so
+  // a pending prompt's deadline holds while one awaits the user (id -> expiry).
+  private readonly blockingUiRequests = new Map<string, number>()
   private pendingBytes = 0
   private transportFailed = false
   private receivedFrame = false
@@ -136,7 +140,7 @@ export class RpcRuntime {
     // Every harness child is spawned with the authorized cwd as its working
     // directory. Adapters that declare spawnsInCwd (pi has no --cwd flag and
     // buckets its sessions by the process working directory) depend on this.
-    const invocation = prepareExecutableSpawn(executable, args, safeChildEnvironment(extraEnvironment))
+    const invocation = prepareExecutableSpawn(executable, args, rootRuntimeEnvironment(extraEnvironment))
     this.child = spawn(invocation.file, invocation.args, { cwd, env: invocation.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' })
     this.transport = new FramedRpcTransport(
       this.child,
@@ -230,6 +234,10 @@ export class RpcRuntime {
     this.lastActivityAt = Date.now()
     if (command.type === 'extension_ui_response') {
       await this.transport.enqueue(`${JSON.stringify(command)}\n`).done
+      if (typeof command.id === 'string' && this.blockingUiRequests.delete(command.id) && this.blockingUiRequests.size === 0) {
+        // The extension resumes now, so its prompt gets a full deadline from here.
+        for (const pending of this.pending.values()) if (pending.command === 'prompt') pending.timer.refresh()
+      }
       return { type: 'response', command: 'extension_ui_response', success: true }
     }
     const timeout = command.type === 'compact' ? 10 * 60_000 : 60_000
@@ -391,8 +399,13 @@ export class RpcRuntime {
       const timer = setTimeout(() => {
         const pending = this.pending.get(id)
         if (!pending) return
+        if (pending.command === 'prompt' && this.awaitingBlockingUi()) {
+          timer.refresh()
+          return
+        }
         this.pendingBytes -= pending.bytes
         this.pending.delete(id)
+        this.forgetBlockingUiWithoutPrompt()
         if (write?.cancel() !== 'flushed') {
           // The line never reached the child: the command cannot execute, so
           // a retry is safe.
@@ -413,6 +426,7 @@ export class RpcRuntime {
         clearTimeout(pending.timer)
         this.pendingBytes -= pending.bytes
         this.pending.delete(id)
+        this.forgetBlockingUiWithoutPrompt()
         pending.reject(error instanceof Error ? error : new Error(errorMessage(error)))
       }
       write = this.transport.enqueue(line)
@@ -446,6 +460,7 @@ export class RpcRuntime {
       clearTimeout(pending.timer)
       this.pendingBytes -= pending.bytes
       this.pending.delete(raw.id)
+      this.forgetBlockingUiWithoutPrompt()
       if (raw.command !== pending.command) {
         pending.reject(new Error(`${this.adapter.agentName} returned a mismatched response for ${pending.command}`))
         this.emit({ type: 'transport_error', error: `${this.adapter.agentName} returned a mismatched RPC response` })
@@ -466,6 +481,12 @@ export class RpcRuntime {
     }
     const value = this.adapter.normalizeEvent(raw)
     if (!value) return
+    const blockingUiId = blockingExtensionUiRequestId(value)
+    if (blockingUiId && this.hasPendingPrompt()) {
+      // A dialog's own timeout resolves it in the extension without a reply.
+      const timeout = typeof value.timeout === 'number' && Number.isFinite(value.timeout) && value.timeout > 0 ? value.timeout : Infinity
+      this.blockingUiRequests.set(blockingUiId, Date.now() + timeout)
+    }
     const liveUsageUpdate = this.liveContextUsage.handleEvent(value)
     if (liveUsageUpdate.reset) {
       this.contextUsageActivityBaseline = 0
@@ -808,6 +829,29 @@ export class RpcRuntime {
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
     this.pending.clear()
     this.uncertainDeliveries.clear()
+    this.blockingUiRequests.clear()
     this.pendingBytes = 0
+  }
+
+  /**
+   * True while a dialog may still await the user. Dialogs past their own
+   * timeout are dropped, but this check still holds once more so the resumed
+   * prompt gets a full deadline.
+   */
+  private awaitingBlockingUi(): boolean {
+    if (this.blockingUiRequests.size === 0) return false
+    const now = Date.now()
+    for (const [id, expiresAt] of this.blockingUiRequests) if (expiresAt <= now) this.blockingUiRequests.delete(id)
+    return true
+  }
+
+  /** Dialogs only hold prompt deadlines; with no prompt pending they are stale. */
+  private forgetBlockingUiWithoutPrompt(): void {
+    if (!this.hasPendingPrompt()) this.blockingUiRequests.clear()
+  }
+
+  private hasPendingPrompt(): boolean {
+    for (const pending of this.pending.values()) if (pending.command === 'prompt') return true
+    return false
   }
 }

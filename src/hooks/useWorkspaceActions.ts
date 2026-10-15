@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { requestFailureMessage } from '@/app/workspace'
 import { clearComposerDraft } from '@/lib/composer-draft'
 import { errorMessage } from '@/lib/errors'
-import { HARNESS_AGENT_NAMES, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
+import { HARNESS_AGENT_NAMES, hasPiExtensionCommand, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
 import { parseMcpAuthenticationCommand } from '@/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/session-actions'
 import type { DEFAULT_SETTINGS } from '@/lib/data'
@@ -469,7 +469,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             if (!compactCommand && !modeCommand) beginOptimisticPrompt()
             activeRuntime = await bridge.agent.start({ cwd: selected.cwd, sessionPath: selected.sessionFile, model: provider.model, thinking: provider.effort, fast: provider.fast, harness: activeHarness })
           } catch (startError) {
-            if (images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
+            // A mode command must reach the modes extension; as a follow-up it would be chat text.
+            if (!modeCommand && images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
               startedPrompt = false
               if (workspace.workspaceRef.current.generation === generation) {
                 workspace.setMessages((items) => items.filter((item) => item.id !== assistantId && (intent === 'steer' || item.id !== userMessage.id)))
@@ -507,6 +508,13 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           })
           completeQueuedFlush()
         } else if (modeCommand) {
+          // Without the modes extension Pi treats the slash command as a chat prompt.
+          const commandName = modeCommand.slice(1).split(/\s/, 1)[0].toLowerCase()
+          const listed = await bridge.agent.command(activeRuntime.runtimeId, { type: 'get_commands' })
+          if (workspace.workspaceRef.current.generation !== generation) return
+          if (!hasPiExtensionCommand(listed, commandName)) {
+            throw new Error(`Pi has no /${commandName} command in this session, so it was not sent. Make sure the Pi modes extension (prompt-commands) is installed and enabled, then restart the session.`)
+          }
           await bridge.agent.command(activeRuntime.runtimeId, {
             type: 'prompt',
             message: modeCommand,

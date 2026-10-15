@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../src/types/api'
 
-const project = {
+const baseProject = {
   id: 'compact-project',
   harness: 'prime' as const,
   name: 'Compact project',
@@ -30,7 +30,7 @@ const session = (status: SessionRecord['status'] = 'idle'): SessionRecord => ({
 const runtime = (runtimeId = 'idle-runtime', isStreaming = false): RuntimeInfo => ({
   runtimeId,
   harness: 'prime',
-  cwd: project.primaryFolder,
+  cwd: baseProject.primaryFolder,
   sessionFile: session().filePath,
   isStreaming,
 })
@@ -40,12 +40,18 @@ interface FixtureOptions {
   sessionStatus?: SessionRecord['status']
   ownsStreaming?: boolean
   withSession?: boolean
+  harness?: 'prime' | 'pi'
+  /** Pi `get_commands` listing; omitted means the runtime reports none. */
+  commands?: Array<{ name: string; source: string }>
+  startError?: Error
 }
 
-function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true }: FixtureOptions = {}) {
+function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'prime', commands = [], startError }: FixtureOptions = {}) {
+  const project = { ...baseProject, harness }
+  if (configuredRuntime) configuredRuntime = { ...configuredRuntime, harness }
   let currentRuntime = configuredRuntime
   let messages: TranscriptMessage[] = []
-  const currentSession = withSession ? session(sessionStatus) : undefined
+  const currentSession = withSession ? { ...session(sessionStatus), harness } : undefined
   const workspaceRef = {
     current: {
       generation: 1,
@@ -61,8 +67,11 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
       ? { runtimeId: configuredRuntime.runtimeId, generation: 1 }
       : null as { runtimeId: string; generation: number } | null,
   }
-  const command = vi.fn(async () => ({}))
-  const start = vi.fn(async () => runtime('started-runtime'))
+  const command = vi.fn(async (_runtimeId: string, request: Record<string, unknown>): Promise<Record<string, unknown>> => request.type === 'get_commands' ? { data: { commands } } : {})
+  const start = vi.fn(async () => {
+    if (startError) throw startError
+    return { ...runtime('started-runtime'), harness }
+  })
   const followUp = vi.fn(async () => true)
   const queuePrompt = vi.fn()
   const setToast = vi.fn()
@@ -87,7 +96,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
   const agentList = vi.fn(async () => configuredRuntime ? [configuredRuntime] : [])
   const bridge = {
     agent: { list: agentList, command, start, stop: vi.fn(async () => false) },
-    sessions: { followUp },
+    sessions: { followUp, list: vi.fn(async () => []) },
   } as unknown as PrimeWorkApi
   const workspaceSessions = currentSession ? [currentSession] : []
   const actions = createWorkspaceActions(() => ({
@@ -96,7 +105,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     sessions: workspaceSessions,
     activeProject: project,
     workspace,
-    settingsState: { settings: { activeHarness: 'prime' } },
+    settingsState: { settings: { activeHarness: harness } },
     provider: { model: 'auto', effort: 'medium', fast: false },
     submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
     initialized: true,
@@ -191,5 +200,68 @@ describe('/compact dispatch', () => {
     expect(fixtureState.followUp).not.toHaveBeenCalled()
     expect(fixtureState.queuePrompt).toHaveBeenCalledWith('/compact', 'queue')
     expect(fixtureState.setToast).toHaveBeenCalledWith('Compaction will run when the current turn finishes.')
+  })
+})
+
+describe('Pi /mode dispatch', () => {
+  const modes = [{ name: 'mode', source: 'extension' }, { name: 'orchestrate', source: 'extension' }]
+
+  it('sends /mode configure as a prompt only after Pi lists the extension command', async () => {
+    const fixtureState = fixture({ harness: 'pi', runtime: runtime(), commands: modes })
+
+    await fixtureState.actions.sendPrompt('/mode configure')
+
+    expect(fixtureState.command.mock.calls.map(([, request]) => request)).toEqual([
+      { type: 'get_commands' },
+      { type: 'prompt', message: '/mode configure' },
+    ])
+  })
+
+  it('sends no prompt and explains how to recover when the modes extension is absent', async () => {
+    // A prompt template or skill with the same name is not the modes extension.
+    const fixtureState = fixture({ harness: 'pi', runtime: runtime(), commands: [{ name: 'mode', source: 'prompt' }] })
+
+    await expect(fixtureState.actions.sendPrompt('/mode configure')).rejects.toThrow('Pi has no /mode command in this session')
+
+    expect(fixtureState.command).toHaveBeenCalledOnce()
+    expect(fixtureState.command).toHaveBeenCalledWith('idle-runtime', { type: 'get_commands' })
+    expect(fixtureState.messages().filter((message) => message.role === 'user')).toHaveLength(0)
+    expect(fixtureState.messages().at(-1)?.parts).toEqual([{ type: 'text', text: expect.stringContaining('restart the session') }])
+  })
+
+  it('gates a freshly started runtime the same way', async () => {
+    const fixtureState = fixture({ harness: 'pi', withSession: false })
+
+    await expect(fixtureState.actions.sendPrompt('/orchestrate on')).rejects.toThrow('Pi has no /orchestrate command')
+
+    expect(fixtureState.start).toHaveBeenCalledOnce()
+    expect(fixtureState.command).toHaveBeenCalledWith('started-runtime', { type: 'get_commands' })
+    expect(fixtureState.command).not.toHaveBeenCalledWith('started-runtime', expect.objectContaining({ type: 'prompt' }))
+  })
+
+  it('never follows up a mode command as session text when the runtime fails to start', async () => {
+    const fixtureState = fixture({ harness: 'pi', startError: new Error('Pi failed to start') })
+
+    await expect(fixtureState.actions.sendPrompt('/mode configure')).rejects.toThrow('Pi failed to start')
+
+    expect(fixtureState.followUp).not.toHaveBeenCalled()
+    expect(fixtureState.command).not.toHaveBeenCalled()
+  })
+
+  it('still follows up an ordinary prompt when the runtime fails to start', async () => {
+    const fixtureState = fixture({ harness: 'pi', startError: new Error('Pi failed to start') })
+
+    await fixtureState.actions.sendPrompt('hello')
+
+    expect(fixtureState.followUp).toHaveBeenCalledWith('/compact-project/session.jsonl', 'hello', 'queue')
+  })
+
+  it('prompts ordinary text without a command lookup', async () => {
+    const fixtureState = fixture({ harness: 'pi', runtime: runtime() })
+
+    await fixtureState.actions.sendPrompt('hello')
+
+    expect(fixtureState.command).toHaveBeenCalledOnce()
+    expect(fixtureState.command).toHaveBeenCalledWith('idle-runtime', expect.objectContaining({ type: 'prompt', message: 'hello' }))
   })
 })
