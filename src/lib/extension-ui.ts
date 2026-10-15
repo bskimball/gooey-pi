@@ -30,7 +30,9 @@ export type ExtensionUiRequest =
 
 const MAX_TITLE_LENGTH = 4_000
 const MAX_OPTION_LENGTH = 500
-const MAX_OPTIONS = 32
+const MAX_QUESTIONNAIRE_OPTIONS = 32
+const MAX_SELECT_OPTIONS = 2_000
+const BLOCKING_METHODS: ReadonlySet<string> = new Set(['select', 'confirm', 'input', 'editor'])
 const ASK_USER_RPC_MARKER = '__prime_ask_user__'
 export const ASK_USER_TIMEOUT_MS = 120_000
 
@@ -54,19 +56,37 @@ function questionnaireMeta(value: string): ExtensionUiQuestionnaireMeta | undefi
   return { groupId, index, total }
 }
 
+function requestId(value: unknown): string | undefined {
+  return stringValue(value, 200)
+}
+
+/**
+ * Id of a dialog request the runtime is blocked on, regardless of whether its
+ * payload is usable. A rejected dialog must still be answered (cancelled) or
+ * the extension awaits forever; fire-and-forget methods never expect a reply.
+ */
+export function blockingExtensionUiRequestId(raw: Record<string, unknown>): string | undefined {
+  if (raw.type !== 'extension_ui_request' || typeof raw.method !== 'string' || !BLOCKING_METHODS.has(raw.method)) return undefined
+  return requestId(raw.id)
+}
+
 export function parseExtensionUiRequest(raw: Record<string, unknown>): ExtensionUiRequest | undefined {
   if (raw.type !== 'extension_ui_request') return undefined
-  const id = stringValue(raw.id, 200)
+  const id = requestId(raw.id)
   const title = stringValue(raw.title, MAX_TITLE_LENGTH)
   const method = raw.method
   if (!id || !title || typeof method !== 'string') return undefined
 
   if (method === 'select') {
-    if (!Array.isArray(raw.options) || raw.options.length < 1 || raw.options.length > MAX_OPTIONS) return undefined
-    const options = raw.options.map((option) => stringValue(option, MAX_OPTION_LENGTH))
-    if (options.some((option): option is undefined => option === undefined)) return undefined
-    const parsedOptions = options as string[]
+    if (!Array.isArray(raw.options) || raw.options.length < 1 || raw.options.length > MAX_SELECT_OPTIONS) return undefined
+    const parsedOptions: string[] = []
+    for (const option of raw.options) {
+      const parsed = stringValue(option, MAX_OPTION_LENGTH)
+      if (parsed === undefined) return undefined
+      parsedOptions.push(parsed)
+    }
     const questionnaire = questionnaireMeta(parsedOptions[0])
+    if (questionnaire && parsedOptions.length > MAX_QUESTIONNAIRE_OPTIONS) return undefined
     const visibleOptions = questionnaire ? parsedOptions.slice(1) : parsedOptions
     if (visibleOptions.length < 1) return undefined
     return { method, id, title, options: visibleOptions, timeout: timeoutValue(raw.timeout), ...(questionnaire ? { questionnaire } : {}) }

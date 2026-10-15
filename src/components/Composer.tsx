@@ -28,7 +28,6 @@ import { appendTerminalContextToPrompt } from '@/lib/terminal-context'
 import { appendSessionRouting, findSessionMentions } from '@/lib/session-mentions'
 import { clearComposerDraft, readComposerDraft, saveComposerDraft, takeComposerDraft } from '@/lib/composer-draft'
 import { contextDialLabel } from '@/lib/format-cost'
-import { isPiBehaviorMode, PI_BEHAVIOR_MODE_EVENT, PI_BEHAVIOR_MODE_OPTIONS, type PiBehaviorMode, readSavedPiBehaviorMode } from '@/lib/harness'
 import { messageActionForKey } from '@/lib/message-shortcuts'
 import { useComposerImages } from '@/hooks/useComposerImages'
 import { useDictation } from '@/hooks/useDictation'
@@ -36,6 +35,7 @@ import { IconButton, SelectControl } from './ui'
 import { ExecutingModelChip, type ExecutingModelChipProps } from './ExecutingModelChip'
 import { ModelPicker } from './ModelPicker'
 import { CheckoutPicker } from './CheckoutPicker'
+import { PiModeControl } from './PiModeControl'
 
 interface ComposerProps {
   busy: boolean
@@ -184,7 +184,6 @@ export const Composer = memo(function Composer({
   const [activeSuggestion, setActiveSuggestion] = useState(0)
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
   const [terminalSelectionOpen, setTerminalSelectionOpen] = useState(false)
-  const [piMode, setPiMode] = useState<PiBehaviorMode>(readSavedPiBehaviorMode)
   const imageAttachments = useComposerImages({ shortName })
   const { images, imagesRef, unsupportedFiles, unsupportedFilesRef, error: attachmentError, setError: setAttachmentError, processing: processingImages } = imageAttachments
   const dictation = useDictation(voice, transcriptionProvider, setAttachmentError)
@@ -238,15 +237,7 @@ export const Composer = memo(function Composer({
   }, [sessions, value])
   useEffect(() => {
     mountedRef.current = true
-    const onModeChange = (event: Event) => {
-      const detail = (event as CustomEvent<unknown>).detail
-      if (isPiBehaviorMode(detail)) setPiMode(detail)
-    }
-    window.addEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
-    return () => {
-      mountedRef.current = false
-      window.removeEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
-    }
+    return () => { mountedRef.current = false }
   }, [])
   useEffect(() => {
     if (annotations.length === 0) setAnnotationsOpen(false)
@@ -704,14 +695,7 @@ export const Composer = memo(function Composer({
             <SelectControl label="Reasoning effort" compact icon={<Gauge size={12} />} value={effort} onChange={(event) => onEffortChange(event.target.value as PrimeThinkingLevel)}>
               {reasoningLevels.map((level) => <option key={level} value={level}>{reasoningLabels[level]}</option>)}
             </SelectControl>
-            {harness === 'pi' ? (
-              <SelectControl label="Behavior mode" compact icon={<Command size={12} />} value={piMode} disabled={disabled || loading} onChange={(event) => {
-                void Promise.resolve(onSend(`/mode ${event.target.value}`, [], 'queue')).catch(() => undefined)
-              }}>
-                {PI_BEHAVIOR_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
-                <option value="configure" title="Choose lead and sidekick models">Configure Fusion…</option>
-              </SelectControl>
-            ) : null}
+            {harness === 'pi' ? <PiModeControl disabled={disabled || loading} onCommand={(command) => onSend(command, [], 'queue')} /> : null}
             {fastSupported ? (
               <button
                 type="button"

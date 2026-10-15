@@ -1,4 +1,4 @@
-import type { HarnessId } from '@/types/api'
+import { PRIME_THINKING_LEVELS, type HarnessId, type PrimeThinkingLevel } from '@/types/api'
 
 export const HARNESS_SELECTOR_ORDER: readonly HarnessId[] = ['pi', 'omp', 'prime']
 
@@ -88,4 +88,73 @@ export function savePiBehaviorMode(mode: PiBehaviorMode, persistDefault = mode !
     } catch { /* ignore storage errors */ }
   }
   publishActivePiBehaviorMode(mode)
+}
+
+export interface PiFusionModelChoice {
+  provider: string
+  modelId: string
+  thinking: PrimeThinkingLevel
+}
+
+export interface PiFusionPair {
+  lead: PiFusionModelChoice
+  sidekick: PiFusionModelChoice
+}
+
+/** Status key the Pi modes extension uses for the active Fusion pair (JSON statusText). */
+export const PI_FUSION_PAIR_STATUS_KEY = 'fusion-pair'
+export const PI_FUSION_PAIR_EVENT = 'gooeypi:pi-fusion-pair-change'
+const MAX_FUSION_PAIR_STATUS_LENGTH = 2_000
+let activePiFusionPair: PiFusionPair | null = null
+
+function hasControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true
+  }
+  return false
+}
+
+function identityPart(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 200 && !hasControlCharacter(value) ? value : undefined
+}
+
+function isThinkingLevel(value: unknown): value is PrimeThinkingLevel {
+  return PRIME_THINKING_LEVELS.some((level) => level === value)
+}
+
+function fusionModelChoice(value: unknown): PiFusionModelChoice | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const provider = identityPart(Reflect.get(value, 'provider'))
+  const modelId = identityPart(Reflect.get(value, 'modelId'))
+  const thinking: unknown = Reflect.get(value, 'thinking')
+  if (!provider || !modelId || !isThinkingLevel(thinking)) return undefined
+  return { provider, modelId, thinking }
+}
+
+/** Parses the extension's structured `fusion-pair` status; anything else is no pair. */
+export function parsePiFusionPairStatus(statusText: unknown): PiFusionPair | undefined {
+  if (typeof statusText !== 'string' || statusText.length > MAX_FUSION_PAIR_STATUS_LENGTH) return undefined
+  let data: unknown
+  try { data = JSON.parse(statusText) } catch { return undefined }
+  if (typeof data !== 'object' || data === null) return undefined
+  const lead = fusionModelChoice(Reflect.get(data, 'lead'))
+  const sidekick = fusionModelChoice(Reflect.get(data, 'sidekick'))
+  return lead && sidekick ? { lead, sidekick } : undefined
+}
+
+export function fusionModelIdentity(choice: PiFusionModelChoice): string {
+  return `${choice.provider}/${choice.modelId}`
+}
+
+export function readActivePiFusionPair(): PiFusionPair | null {
+  return activePiFusionPair
+}
+
+/** Publishes the active runtime's reported pair; null when none is known. Never persisted. */
+export function publishActivePiFusionPair(pair: PiFusionPair | null): void {
+  activePiFusionPair = pair
+  try {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PI_FUSION_PAIR_EVENT, { detail: pair }))
+  } catch { /* ignore event errors */ }
 }

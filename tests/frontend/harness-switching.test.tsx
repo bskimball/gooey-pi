@@ -3,9 +3,11 @@
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PiModeControl } from '../../src/components/PiModeControl'
 import { Sidebar } from '../../src/components/Sidebar'
 import { useAgentEvents } from '../../src/hooks/useAgentEvents'
 import { useBootstrap } from '../../src/hooks/useBootstrap'
+import { useExtensionUi } from '../../src/hooks/useExtensionUi'
 import { useProviderCatalog } from '../../src/hooks/useProviderCatalog'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
 import { AgentSettings } from '../../src/pages/settings/AgentSettings'
@@ -344,6 +346,110 @@ describe('inactive harness event isolation', () => {
     act(() => { handler({ runtimeId: ompRuntime.runtimeId, event: { type: 'agent_start' } }) })
     expect(setRuntime).toHaveBeenCalled()
     expect(queueAgentEvent).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Pi Fusion pair reporting', () => {
+  const pairA = { lead: { provider: 'openai', modelId: 'gpt-6-astra', thinking: 'xhigh' }, sidekick: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'medium' } }
+  const pairB = { lead: { provider: 'anthropic', modelId: 'claude-fable-5-1', thinking: 'high' }, sidekick: { provider: 'openai', modelId: 'gpt-6-mini', thinking: 'low' } }
+  const status = (statusKey: string, statusText?: string) => ({ type: 'extension_ui_request', id: `status-${statusKey}`, method: 'setStatus', statusKey, statusText })
+
+  function setup() {
+    const command = vi.fn(async () => undefined)
+    const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
+    let show!: (runtimeId: string, event: Record<string, unknown>) => void
+    function PairProbe({ activeRuntimeId }: { activeRuntimeId?: string }) {
+      const extension = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime: vi.fn(), reportError: vi.fn() })
+      show = extension.showExtensionUi
+      return <PiModeControl disabled={false} onCommand={vi.fn()} />
+    }
+    const render = (activeRuntimeId?: string) => act(async () => { root.render(<PairProbe activeRuntimeId={activeRuntimeId} />) })
+    const emit = (runtimeId: string, event: Record<string, unknown>) => act(() => { show(runtimeId, event) })
+    const pairText = () => document.querySelector('.pi-fusion-pair')?.textContent ?? null
+    return { command, render, emit, pairText }
+  }
+
+  it('shows only the active runtime pair, in Fusion mode, and clears it on leave or exit', async () => {
+    const { render, emit, pairText } = setup()
+    await render('runtime-a')
+    emit('runtime-a', status('mode', 'Fusion'))
+    expect(pairText()).toBeNull()
+
+    emit('runtime-a', status('fusion-pair', JSON.stringify(pairA)))
+    emit('runtime-b', status('mode', 'Fusion'))
+    emit('runtime-b', status('fusion-pair', JSON.stringify(pairB)))
+    expect(pairText()).toBe('Lead openai/gpt-6-astra·Sidekick claude-bridge/claude-opus-5-5')
+    const lead = document.querySelector<HTMLElement>('.pi-fusion-pair__model')!
+    expect(lead.title).toBe('openai/gpt-6-astra · xhigh thinking')
+    expect(lead.querySelector('.sr-only')?.textContent).toBe('openai/')
+
+    await render('runtime-b')
+    expect(pairText()).toContain('claude-fable-5-1')
+    await render('runtime-a')
+    expect(pairText()).toContain('gpt-6-astra')
+
+    emit('runtime-a', status('fusion-pair', 'Lead openai/gpt-6-astra (xhigh)'))
+    expect(pairText()).toBeNull()
+    emit('runtime-a', status('fusion-pair', JSON.stringify(pairA)))
+    emit('runtime-a', status('mode', 'Apex'))
+    expect(pairText()).toBeNull()
+    emit('runtime-a', status('mode', 'Fusion'))
+    expect(pairText()).toBeNull()
+
+    await render('runtime-b')
+    expect(pairText()).toContain('claude-fable-5-1')
+    emit('runtime-b', status('fusion-pair'))
+    expect(pairText()).toBeNull()
+    emit('runtime-b', status('fusion-pair', JSON.stringify(pairB)))
+    emit('runtime-b', { type: 'runtime_exit' })
+    expect(pairText()).toBeNull()
+    await render(undefined)
+    expect(pairText()).toBeNull()
+  })
+
+  it('announces a pending Fusion setup launch and blocks a duplicate until the command settles', async () => {
+    const pending = deferred<void>()
+    const onCommand = vi.fn(() => pending.promise)
+    await act(async () => { root.render(<PiModeControl disabled={false} onCommand={onCommand} />) })
+    const trigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Behavior mode"]')!
+    const chooseConfigure = async () => {
+      await act(async () => { trigger().click() })
+      const option = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.includes('Configure Fusion'))
+      await act(async () => { option?.click() })
+    }
+    const statusText = () => document.querySelector('.pi-mode-status[role="status"]')?.textContent
+    expect(statusText()).toBe('')
+
+    await chooseConfigure()
+    expect(onCommand).toHaveBeenCalledTimes(1)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode configure')
+    expect(statusText()).toBe('Opening Fusion setup…')
+    expect(trigger().disabled).toBe(true)
+    await chooseConfigure()
+    expect(onCommand).toHaveBeenCalledTimes(1)
+
+    await act(async () => { pending.resolve() })
+    expect(statusText()).toBe('')
+    expect(trigger().disabled).toBe(false)
+
+    onCommand.mockImplementationOnce(() => Promise.reject(new Error('runtime unavailable')))
+    await chooseConfigure()
+    expect(onCommand).toHaveBeenCalledTimes(2)
+    expect(statusText()).toBe('')
+    expect(trigger().disabled).toBe(false)
+  })
+
+  it('cancels unusable blocking dialogs and never answers fire-and-forget events', async () => {
+    const { command, render, emit } = setup()
+    await render('runtime-a')
+    emit('runtime-a', { type: 'extension_ui_request', id: 'too-many', method: 'select', title: 'Fusion lead model', options: Array.from({ length: 2_001 }, (_, index) => `p/m${index}`) })
+    emit('runtime-a', { type: 'extension_ui_request', id: 'bad-confirm', method: 'confirm', title: 'Continue?' })
+    emit('runtime-a', { type: 'extension_ui_request', id: 'note', method: 'notify', message: 'Mode: Fusion.', notifyType: 'info' })
+    emit('runtime-a', { type: 'extension_ui_request', id: 'widget', method: 'setWidget', widgetKey: 'x' })
+    expect(command.mock.calls).toEqual([
+      ['runtime-a', { type: 'extension_ui_response', id: 'too-many', cancelled: true }],
+      ['runtime-a', { type: 'extension_ui_response', id: 'bad-confirm', cancelled: true }],
+    ])
   })
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseExtensionUiRequest } from '../../src/lib/extension-ui'
-import { parsePiModeCommand, piModeFromCommand, piModeFromStatusText } from '../../src/lib/harness'
+import { blockingExtensionUiRequestId, parseExtensionUiRequest } from '../../src/lib/extension-ui'
+import { parsePiFusionPairStatus, parsePiModeCommand, piModeFromCommand, piModeFromStatusText } from '../../src/lib/harness'
 import { pendingExtensionUiForRuntime, type PendingExtensionUi } from '../../src/hooks/useExtensionUi'
 
 describe('extension UI request parsing', () => {
@@ -41,6 +41,30 @@ describe('extension UI request parsing', () => {
     expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: [] })).toBeUndefined()
     expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: ['ok', 42] })).toBeUndefined()
     expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: ['x'.repeat(501)] })).toBeUndefined()
+  })
+
+  it('accepts plain selects beyond 32 options up to the 2000 bound', () => {
+    const models = Array.from({ length: 40 }, (_, index) => `provider-${index % 3}/model-${index}`)
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'pick', method: 'select', title: 'Fusion lead model', options: models })).toMatchObject({ method: 'select', options: models })
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'pick', method: 'select', title: 'Pick', options: Array.from({ length: 2_000 }, (_, index) => `m${index}`) })).toMatchObject({ method: 'select' })
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'pick', method: 'select', title: 'Pick', options: Array.from({ length: 2_001 }, (_, index) => `m${index}`) })).toBeUndefined()
+  })
+
+  it('keeps the 32-option bound for grouped questionnaire questions', () => {
+    const options = (count: number) => ['__prime_ask_user__group-1:0:2', ...Array.from({ length: count }, (_, index) => `Choice ${index}`)]
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'q', method: 'select', title: 'Pick', options: options(31) })).toMatchObject({ questionnaire: { groupId: 'group-1' } })
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'q', method: 'select', title: 'Pick', options: options(32) })).toBeUndefined()
+  })
+
+  it('identifies blocking dialogs that must be cancelled when unusable, but never fire-and-forget methods', () => {
+    const oversized = { type: 'extension_ui_request', id: 'big', method: 'select', title: 'Pick', options: Array.from({ length: 2_001 }, (_, index) => `m${index}`) }
+    expect(parseExtensionUiRequest(oversized)).toBeUndefined()
+    expect(blockingExtensionUiRequestId(oversized)).toBe('big')
+    expect(blockingExtensionUiRequestId({ type: 'extension_ui_request', id: 'c', method: 'confirm', title: 'Continue?' })).toBe('c')
+    expect(blockingExtensionUiRequestId({ type: 'extension_ui_request', id: 'n', method: 'notify', message: 'hi' })).toBeUndefined()
+    expect(blockingExtensionUiRequestId({ type: 'extension_ui_request', id: 's', method: 'setStatus', statusKey: 'mode' })).toBeUndefined()
+    expect(blockingExtensionUiRequestId({ type: 'extension_ui_request', method: 'select', title: 'Pick' })).toBeUndefined()
+    expect(blockingExtensionUiRequestId({ type: 'message_end', id: 'x', method: 'select' })).toBeUndefined()
   })
 
   it('supports confirm and text input requests', () => {
@@ -118,5 +142,17 @@ describe('pending extension UI ownership', () => {
     expect(piModeFromStatusText('Fusion')).toBe('fusion')
     expect(piModeFromCommand('/mode apex-orchestrate')).toBe('apex-orchestrate')
     expect(piModeFromCommand('/orchestrate off')).toBe('apex')
+  })
+
+  it('validates the structured Fusion pair status without guessing', () => {
+    const pair = { lead: { provider: 'openai', modelId: 'gpt-6-astra', thinking: 'xhigh' }, sidekick: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'medium' } }
+    expect(parsePiFusionPairStatus(JSON.stringify(pair))).toEqual(pair)
+    expect(parsePiFusionPairStatus(undefined)).toBeUndefined()
+    expect(parsePiFusionPairStatus('Lead openai/gpt-6-astra (xhigh); sidekick claude-bridge/claude-opus-5-5 (medium).')).toBeUndefined()
+    expect(parsePiFusionPairStatus(JSON.stringify({ ...pair, sidekick: { ...pair.sidekick, thinking: 'ultra' } }))).toBeUndefined()
+    expect(parsePiFusionPairStatus(JSON.stringify({ ...pair, lead: { ...pair.lead, modelId: '' } }))).toBeUndefined()
+    expect(parsePiFusionPairStatus(JSON.stringify({ ...pair, lead: { ...pair.lead, provider: 'open\u001bai' } }))).toBeUndefined()
+    expect(parsePiFusionPairStatus(JSON.stringify({ lead: pair.lead }))).toBeUndefined()
+    expect(parsePiFusionPairStatus('null')).toBeUndefined()
   })
 })

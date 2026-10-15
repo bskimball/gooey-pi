@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
-import { ASK_USER_TIMEOUT_MS, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
-import { type PiBehaviorMode, piModeFromStatusText, publishActivePiBehaviorMode, readDefaultPiBehaviorMode, savePiBehaviorMode } from '@/lib/harness'
+import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
+import { PI_FUSION_PAIR_STATUS_KEY, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, readDefaultPiBehaviorMode, savePiBehaviorMode } from '@/lib/harness'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface UseExtensionUiOptions {
@@ -46,6 +46,8 @@ export function useExtensionUi({
   const extensionUiRef = useRef<PendingExtensionUi | null>(null)
   const pendingByRuntimeRef = useRef<Map<string, PendingExtensionUi>>(new Map())
   const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
+  // Reported by the runtime only; never cached across runtimes or restarts.
+  const fusionPairByRuntimeRef = useRef<Map<string, PiFusionPair>>(new Map())
   const timerByRuntimeRef = useRef<Map<string, number>>(new Map())
   const timedOutQuestionnairesRef = useRef<Set<string>>(new Set())
   const activeRuntimeIdRef = useRef(activeRuntimeId)
@@ -58,6 +60,13 @@ export function useExtensionUi({
     setExtensionUi(visible)
     const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
     publishActivePiBehaviorMode(runtimeMode ?? readDefaultPiBehaviorMode())
+    publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
+  }, [])
+
+  const setFusionPair = useCallback((runtimeId: string, pair: PiFusionPair | undefined) => {
+    if (pair) fusionPairByRuntimeRef.current.set(runtimeId, pair)
+    else fusionPairByRuntimeRef.current.delete(runtimeId)
+    if (activeRuntimeIdRef.current === runtimeId) publishActivePiFusionPair(pair ?? null)
   }, [])
 
   const clearExtensionUi = useCallback((runtimeId?: string, clearMode = false) => {
@@ -164,12 +173,18 @@ export function useExtensionUi({
   const showExtensionUi = useCallback((runtimeId: string, rawEvent: Record<string, unknown>) => {
     if (rawEvent.type === 'runtime_exit') {
       modeByRuntimeRef.current.delete(runtimeId)
+      setFusionPair(runtimeId, undefined)
+      return
+    }
+    if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === PI_FUSION_PAIR_STATUS_KEY) {
+      setFusionPair(runtimeId, parsePiFusionPairStatus(rawEvent.statusText))
       return
     }
     if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === 'mode') {
       const mode = piModeFromStatusText(rawEvent.statusText)
       if (mode) {
         modeByRuntimeRef.current.set(runtimeId, mode)
+        if (mode !== 'fusion') setFusionPair(runtimeId, undefined)
         if (activeRuntimeIdRef.current === runtimeId) {
           savePiBehaviorMode(mode)
         } else if (mode !== 'apex-orchestrate') {
@@ -186,8 +201,13 @@ export function useExtensionUi({
       }
       return
     }
+    if (!bridge) return
     const request = parseExtensionUiRequest(rawEvent)
-    if (!request || !bridge) return
+    if (!request) {
+      const id = blockingExtensionUiRequestId(rawEvent)
+      if (id) void bridge.agent.command(runtimeId, { type: 'extension_ui_response', id, cancelled: true }).catch(() => undefined)
+      return
+    }
 
     if (request.method === 'select' && request.questionnaire) {
       const questionnaireKey = `${runtimeId}:${request.questionnaire.groupId}`
@@ -255,7 +275,7 @@ export function useExtensionUi({
       setExtensionUi(pending)
     }
     scheduleTimeout(pending)
-  }, [bridge, cancelPending, clearExtensionUi, scheduleTimeout])
+  }, [bridge, cancelPending, clearExtensionUi, scheduleTimeout, setFusionPair])
 
   const hasOpenRequestForSession = useCallback((filePath: string): boolean => {
     for (const runtimeId of pendingByRuntimeRef.current.keys()) {
@@ -272,6 +292,8 @@ export function useExtensionUi({
     timerByRuntimeRef.current.clear()
     pendingByRuntimeRef.current.clear()
     timedOutQuestionnairesRef.current.clear()
+    fusionPairByRuntimeRef.current.clear()
+    publishActivePiFusionPair(null)
   }, [cancelPending])
 
   return { extensionUi, clearExtensionUi, respondToExtensionUi, showExtensionUi, hasOpenRequestForSession }

@@ -215,3 +215,10 @@
   .composer--busy::after { animation: none; --composer-flow: 210deg; opacity: .6; }
 }
 .reduce-motion .composer--busy::after { animation: none; --composer-flow: 210deg; opacity: .6; }
+/* Fusion pair readout and setup status: plain text on their own line under the
+   controls, wrapping instead of truncating so model IDs stay complete. */
+.composer__controls:has(> .pi-fusion-pair, > .pi-mode-status:not(:empty)) { flex-wrap: wrap; row-gap: 3px; }
+.pi-fusion-pair, .pi-mode-status { order: 1; flex: 1 0 100%; min-width: 0; padding-inline: 4px; color: var(--text-tertiary); font-size: 10.5px; line-height: 1.35; }
+.pi-fusion-pair { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 5px; }
+.pi-fusion-pair__model { max-width: 100%; overflow-wrap: anywhere; }
+.pi-mode-status:empty { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }

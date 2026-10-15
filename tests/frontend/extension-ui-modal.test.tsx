@@ -123,3 +123,95 @@ describe('extension questionnaire keyboard handling', () => {
     expect(selected.textContent).toContain('Vue')
   })
 })
+
+describe('extension select search', () => {
+  const models = Array.from({ length: 40 }, (_, index) => `${index % 2 ? 'openai' : 'claude-bridge'}/model-${index}`)
+  const selectRequest: ExtensionUiRequest = { method: 'select', id: 'lead', title: 'Fusion lead model', options: ['openai/gpt-6-astra', ...models] }
+
+  function searchInput(): HTMLInputElement {
+    const input = document.querySelector<HTMLInputElement>('.extension-question__search input')
+    if (!input) throw new Error('search not rendered')
+    return input
+  }
+
+  async function typeQuery(value: string) {
+    const input = searchInput()
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }
+
+  function visibleOptions(): string[] {
+    return [...document.querySelectorAll('.extension-question__options [role="option"]')].map((option) => option.textContent ?? '')
+  }
+
+  it('filters more than 32 options case-insensitively and answers with the exact provider/model', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={selectRequest} onRespond={onRespond} />) })
+    expect(visibleOptions()).toHaveLength(41)
+    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 10)) })
+    expect(document.activeElement).toBe(searchInput())
+
+    await typeQuery('OPENAI model-1')
+    expect(visibleOptions()).toEqual(['openai/model-1', 'openai/model-11', 'openai/model-13', 'openai/model-15', 'openai/model-17', 'openai/model-19'])
+    pressKey(searchInput(), { key: 'ArrowDown' })
+    pressKey(searchInput(), { key: 'ArrowDown' })
+    pressKey(searchInput(), { key: 'ArrowUp' })
+    expect(document.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe('openai/model-11')
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe(document.querySelector('[role="option"][aria-selected="true"]')?.id)
+    pressKey(searchInput(), { key: 'Enter' })
+    expect(onRespond).toHaveBeenCalledWith({ value: 'openai/model-11' })
+  })
+
+  it('shows a clear empty state and ignores Enter when nothing matches', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={selectRequest} onRespond={onRespond} />) })
+    await typeQuery('no-such-model')
+    expect(visibleOptions()).toEqual([])
+    expect(document.querySelector('.extension-question__empty')?.textContent).toContain('No options match “no-such-model”')
+    const event = pressKey(searchInput(), { key: 'Enter' })
+    expect(event.defaultPrevented).toBe(true)
+    expect(onRespond).not.toHaveBeenCalled()
+  })
+
+  it('cancels with Escape from the search field', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={selectRequest} onRespond={onRespond} />) })
+    pressKey(searchInput(), { key: 'Escape' })
+    expect(onRespond).toHaveBeenCalledWith({ cancelled: true })
+  })
+
+  it('focuses the first short-select option so Enter answers instead of closing', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={{ method: 'select', id: 'thinking', title: 'Sidekick thinking', options: ['low', 'medium', 'high'] }} onRespond={onRespond} />) })
+    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 10)) })
+    const options = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+    expect(document.activeElement).toBe(options[0])
+
+    pressKey(options[0], { key: 'ArrowDown' })
+    pressKey(options[1], { key: 'ArrowDown' })
+    pressKey(options[2], { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(options[2])
+    pressKey(options[2], { key: 'Home' })
+    expect(document.activeElement).toBe(options[0])
+    pressKey(options[0], { key: 'End' })
+    pressKey(options[2], { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(options[1])
+    expect(document.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe('2medium')
+
+    const event = pressKey(options[1], { key: 'Enter' })
+    expect(event.defaultPrevented).toBe(true)
+    expect(onRespond).toHaveBeenCalledTimes(1)
+    expect(onRespond).toHaveBeenCalledWith({ value: 'medium' })
+  })
+
+  it('keeps short selects as a numbered button list without search', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={{ method: 'select', id: 'x', title: 'Thinking', options: ['high', 'medium'] }} onRespond={onRespond} />) })
+    expect(document.querySelector('.extension-question__search')).toBeNull()
+    expect(visibleOptions()).toEqual(['1high', '2medium'])
+    await clickButton(document.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
+    expect(onRespond).toHaveBeenCalledWith({ value: 'medium' })
+  })
+})
