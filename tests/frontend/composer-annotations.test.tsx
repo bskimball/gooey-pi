@@ -129,7 +129,7 @@ const clickSend = async () => {
 }
 
 describe('Composer skill mentions', () => {
-  it('sends the exact catalog skill file so the agent can load an explicitly invoked skill', async () => {
+  it('invokes the selected skill file without requiring catalog-ID verification', async () => {
     const skill: SkillRecord = {
       id: '9acaa400e83a609a1d6be9bb61dc04da',
       name: 'improve-codebase-architecture',
@@ -145,7 +145,8 @@ describe('Composer skill mentions', () => {
 
     const [prompt] = onSend.mock.calls[0]
     expect(prompt.startsWith('Use @improve-codebase-architecture and @disabled-skill\n\n')).toBe(true)
-    expect(prompt).toContain(`catalog id "${skill.id}"`)
+    expect(prompt).not.toContain(skill.id)
+    expect(prompt).toContain('No catalog lookup or catalog-ID verification is required')
     expect(prompt).toContain(`Read the skill file at ${JSON.stringify(skill.path)}`)
     expect(prompt).toContain('relative paths from the directory containing that skill file')
     expect(prompt).not.toContain('/disabled/SKILL.md')

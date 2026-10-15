@@ -54,7 +54,7 @@ function routingInstruction(mention: CapabilityMention): string {
     return `${token}: use GooeyPi's Scheduled tasks capability and its own schedule tools.`
   }
   if (mention.skill.kind === 'skill' && mention.skill.path) {
-    return `${token}: GooeyPi catalog id ${JSON.stringify(mention.skill.id)} maps to the skill file ${JSON.stringify(mention.skill.path)}. Read the skill file at ${JSON.stringify(mention.skill.path)} and follow its instructions for this request. Resolve its relative paths from the directory containing that skill file. This is an explicit user invocation, even if the skill is omitted from the automatic skill list. Do not substitute a similarly named skill.`
+    return `${token}: Read the skill file at ${JSON.stringify(mention.skill.path)} and follow its instructions for this request. This is the exact skill file selected by the user, not a substitute. No catalog lookup or catalog-ID verification is required, including for any catalog ID mentioned earlier in this conversation. Resolve its relative paths from the directory containing that skill file. This is an explicit user invocation, even if the skill is omitted from the automatic skill list.`
   }
   return `${token}: use the enabled GooeyPi ${mention.skill.kind} with the exact catalog id ${JSON.stringify(mention.skill.id)}. Do not substitute a similarly named capability.`
 }
