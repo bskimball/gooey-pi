@@ -1,4 +1,4 @@
-import type { SkillRecord } from '@/types/api'
+import type { SessionRecord, SkillRecord } from '@/types/api'
 
 /** `$` invokes skills; `@` references sessions and every other capability kind. */
 export type MentionTrigger = '@' | '$'
@@ -46,6 +46,51 @@ export function findMentionQuery(value: string): MentionQuery | null {
 export function capabilitiesForMention(skills: readonly SkillRecord[], mention: MentionQuery): SkillRecord[] {
   const query = mention.query.toLocaleLowerCase().trim()
   return skills.filter((skill) => capabilityTrigger(skill) === mention.trigger && skill.name.toLocaleLowerCase().includes(query))
+}
+
+const MENTION_MENU_LIMIT = 8
+
+/** Exact name, then prefix, then a looser substring. Empty query does not rank. */
+export function compareMentionMatch(left: string, right: string, query: string): number {
+  const needle = query.toLocaleLowerCase().trim()
+  if (!needle) return 0
+  const rank = (label: string): number => {
+    const name = label.toLocaleLowerCase()
+    if (name === needle) return 0
+    if (name.startsWith(needle)) return 1
+    return 2
+  }
+  const byRank = rank(left) - rank(right)
+  return byRank === 0 ? left.length - right.length : byRank
+}
+
+export type AtMentionTarget =
+  | { kind: 'session'; session: SessionRecord }
+  | { kind: 'capability'; skill: SkillRecord }
+
+/** `@` results the menu can show. A typed query puts the tightest name first so it stays on screen. */
+export function orderedAtMentions(
+  sessions: readonly SessionRecord[],
+  capabilities: readonly SkillRecord[],
+  query: string,
+): AtMentionTarget[] {
+  const needle = query.toLocaleLowerCase().trim()
+  const matchedSessions = sessions.filter((session) => session.title.toLocaleLowerCase().includes(needle))
+  if (!needle) {
+    return [
+      ...matchedSessions.slice(0, 6).map((session) => ({ kind: 'session' as const, session })),
+      ...capabilities.slice(0, 6).map((skill) => ({ kind: 'capability' as const, skill })),
+    ].slice(0, MENTION_MENU_LIMIT)
+  }
+  const targets: AtMentionTarget[] = [
+    ...matchedSessions.map((session) => ({ kind: 'session' as const, session })),
+    ...capabilities.map((skill) => ({ kind: 'capability' as const, skill })),
+  ]
+  const label = (target: AtMentionTarget): string => target.kind === 'session' ? target.session.title : target.skill.name
+  return [...targets]
+    .sort((left, right) => compareMentionMatch(label(left), label(right), needle)
+      || (left.kind === right.kind ? 0 : left.kind === 'session' ? -1 : 1))
+    .slice(0, MENTION_MENU_LIMIT)
 }
 
 function mentionCandidates(skills: readonly SkillRecord[]): SkillRecord[] {

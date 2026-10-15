@@ -23,7 +23,7 @@ import type {
   VoiceTranscriptionProvider,
 } from '@/types/api'
 import { appendAnnotationsToPrompt } from '@/lib/browser-annotations'
-import { appendCapabilityRouting, capabilitiesForMention, capabilityTrigger, findMentionQuery, type MentionTrigger } from '@/lib/capability-mentions'
+import { appendCapabilityRouting, capabilitiesForMention, capabilityTrigger, compareMentionMatch, findMentionQuery, orderedAtMentions, type MentionTrigger } from '@/lib/capability-mentions'
 import { appendTerminalContextToPrompt } from '@/lib/terminal-context'
 import { appendSessionRouting, findSessionMentions } from '@/lib/session-mentions'
 import { clearComposerDraft, readComposerDraft, saveComposerDraft, takeComposerDraft } from '@/lib/composer-draft'
@@ -398,12 +398,11 @@ export const Composer = memo(function Composer({
           .filter((item) => item.command.startsWith(value))
           .map((item) => ({ key: item.command, label: item.command, detail: item.detail, icon: <Command size={14} />, choose: () => { setValue(`${item.command} `); setMenu(null); textareaRef.current?.focus() } }))
       : menu === 'mention' && mentionsSkills
-        ? mentionCapabilities.slice(0, 8).map((skill) => ({ key: `skill:${skill.id}`, label: `$${skill.name}`, detail: skill.description, icon: <Sparkle size={14} />, choose: () => insertMention('$', skill.name) }))
+        ? [...mentionCapabilities].sort((left, right) => compareMentionMatch(left.name, right.name, mentionQuery)).slice(0, 8).map((skill) => ({ key: `skill:${skill.id}`, label: `$${skill.name}`, detail: skill.description, icon: <Sparkle size={14} />, choose: () => insertMention('$', skill.name) }))
       : menu === 'mention'
-        ? [
-            ...sessions.filter((session) => session.title.toLocaleLowerCase().includes(mentionQuery)).slice(0, 6).map((session) => ({ key: `session:${session.harness}:${session.id}`, label: `@${session.title}`, detail: `${session.harness.toUpperCase()} session · ${session.status}`, icon: <ChatCircleText size={14} />, choose: () => insertMention('@', session.title, session) })),
-            ...mentionCapabilities.slice(0, 6).map((skill) => ({ key: `capability:${skill.id}`, label: `@${skill.name}`, detail: skill.description, icon: <At size={14} />, choose: () => insertMention('@', skill.name) })),
-          ].slice(0, 8)
+        ? orderedAtMentions(sessions, mentionCapabilities, mentionQuery).map((target) => target.kind === 'session'
+          ? { key: `session:${target.session.harness}:${target.session.id}`, label: `@${target.session.title}`, detail: `${target.session.harness.toUpperCase()} session · ${target.session.status}`, icon: <ChatCircleText size={14} />, choose: () => insertMention('@', target.session.title, target.session) }
+          : { key: `capability:${target.skill.id}`, label: `@${target.skill.name}`, detail: target.skill.description, icon: <At size={14} />, choose: () => insertMention('@', target.skill.name) })
         : menu === 'add'
           ? [
               { key: 'files', label: 'Add files', detail: 'Attach images, audio, video, or other files', icon: <Paperclip size={14} />, choose: () => { setMenu(null); fileInputRef.current?.click() } },
