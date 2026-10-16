@@ -82,7 +82,12 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     runtimeIdRef,
     runtimeOwnerRef,
     prepareForPrompt: () => true,
-    attachRuntime: (next: RuntimeInfo | undefined) => { currentRuntime = next ?? null },
+    attachRuntime: (next: RuntimeInfo | undefined, generation = workspaceRef.current.generation) => {
+      if (workspaceRef.current.generation !== generation) return
+      currentRuntime = next ?? null
+      runtimeIdRef.current = next?.runtimeId ?? null
+      runtimeOwnerRef.current = next ? { runtimeId: next.runtimeId, generation } : null
+    },
     setRuntime: (next: RuntimeInfo | ((current: RuntimeInfo | null) => RuntimeInfo | null)) => {
       currentRuntime = typeof next === 'function' ? next(currentRuntime) : next
     },
@@ -128,7 +133,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     reportError,
   } as unknown as WorkspaceActionsDeps))
 
-  return { actions, command, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
+  return { actions, command, agentList, workspace, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
 }
 
 describe('/compact dispatch', () => {
@@ -214,7 +219,73 @@ describe('Pi /mode dispatch', () => {
     expect(fixtureState.command.mock.calls.map(([, request]) => request)).toEqual([
       { type: 'get_commands' },
       { type: 'prompt', message: '/mode configure' },
+      { type: 'get_state' },
     ])
+  })
+
+  it('refreshes Fusion A/high to restored Apex B/low after the mode command completes', async () => {
+    const fusionRuntime: RuntimeInfo = { ...runtime(), harness: 'pi', model: { provider: 'provider', id: 'A' }, thinkingLevel: 'high' }
+    const apexRuntime: RuntimeInfo = { ...fusionRuntime, model: { provider: 'provider', id: 'B' }, thinkingLevel: 'low' }
+    const state = fixture({ harness: 'pi', runtime: fusionRuntime, commands: modes })
+    let runtimeState = fusionRuntime
+    let listedState = fusionRuntime
+    state.agentList.mockImplementation(async () => [listedState])
+    state.command.mockImplementation(async (_runtimeId, request) => {
+      if (request.type === 'get_commands') return { data: { commands: modes } }
+      if (request.type === 'prompt') {
+        expect(request.message).toBe('/mode apex')
+        // The extension restores Apex's selection, but the desktop's cached
+        // RuntimeInfo still contains the pre-command Fusion lead selection.
+        runtimeState = apexRuntime
+      }
+      if (request.type === 'get_state') listedState = runtimeState
+      return {}
+    })
+
+    await state.actions.sendPrompt('/mode apex', [], 'queue')
+
+    expect(state.currentRuntime()).toMatchObject({ model: { provider: 'provider', id: 'B' }, thinkingLevel: 'low' })
+    expect(state.command.mock.calls.map(([, request]) => request)).toEqual([
+      { type: 'get_commands' },
+      { type: 'prompt', message: '/mode apex' },
+      { type: 'get_state' },
+    ])
+    expect(state.agentList).toHaveBeenCalledTimes(2)
+    expect(state.messages()).toEqual([])
+  })
+
+  it.each([
+    ['prompt', 'workspace'], ['get_state', 'workspace'], ['list', 'workspace'],
+    ['prompt', 'runtime'], ['get_state', 'runtime'], ['list', 'runtime'],
+  ])('ignores a stale mode refresh suspended at %s after a %s switch', async (stage, switchKind) => {
+    const original: RuntimeInfo = { ...runtime(), harness: 'pi', model: { provider: 'provider', id: 'A' }, thinkingLevel: 'high' }
+    const restored: RuntimeInfo = { ...original, model: { provider: 'provider', id: 'B' }, thinkingLevel: 'low' }
+    const replacement: RuntimeInfo = { ...original, runtimeId: 'replacement', model: { provider: 'provider', id: 'C' }, thinkingLevel: 'medium' }
+    const state = fixture({ harness: 'pi', runtime: original, commands: modes })
+    let release!: () => void
+    let reached!: () => void
+    const pending = new Promise<void>((resolve) => { release = resolve })
+    const suspended = new Promise<void>((resolve) => { reached = resolve })
+    state.command.mockImplementation(async (_runtimeId, request) => {
+      if (request.type === 'get_commands') return { data: { commands: modes } }
+      if (request.type === stage) { reached(); await pending }
+      return {}
+    })
+    state.agentList.mockResolvedValueOnce([original]).mockImplementation(async () => {
+      if (stage === 'list') { reached(); await pending }
+      return [restored]
+    })
+    const sending = state.actions.sendPrompt('/mode apex')
+    await suspended
+    if (switchKind === 'workspace') state.workspace.workspaceRef.current.generation += 1
+    state.workspace.attachRuntime(replacement)
+    release()
+    await sending
+
+    expect(state.currentRuntime()).toEqual(replacement)
+    expect(state.workspace.runtimeIdRef.current).toBe('replacement')
+    if (stage === 'prompt') expect(state.command).not.toHaveBeenCalledWith(original.runtimeId, { type: 'get_state' })
+    if (stage !== 'list') expect(state.agentList).toHaveBeenCalledTimes(1)
   })
 
   it('sends no prompt and explains how to recover when the modes extension is absent', async () => {

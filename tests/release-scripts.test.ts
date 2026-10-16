@@ -218,14 +218,14 @@ describe('release preflight', () => {
   })
 
   test('enforces the repository Node and npm boundaries from checked-in metadata', () => {
-    expect(readRepositoryToolchain()).toEqual({ node: '24.15.0', npm: '12.0.2' })
-    expect(() => assertSupportedNode('v24.14.99')).toThrow(/Node\.js >=24\.15\.0 is required/)
-    expect(() => assertSupportedNode('v24.15.0')).not.toThrow()
-    expect(() => assertSupportedNode('v25.0.0')).not.toThrow()
+    expect(readRepositoryToolchain()).toEqual({ node: '26.8.2', npm: '12.0.2' })
+    expect(() => assertSupportedNode('v26.8.1')).toThrow(/Node\.js >=26\.8\.2 is required/)
+    expect(() => assertSupportedNode('v26.8.2')).not.toThrow()
+    expect(() => assertSupportedNode('v27.0.0')).not.toThrow()
     expect(() => assertSupportedNpm('12.0.1')).toThrow(/npm >=12\.0\.2 is required/)
     expect(() => assertSupportedNpm('12.0.2')).not.toThrow()
     expect(() => assertSupportedNpm('13.0.0')).not.toThrow()
-    expect(() => assertSupportedToolchain({ nodeVersion: 'v24.15.0', npmVersion: '12.0.2' })).not.toThrow()
+    expect(() => assertSupportedToolchain({ nodeVersion: 'v26.8.2', npmVersion: '12.0.2' })).not.toThrow()
   })
 
   test('rejects malformed and prerelease tool versions', () => {
@@ -253,7 +253,7 @@ describe('release preflight', () => {
 
     for (const path of ['scripts/release/lib.mjs', 'scripts/release/bootstrap-npm.mjs', 'scripts/release/package.mjs', 'scripts/release/preflight.mjs']) {
       const source = readFileSync(path, 'utf8')
-      expect(source).not.toContain('24.15.0')
+      expect(source).not.toContain('26.8.2')
       expect(source).not.toContain('12.0.2')
     }
   })
@@ -543,6 +543,8 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
     const toolchain = readRepositoryToolchain()
     expect(packageJson.engines).toEqual({ node: `>=${toolchain.node}`, npm: `>=${toolchain.npm}` })
+    const packageLock = JSON.parse(readFileSync('package-lock.json', 'utf8'))
+    expect(packageLock.packages[''].engines).toEqual(packageJson.engines)
     expect(packageJson.packageManager).toBe(`npm@${toolchain.npm}`)
     expect(readFileSync('.nvmrc', 'utf8').trim()).toBe(toolchain.node)
     const readme = readFileSync('README.md', 'utf8')

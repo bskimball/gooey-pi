@@ -8,7 +8,7 @@ import { Sidebar } from '../../src/components/Sidebar'
 import { useAgentEvents } from '../../src/hooks/useAgentEvents'
 import { useBootstrap } from '../../src/hooks/useBootstrap'
 import { useExtensionUi } from '../../src/hooks/useExtensionUi'
-import { useProviderCatalog } from '../../src/hooks/useProviderCatalog'
+import { groupModelsByProvider, useProviderCatalog } from '../../src/hooks/useProviderCatalog'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
 import { AgentSettings } from '../../src/pages/settings/AgentSettings'
 import { ProviderSettings } from '../../src/pages/settings/ProviderSettings'
@@ -352,21 +352,28 @@ describe('inactive harness event isolation', () => {
 describe('Pi Fusion pair reporting', () => {
   const pairA = { lead: { provider: 'openai', modelId: 'gpt-6-astra', thinking: 'xhigh' }, sidekick: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'medium' } }
   const pairB = { lead: { provider: 'anthropic', modelId: 'claude-fable-5-1', thinking: 'high' }, sidekick: { provider: 'openai', modelId: 'gpt-6-mini', thinking: 'low' } }
+  const pairCatalog: PrimeModelCatalog = {
+    primeVersion: '0.84.1', refreshedAt: '2026-08-06T00:00:00.000Z',
+    providers: ['openai', 'claude-bridge', 'anthropic'].map((id) => ({ id, name: id, authMethod: 'api_key', configured: true, modelCount: 2, availableModelCount: 2, enabled: true })),
+    models: [pairA.lead, pairA.sidekick, pairB.lead, pairB.sidekick].map((choice) => ({ key: `${choice.provider}/${choice.modelId}`, provider: choice.provider, id: choice.modelId, name: choice.modelId, reasoning: true, input: ['text'], contextWindow: 100_000, maxTokens: 8_000, availableThinkingLevels: ['off', 'low', 'medium', 'high', 'xhigh'], fastModeSupported: false, available: true })),
+  }
+  const pairModels = groupModelsByProvider(pairCatalog.models)
   const status = (statusKey: string, statusText?: string) => ({ type: 'extension_ui_request', id: `status-${statusKey}`, method: 'setStatus', statusKey, statusText })
 
   function setup() {
     const command = vi.fn(async () => undefined)
+    const onCommand = vi.fn<(_: string) => Promise<void>>(async () => undefined)
     const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
     let show!: (runtimeId: string, event: Record<string, unknown>) => void
     function PairProbe({ activeRuntimeId }: { activeRuntimeId?: string }) {
       const extension = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime: vi.fn(), reportError: vi.fn() })
       show = extension.showExtensionUi
-      return <PiModeControl disabled={false} onCommand={vi.fn()} />
+      return <PiModeControl disabled={false} modelsByProvider={pairModels} providers={pairCatalog.providers} onCommand={onCommand} />
     }
     const render = (activeRuntimeId?: string) => act(async () => { root.render(<PairProbe activeRuntimeId={activeRuntimeId} />) })
     const emit = (runtimeId: string, event: Record<string, unknown>) => act(() => { show(runtimeId, event) })
-    const pairText = () => document.querySelector('.pi-fusion-pair')?.textContent ?? null
-    return { command, render, emit, pairText }
+    const pairText = () => document.querySelector<HTMLButtonElement>('[aria-label^="Lead model:"]:not(:disabled)') ? document.querySelector('.pi-fusion-pair')?.textContent ?? null : null
+    return { command, onCommand, render, emit, pairText }
   }
 
   it('shows only the active runtime pair, in Fusion mode, and clears it on leave or exit', async () => {
@@ -378,10 +385,10 @@ describe('Pi Fusion pair reporting', () => {
     emit('runtime-a', status('fusion-pair', JSON.stringify(pairA)))
     emit('runtime-b', status('mode', 'Fusion'))
     emit('runtime-b', status('fusion-pair', JSON.stringify(pairB)))
-    expect(pairText()).toBe('Lead openai/gpt-6-astra·Sidekick claude-bridge/claude-opus-5-5')
-    const lead = document.querySelector<HTMLElement>('.pi-fusion-pair__model')!
-    expect(lead.title).toBe('openai/gpt-6-astra · xhigh thinking')
-    expect(lead.querySelector('.sr-only')?.textContent).toBe('openai/')
+    expect(document.querySelector('[aria-label="Lead model: gpt-6-astra"]')).not.toBeNull()
+    expect(document.querySelector('[aria-label="Sidekick model: claude-opus-5-5"]')).not.toBeNull()
+    expect(document.querySelector('[aria-label="Lead thinking"][role="combobox"]')?.textContent).toBe('Lead: Extra high')
+    expect(document.querySelector('[aria-label="Sidekick thinking"][role="combobox"]')?.textContent).toBe('Sidekick: Standard')
 
     await render('runtime-b')
     expect(pairText()).toContain('claude-fable-5-1')
@@ -407,10 +414,41 @@ describe('Pi Fusion pair reporting', () => {
     expect(pairText()).toBeNull()
   })
 
+  it('resets pending role edits on runtime switches without letting old completions unlock new edits', async () => {
+    const { render, emit, onCommand } = setup()
+    await render('runtime-a')
+    emit('runtime-a', status('mode', 'Fusion'))
+    emit('runtime-a', status('fusion-pair', JSON.stringify(pairA)))
+    emit('runtime-b', status('mode', 'Fusion'))
+    emit('runtime-b', status('fusion-pair', JSON.stringify(pairB)))
+    const first = deferred<void>()
+    const second = deferred<void>()
+    onCommand.mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise)
+    const trigger = () => document.querySelector<HTMLButtonElement>('[aria-label="Sidekick thinking"][role="combobox"]')!
+    const chooseLow = async () => {
+      await click(trigger())
+      const option = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent === 'Sidekick: Low')!
+      await click(option)
+    }
+    await chooseLow()
+    expect(onCommand).toHaveBeenLastCalledWith('/mode fusion-set sidekick thinking low')
+    expect(trigger().disabled).toBe(true)
+    await render('runtime-b')
+    expect(trigger().disabled).toBe(false)
+    expect(trigger().textContent).toBe('Sidekick: Low')
+    await chooseLow()
+    expect(trigger().disabled).toBe(true)
+    await act(async () => { first.resolve() })
+    expect(trigger().disabled).toBe(true)
+    await act(async () => { second.reject(new Error('runtime rejected change')) })
+    expect(trigger().disabled).toBe(false)
+    expect(trigger().textContent).toBe('Sidekick: Low')
+  })
+
   it('announces a pending Fusion setup launch and blocks a duplicate until the command settles', async () => {
     const pending = deferred<void>()
     const onCommand = vi.fn(() => pending.promise)
-    await act(async () => { root.render(<PiModeControl disabled={false} onCommand={onCommand} />) })
+    await act(async () => { root.render(<PiModeControl disabled={false} modelsByProvider={pairModels} providers={pairCatalog.providers} onCommand={onCommand} />) })
     const trigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Behavior mode"]')!
     const chooseConfigure = async () => {
       await act(async () => { trigger().click() })

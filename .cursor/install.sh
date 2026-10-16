@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 # shellcheck disable=SC1091
 . "$NVM_DIR/nvm.sh"
-nvm install >/dev/null        # reads .nvmrc (24.15.0); no-op once installed
+nvm install >/dev/null        # reads .nvmrc (26.8.2); no-op once installed
 nvm use >/dev/null
 nvm alias default "$(cat .nvmrc)" >/dev/null
 

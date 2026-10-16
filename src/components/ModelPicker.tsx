@@ -7,6 +7,9 @@ interface ModelPickerProps {
   modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>
   providers: PrimeProviderDescriptor[]
   onChange(value: string): void
+  label?: string
+  disabled?: boolean
+  unavailableLabel?: string
 }
 
 interface ModelGroup {
@@ -14,7 +17,7 @@ interface ModelGroup {
   models: PrimeModelDescriptor[]
 }
 
-export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, providers, onChange }: ModelPickerProps) {
+export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, providers, onChange, label = 'Model', disabled = false, unavailableLabel = 'No model available' }: ModelPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   // null, not a string sentinel: harness catalogs are user-authored, so a
@@ -53,7 +56,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
   }
   const choose = (model: PrimeModelDescriptor | undefined) => {
-    if (!model?.available) return
+    if (disabled || !model?.available) return
     onChange(model.key)
     close(true)
   }
@@ -81,6 +84,10 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
     if (!open) return
     if (!navigableModels.some((model) => model.key === activeKey)) setActiveKey(navigableModels[0]?.key ?? null)
   }, [activeKey, navigableModels, open])
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
 
   useEffect(() => {
     if (!open || !activeKey) return
@@ -113,12 +120,12 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
         ref={triggerRef}
         type="button"
         className="permissions-chip model-picker__trigger"
-        aria-label={`Model: ${selected?.name ?? 'No model available'}`}
-        title={selected?.name ?? 'No model available'}
+        aria-label={`${label}: ${selected?.name ?? unavailableLabel}`}
+        title={`${label}: ${selected?.name ?? unavailableLabel}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        disabled={!groups.length}
+        disabled={disabled || !groups.length}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -128,10 +135,10 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
         }}
       >
         <Brain size={14} />
-        <span>{selected?.name ?? 'No model available'}</span>
+        <span>{label === 'Model' ? '' : `${label}: `}{selected?.name ?? unavailableLabel}</span>
         <CaretDown size={11} aria-hidden="true" />
       </button>
-      {open ? (
+      {open && !disabled ? (
         <div
           className="model-picker__popover"
           onKeyDown={(event) => {

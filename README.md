@@ -105,7 +105,7 @@ Harness provider credentials stay with the harness. Optional voice keys are encr
 
 ## Run from source
 
-You will need Node.js 24.15.0 or newer and npm 12.0.2 or newer. The repository pins Node.js 24.15.0 in `.nvmrc`; with [nvm](https://github.com/nvm-sh/nvm), you can select it with:
+You will need Node.js 26.8.2 or newer and npm 12.0.2 or newer. The repository pins Node.js 26.8.2 in `.nvmrc`; with [nvm](https://github.com/nvm-sh/nvm), you can select it with:
 
 ```bash
 nvm install && nvm use

@@ -178,6 +178,10 @@ export const Composer = memo(function Composer({
   onClearTerminalSelection = noop,
   draftKey,
 }: ComposerProps) {
+  const modelControls = <>
+    <ModelPicker value={model} modelsByProvider={modelsByProvider} providers={providers} onChange={onModelChange} />
+    <SelectControl label="Reasoning effort" compact icon={<Gauge size={12} />} value={effort} onChange={(event) => onEffortChange(event.target.value as PrimeThinkingLevel)}>{reasoningLevels.map((level) => <option key={level} value={level}>{reasoningLabels[level]}</option>)}</SelectControl>
+  </>
   const [value, setValue] = useState(() => (draftKey ? readComposerDraft(draftKey)?.text : undefined) ?? takeComposerDraft())
   const [menu, setMenu] = useState<'add' | 'mention' | 'command' | null>(null)
   const [sessionReferenceIds, setSessionReferenceIds] = useState<ReadonlyMap<string, string>>(() => new Map())
@@ -689,12 +693,9 @@ export const Composer = memo(function Composer({
                 void imageAttachments.ingest(files)
               }}
             />
-            <ModelPicker value={model} modelsByProvider={modelsByProvider} providers={providers} onChange={onModelChange} />
+            {harness === 'pi' ? <PiModeControl disabled={Boolean(disabled || loading || busy || submitting)} modelsByProvider={modelsByProvider} providers={providers} onCommand={(command) => onSend(command, [], 'queue')}>{modelControls}</PiModeControl> : modelControls}
+            <CheckoutPicker catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} onExecute={onExecuteCheckout} />
             <ExecutingModelChip executingModel={executingModel} />
-            <SelectControl label="Reasoning effort" compact icon={<Gauge size={12} />} value={effort} onChange={(event) => onEffortChange(event.target.value as PrimeThinkingLevel)}>
-              {reasoningLevels.map((level) => <option key={level} value={level}>{reasoningLabels[level]}</option>)}
-            </SelectControl>
-            {harness === 'pi' ? <PiModeControl disabled={disabled || loading} onCommand={(command) => onSend(command, [], 'queue')} /> : null}
             {fastSupported ? (
               <button
                 type="button"
@@ -707,7 +708,6 @@ export const Composer = memo(function Composer({
                 <Lightning size={12} /> <span className="fast-mode-toggle__label">Fast</span>
               </button>
             ) : null}
-            <CheckoutPicker catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} onExecute={onExecuteCheckout} />
           </div>
           <div className="composer__actions">
             {dictation.state === 'connecting' || dictation.state === 'recording' ? <button type="button" className="context-usage-dial context-usage-dial--cancel" aria-label="Cancel dictation" title="Cancel dictation" onClick={dictation.cancel}><X size={14} /></button> : <span

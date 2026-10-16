@@ -508,17 +508,30 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           })
           completeQueuedFlush()
         } else if (modeCommand) {
+          const runtimeId = activeRuntime.runtimeId
+          const ownsModeRuntime = () => workspace.workspaceRef.current.generation === generation
+            && workspace.runtimeIdRef.current === runtimeId
+            && workspace.runtimeOwnerRef.current?.runtimeId === runtimeId
+            && workspace.runtimeOwnerRef.current.generation === generation
           // Without the modes extension Pi treats the slash command as a chat prompt.
           const commandName = modeCommand.slice(1).split(/\s/, 1)[0].toLowerCase()
-          const listed = await bridge.agent.command(activeRuntime.runtimeId, { type: 'get_commands' })
-          if (workspace.workspaceRef.current.generation !== generation) return
+          const listed = await bridge.agent.command(runtimeId, { type: 'get_commands' })
+          if (!ownsModeRuntime()) return
           if (!hasPiExtensionCommand(listed, commandName)) {
             throw new Error(`Pi has no /${commandName} command in this session, so it was not sent. Make sure the Pi modes extension (prompt-commands) is installed and enabled, then restart the session.`)
           }
-          await bridge.agent.command(activeRuntime.runtimeId, {
+          await bridge.agent.command(runtimeId, {
             type: 'prompt',
             message: modeCommand,
           })
+          if (!ownsModeRuntime()) return
+          // Modes can restore a different model/thinking pair without an agent
+          // turn. Refresh the runtime cache before publishing it to the composer.
+          await bridge.agent.command(runtimeId, { type: 'get_state' })
+          if (!ownsModeRuntime()) return
+          const refreshed = (await bridge.agent.list()).find((candidate) => candidate.runtimeId === runtimeId)
+          if (!ownsModeRuntime()) return
+          if (refreshed) workspace.attachRuntime(refreshed, generation)
           completeQueuedFlush()
         } else if (activeRuntime.isStreaming) {
           // Follow-ups are daemon-owned. Steers get a renderer-only pending

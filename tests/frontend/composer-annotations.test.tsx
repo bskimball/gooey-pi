@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { Composer } from '../../src/components/Composer'
+import { publishActivePiBehaviorMode, publishActivePiFusionPair, type PiFusionPair } from '../../src/lib/harness'
 import { appendCapabilityRouting, CAPABILITY_ROUTING_BEGIN, CAPABILITY_ROUTING_END, capabilitiesForMention, findCapabilityMentions, findMentionQuery, splitCapabilityRouting } from '../../src/lib/capability-mentions'
 import { groupModelsByProvider } from '../../src/hooks/useProviderCatalog'
 import type { BrowserAnnotation, PrimeModelDescriptor, PrimeProviderDescriptor, PromptDeliveryIntent, PromptImage, SessionRecord, SkillRecord, TerminalPromptContext, TerminalSelectionContext } from '../../src/types/api'
@@ -57,6 +58,8 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
+  publishActivePiBehaviorMode('apex')
+  publishActivePiFusionPair(null)
 })
 
 afterEach(async () => {
@@ -66,6 +69,7 @@ afterEach(async () => {
 })
 
 interface RenderOptions {
+  composerProps?: Partial<ComponentProps<typeof Composer>>
   annotations?: BrowserAnnotation[]
   sendSignal?: number
   onSend?: Mock<(prompt: string, images: PromptImage[], intent: PromptDeliveryIntent) => Promise<void>>
@@ -78,7 +82,7 @@ interface RenderOptions {
   skills?: SkillRecord[]
 }
 
-function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async () => undefined), onRemoveAnnotation = vi.fn(), onClearAnnotations = vi.fn(), terminalSelection, getTerminalContext, onClearTerminalSelection = vi.fn(), sessions = [], skills = [] }: RenderOptions = {}) {
+function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async () => undefined), onRemoveAnnotation = vi.fn(), onClearAnnotations = vi.fn(), terminalSelection, getTerminalContext, onClearTerminalSelection = vi.fn(), sessions = [], skills = [], composerProps = {} }: RenderOptions = {}) {
   act(() =>
     root.render(
       <Composer
@@ -107,6 +111,7 @@ function renderComposer({ annotations = [], sendSignal = 0, onSend = vi.fn(async
         onRemoveAnnotation={onRemoveAnnotation}
         onClearAnnotations={onClearAnnotations}
         onClearTerminalSelection={onClearTerminalSelection}
+        {...composerProps}
       />,
     ),
   )
@@ -559,6 +564,98 @@ describe('Composer sendSignal', () => {
       renderComposer(options)
     })
     expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('orders ordinary dropdowns before other controls and retains non-Pi callbacks', async () => {
+    const onModelChange = vi.fn()
+    const onEffortChange = vi.fn()
+    const onFastChange = vi.fn()
+    const composerProps = { harness: 'pi', onModelChange, onEffortChange, onFastChange, fastSupported: true, reasoningLevels: ['low', 'medium'] } satisfies Partial<ComponentProps<typeof Composer>>
+    renderComposer({ composerProps })
+    const labels = () => [...container.querySelectorAll('.composer__controls button')].map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())
+    expect(labels()).toEqual(['Add context', 'Behavior mode', 'Model: Vision', 'Reasoning effort', 'Checkout: Checkout', 'Fast'])
+    renderComposer({ composerProps: { ...composerProps, harness: 'omp' } })
+    expect(labels()).toEqual(['Add context', 'Model: Vision', 'Reasoning effort', 'Checkout: Checkout', 'Fast'])
+    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Model: Vision"]')!.click() })
+    await act(async () => { container.querySelector<HTMLButtonElement>('.model-picker [role="option"]')!.click() })
+    expect(onModelChange).toHaveBeenCalledWith('provider/vision')
+    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Reasoning effort"][role="combobox"]')!.click() })
+    await act(async () => { container.querySelector<HTMLButtonElement>('.select-control [role="option"]')!.click() })
+    expect(onEffortChange).toHaveBeenCalledWith('low')
+    await act(async () => { container.querySelector<HTMLButtonElement>('.fast-mode-toggle')!.click() })
+    expect(onFastChange).toHaveBeenCalledWith(true)
+  })
+
+  it('edits both Fusion roles through queued commands and waits for reported values', async () => {
+    const lead = { ...models[0], key: 'provider/Lead/Model', id: 'Lead/Model', name: 'Lead Model', availableThinkingLevels: ['high', 'xhigh'] } satisfies PrimeModelDescriptor
+    const sidekick = { ...models[0], key: 'provider/Side/Model', id: 'Side/Model', name: 'Side Model', availableThinkingLevels: ['off', 'low'] } satisfies PrimeModelDescriptor
+    const pair: PiFusionPair = { lead: { provider: 'provider', modelId: lead.id, thinking: 'high' }, sidekick: { provider: 'provider', modelId: sidekick.id, thinking: 'off' } }
+    publishActivePiBehaviorMode('fusion')
+    publishActivePiFusionPair(pair)
+    const onSend = vi.fn<(prompt: string, images: PromptImage[], intent: PromptDeliveryIntent) => Promise<void>>(async () => undefined)
+    const onModelChange = vi.fn()
+    const onEffortChange = vi.fn()
+    const composerProps = { harness: 'pi' as const, modelsByProvider: groupModelsByProvider([lead, sidekick]), onModelChange, onEffortChange, fastSupported: true }
+    renderComposer({ onSend, composerProps })
+    const trigger = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!
+    const choose = async (label: string, text: string) => {
+      await act(async () => { trigger(label).click() })
+      const option = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.querySelector('strong')?.textContent === text)!
+      await act(async () => { option.click() })
+    }
+    expect([...container.querySelectorAll('.composer__controls button')].map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())).toEqual([
+      'Add context', 'Behavior mode', 'Lead model: Lead Model', 'Lead thinking', 'Sidekick model: Side Model', 'Sidekick thinking', 'Checkout: Checkout', 'Fast',
+    ])
+    expect(container.querySelector('[aria-label="Reasoning effort"]')).toBeNull()
+    await act(async () => { trigger('Sidekick thinking').click() })
+    expect([...container.querySelectorAll('[role="option"] strong')].map((option) => option.textContent)).toEqual(['Sidekick: Off', 'Sidekick: Low'])
+    await act(async () => { container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1].click() })
+    expect(onSend).toHaveBeenLastCalledWith('/mode fusion-set sidekick thinking low', [], 'queue')
+    expect(trigger('Sidekick thinking').textContent).toBe('Sidekick: Off')
+    act(() => { publishActivePiFusionPair({ ...pair, sidekick: { ...pair.sidekick, thinking: 'low' } }) })
+    expect(trigger('Sidekick thinking').textContent).toBe('Sidekick: Low')
+    expect(trigger('Lead thinking').textContent).toBe('Lead: High')
+    await choose('Lead thinking', 'Lead: Extra high')
+    expect(onSend).toHaveBeenLastCalledWith('/mode fusion-set lead thinking xhigh', [], 'queue')
+    expect(trigger('Lead thinking').textContent).toBe('Lead: High')
+
+    let resolve!: () => void
+    onSend.mockImplementationOnce(() => new Promise<void>((done) => { resolve = done }))
+    await choose('Sidekick model: Side Model', 'Lead Model')
+    expect(onSend).toHaveBeenLastCalledWith('/mode fusion-set sidekick model provider/Lead/Model', [], 'queue')
+    expect(trigger('Sidekick model: Side Model').disabled).toBe(true)
+    expect(trigger('Lead thinking').disabled).toBe(true)
+    await act(async () => { resolve() })
+    expect(trigger('Sidekick model: Side Model').disabled).toBe(false)
+    act(() => { publishActivePiFusionPair({ ...pair, sidekick: { ...pair.lead, thinking: 'xhigh' } }) })
+    expect(trigger('Sidekick model: Lead Model')).not.toBeNull()
+    expect(trigger('Sidekick thinking').textContent).toBe('Sidekick: Extra high')
+    await act(async () => { trigger('Sidekick thinking').click() })
+    expect([...container.querySelectorAll('[role="option"] strong')].map((option) => option.textContent)).toEqual(['Sidekick: High', 'Sidekick: Extra high'])
+    await act(async () => { trigger('Sidekick thinking').click() })
+    onSend.mockRejectedValueOnce(new Error('runtime rejected model'))
+    await choose('Lead model: Lead Model', 'Side Model')
+    expect(onSend).toHaveBeenLastCalledWith('/mode fusion-set lead model provider/Side/Model', [], 'queue')
+    expect(trigger('Lead model: Lead Model').disabled).toBe(false)
+    expect(onModelChange).not.toHaveBeenCalled()
+    expect(onEffortChange).not.toHaveBeenCalled()
+
+    renderComposer({ onSend, composerProps: { ...composerProps, busy: true } })
+    expect(trigger('Lead model: Lead Model').disabled).toBe(true)
+    expect(trigger('Sidekick thinking').disabled).toBe(true)
+    renderComposer({ onSend, composerProps })
+    act(() => { publishActivePiFusionPair({ ...pair, lead: { ...pair.lead, modelId: 'Missing/Model' } }) })
+    expect(trigger('Lead model: provider/Missing/Model (unavailable)')).not.toBeNull()
+    expect(trigger('Lead thinking').disabled).toBe(true)
+    expect(trigger('Sidekick thinking').disabled).toBe(false)
+    act(() => { publishActivePiFusionPair(null) })
+    expect(trigger('Lead model: Not reported').disabled).toBe(true)
+    expect(trigger('Sidekick thinking').disabled).toBe(true)
+    expect(trigger('Behavior mode').disabled).toBe(false)
+    expect(container.querySelector('[aria-label="Model: Vision"]')).toBeNull()
+    act(() => { publishActivePiBehaviorMode('apex') })
+    expect(trigger('Model: No model available')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Lead thinking"]')).toBeNull()
   })
 
   it('opens the custom SelectControl popover from the chevron, supports keyboard navigation, and dispatches Pi mode changes', async () => {

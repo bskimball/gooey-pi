@@ -9,7 +9,7 @@ map lists others.
 ## Baseline preconditions
 
 - The app is built (`out/main/index.js` exists); if not, run `npm run build`.
-- `node -v` is `v24.15.0` (load nvm first if not: `. "$HOME/.nvm/nvm.sh"; nvm use`).
+- `node -v` is `v26.8.2` (load nvm first if not: `. "$HOME/.nvm/nvm.sh"; nvm use`).
 - A display is available; on a headless machine prefix commands with `xvfb-run -a`.
 - Drives run against a throwaway `HOME` + Electron `--user-data-dir`, so the real
   `~/.prime` / `~/.omp` / `~/.pi` state is never touched.
