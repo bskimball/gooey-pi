@@ -9,7 +9,7 @@ import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity, splitAssistantTurn } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { TurnNavigator } from './transcript/turn-navigator'
-import { LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
+import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
 export { tokenizeSyntax } from './transcript/syntax'
@@ -33,6 +33,12 @@ export function coalesceAssistantTurns(messages: TranscriptMessage[]): Transcrip
     }
   }
   return changed ? grouped : messages
+}
+
+function timestampValue(value?: string | number): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = typeof value === 'number' ? value : Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 interface TranscriptProps {
@@ -114,9 +120,30 @@ export function Transcript({ messages, git, harness = 'prime', loading, active =
           </div>
         </div> : null}
         {hiddenCount > 0 ? <button type="button" className="transcript__show-earlier" onClick={showEarlier}>Show {Math.min(250, hiddenCount)} earlier messages</button> : null}
-        {visibleMessages.map((message) => <ErrorBoundary key={message.id} fallback={<div className="message message--render-failure" role="note">This message could not be displayed.</div>}>
+        {visibleMessages.map((message, messageIndex) => {
+          // The prompt line carries its turn's outcome, borrowed from every assistant segment
+          // before the following prompt: steering and compaction can split one turn into several.
+          let turnLabel: string | undefined
+          let turnRunning = false
+          if (message.role === 'user') {
+            const segments: TranscriptMessage[] = []
+            for (let index = messageIndex + 1; index < visibleMessages.length; index += 1) {
+              const candidate = visibleMessages[index]
+              if (candidate.role === 'user' && candidate.kind !== 'steer-read-marker') break
+              if (candidate.role === 'assistant') segments.push(candidate)
+            }
+            const isLastPrompt = !visibleMessages.slice(messageIndex + 1).some((candidate) => candidate.role === 'user' && candidate.kind !== 'steer-read-marker')
+            // An active session's last turn is still running even between segments (e.g. mid-compaction).
+            turnRunning = segments.some((segment) => segment.streaming || segment.id === activeAssistantId) || (active && isLastPrompt)
+            if (segments.length > 0 && !turnRunning) {
+              const startedAt = timestampValue(segments[0].startedAt ?? segments[0].timestamp)
+              const completedAt = timestampValue(segments.at(-1)?.completedAt)
+              if (startedAt !== undefined && completedAt !== undefined && completedAt >= startedAt) turnLabel = formatWorkedDuration(completedAt - startedAt)
+            }
+          }
+          return <ErrorBoundary key={message.id} fallback={<div className="message message--render-failure" role="note">This message could not be displayed.</div>}>
           {message.kind === 'steer-read-marker' ? <SteerReadMarker message={message} />
-            : message.role === 'user' ? <UserMessage message={message} onOpenSessionReference={onOpenSessionReference} />
+            : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnRunning={turnRunning} onOpenSessionReference={onOpenSessionReference} />
             : message.role === 'assistant' ? message.streaming || message.id === activeAssistantId
               ? <ActiveAssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} />
               : <AssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} />
@@ -124,7 +151,8 @@ export function Transcript({ messages, git, harness = 'prime', loading, active =
             : message.role === 'goal' ? <GoalMessage message={message} />
             : message.role === 'tool' || message.role === 'system' ? <ActivityMessage message={message} harness={harness} />
             : <div className={`message message--${message.role}`}>{message.parts.map((part, partIndex) => part.type === 'text' ? <span key={partIndex}>{part.text}</span> : null)}</div>}
-        </ErrorBoundary>)}
+          </ErrorBoundary>
+        })}
         {active && !activeAssistantId ? <article className="message message--assistant transcript-active-placeholder" aria-live="polite">
           <div className="assistant-mark"><AssistantMark harness={harness} /></div><div className="streaming-state"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /></div>
         </article> : null}

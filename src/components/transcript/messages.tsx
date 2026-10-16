@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { CaretRight, Check, Copy, Crosshair } from '../icons'
+import { CaretRight, Check, CircleNotch, Copy, Crosshair } from '../icons'
 import type { HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { splitAnnotationBlock } from '@/lib/browser-annotations'
 import { splitCapabilityRouting } from '@/lib/capability-mentions'
@@ -266,13 +266,19 @@ function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessio
   )
 }
 
-export const UserMessage = memo(function UserMessage({ message, onOpenSessionReference }: { message: TranscriptMessage; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+export const UserMessage = memo(function UserMessage({ message, turnLabel, turnRunning = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnRunning?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
   return (
     <article className="message message--user">
       <div className="user-bubble">
         {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' ? renderImage(part, `user-${index}`) : null))}
       </div>
+      {turnRunning || turnLabel ? (
+        <span className="message__turn-status">
+          <span aria-hidden="true">{turnRunning ? <><CircleNotch className="spin" size={11} /> running</> : <><Check size={11} /> {turnLabel}</>}</span>
+          <span className="sr-only">{turnRunning ? 'Turn running' : `Turn took ${turnLabel}`}</span>
+        </span>
+      ) : null}
       {message.steerState ? <div className={`message__steer-state is-${message.steerState}`} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}
       <MessageActions message={message} text={copyableText} />
     </article>

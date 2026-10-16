@@ -22,12 +22,16 @@
 .message { width: 100%; margin-bottom: 24px; }
 /* A session reads as a log of processes: each prompt is a command line in the gutter grid the
    agent's output uses, and every later prompt opens a new process below a divider. */
-.message--user { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 10px; }
+.message--user { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 8px; }
 .message--user::before { grid-row: 1; grid-column: 1; color: var(--prime); content: '❯'; font: 700 14px/1.5 var(--chat-mono); text-align: center; }
 .message--user > * { grid-column: 2; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 3; align-self: start; margin-top: -3px; }
-.message--assistant + .message--user { margin-top: -12px; }
-.message ~ .message--user { padding-top: 18px; border-top: 1px solid var(--border); }
+/* Turns are grouped by air, not rules: tight prompt-to-reply, a long pause before the next prompt. */
+.message ~ .message--user { margin-top: 40px; }
+/* Prompt-line turn outcome: duration (or live state) borrowed from the reply, right-aligned
+   where the copy action appears on hover, so the two trade places instead of stacking. */
+.message--user > .message__turn-status { grid-row: 1; grid-column: 3; align-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
+.message--user:hover > .message__turn-status, .message--user:focus-within > .message__turn-status { opacity: 0; }
 .message__steer-state { margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .message__steer-state.is-read { color: var(--success); }
 .message--steer-read { display: flex; align-items: center; gap: 10px; margin: -5px 0 21px; color: var(--text-tertiary); font-size: var(--chat-meta); }
@@ -42,8 +46,9 @@
 .user-annotations > pre { max-height: 220px; margin: 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message--assistant { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; }
 .assistant-mark { position: relative; padding-top: 1px; }
-/* Output rail: ties the reply to its prompt the way a terminal indents a process's output. */
-.assistant-mark::after { position: absolute; top: 32px; bottom: 6px; left: 50%; width: 1px; background: var(--border); content: ''; transform: translateX(-50%); }
+/* The harness mark only earns its gutter while the turn is live; settled replies keep the
+   column alignment but retire the icon, and the running work rail supplies the only line. */
+.message--assistant:not(:has(.work-disclosure.is-running, .streaming-state)) .assistant-mark { opacity: 0; }
 .message--assistant:has(.work-disclosure.is-running, .streaming-state) .assistant-mark > span, .transcript-active-placeholder .assistant-mark > span { animation: assistant-mark-pulse 3.2s cubic-bezier(.4, 0, .2, 1) infinite; }
 .message__content { min-width: 0; font-size: var(--chat-body); line-height: 1.65; }
 .prose { margin: 0 0 12px; white-space: normal; overflow-wrap: anywhere; }
@@ -70,11 +75,12 @@
 .prose hr { margin: 15px 0; border: 0; border-top: 1px solid var(--border); }
 .markdown-image-placeholder { color: var(--text-tertiary); font-style: italic; }
 .markdown-link-unsupported { color: var(--text-secondary); text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
-.work-disclosure { margin: 8px 0 12px; border-top: 1px solid var(--border); }
+/* Settled work is one ledger line between prompt and answer: no rule above it, the caret and count carry it. */
+.work-disclosure { margin: 2px 0 14px; }
 /* The running rail hangs in the assistant-mark gutter (26px column + 12px gap), centred under
    the icon, so live work keeps the full content width. */
 .work-disclosure.is-running { position: relative; margin-top: 0; padding: 0 0 7px; border-top: 0; }
-.work-disclosure__button { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
+.work-disclosure__button { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
 .work-disclosure__button:hover { color: var(--text); }
 .work-disclosure__rail { position: absolute; top: 6px; bottom: 10px; left: -27px; width: 2px; border: 0; border-radius: 999px; background: linear-gradient(180deg, var(--border) 0%, color-mix(in srgb, var(--prime) 42%, var(--border)) 50%, var(--border) 100%); background-size: 100% 200%; animation: work-rail-flow 3.2s linear infinite; }
 .message__content > .work-disclosure.is-running:first-child .work-disclosure__rail { top: 34px; }
@@ -231,7 +237,7 @@
 
 /* Turn header: stands in for the prompt of the turn being read once that prompt scrolls away. */
 .message--user { scroll-margin-top: 14px; }
-.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 24px; border-bottom: 1px solid var(--border); color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 24px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 0 0 10px 10px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
 .turn-header__glyph { color: var(--prime); font: 700 13px/1 var(--chat-mono); text-align: center; }
 .turn-header__prompt { min-width: 0; overflow: hidden; font: var(--chat-meta)/1.4 var(--chat-mono); text-overflow: ellipsis; white-space: nowrap; }
 .turn-header__state { display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }

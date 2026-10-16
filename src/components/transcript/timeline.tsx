@@ -441,10 +441,11 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
   const startedAt = timestamp(message.startedAt ?? message.timestamp) ?? 0
   const completedAt = timestamp(message.completedAt) ?? startedAt
   const duration = formatWorkedDuration(Math.max(0, completedAt - startedAt))
+  const steps = parts.filter((part) => (part.type === 'toolCall' && showTools) || part.type === 'agentMessage' || part.type === 'compaction').length
   return (
     <section className="work-disclosure">
       <button type="button" className="work-disclosure__button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <CaretRight className="disclosure-caret" size={13} /><span>Worked for {duration}</span>
+        <CaretRight className="disclosure-caret" size={13} /><span>Worked for {duration}{steps > 0 ? ` · ${steps} step${steps === 1 ? '' : 's'}` : ''}</span>
       </button>
       {open ? <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
     </section>
