@@ -1,7 +1,9 @@
 /* Transcript */
 /* One type scale for the session: body prose, the monospace command line, activity rows, metadata. */
 :root { --chat-body: 14px; --chat-code: 13px; --chat-ui: 12.5px; --chat-meta: 11px; --chat-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", Menlo, monospace; }
-.transcript { position: absolute; inset: 0; overflow-y: auto; padding: 30px 0 170px; }
+/* A gutter on both edges keeps the scrolled column centred on the same axis as the pane-centred
+   turn header and composer, so their text lines up with the transcript's. */
+.transcript { position: absolute; inset: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 30px 0 170px; }
 .transcript.has-pinned-changes { padding-bottom: 245px; }
 .transcript.has-docked-changes { padding-bottom: 250px; }
 .transcript.has-queued-messages { padding-bottom: 325px; }
@@ -21,8 +23,9 @@
 .prompt-suggestions button:active { transform: scale(.97); }
 .message { width: 100%; margin-bottom: 24px; }
 /* Each sent prompt is a tinted block with a prime edge, so your side of a long session stays
-   easy to find while scanning the agent's output. */
-.message--user { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 16px; padding: 9px 10px 9px 14px; border-left: 2px solid color-mix(in srgb, var(--prime) 70%, transparent); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--prime-soft) 60%, transparent); }
+   easy to find while scanning the agent's output. The block spans the assistant-mark gutter
+   (26px column + 12px gap), so its text starts in the same column as the reply. */
+.message--user { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 16px; padding: 9px 10px 9px 38px; border-radius: 8px; background: var(--surface-subtle); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--prime) 70%, transparent); }
 .message--user > * { grid-column: 1; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
 /* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt. */
@@ -240,7 +243,7 @@
 
 /* Turn header: stands in for the prompt of the turn being read once that prompt scrolls away. */
 .message--user { scroll-margin-top: 14px; }
-.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 39px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 0 0 10px 10px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 61px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 0 0 10px 10px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
 .turn-header__prompt { min-width: 0; overflow: hidden; font-size: var(--chat-ui); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .turn-header__state { display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .turn-header__jump { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border-radius: 6px; color: var(--text-tertiary); background: transparent; transition: color 120ms ease-out, background 120ms ease-out; }

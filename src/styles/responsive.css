@@ -64,7 +64,7 @@
   .transcript { padding-top: 20px; padding-bottom: 184px; }
   .transcript__inner { padding-inline: 15px; }
   .message--assistant { grid-template-columns: 24px minmax(0, 1fr); gap: 9px; }
-  .message--user { column-gap: 9px; }
+  .message--user { column-gap: 9px; padding-left: 33px; }
   .transcript { --chat-body: 13.5px; --chat-code: 12.5px; }
   .activity-tool__summary, .work-disclosure__button, .agent-message__summary, .goal-message__summary { min-height: 44px; }
   .activity-tool__state { display: none; }
