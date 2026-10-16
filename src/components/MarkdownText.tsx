@@ -126,5 +126,5 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
     () => <ReactMarkdown remarkPlugins={markdownPlugins} skipHtml components={markdownComponents}>{parsedText}</ReactMarkdown>,
     [parsedText],
   )
-  return <div className="prose">{markdown}</div>
+  return <div className={streaming ? 'prose is-streaming' : 'prose'}>{markdown}</div>
 })

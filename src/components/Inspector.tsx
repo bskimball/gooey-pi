@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react'
-import { SidebarRight } from './icons'
+import { Folder, GitDiff, Globe, Info, Robot, SidebarRight } from './icons'
 import type { BrowserAnnotationsApi } from '@/hooks/useBrowserAnnotations'
 import type { StampedPointerEvent } from '@/hooks/useAgentBrowserTabs'
 import type { AgentBrowserTabRecord, AutomationScheduleRecord, GitStatus, InspectorTab, NativeHeartbeatRecord, ProjectRecord, RuntimeInfo, TranscriptMessage } from '@/types/api'
@@ -51,7 +51,7 @@ export interface InspectorProps {
   overlay?: boolean
 }
 
-const tabs: Array<{ id: InspectorTab; label: string }> = [{ id: 'summary', label: 'Summary' }, { id: 'specialists', label: 'Specialists' }, { id: 'changes', label: 'Changes' }, { id: 'browser', label: 'Browser' }, { id: 'files', label: 'Files' }]
+const tabs: Array<{ id: InspectorTab; label: string; Icon: typeof Info }> = [{ id: 'summary', label: 'Summary', Icon: Info }, { id: 'specialists', label: 'Specialists', Icon: Robot }, { id: 'changes', label: 'Changes', Icon: GitDiff }, { id: 'browser', label: 'Browser', Icon: Globe }, { id: 'files', label: 'Files', Icon: Folder }]
 
 /** Memoized so streaming transcript updates (which this component no longer consumes outside the Summary tab) do not re-render the inspector shell. */
 export const Inspector = memo(function Inspector({ activeTab, onTabChange, onClose, agentName, shortName, project, cwd, runtime, messages, git, automations, heartbeats, onOpenAutomation, browserHome, browserNavigationRequest, onBrowserNavigationRequestHandled, browserAnnotations, agentBrowserTabs, activeAgentTabId, agentPreviewSelected, onSelectAgentTab, onCloseAgentTab, onShowBrowserPreview, onAgentSlotRect, agentSessionKey, onPreviewContext, previewPointerEvent, onNavigateAgentTab, onRefreshGit, onOpenExternal, onRevealPath, onGrantProject, overlay = false, platform = 'darwin', homeDir }: InspectorProps) {
@@ -74,7 +74,7 @@ export const Inspector = memo(function Inspector({ activeTab, onTabChange, onClo
   }
   return <aside ref={inspectorRef} className="inspector" aria-label="Session inspector" tabIndex={overlay ? -1 : undefined}>
     <div className="inspector__tabs" role="tablist" aria-label="Inspector views">
-      {tabs.map((tab, index) => <button id={`inspector-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls={`inspector-panel-${tab.id}`} tabIndex={activeTab === tab.id ? 0 : -1} className={activeTab === tab.id ? 'is-active' : ''} key={tab.id} onKeyDown={(event) => { if (['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) { event.preventDefault(); moveTab(index, event.key) } }} onClick={() => onTabChange(tab.id)}>{tab.label}{tab.id === 'changes' && git.files.length ? <span>{git.files.length}</span> : tab.id === 'specialists' && specialistCount ? <span>{specialistCount}</span> : null}</button>)}
+      {tabs.map((tab, index) => <button id={`inspector-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls={`inspector-panel-${tab.id}`} tabIndex={activeTab === tab.id ? 0 : -1} className={activeTab === tab.id ? 'is-active' : ''} key={tab.id} onKeyDown={(event) => { if (['ArrowRight','ArrowLeft','Home','End'].includes(event.key)) { event.preventDefault(); moveTab(index, event.key) } }} title={tab.label} onClick={() => onTabChange(tab.id)}><tab.Icon size={15} aria-hidden="true"/><span className="inspector__tab-label">{tab.label}</span>{tab.id === 'changes' && git.files.length ? <span className="inspector__tab-count">{git.files.length}</span> : tab.id === 'specialists' && specialistCount ? <span className="inspector__tab-count">{specialistCount}</span> : null}</button>)}
       <span className="inspector__tab-spacer"/>
       <IconButton label="Close inspector" onClick={onClose}><SidebarRight size={15}/></IconButton>
     </div>

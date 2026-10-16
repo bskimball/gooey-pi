@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { CaretDown, CaretRight, Check, Copy, Crosshair } from '../icons'
+import { CaretRight, Check, Copy, Crosshair } from '../icons'
 import type { HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { splitAnnotationBlock } from '@/lib/browser-annotations'
 import { splitCapabilityRouting } from '@/lib/capability-mentions'
@@ -30,7 +30,7 @@ function renderImage(part: Extract<MessagePart, { type: 'image' }>, key: string)
   )
 }
 
-function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false) {
+export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false) {
   return parts.map((part, index) => {
     if (part.type === 'text') return <MarkdownText key={`${keyPrefix}-${index}`} text={part.text} streaming={streaming} />
     if (part.type === 'image') return renderImage(part, `${keyPrefix}-${index}`)
@@ -38,7 +38,7 @@ function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = fa
   })
 }
 
-function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false) {
+export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false) {
   const groups: Array<{ activity: boolean; parts: MessagePart[] }> = []
   for (const part of parts) {
     const activity = part.type !== 'text' && part.type !== 'image'
@@ -86,6 +86,27 @@ function primaryNarrativeStart(parts: MessagePart[], start: number): number {
     }
   }
   return bestStart
+}
+
+const isActivity = (part: MessagePart) => part.type === 'thinking' || part.type === 'toolCall' || part.type === 'toolResult' || part.type === 'agentMessage' || part.type === 'compaction'
+
+/**
+ * Splits a turn into opening narrative, the work behind the disclosure, and the answer tail.
+ * Live and settled turns share it so a finishing turn collapses its work in place.
+ */
+export function splitAssistantTurn(parts: MessagePart[]): { before: MessagePart[]; work: MessagePart[]; after: MessagePart[] } {
+  const firstActivity = parts.findIndex(isActivity)
+  if (firstActivity < 0) return { before: parts, work: [], after: [] }
+  let lastActivity = -1
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (isActivity(parts[index])) {
+      lastActivity = index
+      break
+    }
+  }
+  const finalNarrative = primaryNarrativeStart(parts, firstActivity + 1)
+  const workEnd = finalNarrative >= 0 ? finalNarrative : lastActivity + 1
+  return { before: parts.slice(0, firstActivity), work: parts.slice(firstActivity, workEnd), after: parts.slice(workEnd) }
 }
 
 function messageText(message: TranscriptMessage): string {
@@ -139,20 +160,7 @@ function AssistantHarnessMark({ harness, size = 24 }: { harness: HarnessId; size
 
 export const AssistantMessage = memo(
   function AssistantMessage({ message, harness = 'prime', showReasoning, showTools }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean }) {
-    const isActivity = (part: MessagePart) => part.type === 'thinking' || part.type === 'toolCall' || part.type === 'toolResult' || part.type === 'agentMessage' || part.type === 'compaction'
-    const firstActivity = message.parts.findIndex(isActivity)
-    let lastActivity = -1
-    for (let index = message.parts.length - 1; index >= 0; index -= 1) {
-      if (isActivity(message.parts[index])) {
-        lastActivity = index
-        break
-      }
-    }
-    const finalNarrative = firstActivity < 0 ? -1 : primaryNarrativeStart(message.parts, firstActivity + 1)
-    const workEnd = finalNarrative >= 0 ? finalNarrative : lastActivity + 1
-    const before = firstActivity < 0 ? message.parts : message.parts.slice(0, firstActivity)
-    const work = firstActivity < 0 ? [] : message.parts.slice(firstActivity, workEnd)
-    const after = firstActivity < 0 ? [] : message.parts.slice(workEnd)
+    const { before, work, after } = splitAssistantTurn(message.parts)
     const hasVisibleActivity = work.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
     )
@@ -305,7 +313,7 @@ export const AgentMessage = memo(function AgentMessage({ message }: { message: T
         <PiMark size={18} />
         <span className="agent-message__label">Message from agent</span>
         {message.agentName ? <span className="agent-message__name">{message.agentName}</span> : null}
-        {open ? <CaretDown className="agent-message__chevron" size={13} /> : <CaretRight className="agent-message__chevron" size={13} />}
+        <CaretRight className="agent-message__chevron disclosure-caret" size={13} />
       </button>
       {open ? (
         <div className="agent-message__content" id={contentId}>
@@ -328,7 +336,7 @@ export const GoalMessage = memo(function GoalMessage({ message }: { message: Tra
           <Crosshair size={15} />
         </span>
         <span className="goal-message__label">Goal summary</span>
-        {open ? <CaretDown className="goal-message__chevron" size={13} /> : <CaretRight className="goal-message__chevron" size={13} />}
+        <CaretRight className="goal-message__chevron disclosure-caret" size={13} />
       </button>
       {open ? (
         <div className="goal-message__content" id={contentId}>

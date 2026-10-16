@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
-  CaretDown,
   CaretRight,
   ChatCircle,
   ChatCircleDots,
@@ -217,6 +216,11 @@ export function LiveElapsed({ since }: { since?: string | number }) {
   return <span className="live-elapsed" aria-hidden="true">{formatWorkedDuration(Math.max(0, now - startedAt))}</span>
 }
 
+/** The last few lines of streamed output, shown under a running command like a terminal's live scrollback. */
+function outputTail(output: string, lines = 4): string {
+  return output.slice(-4_000).trimEnd().split('\n').slice(-lines).join('\n')
+}
+
 function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall' }>; next?: MessagePart }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -256,8 +260,9 @@ function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall
         <span className="activity-line__kind">{kind === 'question' ? 'Question' : part.name}</span>
         {preview ? <code className="activity-tool__preview"><SyntaxText text={preview} /></code> : null}
         <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><CircleNotch className="spin" size={12} /> running</>}</span>
-        {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
+        {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
       </button>
+      {state === 'running' && !open && output.trim() ? <pre className="activity-tool__tail">{outputTail(output)}</pre> : null}
       {open && visibleOutput ? (
         <div className="activity-tool__details">
           <div className="activity-tool__details-toolbar">
@@ -284,7 +289,7 @@ function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agent
       <span className="activity-line__icon"><ChatCircle size={14} /></span>
       <span className="activity-line__kind">Message from agent</span>
       {part.agentName ? <span className="activity-agent__name">{part.agentName}</span> : null}
-      {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
+      {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
     </button>
     {open && part.text ? <div className="activity-agent__details"><MarkdownText text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></div> : null}
   </div>
@@ -320,7 +325,7 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
       <span className="activity-compaction__reason">{compactionReasonLabel(part.reason)}</span>
       {tokenLabel ? <span className="activity-compaction__tokens">{tokenLabel}</span> : null}
       <span className="activity-tool__state">{state}</span>
-      {canExpand ? open ? <CaretDown size={13} /> : <CaretRight size={13} /> : null}
+      {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
     </button>
     {open && details ? <div className={`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`}><MarkdownText text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></div> : null}
   </div>
@@ -402,7 +407,7 @@ export function LiveWorkVerb({ mode, prefix = '' }: { mode: 'Thinking' | 'Workin
   const word = verbs[index] ?? verbs[0]
   return <>
     <span className="sr-only">{`${prefix}${verbs[0]}`}</span>
-    <span className="live-work-verb" aria-hidden="true">{`${prefix}${word}`}</span>
+    <span key={word} className="live-work-verb" aria-hidden="true">{`${prefix}${word}`}</span>
   </>
 }
 
@@ -419,7 +424,8 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
   return status ?? 'Working'
 }
 
-export function WorkDisclosure({ message, parts, showReasoning, showTools, running = message.streaming }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; running?: boolean }) {
+/** `children` is the live answer streaming after the work; it renders between the timeline and the status row. */
+export function WorkDisclosure({ message, parts, showReasoning, showTools, running = message.streaming, children }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; running?: boolean; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
   if (running) {
     const status = liveWorkStatus(message.parts, showReasoning, showTools)
@@ -427,6 +433,7 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
       <span className="work-disclosure__rail" aria-hidden="true" />
       <div className="work-disclosure__live">
         <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} streaming />
+        {children}
         <div className="work-disclosure__status" role="status"><LiveWorkVerb mode={status} /><LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots /></div>
       </div>
     </section>
@@ -437,7 +444,7 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
   return (
     <section className="work-disclosure">
       <button type="button" className="work-disclosure__button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        {open ? <CaretDown size={13} /> : <CaretRight size={13} />}<span>Worked for {duration}</span>
+        <CaretRight className="disclosure-caret" size={13} /><span>Worked for {duration}</span>
       </button>
       {open ? <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
     </section>

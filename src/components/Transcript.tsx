@@ -6,8 +6,9 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownText } from './MarkdownText'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
-import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage } from './transcript/messages'
+import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity, splitAssistantTurn } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
+import { TurnNavigator } from './transcript/turn-navigator'
 import { LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
@@ -63,12 +64,17 @@ function AssistantMark({ harness, size = 24 }: { harness: HarnessId; size?: numb
 
 function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: { message: TranscriptMessage; harness: HarnessId; showReasoning: boolean; showTools: boolean }) {
   const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
+  // The live turn uses the settled split, so finishing collapses the work instead of moving or restyling the answer.
+  const { before, work, after } = splitAssistantTurn(message.parts)
   return (
     <article className="message message--assistant">
       <div className="assistant-mark"><AssistantMark harness={harness} /></div>
       <div className="message__content">
         {visibleActivity
-          ? <WorkDisclosure message={message} parts={message.parts} showReasoning={showReasoning} showTools={showTools} running />
+          ? <>
+            {renderNarrative(before, 'before')}
+            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} running>{renderNarrativeWithActivity(after, 'after', showReasoning, showTools, true)}</WorkDisclosure>
+          </>
           : <>
             {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} streaming /> : null)}
             <div className="streaming-state" aria-live="polite"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /> <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
@@ -125,6 +131,7 @@ export function Transcript({ messages, git, harness = 'prime', loading, active =
         <div />
       </div>
     </div>
+    {!loading ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
     {showPinnedChanges && git.files.length ? <div className="transcript-changes-pin"><ChangesCard git={git} onOpenChanges={onOpenChanges} /></div> : null}
   </>
 }

@@ -825,7 +825,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.getByRole('combobox', { name: 'Message Prime' })).toBeVisible()
 
     await openSettings()
-    await page.locator('.sidebar__primary').getByRole('button', { name: /^New session/ }).click()
+    await page.locator('.sidebar__title-actions').getByRole('button', { name: /^New session/ }).click()
     await expect(page.getByRole('combobox', { name: 'Message Prime' })).toBeVisible()
 
     await openSettings()
@@ -1527,10 +1527,10 @@ test.describe('Prime Work desktop smoke', () => {
   test('removes a project from the sidebar through its context menu', async () => {
     const projectRow = page.locator('.project-row').first()
     await expect(projectRow).toBeVisible()
-    await expect(page.locator('.sidebar__primary .ph-note-pencil')).toHaveCount(1)
+    await expect(page.locator('.sidebar__title-actions .ph-note-pencil')).toHaveCount(1)
     await expect(page.locator('.project-row__new-session .ph-note-pencil')).toHaveCount(1)
     await expect(page.locator('.sidebar__section-heading .ph-folder-plus')).toHaveCount(1)
-    await expect(page.getByTitle('New session (⌘N)')).toHaveCount(2)
+    await expect(page.getByTitle('New session (⌘N)')).toHaveCount(1)
     await expect(page.getByTitle('Add project')).toHaveCount(1)
     await expect(projectRow.getByTitle('New session in Multi-folder fixture')).toHaveCount(1)
     await expect(page.getByTitle('Archive Hermetic desktop fixture')).toHaveCount(1)
@@ -1750,9 +1750,9 @@ test.describe('Prime Work desktop smoke', () => {
     expect(await nativeSelectTheme()).toMatchObject({
       scheme: 'dark',
       optionColor: 'rgb(241, 245, 249)',
-      optionBackground: 'rgb(20, 31, 45)',
+      optionBackground: 'rgb(20, 23, 27)',
       themeColor: '#f1f5f9',
-      themeBackground: '#141f2d',
+      themeBackground: '#14171b',
     })
     await page.getByRole('button', { name: /System/ }).click()
   })

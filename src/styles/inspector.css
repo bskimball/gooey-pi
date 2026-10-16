@@ -1,11 +1,19 @@
 /* Inspector */
 .inspector { position: relative; z-index: 10; width: var(--inspector-width, clamp(420px, 46vw, 660px)); min-width: 340px; flex: 0 0 var(--inspector-width, clamp(420px, 46vw, 660px)); display: flex; flex-direction: column; background: var(--canvas); animation: panel-in 150ms ease-out; }
 .inspector__tabs { height: 43px; flex: 0 0 43px; display: flex; align-items: stretch; gap: 3px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--canvas) 92%, var(--surface-subtle)); }
-.inspector__tabs > button:not(.icon-button) { position: relative; min-width: 58px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; color: var(--text-secondary); background: transparent; font-size: 11.5px; transition: color 120ms ease-out; }
+/* Icon tabs; only the active tab shows its label, so the strip stays narrow at any inspector width. */
+.inspector__tabs > button:not(.icon-button) { position: relative; min-width: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; color: var(--text-tertiary); background: transparent; font-size: 11.5px; transition: color 120ms ease-out; }
+/* The label stays in the accessibility tree; inactive tabs collapse it to zero width so it can expand in on selection. */
+.inspector__tab-label { max-width: 96px; overflow: hidden; white-space: nowrap; transition: max-width 240ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease-out, margin 240ms cubic-bezier(.2, .8, .2, 1); }
+.inspector__tabs > button:not(.is-active) .inspector__tab-label { max-width: 0; margin-left: -6px; opacity: 0; }
+.inspector__tabs > button:not(.icon-button) > svg { flex: 0 0 auto; transition: transform 120ms ease-out; }
+.inspector__tabs > button:not(.icon-button):active > svg { transform: scale(.9); }
+.inspector__tabs > button:not(.is-active) .inspector__tab-count { position: absolute; top: 7px; left: calc(50% + 3px); min-width: 14px; height: 14px; padding: 0 3px; font-size: 8.5px; }
 .inspector__tabs > button:not(.icon-button):hover { color: var(--text); }
 .inspector__tabs > button.is-active { color: var(--text); font-weight: 560; }
-.inspector__tabs > button.is-active::after { position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; content: ""; background: var(--prime); }
-.inspector__tabs > button span { min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; border-radius: 8px; color: var(--text-secondary); background: var(--surface-hover); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.inspector__tabs > button:not(.icon-button)::after { position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; content: ""; background: var(--prime); opacity: 0; transform: scaleX(.3); transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 160ms ease-out; }
+.inspector__tabs > button.is-active::after { opacity: 1; transform: scaleX(1); }
+.inspector__tab-count { min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; border-radius: 8px; color: var(--text-secondary); background: var(--surface-hover); font-size: 9.5px; font-variant-numeric: tabular-nums; animation: badge-in 200ms cubic-bezier(.2, .8, .2, 1); }
 .inspector__tab-spacer { flex: 1; }
 .inspector__tabs > .icon-button { align-self: center; }
 .inspector__body { flex: 1; min-height: 0; overflow: hidden; }

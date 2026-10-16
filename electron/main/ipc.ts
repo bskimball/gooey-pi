@@ -1,4 +1,5 @@
 import { ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { pathToFileURL } from 'node:url'
 import type { ApplicationMenuName, AppMeta, HarnessId, SessionChangeEvent, ThemeMode } from '../../src/types/api'
 import type { AgentRpcManager } from './agent-rpc'
 import type { GitService } from './git'
@@ -228,6 +229,22 @@ export function registerIpc(services: Services, expectedRendererUrl: string): Ip
     }
     console.warn('Rejected app:reveal-path: no authorization domain covers the path')
     return false
+  })
+  handle('app:open-in-vscode', async (_event, path) => {
+    try {
+      const requested = await requireExistingPath(path)
+      const domains = [services.projects, services.omp.projects, services.pi.projects]
+      let authorized: string | undefined
+      for (const domain of domains) {
+        try { authorized = await domain.authorizePath(requested); break } catch { /* denial here defers to the next harness's projects */ }
+      }
+      if (!authorized) throw new Error('no registered project covers the path')
+      await shell.openExternal(`vscode://file${pathToFileURL(authorized).pathname}`, { activate: true })
+      return true
+    } catch (error) {
+      console.warn('Rejected app:open-in-vscode:', error instanceof Error ? error.message : error)
+      return false
+    }
   })
   handle('updates:get-state', () => services.updates.getState())
   handle('updates:check', () => services.updates.check())

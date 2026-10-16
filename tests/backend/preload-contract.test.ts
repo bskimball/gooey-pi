@@ -17,6 +17,7 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['app', 'refreshHarnesses', 'app:refresh-harnesses', []],
   ['app', 'openExternal', 'app:open-external', ['https://example.com']],
   ['app', 'revealPath', 'app:reveal-path', ['/repo/file']],
+  ['app', 'openInVsCode', 'app:open-in-vscode', ['/repo']],
   ['app', 'popupMenu', 'app:popup-menu', ['file', 10, 20]],
   ['app', 'setTitleBarTheme', 'app:set-title-bar-theme', ['dark']],
   ['updates', 'getState', 'updates:get-state', []],

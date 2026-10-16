@@ -24,3 +24,11 @@ export async function revealPath(app: ShellApi, path: string): Promise<string | 
     return errorMessage(error)
   }
 }
+
+export async function openInVsCode(app: Pick<PrimeWorkApi['app'], 'openInVsCode'>, path: string): Promise<string | null> {
+  try {
+    return await app.openInVsCode(path) ? null : `GooeyPi could not open ${path} in VS Code. Is VS Code installed?`
+  } catch (error) {
+    return errorMessage(error)
+  }
+}

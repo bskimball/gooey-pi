@@ -20,17 +20,34 @@
 .brand-switcher__option strong { font-size: 12px; font-weight: 560; }
 .brand-switcher__option small { margin-top: 1px; color: var(--text-tertiary); font-size: 10px; }
 .sidebar__title-actions { display: flex; margin-left: auto; gap: 2px; }
-.sidebar__primary { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--border); }
-.sidebar__primary > button, .sidebar__footer > button { width: 100%; height: 33px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border-radius: 8px; color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
-.sidebar__primary > button:hover, .sidebar__footer > button:hover { color: var(--text); background: var(--surface-hover); }
-.sidebar__primary > button.is-active, .sidebar__footer > button.is-active { color: var(--text); background: var(--surface-selected); }
-.sidebar__primary > button span:not(.nav-count), .sidebar__footer > button span:not(.sidebar-update__icon) { flex: 1; }
-.sidebar__primary kbd, .sidebar__footer kbd { opacity: 0; transition: opacity 130ms ease-out; }
-.sidebar__primary button:hover kbd, .sidebar__footer button:hover kbd { opacity: 1; }
-.nav-count { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--prime) 24%, transparent); border-radius: 9px; color: var(--prime); background: var(--prime-soft); font-size: 10.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.sidebar-search { height: 32px; display: flex; align-items: center; gap: 6px; margin: 4px 0 6px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--canvas); color: var(--text-tertiary); }
+.sidebar__primary { padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); }
+.sidebar__footer > button { width: 100%; height: 33px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border-radius: 8px; color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
+.sidebar__footer > button:hover { color: var(--text); background: var(--surface-hover); }
+.sidebar__footer > button.is-active { color: var(--text); background: var(--surface-selected); }
+.sidebar__footer > button span:not(.sidebar-update__icon) { flex: 1; }
+.sidebar__footer kbd { opacity: 0; transition: opacity 130ms ease-out; }
+.sidebar__footer button:hover kbd { opacity: 1; }
+/* Destinations share one icon row; the title tooltip and sr-only label carry the name. */
+/* One shared selection pill slides to the active destination; --i is its column index. */
+.sidebar__destinations { --i: 0; position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+.sidebar__destinations::before { position: absolute; top: 0; bottom: 0; left: 0; width: calc((100% - 6px) / 4); border-radius: 7px; content: ""; background: var(--surface-selected); opacity: 0; transform: translateX(calc(var(--i) * (100% + 2px))); transition: transform 260ms cubic-bezier(.2, .8, .2, 1), opacity 160ms ease-out; pointer-events: none; }
+.sidebar__destinations:has(> .is-active)::before { opacity: 1; }
+.sidebar__destinations:has(> :nth-child(2).is-active) { --i: 1; }
+.sidebar__destinations:has(> :nth-child(3).is-active) { --i: 2; }
+.sidebar__destinations:has(> :nth-child(4).is-active) { --i: 3; }
+.sidebar__destinations > button { position: relative; height: 30px; display: grid; place-items: center; border-radius: 7px; color: var(--text-tertiary); background: transparent; transition: color 120ms ease-out, background 120ms ease-out; }
+.sidebar__destinations > button:hover { color: var(--text); background: var(--surface-hover); }
+.sidebar__destinations > button.is-active { color: var(--text); background: transparent; }
+.sidebar__destinations > button > svg { transition: transform 120ms ease-out; }
+.sidebar__destinations > button:active > svg { transform: scale(.88); }
+.sidebar__destinations .nav-count { position: absolute; top: 2px; left: calc(50% + 4px); min-width: 15px; height: 15px; padding: 0 4px; font-size: 9px; }
+.nav-count { min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--prime) 24%, transparent); border-radius: 9px; color: var(--prime); background: var(--prime-soft); font-size: 10.5px; font-weight: 650; font-variant-numeric: tabular-nums; animation: badge-in 200ms cubic-bezier(.2, .8, .2, 1); }
+@keyframes badge-in { from { opacity: 0; transform: scale(.6); } }
+.sidebar-search { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); color: var(--text-tertiary); transition: border-color 140ms ease-out, background 140ms ease-out, color 140ms ease-out; }
+.sidebar-search:hover { border-color: var(--border-strong); }
+.sidebar-search:focus-within { border-color: var(--border-strong); color: var(--text-secondary); background: var(--surface-raised); }
 .sidebar-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 12px; }
-.sidebar-search button { width: 18px; height: 18px; padding: 0; color: var(--text-tertiary); background: transparent; }
+.sidebar-search button { width: 18px; height: 18px; padding: 0; color: var(--text-tertiary); background: transparent; animation: badge-in 160ms ease-out; }
 .sidebar__scroll { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 12px; }
 .sidebar__section-heading { position: sticky; z-index: 20; top: -8px; height: 30px; display: flex; align-items: center; justify-content: space-between; margin: -4px -2px 4px; padding: 0 4px 0 8px; color: var(--text-tertiary); background: color-mix(in srgb, var(--sidebar) 92%, transparent); backdrop-filter: blur(8px); font-size: 10.5px; font-weight: 650; letter-spacing: .045em; text-transform: uppercase; }
 .sidebar__section-heading-actions { position: relative; display: flex; align-items: center; gap: 2px; }

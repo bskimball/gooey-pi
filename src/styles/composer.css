@@ -178,33 +178,29 @@
     color-mix(in srgb, var(--focus) 45%, transparent),
     color-mix(in srgb, var(--prime) 55%, transparent));
   filter: blur(7px);
-  opacity: .5;
+  opacity: .14;
 }
 
-/* Streaming ribbon: two soft currents run around the border like molten glass.
+/* Streaming ribbon: one soft current drifts around the border.
    Animating a registered property repaints the gradient every frame, so the flow is
-   stepped to ~30 fps (3.5deg per step), which roughly halves steady-state renderer CPU. */
+   stepped to ~30 fps (2deg per step), which roughly halves steady-state renderer CPU. */
 .composer--busy::after {
   z-index: 2;
-  inset: -3px;
-  padding: 2.5px;
-  border-radius: 17px;
+  inset: -1.5px;
+  padding: 1.5px;
+  border-radius: 15.5px;
   background: conic-gradient(from var(--composer-flow),
-    transparent 0 8%,
-    color-mix(in srgb, var(--prime) 30%, transparent) 18%,
-    color-mix(in srgb, var(--prime) 85%, white) 27%,
-    color-mix(in srgb, var(--focus) 90%, white) 34%,
-    color-mix(in srgb, var(--prime) 40%, transparent) 44%,
-    transparent 54%,
-    color-mix(in srgb, var(--focus) 55%, transparent) 68%,
-    color-mix(in srgb, var(--prime) 60%, white) 76%,
-    transparent 88%);
+    transparent 0 12%,
+    color-mix(in srgb, var(--prime) 22%, transparent) 26%,
+    color-mix(in srgb, var(--prime) 55%, transparent) 36%,
+    color-mix(in srgb, var(--focus) 40%, transparent) 44%,
+    transparent 60%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  filter: blur(.6px);
-  animation: composer-flow 3.4s steps(102, end) infinite;
+  filter: blur(.4px);
+  animation: composer-flow 6s steps(180, end) infinite;
 }
 
 @keyframes composer-flow { to { --composer-flow: 360deg; } }

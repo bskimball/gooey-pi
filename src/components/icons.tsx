@@ -46,6 +46,7 @@ import { FunnelSimple as PhFunnelSimple } from '@phosphor-icons/react/dist/csr/F
 import { Gauge as PhGauge } from '@phosphor-icons/react/dist/csr/Gauge'
 import { Gear as PhGear } from '@phosphor-icons/react/dist/csr/Gear'
 import { GitBranch as PhGitBranch } from '@phosphor-icons/react/dist/csr/GitBranch'
+import { GitDiff as PhGitDiff } from '@phosphor-icons/react/dist/csr/GitDiff'
 import { GitFork as PhGitFork } from '@phosphor-icons/react/dist/csr/GitFork'
 import { Globe as PhGlobe } from '@phosphor-icons/react/dist/csr/Globe'
 import { GlobeSimple as PhGlobeSimple } from '@phosphor-icons/react/dist/csr/GlobeSimple'
@@ -180,6 +181,7 @@ export const FunnelSimple = createPhosphorIcon(PhFunnelSimple, 'funnel-simple')
 export const Gauge = createPhosphorIcon(PhGauge, 'gauge')
 export const Gear = createPhosphorIcon(PhGear, 'gear')
 export const GitBranch = createPhosphorIcon(PhGitBranch, 'git-branch')
+export const GitDiff = createPhosphorIcon(PhGitDiff, 'git-diff')
 export const GitFork = createPhosphorIcon(PhGitFork, 'git-fork')
 export const Globe = createPhosphorIcon(PhGlobe, 'globe')
 export const GlobeSimple = createPhosphorIcon(PhGlobeSimple, 'globe-simple')

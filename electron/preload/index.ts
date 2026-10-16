@@ -37,6 +37,7 @@ const api: PrimeWorkApi = {
     refreshHarnesses: () => invoke('app:refresh-harnesses'),
     openExternal: (url) => invoke('app:open-external', url),
     revealPath: (path) => invoke('app:reveal-path', path),
+    openInVsCode: (path) => invoke('app:open-in-vscode', path),
     popupMenu: (menu, x, y) => invoke('app:popup-menu', menu, x, y),
     setTitleBarTheme: (theme) => invoke('app:set-title-bar-theme', theme),
     onOpenSettings: (callback) => subscribeSignal('app:open-settings', callback),
