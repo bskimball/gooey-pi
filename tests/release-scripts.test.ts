@@ -1225,7 +1225,9 @@ describe('post-package verification helpers', () => {
     // The previous checked-in ICNS silently contained Prime artwork. Anchor
     // its full-size layer to GooeyPi's canonical PNG and retain small layers.
     expect(macIconChunks.get('ic10')?.equals(readFileSync('assets/icon.png'))).toBe(true)
-    expect(macIconChunks.has('ic04')).toBe(true)
+    // App-bundle rendering only reads ARGB, not PNG, in the 16px and 32px 1x slots.
+    expect(macIconChunks.get('ic04')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
+    expect(macIconChunks.get('ic05')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
     expect(macIconChunks.has('ic11')).toBe(true)
     expect(packageJson.build.asarUnpack).toBeUndefined()
     expect(packageJson.build.mac.asarUnpack).toEqual([
