@@ -142,6 +142,11 @@
       "category": "Development",
       "synopsis": "A desktop workspace for Pi, OMP, and Prime Agent",
       "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "Name": "Apex"
+        }
+      },
       "target": [
         "AppImage",
         "deb",

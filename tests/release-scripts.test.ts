@@ -1207,6 +1207,7 @@ describe('post-package verification helpers', () => {
     expect(packageJson.desktopName).toBe('gooeypi.desktop')
     expect(packageJson.build.linux.synopsis).toBe(packageJson.description)
     expect(packageJson.build.linux.syncDesktopName).toBe(true)
+    expect(packageJson.build.linux.desktop.entry.Name).toBe('Apex')
     expect(packageJson.build.mac.icon).toBe('assets/icon.icns')
     expect(packageJson.build.mac.extendInfo.LSUIElement).toBe(true)
     expect(packageJson.build.linux.icon).toBe('assets/icon.png')
