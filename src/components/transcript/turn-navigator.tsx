@@ -94,7 +94,6 @@ export function TurnNavigator({ scrollRef, active }: { scrollRef: RefObject<HTML
   const running = active && isLast
   return (
     <div className="turn-header" role="navigation" aria-label="Current turn">
-      <span className="turn-header__glyph" aria-hidden="true">❯</span>
       <span className="turn-header__prompt" title={current.text}>{current.text}</span>
       {running ? <span className="turn-header__state"><CircleNotch className="spin" size={12} /> running</span> : null}
       <button

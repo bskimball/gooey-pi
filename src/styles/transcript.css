@@ -20,24 +20,23 @@
 .prompt-suggestions button:hover { color: var(--text); border-color: color-mix(in srgb, var(--prime) 48%, var(--border-strong)); background: color-mix(in srgb, var(--prime-soft) 45%, var(--surface-hover)); transform: translateY(-1px); }
 .prompt-suggestions button:active { transform: scale(.97); }
 .message { width: 100%; margin-bottom: 24px; }
-/* A session reads as a log of processes: each prompt is a command line in the gutter grid the
-   agent's output uses, and every later prompt opens a new process below a divider. */
-.message--user { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 8px; }
-.message--user::before { grid-row: 1; grid-column: 1; color: var(--prime); content: '❯'; font: 700 14px/1.5 var(--chat-mono); text-align: center; }
-.message--user > * { grid-column: 2; min-width: 0; }
-.message--user > .message-actions { grid-row: 1; grid-column: 3; align-self: start; margin-top: -3px; }
-/* Turns are grouped by air, not rules: tight prompt-to-reply, a long pause before the next prompt. */
+/* Each sent prompt is a tinted block with a prime edge, so your side of a long session stays
+   easy to find while scanning the agent's output. */
+.message--user { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 16px; padding: 9px 10px 9px 14px; border-left: 2px solid color-mix(in srgb, var(--prime) 70%, transparent); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--prime-soft) 60%, transparent); }
+.message--user > * { grid-column: 1; min-width: 0; }
+.message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
+/* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt. */
 .message ~ .message--user { margin-top: 40px; }
 /* Prompt-line turn outcome: duration (or live state) borrowed from the reply, right-aligned
    where the copy action appears on hover, so the two trade places instead of stacking. */
-.message--user > .message__turn-status { grid-row: 1; grid-column: 3; align-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
+.message--user > .message__turn-status { grid-row: 1; grid-column: 2; align-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
 .message--user:hover > .message__turn-status, .message--user:focus-within > .message__turn-status { opacity: 0; }
 .message__steer-state { margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .message__steer-state.is-read { color: var(--success); }
 .message--steer-read { display: flex; align-items: center; gap: 10px; margin: -5px 0 21px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .message--steer-read::before, .message--steer-read::after { height: 1px; flex: 1; background: var(--border); content: ''; }
 .message--steer-read span { flex: 0 0 auto; }
-.user-bubble { color: var(--text); font: var(--chat-code)/1.6 var(--chat-mono); overflow-wrap: anywhere; }
+.user-bubble { color: var(--text); font-size: var(--chat-body); line-height: 1.6; overflow-wrap: anywhere; }
 .user-annotations { margin-top: 6px; }
 .user-annotations > summary { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--annotation) 35%, var(--border)); border-radius: 6px; color: var(--annotation); background: color-mix(in srgb, var(--annotation) 8%, transparent); cursor: pointer; font-size: var(--chat-meta); font-weight: 600; list-style: none; user-select: none; }
 .user-annotations > summary::-webkit-details-marker { display: none; }
@@ -49,6 +48,10 @@
 /* The harness mark only earns its gutter while the turn is live; settled replies keep the
    column alignment but retire the icon, and the running work rail supplies the only line. */
 .message--assistant:not(:has(.work-disclosure.is-running, .streaming-state)) .assistant-mark { opacity: 0; }
+/* A live turn that ends the transcript sits directly above the composer, whose clearance the
+   transcript's bottom padding already reserves, so it drops the margins that space later rows. */
+.message--assistant:has(.work-disclosure.is-running, .streaming-state):not(:has(~ .message)),
+.message--assistant:not(:has(~ .message)) > .message__content > .work-disclosure.is-running:last-child { margin-bottom: 0; }
 .message--assistant:has(.work-disclosure.is-running, .streaming-state) .assistant-mark > span, .transcript-active-placeholder .assistant-mark > span { animation: assistant-mark-pulse 3.2s cubic-bezier(.4, 0, .2, 1) infinite; }
 .message__content { min-width: 0; font-size: var(--chat-body); line-height: 1.65; }
 .prose { margin: 0 0 12px; white-space: normal; overflow-wrap: anywhere; }
@@ -237,9 +240,8 @@
 
 /* Turn header: stands in for the prompt of the turn being read once that prompt scrolls away. */
 .message--user { scroll-margin-top: 14px; }
-.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 24px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 0 0 10px 10px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
-.turn-header__glyph { color: var(--prime); font: 700 13px/1 var(--chat-mono); text-align: center; }
-.turn-header__prompt { min-width: 0; overflow: hidden; font: var(--chat-meta)/1.4 var(--chat-mono); text-overflow: ellipsis; white-space: nowrap; }
+.turn-header { position: absolute; z-index: 9; top: 0; left: 0; right: 0; max-width: var(--transcript-measure); height: 36px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; padding: 0 4px 0 39px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 0 0 10px 10px; color: var(--text-secondary); background: color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter: blur(10px); animation: turn-header-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.turn-header__prompt { min-width: 0; overflow: hidden; font-size: var(--chat-ui); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .turn-header__state { display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .turn-header__jump { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border-radius: 6px; color: var(--text-tertiary); background: transparent; transition: color 120ms ease-out, background 120ms ease-out; }
 .turn-header__jump:hover { color: var(--text); background: var(--surface-hover); }
