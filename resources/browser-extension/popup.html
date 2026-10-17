@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Apex</title>
+<style>
+  :root { color-scheme: dark; --bg: #16181d; --raised: #1f2228; --line: rgba(255,255,255,.08); --text: #e9ebf1; --muted: #9a9fac; --ok: #4fcf8a; --warn: #e8b04a; --off: #6b7080; }
+  * { box-sizing: border-box; }
+  body { width: 300px; margin: 0; padding: 14px; color: var(--text); background: var(--bg); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  h1 { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 13px; font-weight: 650; letter-spacing: .01em; }
+  .mark { width: 18px; height: 18px; flex: 0 0 18px; margin-top: -1px; }
+  .connection { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--off); }
+  [data-connected="true"] .connection { color: var(--text); }
+  [data-connected="true"] .connection .dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(79,207,138,.16); }
+  .tab { margin: 14px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); }
+  .tab-title { margin: 0; overflow: hidden; font-size: 13px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+  .tab-host { margin: 2px 0 0; overflow: hidden; color: var(--muted); font: 11px/1.4 ui-monospace, "SFMono-Regular", Menlo, monospace; white-space: nowrap; text-overflow: ellipsis; }
+  .agent-state { display: none; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 12px; font-weight: 560; }
+  .agent-state .dot { background: var(--ok); }
+  [data-paired="true"] .agent-state { display: flex; }
+  [data-paused="true"] .agent-state .dot { background: var(--warn); }
+  .hint { margin: 8px 0 0; color: var(--muted); font-size: 11.5px; }
+  .hint:empty { display: none; }
+  .actions { display: grid; gap: 6px; margin-top: 14px; }
+  button { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; color: var(--text); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); font: inherit; font-size: 12.5px; font-weight: 580; cursor: pointer; transition: background 130ms ease-out, transform 100ms ease-out; }
+  button:hover:not(:disabled) { background: #2a2e36; }
+  button:active:not(:disabled) { transform: scale(.96); }
+  button:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { color: #16181d; background: var(--text); box-shadow: none; }
+  button.primary:hover:not(:disabled) { background: #fff; }
+  #pause { display: none; }
+  [data-paired="true"] #pause { display: block; }
+  .error { margin: 10px 0 0; color: #ff8f86; font-size: 11.5px; }
+  .error:empty { display: none; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+</head>
+<body data-connected="false" data-paired="false" data-paused="false">
+  <header>
+    <h1>
+      <svg class="mark" viewBox="0 0 100 100" fill="none" focusable="false" aria-hidden="true">
+        <path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M50 8 C60 24 74 51 86 81 C87.6 85 84 88.8 80 86.8 L67 80 C61 68 55.5 64 50 64 C44.5 64 39 68 33 80 L20 86.8 C16 88.8 12.4 85 14 81 C26 51 40 24 50 8 Z M50 27 C45 37 40.5 46 37.5 54.5 C45 49.5 55 49.5 62.5 54.5 C59.5 46 55 37 50 27 Z"/>
+        <path fill="#38bdf8" d="M27 89 C37 78 46 76 54 81.5 C60.5 85.8 66.5 84.5 73 79.5 C66.5 90 56.5 92.5 47 87.8 C39.5 84 33.5 85.2 27 89 Z"/>
+      </svg>
+      Apex
+    </h1>
+    <span class="connection" role="status"><span class="dot" aria-hidden="true"></span><span id="connection">Connecting…</span></span>
+  </header>
+  <section class="tab" aria-label="Current tab">
+    <p class="tab-title" id="tab-title">This tab</p>
+    <p class="tab-host" id="tab-host"></p>
+    <p class="agent-state" role="status"><span class="dot" aria-hidden="true"></span><span id="agent-state"></span></p>
+    <p class="hint" id="hint"></p>
+  </section>
+  <div class="actions">
+    <button type="button" class="primary" id="share">Share this tab with Apex</button>
+    <button type="button" id="pause">Pause agent</button>
+  </div>
+  <p class="error" id="error" role="alert"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -718,6 +718,10 @@ export interface NativeHeartbeatRecord {
 
 /** One agent-controlled browser tab. The registry lives in the main process; the renderer hosts the webview guests and mirrors this state. */
 export interface AgentBrowserTabRecord {
+  backend?: 'webview' | 'extension'
+  pairedByUser?: boolean
+  paused?: boolean
+  chromeTabId?: number
   tabId: string
   /** Canonical session file path of the thread this tab belongs to. */
   sessionFile: string
@@ -729,6 +733,14 @@ export interface AgentBrowserTabRecord {
   active: boolean
   canGoBack: boolean
   canGoForward: boolean
+}
+
+export interface AgentBrowserExtensionStatus {
+  connected: boolean
+  extensionPath: string
+  bridgePort: number | null
+  activeSessionKey: string | null
+  pairedTabCount: number
 }
 
 export interface AgentBrowserState {
@@ -839,6 +851,12 @@ export interface PrimeWorkApi {
   }
   settings: { get(): Promise<AppSettings>; update(patch: Partial<AppSettings>): Promise<AppSettings>; resetBrowserData(): Promise<boolean> }
   browser: {
+    getExtensionStatus(): Promise<AgentBrowserExtensionStatus>
+    onExtensionStatusChanged(callback: (status: AgentBrowserExtensionStatus) => void): () => void
+    setActiveSession(sessionKey: string | null): Promise<void>
+    setTabPaused(sessionKey: string, tabId: string, paused: boolean): Promise<AgentBrowserTabRecord | null>
+    popOutTab(sessionKey: string, tabId: string): Promise<AgentBrowserTabRecord | null>
+    focusExtensionTab(sessionKey: string, tabId: string): Promise<boolean>
     state(): Promise<AgentBrowserState>
     attachTab(tabId: string, webContentsId: number): Promise<boolean>
     selectTab(tabId: string): Promise<boolean>

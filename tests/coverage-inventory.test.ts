@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,21 +9,24 @@ import {
   COVERAGE_FAMILIES,
   COVERAGE_RUNTIME_EXTENSIONS,
   COVERAGE_TECHNICAL_EXCLUSIONS,
-  createCoverageInventory,
-  familyCoverageThresholds,
   type CoverageFamily,
   type CoverageTechnicalExclusion,
+  createCoverageInventory,
+  familyCoverageThresholds,
 } from '../scripts/release/coverage-inventory'
 import vitestConfig from '../vitest.config'
 
 const temporaryDirectories: string[] = []
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
-const VITEST_ENTRYPOINT = resolve(PROJECT_ROOT, 'node_modules/vitest/vitest.mjs')
+const VITEST_ENTRYPOINT = resolve(createRequire(import.meta.url).resolve('vitest/package.json'), '..', 'vitest.mjs')
 
 const REQUIRED_SAFETY_MODULES = [
   'electron/main/ipc.ts',
   'electron/main/lib/capability-bridge.ts',
   'electron/main/browser/agent-bridge.ts',
+  'electron/main/browser/extension-bridge.ts',
+  'electron/main/browser/extension-tab-driver.ts',
+  'electron/main/browser/service-support.ts',
   'electron/main/collaboration/agent-bridge.ts',
   'electron/main/collaboration/message-envelope.ts',
   'electron/main/schedules/agent-bridge.ts',
@@ -54,7 +58,12 @@ describe('safety-critical coverage inventory', () => {
           exclude?: string[]
           reporter?: string[]
           reportOnFailure?: boolean
-          thresholds?: { statements?: number; branches?: number; functions?: number; lines?: number }
+          thresholds?: {
+            statements?: number
+            branches?: number
+            functions?: number
+            lines?: number
+          }
         }
       }
     }
@@ -137,18 +146,28 @@ describe('safety-critical coverage inventory', () => {
       thresholds: { statements: 50, branches: 50, functions: 50, lines: 50 },
     })
 
-    expect(() => createCoverageInventory(projectRoot, { families: [family('linked-production')], exclusions: [] })).toThrow(/family root must be a real directory/)
-    expect(() => createCoverageInventory(projectRoot, { families: [family('not-a-directory')], exclusions: [] })).toThrow(/family root must be a real directory/)
+    expect(() =>
+      createCoverageInventory(projectRoot, {
+        families: [family('linked-production')],
+        exclusions: [],
+      }),
+    ).toThrow(/family root must be a real directory/)
+    expect(() =>
+      createCoverageInventory(projectRoot, {
+        families: [family('not-a-directory')],
+        exclusions: [],
+      }),
+    ).toThrow(/family root must be a real directory/)
   })
 
   it('loads the explicit repository config coherently from another working directory', () => {
     const foreignWorkingDirectory = mkdtempSync(join(tmpdir(), 'gooeypi-coverage-config-cwd-'))
     temporaryDirectories.push(foreignWorkingDirectory)
-    const result = spawnSync(
-      process.execPath,
-      [VITEST_ENTRYPOINT, 'run', '--config', join(PROJECT_ROOT, 'vitest.config.ts'), 'tests/fixtures/explicit-config-cwd.test.ts'],
-      { cwd: foreignWorkingDirectory, encoding: 'utf8', timeout: 60_000 },
-    )
+    const result = spawnSync(process.execPath, [VITEST_ENTRYPOINT, 'run', '--config', join(PROJECT_ROOT, 'vitest.config.ts'), 'tests/fixtures/explicit-config-cwd.test.ts'], {
+      cwd: foreignWorkingDirectory,
+      encoding: 'utf8',
+      timeout: 60_000,
+    })
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
   })
@@ -157,22 +176,24 @@ describe('safety-critical coverage inventory', () => {
     const foreignWorkingDirectory = mkdtempSync(join(tmpdir(), 'gooeypi-coverage-glob-cwd-'))
     temporaryDirectories.push(foreignWorkingDirectory)
     const reportsDirectory = join(foreignWorkingDirectory, 'coverage')
-    const result = spawnSync(
-      process.execPath,
-      [VITEST_ENTRYPOINT, 'run', '--coverage', '--config', join(PROJECT_ROOT, 'tests/fixtures/coverage-glob-project/vitest.config.ts')],
-      {
-        cwd: foreignWorkingDirectory,
-        encoding: 'utf8',
-        timeout: 60_000,
-        env: { ...process.env, GOOEYPI_COVERAGE_FIXTURE_REPORTS: reportsDirectory },
+    const result = spawnSync(process.execPath, [VITEST_ENTRYPOINT, 'run', '--coverage', '--config', join(PROJECT_ROOT, 'tests/fixtures/coverage-glob-project/vitest.config.ts')], {
+      cwd: foreignWorkingDirectory,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: {
+        ...process.env,
+        GOOEYPI_COVERAGE_FIXTURE_REPORTS: reportsDirectory,
       },
-    )
+    })
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     const summary = JSON.parse(readFileSync(join(reportsDirectory, 'coverage-summary.json'), 'utf8')) as Record<string, unknown>
     const measuredFiles = Object.keys(summary).map((file) => file.replaceAll('\\', '/'))
     for (const file of ['@(authority).ts', '{authority,other}.ts', 'authority[.].ts']) {
-      expect(measuredFiles.some((measuredFile) => measuredFile.endsWith(`/src/${file}`)), file).toBe(true)
+      expect(
+        measuredFiles.some((measuredFile) => measuredFile.endsWith(`/src/${file}`)),
+        file,
+      ).toBe(true)
     }
   })
 
@@ -217,7 +238,12 @@ describe('safety-critical coverage inventory', () => {
         exclusions: [{ ...documented, compensatingVerification: [] }],
       }),
     ).toThrow(/compensating verification/)
-    expect(() => createCoverageInventory(projectRoot, { families, exclusions: [documented, documented] })).toThrow(/duplicate coverage exclusion/)
+    expect(() =>
+      createCoverageInventory(projectRoot, {
+        families,
+        exclusions: [documented, documented],
+      }),
+    ).toThrow(/duplicate coverage exclusion/)
     expect(() =>
       createCoverageInventory(projectRoot, {
         families,

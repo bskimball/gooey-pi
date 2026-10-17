@@ -13,8 +13,8 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 527534 bytes at 76074ea after the 5d69087 and Fusion features.
-  mainBytes: 520 * KIB,
+  // Measured 550240 bytes after adding the Apex browser extension bridge and driver.
+  mainBytes: 544 * KIB,
   preloadBytes: 16 * KIB,
   initialRendererBytes: 1280 * KIB,
   largestRendererChunkBytes: 600 * KIB,

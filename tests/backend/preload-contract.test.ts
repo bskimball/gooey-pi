@@ -2,11 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronMocks = vi.hoisted(() => ({
   api: undefined as unknown,
-  contextBridge: { exposeInMainWorld: vi.fn((_name: string, api: unknown) => { electronMocks.api = api }) },
-  ipcRenderer: { invoke: vi.fn(), on: vi.fn(), removeListener: vi.fn(), send: vi.fn() },
+  contextBridge: {
+    exposeInMainWorld: vi.fn((_name: string, api: unknown) => {
+      electronMocks.api = api
+    }),
+  },
+  ipcRenderer: {
+    invoke: vi.fn(),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+    send: vi.fn(),
+  },
 }))
 
-vi.mock('electron', () => ({ contextBridge: electronMocks.contextBridge, ipcRenderer: electronMocks.ipcRenderer }))
+vi.mock('electron', () => ({
+  contextBridge: electronMocks.contextBridge,
+  ipcRenderer: electronMocks.ipcRenderer,
+}))
 
 await import('../../electron/preload/index')
 
@@ -82,6 +94,11 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['settings', 'get', 'settings:get', []],
   ['settings', 'update', 'settings:update', [{ theme: 'dark' }]],
   ['settings', 'resetBrowserData', 'settings:reset-browser-data', []],
+  ['browser', 'getExtensionStatus', 'browser:extension-status', []],
+  ['browser', 'setActiveSession', 'browser:set-active-session', ['/session.jsonl']],
+  ['browser', 'setTabPaused', 'browser:set-tab-paused', ['/session.jsonl', 'tab', true]],
+  ['browser', 'popOutTab', 'browser:pop-out-tab', ['/session.jsonl', 'tab']],
+  ['browser', 'focusExtensionTab', 'browser:focus-extension-tab', ['/session.jsonl', 'tab']],
   ['browser', 'state', 'browser:state', []],
   ['browser', 'attachTab', 'browser:attach-tab', ['tab', 7]],
   ['browser', 'selectTab', 'browser:select-tab', ['tab']],
@@ -108,6 +125,7 @@ const SUBSCRIPTION_CASES: Array<[domain: string, method: string, channel: string
   ['providers', 'onAuthEvent', 'providers:auth-event'],
   ['terminal', 'onData', 'terminal:data'],
   ['terminal', 'onExit', 'terminal:exit'],
+  ['browser', 'onExtensionStatusChanged', 'browser:extension-status-changed'],
   ['browser', 'onChanged', 'browser:changed'],
   ['browser', 'onPointer', 'browser:pointer'],
   ['browser', 'onActivity', 'browser:activity'],
@@ -124,7 +142,9 @@ describe('preload bridge contract', () => {
   })
 
   it('exposes the main-process Settings signal with a removable listener', () => {
-    const api = electronMocks.api as { app: { onOpenSettings(callback: () => void): () => void } }
+    const api = electronMocks.api as {
+      app: { onOpenSettings(callback: () => void): () => void }
+    }
     expect(() => (api.app.onOpenSettings as unknown as (callback: unknown) => unknown)(undefined)).toThrow('callback must be a function')
     const callback = vi.fn()
     const unsubscribe = api.app.onOpenSettings(callback)
@@ -166,7 +186,7 @@ describe('preload bridge contract', () => {
     const callback = vi.fn()
     expect(() => api[domain][method](undefined)).toThrow('callback must be a function')
     const unsubscribe = api[domain][method](callback) as () => void
-    const listener = electronMocks.ipcRenderer.on.mock.calls.at(-1)?.[1] as ((event: unknown, payload: unknown) => void)
+    const listener = electronMocks.ipcRenderer.on.mock.calls.at(-1)?.[1] as (event: unknown, payload: unknown) => void
     const payload = { ok: true }
 
     expect(electronMocks.ipcRenderer.on).toHaveBeenLastCalledWith(channel, listener)
@@ -179,15 +199,18 @@ describe('preload bridge contract', () => {
     expect(electronMocks.ipcRenderer.removeListener).toHaveBeenCalledWith(channel, listener)
   })
 
-
   it('unwraps recognized Electron invoke errors while retaining diagnostics and error type', async () => {
     const original = new TypeError("Error invoking remote method 'voice:transcribe': TypeError: Invalid voice URL")
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     electronMocks.ipcRenderer.invoke.mockRejectedValueOnce(original)
-    const api = electronMocks.api as { voice: { transcribe(request: unknown): Promise<unknown> } }
+    const api = electronMocks.api as {
+      voice: { transcribe(request: unknown): Promise<unknown> }
+    }
 
     const rejection = api.voice.transcribe({})
-    await expect(rejection).rejects.toMatchObject({ message: 'Invalid voice URL' })
+    await expect(rejection).rejects.toMatchObject({
+      message: 'Invalid voice URL',
+    })
     await rejection.catch((error: unknown) => {
       expect(error).toBeInstanceOf(TypeError)
       expect(error).not.toBe(original)
@@ -200,7 +223,9 @@ describe('preload bridge contract', () => {
   it('leaves unrecognized Error messages untouched', async () => {
     const original = new Error("Error invoking remote method 'settings:update': malformed")
     electronMocks.ipcRenderer.invoke.mockRejectedValueOnce(original)
-    const api = electronMocks.api as { settings: { update(patch: unknown): Promise<unknown> } }
+    const api = electronMocks.api as {
+      settings: { update(patch: unknown): Promise<unknown> }
+    }
 
     await expect(api.settings.update({})).rejects.toBe(original)
   })
@@ -208,7 +233,9 @@ describe('preload bridge contract', () => {
   it('leaves non-Error rejections untouched', async () => {
     const original = { reason: 'raw rejection' }
     electronMocks.ipcRenderer.invoke.mockRejectedValueOnce(original)
-    const api = electronMocks.api as { settings: { update(patch: unknown): Promise<unknown> } }
+    const api = electronMocks.api as {
+      settings: { update(patch: unknown): Promise<unknown> }
+    }
 
     await expect(api.settings.update({})).rejects.toBe(original)
   })
