@@ -122,6 +122,12 @@ const LEGACY_UNPREFIXED_TOOLS = [
 async function loadExtension(injection: ExtensionInjection, configured: boolean) {
   vi.resetModules()
   vi.unstubAllEnvs()
+  // A shell launched from inside GooeyPi inherits live broker variables; clear them so the
+  // unconfigured case really runs without a broker.
+  for (const [url, token] of Object.values(brokerVariables)) {
+    vi.stubEnv(url, undefined)
+    vi.stubEnv(token, undefined)
+  }
   const variables = brokerVariables[injection.capability]
   if (configured && variables) {
     vi.stubEnv(variables[0], 'http://127.0.0.1:1/')

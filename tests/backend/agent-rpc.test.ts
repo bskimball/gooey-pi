@@ -1127,7 +1127,8 @@ const answers = []
 const finish = () => send({ id: prompt.id, type: 'response', command: 'prompt', success: true, data: { answers } })
 readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
-  if (command.type === 'prompt') {
+  if (command.type === 'ping') send({ id: command.id, type: 'response', command: 'ping', success: true })
+  else if (command.type === 'prompt') {
     prompt = command
     if (command.message === 'two-steps') { awaiting.add('step-1'); select('step-1') }
     else if (command.message === 'parallel') { awaiting.add('q-1'); awaiting.add('q-2'); select('q-1'); select('q-2') }
@@ -1146,14 +1147,17 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 setInterval(() => {}, 1000)
 `
-  const DEADLINE_MS = 150
+  // Long enough to cover one stdin/stdout round trip to the fake agent on a loaded machine,
+  // which is the gap between answering one dialog step and the next step arriving.
+  const DEADLINE_MS = 400
   const runtimes: RpcRuntime[] = []
 
   afterEach(async () => {
     await Promise.all(runtimes.splice(0).map((runtime) => runtime.stop()))
   })
 
-  const dialogRuntime = () => {
+  // Waits until the fake agent answers, so process startup never eats into a prompt's deadline.
+  const dialogRuntime = async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-dialog-'))
     dirs.push(cwd)
     const executable = join(cwd, 'dialog-agent.cjs')
@@ -1168,30 +1172,31 @@ setInterval(() => {}, 1000)
     const request = (runtime as unknown as { request(command: RpcObject, timeoutMs: number): Promise<RpcObject> }).request.bind(runtime)
     const answer = (id: string, value: string) => runtime.command({ type: 'extension_ui_response', id, value })
     const cancel = (id: string) => runtime.command({ type: 'extension_ui_response', id, cancelled: true })
+    await request({ type: 'ping' }, 30_000)
     return { runtime, request, events, answer, cancel }
   }
   const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
 
   it('holds the prompt deadline through each step of a multi-step dialog and returns the real response', async () => {
-    const { request, events, answer } = dialogRuntime()
+    const { request, events, answer } = await dialogRuntime()
     const prompt = request({ type: 'prompt', message: 'two-steps' }, DEADLINE_MS)
     await waitUntil(() => events.includes('step-1'))
-    await sleep(DEADLINE_MS * 3)
+    await sleep(DEADLINE_MS * 2)
     await answer('step-1', 'openai/gpt-6.1-sol')
     await waitUntil(() => events.includes('step-2'))
-    await sleep(DEADLINE_MS * 3)
+    await sleep(DEADLINE_MS * 2)
     await answer('step-2', 'medium')
 
     await expect(prompt).resolves.toMatchObject({ command: 'prompt', success: true, data: { answers: ['openai/gpt-6.1-sol', 'medium'] } })
   })
 
   it('holds the prompt deadline until every concurrent dialog closes, including cancellation', async () => {
-    const { request, events, answer, cancel } = dialogRuntime()
+    const { request, events, answer, cancel } = await dialogRuntime()
     let settled = false
     const prompt = request({ type: 'prompt', message: 'parallel' }, DEADLINE_MS).finally(() => { settled = true })
     await waitUntil(() => events.includes('q-1') && events.includes('q-2'))
     await answer('q-1', 'first')
-    await sleep(DEADLINE_MS * 3)
+    await sleep(DEADLINE_MS * 2)
     expect(settled).toBe(false)
     await cancel('q-2')
 
@@ -1199,11 +1204,11 @@ setInterval(() => {}, 1000)
   })
 
   it('restarts the normal deadline after the last dialog closes when the prompt then stalls', async () => {
-    const { request, events, answer } = dialogRuntime()
+    const { request, events, answer } = await dialogRuntime()
     const prompt = request({ type: 'prompt', message: 'stall-after-dialog' }, DEADLINE_MS)
     const failure = prompt.then(() => ({ error: undefined, at: Date.now() }), (error: unknown) => ({ error, at: Date.now() }))
     await waitUntil(() => events.includes('stall'))
-    await sleep(DEADLINE_MS * 3)
+    await sleep(DEADLINE_MS * 2)
     const answeredAt = Date.now()
     await answer('stall', 'chosen')
 
@@ -1213,19 +1218,19 @@ setInterval(() => {}, 1000)
   })
 
   it('still times out a prompt that only emits fire-and-forget extension UI', async () => {
-    const { request } = dialogRuntime()
+    const { request } = await dialogRuntime()
     await expect(request({ type: 'prompt', message: 'notify-only' }, DEADLINE_MS)).rejects.toThrow(/RPC command prompt timed out after delivery/)
   })
 
   it('stops holding the prompt once a dialog passes its own timeout', async () => {
-    const { request, events } = dialogRuntime()
+    const { request, events } = await dialogRuntime()
     const prompt = request({ type: 'prompt', message: 'expiring-dialog' }, DEADLINE_MS)
     await waitUntil(() => events.includes('expiring'))
     await expect(prompt).rejects.toThrow(/RPC command prompt timed out after delivery/)
   })
 
   it('keeps non-prompt deadlines while a dialog is open', async () => {
-    const { request, events, answer } = dialogRuntime()
+    const { request, events, answer } = await dialogRuntime()
     const prompt = request({ type: 'prompt', message: 'two-steps' }, DEADLINE_MS)
     await waitUntil(() => events.includes('step-1'))
     await expect(request({ type: 'sleepy' }, DEADLINE_MS)).rejects.toThrow(/RPC command sleepy timed out after delivery/)
@@ -1236,7 +1241,7 @@ setInterval(() => {}, 1000)
   })
 
   it('keeps a public prompt command alive while the user spends over a minute in the dialog', async () => {
-    const { runtime, events, answer } = dialogRuntime()
+    const { runtime, events, answer } = await dialogRuntime()
     const settle = () => new Promise((resolveTick) => setImmediate(resolveTick))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
@@ -1255,7 +1260,7 @@ setInterval(() => {}, 1000)
   })
 
   it('fails a dialog-held prompt promptly when the agent exits', async () => {
-    const { request, events } = dialogRuntime()
+    const { request, events } = await dialogRuntime()
     const prompt = request({ type: 'prompt', message: 'two-steps' }, 60_000)
     await waitUntil(() => events.includes('step-1'))
     void request({ type: 'exit' }, 60_000).catch(() => undefined)
