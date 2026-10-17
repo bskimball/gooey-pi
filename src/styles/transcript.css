@@ -22,14 +22,16 @@
 .prompt-suggestions button:hover { color: var(--text); border-color: color-mix(in srgb, var(--prime) 48%, var(--border-strong)); background: color-mix(in srgb, var(--prime-soft) 45%, var(--surface-hover)); transform: translateY(-1px); }
 .prompt-suggestions button:active { transform: scale(.97); }
 .message { width: 100%; margin-bottom: 24px; }
-/* Each sent prompt is a tinted block with a prime edge, so your side of a long session stays
-   easy to find while scanning the agent's output. The block spans the assistant-mark gutter
-   (26px column + 12px gap), so its text starts in the same column as the reply. */
-.message--user { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin-bottom: 16px; padding: 9px 10px 9px 38px; border-radius: 8px; background: var(--surface-subtle); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--prime) 70%, transparent); }
+/* Each sent prompt is a tinted block with a muted prime edge, so your side of a long session stays
+   easy to find while scanning the agent's output. The edge sits on the axis the assistant mark and
+   running work rail share (11px into the 38px gutter), the text starts in the reply column, and the
+   edge side stays square so the rule reads as a straight margin line. */
+.message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px 11px; padding: 10px 10px 10px 25px; border-left: 2px solid color-mix(in srgb, var(--prime) 50%, var(--border-strong)); border-radius: 0 6px 6px 0; background: var(--surface-subtle); }
 .message--user > * { grid-column: 1; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
-/* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt. */
-.message ~ .message--user { margin-top: 40px; }
+/* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt.
+   The reply's hover-only Copy row (30px) already opens that pause, so the margin adds only the rest. */
+.message ~ .message--user { margin-top: 28px; }
 /* Prompt-line turn outcome: duration (or live state) borrowed from the reply, right-aligned
    where the copy action appears on hover, so the two trade places instead of stacking. */
 .message--user > .message__turn-status { grid-row: 1; grid-column: 2; align-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
@@ -86,7 +88,8 @@
 /* The running rail hangs in the assistant-mark gutter (26px column + 12px gap), centred under
    the icon, so live work keeps the full content width. */
 .work-disclosure.is-running { position: relative; margin-top: 0; padding: 0 0 7px; border-top: 0; }
-.work-disclosure__button { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
+/* The caret hangs left by its padding plus the glyph's own inset, so its point lines up with the reply text. */
+.work-disclosure__button { width: calc(100% + 7px); min-height: 26px; display: flex; align-items: center; gap: 6px; margin-left: -7px; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
 .work-disclosure__button:hover { color: var(--text); }
 .work-disclosure__rail { position: absolute; top: 6px; bottom: 10px; left: -27px; width: 2px; border: 0; border-radius: 999px; background: linear-gradient(180deg, var(--border) 0%, color-mix(in srgb, var(--prime) 42%, var(--border)) 50%, var(--border) 100%); background-size: 100% 200%; animation: work-rail-flow 3.2s linear infinite; }
 .message__content > .work-disclosure.is-running:first-child .work-disclosure__rail { top: 34px; }
@@ -170,7 +173,7 @@
 .image-lightbox__close { position: absolute; z-index: 1; top: 9px; right: 9px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; color: #fff; background: rgba(10,10,10,.68); box-shadow: 0 2px 8px rgba(0,0,0,.28); backdrop-filter: blur(6px); }
 .image-lightbox__close:hover, .image-lightbox__close:focus-visible { background: rgba(10,10,10,.9); }
 .image-lightbox__close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.message--activity { margin: 3px 0 18px 38px; }
+.message--activity { width: auto; margin: 3px 0 18px 38px; }
 .message--activity .work-timeline { padding: 0; }
 .changes-card { width: 100%; min-height: 57px; display: flex; align-items: center; gap: 7px; margin: 12px 0 9px; padding: 9px 7px 9px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface-raised); text-align: left; }
 .changes-card__open { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; padding: 0; color: inherit; background: transparent; text-align: left; }
