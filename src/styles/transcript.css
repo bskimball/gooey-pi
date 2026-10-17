@@ -25,8 +25,8 @@
 /* Each sent prompt is a tinted block with a muted prime edge, so your side of a long session stays
    easy to find while scanning the agent's output. The edge sits on the axis the assistant mark and
    running work rail share (11px into the 38px gutter), the text starts in the reply column, and the
-   edge side stays square so the rule reads as a straight margin line. */
-.message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px 11px; padding: 10px 10px 10px 25px; border-left: 2px solid color-mix(in srgb, var(--prime) 50%, var(--border-strong)); border-radius: 0 6px 6px 0; background: var(--surface-subtle); }
+   block stays square so the rule reads as a straight margin line. */
+.message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px 11px; padding: 10px 10px 10px 25px; border-left: 2px solid color-mix(in srgb, var(--prime) 50%, var(--border-strong)); background: var(--surface-subtle); }
 .message--user > * { grid-column: 1; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
 /* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt.
