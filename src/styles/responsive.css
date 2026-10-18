@@ -9,6 +9,7 @@
 @container (max-width: 490px) {
   .select-control { position: relative; width: 28px; flex: 0 0 28px; justify-content: center; gap: 0; padding-inline: 0; }
   .select-control select, .select-control__trigger { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; opacity: 0; cursor: pointer; }
+  .select-control:focus-within:not(:has(.select-control__menu)), .select-control:has(.select-control__trigger:focus-visible, select:focus-visible) { color: var(--text); border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 1px; }
   .select-control__icon { pointer-events: none; }
   .fast-mode-toggle { width: 28px; justify-content: center; padding-inline: 0; }
   .fast-mode-toggle__label, .worktree-picker__label, .model-picker__trigger > span { display: none; }

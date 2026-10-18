@@ -18,6 +18,16 @@ function generateCommitSummary(files: GitStatus['files']): string {
   return `${verb} ${description}`
 }
 
+function splitFilePath(path: string): { dir: string; name: string } {
+  const slash = path.lastIndexOf('/')
+  return slash === -1 ? { dir: '', name: path } : { dir: path.slice(0, slash + 1), name: path.slice(slash + 1) }
+}
+
+function FilePathLabel({ path }: { path: string }) {
+  const { dir, name } = splitFilePath(path)
+  return <span className="changes-file-path" title={path}>{dir ? <i>{dir}</i> : null}<b>{name}</b></span>
+}
+
 const DiffView = memo(function DiffView({ text }: { text: string }) {
   if (!text) return <div className="diff-placeholder"><FileCode size={22} /><span>Select a changed file to inspect its diff.</span></div>
   const { lines, truncated } = boundLines(text, MAX_RENDERED_DIFF_CHARACTERS, MAX_RENDERED_DIFF_LINES)
@@ -112,11 +122,11 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
       <div className="changes-body">
         <div className="file-changes scroll-area">
           <div className="file-changes__header"><span>{visibleFiles.length} changed {visibleFiles.length === 1 ? 'file' : 'files'}</span>{visibleFiles.length ? <button type="button" disabled={readOnly} onClick={() => void mutate(scope === 'staged' ? 'unstage' : 'stage', visibleFiles.map((file) => file.path))}>{scope === 'staged' ? 'Unstage all' : 'Stage all'}</button> : null}</div>
-          {visibleFiles.map((file) => <button type="button" key={file.path} className={selectedPath === file.path ? 'is-selected' : ''} onClick={() => setSelectedPath(file.path)}><File size={13} /><span title={file.path}>{file.path}</span><small className="additions">+{file.additions}</small><small className="deletions">−{file.deletions}</small><span className="file-status">{file.status}</span></button>)}
+          {visibleFiles.map((file) => <button type="button" key={file.path} className={selectedPath === file.path ? 'is-selected' : ''} onClick={() => setSelectedPath(file.path)}><File size={13} /><FilePathLabel path={file.path} /><small className="additions">+{file.additions}</small><small className="deletions">−{file.deletions}</small><span className="file-status">{file.status}</span></button>)}
           {visibleFiles.length === 0 ? <p className="file-changes__empty">No {scope} changes.</p> : null}
         </div>
         <div className="diff-pane scroll-area">
-          {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><span>{selectedPath}</span></div><div>{scope === 'unstaged' ? <button type="button" disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}><ArrowLineDown size={12} /> Stage</button> : <button type="button" disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}><ArrowUUpLeft size={12} /> Unstage</button>}<button type="button" className="danger-action" disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}><ArrowUUpLeft size={12} /> Undo changes</button></div></div> : null}
+          {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><FilePathLabel path={selectedPath} /></div><div>{scope === 'unstaged' ? <button type="button" disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}><ArrowLineDown size={12} /> Stage</button> : <button type="button" disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}><ArrowUUpLeft size={12} /> Unstage</button>}<button type="button" className="danger-action" disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}><ArrowUUpLeft size={12} /> Undo changes</button></div></div> : null}
           {loading ? <div className="diff-loading"><CircleNotch className="spin" size={15} /> Loading diff…</div> : <DiffView text={diff} />}
         </div>
       </div>

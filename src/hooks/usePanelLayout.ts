@@ -2,17 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import type { WorkspaceView } from '@/types/api'
 
 export const INSPECTOR_MIN = 340
-export const INSPECTOR_DEFAULT = 520
+export const INSPECTOR_DEFAULT = 410
 export const CHAT_MIN = 360
 export const TERMINAL_MIN = 170
 export const TERMINAL_DEFAULT = 310
 export const WORKSPACE_ROW_MIN = 220
 export const SMALLEST_LAYOUT_BREAKPOINT = 720
+export const INSPECTOR_INITIAL_RATIO = 0.44
 
-const readPanelSize = (key: string, fallback: number) => {
-  if (typeof window === 'undefined') return fallback
-  const value = Number(window.localStorage.getItem(key))
-  return Number.isFinite(value) && value > 0 ? value : fallback
+const readSavedPanelSize = (key: string): number | null => {
+  if (typeof window === 'undefined') return null
+  const raw = window.localStorage.getItem(key)
+  if (raw === null) return null
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+const readPanelSize = (key: string, fallback: number) => readSavedPanelSize(key) ?? fallback
+
+export const getInitialInspectorWidth = (rowWidth: number, maxWidth: number) => {
+  if (rowWidth <= 0) return Math.min(maxWidth, Math.max(INSPECTOR_MIN, INSPECTOR_DEFAULT))
+  const proportional = Math.min(INSPECTOR_DEFAULT, Math.round(rowWidth * INSPECTOR_INITIAL_RATIO))
+  return Math.min(maxWidth, Math.max(INSPECTOR_MIN, proportional))
 }
 
 interface UsePanelLayoutOptions {
@@ -36,6 +47,7 @@ export function usePanelLayout({
   const [smallestLayout, setSmallestLayout] = useState(() => window.matchMedia(`(max-width: ${SMALLEST_LAYOUT_BREAKPOINT}px)`).matches)
   const [smallestSidebarAllowed, setSmallestSidebarAllowed] = useState(false)
   const [smallestInspectorAllowed, setSmallestInspectorAllowed] = useState(false)
+  const savedInspectorWidthRef = useRef(readSavedPanelSize('prime-work.inspector-width') !== null)
   const [inspectorWidth, setInspectorWidth] = useState(() => readPanelSize('prime-work.inspector-width', INSPECTOR_DEFAULT))
   const [terminalHeight, setTerminalHeight] = useState(() => readPanelSize('prime-work.terminal-height', TERMINAL_DEFAULT))
   const [inspectorMax, setInspectorMax] = useState(660)
@@ -97,7 +109,12 @@ export function usePanelLayout({
     if (!row || !workspace) return
     const syncBounds = () => {
       if (!window.matchMedia('(max-width: 980px)').matches) {
-        setInspectorMax(Math.max(INSPECTOR_MIN, row.clientWidth - CHAT_MIN))
+        const nextMax = Math.max(INSPECTOR_MIN, row.clientWidth - CHAT_MIN)
+        setInspectorMax(nextMax)
+        if (!savedInspectorWidthRef.current && row.clientWidth > 0) {
+          savedInspectorWidthRef.current = true
+          setInspectorWidth(getInitialInspectorWidth(row.clientWidth, nextMax))
+        }
       }
       setTerminalMax(Math.max(TERMINAL_MIN, workspace.clientHeight - WORKSPACE_ROW_MIN))
     }

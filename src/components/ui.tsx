@@ -30,6 +30,8 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const pendingFocusIndexRef = useRef<number | null>(null)
   const options = Children.toArray(children).flatMap((child) => {
     if (!isValidElement<{ value?: string | number; disabled?: boolean; title?: string; children?: ReactNode }>(child)) return []
     const optionValue = String(child.props.value ?? '')
@@ -41,9 +43,52 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
   const selectedValue = String(value ?? options[0]?.value ?? '')
   const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0]
 
+  const updateMenuBounds = () => {
+    const root = rootRef.current
+    const menu = menuRef.current
+    if (!root || !menu) return
+    const rootRect = root.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    if (!vw || !vh || (rootRect.width === 0 && rootRect.height === 0)) return
+    const paneRect = root.closest('.conversation-pane')?.getBoundingClientRect()
+    const hasPaneBounds = Boolean(paneRect && (paneRect.width > 0 || paneRect.height > 0))
+    const leftBound = hasPaneBounds ? Math.max(16, paneRect!.left + 12) : 16
+    const rightBound = hasPaneBounds ? Math.min(vw - 16, paneRect!.right - 12) : vw - 16
+    const topBound = hasPaneBounds ? Math.max(16, paneRect!.top + 12) : 16
+    const availableWidth = Math.max(180, Math.floor(rightBound - leftBound))
+    const menuWidth = Math.min(320, availableWidth)
+    let offsetLeft = 0
+    if (rootRect.left + menuWidth > rightBound) {
+      offsetLeft = Math.floor(rightBound - (rootRect.left + menuWidth))
+    }
+    if (rootRect.left + offsetLeft < leftBound) {
+      offsetLeft = Math.ceil(leftBound - rootRect.left)
+    }
+    const availableAbove = Math.max(0, Math.floor(rootRect.top - 7 - topBound))
+    menu.style.setProperty('--select-menu-width', `${menuWidth}px`)
+    menu.style.setProperty('--select-menu-left', `${offsetLeft}px`)
+    menu.style.setProperty('--select-menu-max-height', `${availableAbove}px`)
+  }
+
   const close = (restoreFocus = false) => {
+    pendingFocusIndexRef.current = null
     setOpen(false)
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
+    if (restoreFocus) triggerRef.current?.focus()
+  }
+
+  const selectOption = (nextValue: string) => {
+    close(true)
+    onChange?.({ target: { value: nextValue }, currentTarget: { value: nextValue } } as ChangeEvent<HTMLSelectElement>)
+  }
+
+  const applyFocusToOption = (targetIndex: number) => {
+    const items = rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')
+    if (!items?.length) return
+    const bounded = ((targetIndex % items.length) + items.length) % items.length
+    const target = items[bounded]
+    target?.focus()
+    target?.scrollIntoView?.({ block: 'nearest' })
   }
 
   useEffect(() => {
@@ -52,6 +97,14 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
 
   useEffect(() => {
     if (!open) return
+    updateMenuBounds()
+    if (pendingFocusIndexRef.current !== null) {
+      const targetIndex = pendingFocusIndexRef.current
+      pendingFocusIndexRef.current = null
+      applyFocusToOption(targetIndex)
+    } else {
+      rootRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' })
+    }
     const onPointerDown = (event: MouseEvent) => {
       if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) setOpen(false)
     }
@@ -63,39 +116,57 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onEscape)
+    window.addEventListener('resize', updateMenuBounds)
     return () => {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onEscape)
+      window.removeEventListener('resize', updateMenuBounds)
     }
   }, [open])
 
-  const focusOption = (targetIndex: number) => {
-    requestAnimationFrame(() => {
-      const items = rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')
-      if (!items?.length) return
-      const bounded = ((targetIndex % items.length) + items.length) % items.length
-      items[bounded]?.focus()
-    })
-  }
-
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (disabled) return
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      event.stopPropagation()
+      close(true)
+      return
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!open) {
+        setOpen(true)
+        return
+      }
+      const items = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])]
+      const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+      const enabledOptions = options.filter((option) => !option.disabled)
+      if (activeIndex >= 0 && enabledOptions[activeIndex]) {
+        selectOption(enabledOptions[activeIndex].value)
+      } else {
+        close(true)
+      }
+      return
+    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
       event.preventDefault()
+      event.stopPropagation()
       const enabledOptions = options.filter((option) => !option.disabled)
       if (!enabledOptions.length) return
       if (!open) {
-        setOpen(true)
         const currentIndex = Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
-        focusOption(currentIndex)
+        const initialIndex = event.key === 'Home' ? 0 : event.key === 'End' ? enabledOptions.length - 1 : currentIndex
+        pendingFocusIndexRef.current = initialIndex
+        setOpen(true)
         return
       }
       const items = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])]
       const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement)
       const currentIndex = activeIndex >= 0 ? activeIndex : Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
-      if (event.key === 'Home') focusOption(0)
-      else if (event.key === 'End') focusOption(items.length - 1)
-      else focusOption(currentIndex + (event.key === 'ArrowDown' ? 1 : -1))
+      if (event.key === 'Home') applyFocusToOption(0)
+      else if (event.key === 'End') applyFocusToOption(items.length - 1)
+      else applyFocusToOption(currentIndex + (event.key === 'ArrowDown' ? 1 : -1))
     }
   }
 
@@ -140,7 +211,16 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
       </button>
       <CaretDown className="select-control__chevron" size={11} aria-hidden="true" />
       {open && !disabled ? (
-        <div className="worktree-picker__menu select-control__menu" id={menuId} role="listbox" aria-label={label}>
+        <div
+          ref={(node) => {
+            menuRef.current = node
+            if (node) updateMenuBounds()
+          }}
+          className="worktree-picker__menu select-control__menu"
+          id={menuId}
+          role="listbox"
+          aria-label={label}
+        >
           <div className="worktree-picker__heading">{label}</div>
           <div className="worktree-picker__options">
             {options.map((option) => {
@@ -153,10 +233,7 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
                   disabled={option.disabled}
                   className={`worktree-picker__option ${selected ? 'is-active' : ''}`}
                   key={option.value}
-                  onClick={() => {
-                    close(true)
-                    onChange?.({ target: { value: option.value }, currentTarget: { value: option.value } } as ChangeEvent<HTMLSelectElement>)
-                  }}
+                  onClick={() => selectOption(option.value)}
                 >
                   <span className="worktree-picker__check">{selected ? <Check size={13} /> : null}</span>
                   <span className="worktree-picker__option-copy">

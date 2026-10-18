@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChangesCard } from '../../src/components/ChangesCard'
 import { ChangesPanel } from '../../src/components/inspector/ChangesPanel'
+import { INSPECTOR_DEFAULT, INSPECTOR_MIN, usePanelLayout } from '../../src/hooks/usePanelLayout'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -134,5 +135,73 @@ describe('ChangesPanel status states', () => {
     act(() => { button('Staged').click() })
     expect(button('Unstage').disabled).toBe(false)
     expect(button('Unstage all').disabled).toBe(false)
+  })
+
+  it('splits nested file paths into dimmed directory prefix and prominent basename', async () => {
+    const git = {
+      isRepo: true,
+      branch: 'main',
+      files: [{ path: 'src/components/inspector/ChangesPanel.tsx', status: 'M', staged: false, additions: 4, deletions: 2 }],
+    }
+
+    await act(async () => {
+      root.render(<ChangesPanel git={git} onRefreshGit={vi.fn()} />)
+      await Promise.resolve()
+    })
+
+    const label = container.querySelector<HTMLElement>('.file-changes .changes-file-path')!
+    expect(label.getAttribute('title')).toBe('src/components/inspector/ChangesPanel.tsx')
+    expect(label.querySelector('i')?.textContent).toBe('src/components/inspector/')
+    expect(label.querySelector('b')?.textContent).toBe('ChangesPanel.tsx')
+  })
+
+  it('allocates a conversation-first initial inspector width while respecting saved widths', async () => {
+    window.localStorage.removeItem('prime-work.inspector-width')
+    window.matchMedia = vi.fn().mockImplementation(() => ({ matches: false })) as unknown as typeof window.matchMedia
+    globalThis.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as unknown as typeof ResizeObserver
+
+    let latestWidth = 0
+    function Harness({ rowWidth }: { rowWidth: number }) {
+      const layout = usePanelLayout({
+        sidebarOpen: true,
+        inspectorOpen: true,
+        setInspectorOpen: vi.fn(),
+        closeSmallestPanels: vi.fn(),
+        terminalOpen: false,
+        view: 'session',
+      })
+      latestWidth = layout.inspectorWidth
+      return (
+        <div ref={(node) => {
+          layout.sessionWorkspaceRef.current = node
+        }}>
+          <div ref={(node) => {
+            if (node) Object.defineProperty(node, 'clientWidth', { configurable: true, value: rowWidth })
+            layout.workspaceRowRef.current = node
+          }} />
+        </div>
+      )
+    }
+
+    await act(async () => {
+      root.render(<Harness rowWidth={790} />)
+    })
+    expect(latestWidth).toBeGreaterThanOrEqual(INSPECTOR_MIN)
+    expect(latestWidth).toBeLessThanOrEqual(INSPECTOR_DEFAULT)
+    expect(latestWidth).toBe(348)
+
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    window.localStorage.setItem('prime-work.inspector-width', '480')
+
+    await act(async () => {
+      root.render(<Harness rowWidth={1000} />)
+    })
+    expect(latestWidth).toBe(480)
+    window.localStorage.removeItem('prime-work.inspector-width')
   })
 })

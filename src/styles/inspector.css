@@ -2,9 +2,9 @@
 .inspector {
 	position: relative;
 	z-index: 10;
-	width: var(--inspector-width, clamp(420px, 46vw, 660px));
+	width: var(--inspector-width, clamp(340px, 42vw, 410px));
 	min-width: 340px;
-	flex: 0 0 var(--inspector-width, clamp(420px, 46vw, 660px));
+	flex: 0 0 var(--inspector-width, clamp(340px, 42vw, 410px));
 	display: flex;
 	flex-direction: column;
 	background: var(--canvas);
@@ -503,6 +503,7 @@
 
 /* Changes */
 .changes-panel {
+	container: changes-panel / inline-size;
 	height: 100%;
 	display: flex;
 	flex-direction: column;
@@ -637,10 +638,14 @@
 	grid-template-columns: 190px minmax(0, 1fr);
 }
 .file-changes {
+	min-height: 0;
 	overflow: auto;
 	border-right: 1px solid var(--border);
 }
 .file-changes__header {
+	position: sticky;
+	top: 0;
+	z-index: 1;
 	height: 35px;
 	display: flex;
 	align-items: center;
@@ -648,6 +653,7 @@
 	padding: 0 8px 0 10px;
 	border-bottom: 1px solid var(--border);
 	color: var(--text-tertiary);
+	background: var(--canvas);
 	font-size: 10px;
 }
 .file-changes__header button {
@@ -673,17 +679,35 @@
 	color: var(--text);
 	background: var(--surface-hover);
 }
-.file-changes > button span:nth-of-type(1) {
+.changes-file-path {
+	min-width: 0;
+	display: flex;
+	align-items: baseline;
 	overflow: hidden;
 	white-space: nowrap;
-	text-overflow: ellipsis;
 	font-size: 10.5px;
+}
+.changes-file-path > i {
+	min-width: 0;
+	flex: 0 1 auto;
+	overflow: hidden;
+	color: var(--text-tertiary);
+	font-style: normal;
+	text-overflow: ellipsis;
+}
+.changes-file-path > b {
+	max-width: 100%;
+	flex: 0 0 auto;
+	overflow: hidden;
+	font-weight: 500;
+	text-overflow: ellipsis;
 }
 .file-changes small {
 	font:
 		9px / 1.2 "SFMono-Regular",
 		Menlo,
 		monospace;
+	font-variant-numeric: tabular-nums;
 }
 .file-changes .additions {
 	color: var(--success);
@@ -706,6 +730,7 @@
 }
 .diff-pane {
 	min-width: 0;
+	min-height: 0;
 	overflow: auto;
 	background: var(--canvas);
 }
@@ -713,6 +738,7 @@
 	position: sticky;
 	z-index: 2;
 	top: 0;
+	left: 0;
 	height: 36px;
 	display: flex;
 	align-items: center;
@@ -728,10 +754,11 @@
 	align-items: center;
 	gap: 5px;
 }
+.diff-header > div:first-child > svg,
+.diff-header > div:last-child {
+	flex: 0 0 auto;
+}
 .diff-header > div:first-child span {
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
 	font:
 		10.5px / 1.2 "SFMono-Regular",
 		Menlo,
@@ -756,7 +783,8 @@
 	background: var(--danger-soft);
 }
 .diff-view {
-	min-width: max-content;
+	width: max-content;
+	min-width: 100%;
 	margin: 0;
 	padding: 7px 0 20px;
 	font-size: 10.5px;
@@ -765,7 +793,24 @@
 .diff-line {
 	min-height: 17px;
 	display: grid;
-	grid-template-columns: 34px 18px minmax(360px, 1fr);
+	grid-template-columns: 34px minmax(0, 1fr);
+}
+@container (max-width: 520px) {
+	.changes-panel .changes-body {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+	.changes-panel .file-changes {
+		max-height: clamp(104px, 28vh, 176px);
+		border-right: 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.changes-panel .file-changes small {
+		display: inline;
+	}
+	.changes-panel .file-changes__empty {
+		margin: 10px;
+	}
 }
 .diff-line > i {
 	padding-right: 7px;

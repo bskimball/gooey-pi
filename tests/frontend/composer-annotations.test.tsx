@@ -1280,23 +1280,120 @@ describe("Composer sendSignal", () => {
 			);
 		});
 		expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+		expect(document.activeElement).toBe(modeTrigger);
+
+		await setDraft("Unsent draft");
 
 		await act(async () => {
 			modeTrigger.dispatchEvent(
-				new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
 			);
 		});
-		const fusionOption = [
-			...modeControl.querySelectorAll<HTMLButtonElement>('[role="option"]'),
-		].find(
-			(opt) =>
-				opt.textContent?.includes("Fusion") &&
-				!opt.textContent?.includes("Configure"),
-		)!;
+		expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull();
+		expect(onSend).not.toHaveBeenCalled();
+
 		await act(async () => {
-			fusionOption.click();
+			modeTrigger.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+			);
 		});
-		expect(onSend).toHaveBeenCalledWith("/mode fusion", [], "queue");
+		expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+		expect(onSend).not.toHaveBeenCalled();
+
+		const scrollSpy = vi.fn();
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollSpy,
+		});
+		const rectSpy = vi
+			.spyOn(modeControl, "getBoundingClientRect")
+			.mockReturnValue({
+				x: 420,
+				y: 505,
+				top: 505,
+				bottom: 531,
+				left: 420,
+				right: 448,
+				width: 28,
+				height: 26,
+				toJSON: () => ({}),
+			});
+
+		try {
+			await act(async () => {
+				modeTrigger.dispatchEvent(
+					new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+				);
+			});
+			const menu = modeControl.querySelector<HTMLElement>('[role="listbox"]')!;
+			expect(menu.style.getPropertyValue("--select-menu-width")).toBe("320px");
+			expect(menu.style.getPropertyValue("--select-menu-max-height")).toBe(
+				"482px",
+			);
+			rectSpy.mockReturnValue({
+				x: 420,
+				y: 123,
+				top: 123,
+				bottom: 149,
+				left: 420,
+				right: 448,
+				width: 28,
+				height: 26,
+				toJSON: () => ({}),
+			});
+			await act(async () => {
+				window.dispatchEvent(new Event("resize"));
+			});
+			expect(menu.style.getPropertyValue("--select-menu-max-height")).toBe(
+				"100px",
+			);
+			const options = [
+				...modeControl.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+			];
+			expect(document.activeElement).toBe(options[0]);
+			expect(scrollSpy).toHaveBeenCalledWith({ block: "nearest" });
+
+			await act(async () => {
+				options[0].dispatchEvent(
+					new KeyboardEvent("keydown", { key: "End", bubbles: true }),
+				);
+			});
+			expect(document.activeElement).toBe(options.at(-1));
+			expect(options.at(-1)?.textContent).toContain("Configure Fusion…");
+
+			await act(async () => {
+				options.at(-1)!.dispatchEvent(
+					new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+				);
+			});
+			expect(document.activeElement).toBe(options[0]);
+
+			const fusionIndex = options.findIndex(
+				(opt) =>
+					opt.textContent?.includes("Fusion") &&
+					!opt.textContent?.includes("Configure"),
+			);
+			for (let step = 0; step < fusionIndex; step += 1) {
+				await act(async () => {
+					(document.activeElement as HTMLElement).dispatchEvent(
+						new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+					);
+				});
+			}
+			expect(document.activeElement).toBe(options[fusionIndex]);
+
+			await act(async () => {
+				options[fusionIndex].dispatchEvent(
+					new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+				);
+			});
+			expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+			expect(document.activeElement).toBe(modeTrigger);
+			expect(onSend).toHaveBeenCalledTimes(1);
+			expect(onSend).toHaveBeenCalledWith("/mode fusion", [], "queue");
+		} finally {
+			rectSpy.mockRestore();
+		}
 	});
 });
 
