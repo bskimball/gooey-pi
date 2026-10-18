@@ -395,6 +395,8 @@ async function readTranscriptWithDialect(dialect: TranscriptDialect, filePath: s
       continue
     }
     const message = isRecord(entry.message) ? entry.message : {}
+    // Pi persists the model's system-prompt snapshot as a message; it is context, not conversation.
+    if (message.role === 'system') continue
     const collaborationMessage = message.role === 'user' ? parseGooeyPiAgentMessage(textFromContent(message.content)) : undefined
     if (collaborationMessage) {
       const rawTimestamp = typeof message.timestamp === 'string' || typeof message.timestamp === 'number' ? message.timestamp

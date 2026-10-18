@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   CaretRight,
   ChatCircle,
@@ -103,96 +103,11 @@ function ReasoningPart({ part, streaming = false }: { part: Extract<MessagePart,
 }
 
 export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
-  // Option 2 ("Woodblock Breaking Curl" + cruising shark fin):
-  // Layered Ukiyo-e asymmetric breaking waves in the palette of PiWelcomeMark,
-  // with a dorsal fin that periodically surfaces and glides between the swells.
-  const [sharkPass, setSharkPass] = useState<{ key: number; top: number; durationMs: number; reverse: boolean } | null>(null)
-  useEffect(() => {
-    let activeTimer: number | undefined
-    let nextTimer: number | undefined
-    const scheduleNext = (initial = false) => {
-      const delayMs = initial ? 450 + Math.floor(Math.random() * 900) : 2_400 + Math.floor(Math.random() * 3_400)
-      nextTimer = window.setTimeout(() => {
-        const durationMs = 2_200 + Math.floor(Math.random() * 900)
-        const top = Number((-0.7 + Math.random() * 1.4).toFixed(2))
-        const reverse = Math.random() < 0.28
-        setSharkPass((previous) => ({ key: (previous?.key ?? 0) + 1, top, durationMs, reverse }))
-        activeTimer = window.setTimeout(() => {
-          setSharkPass(null)
-          scheduleNext(false)
-        }, durationMs)
-      }, delayMs)
-    }
-    scheduleNext(true)
-    return () => {
-      if (nextTimer !== undefined) window.clearTimeout(nextTimer)
-      if (activeTimer !== undefined) window.clearTimeout(activeTimer)
-    }
-  }, [])
+  // One ink line, two periods wide, sliding one period per loop so the seam never shows.
   return (
     <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Prime is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
-      <svg className="thinking-dots__wave" viewBox="0 0 32 18" fill="none" focusable="false" aria-hidden="true">
-        {/* Back horizon woodblock swell (period = 16) */}
-        <g className="thinking-dots__wave-swell">
-          <path
-            className="thinking-dots__mound-fill"
-            d="M-16 11.2 C-12.5 11.2 -10.2 6.2 -6.5 6.2 C-3.2 6.2 -2.2 11.2 0 11.2 C3.5 11.2 5.8 6.2 9.5 6.2 C12.8 6.2 13.8 11.2 16 11.2 C19.5 11.2 21.8 6.2 25.5 6.2 C28.8 6.2 29.8 11.2 32 11.2 C35.5 11.2 37.8 6.2 41.5 6.2 C44.8 6.2 45.8 11.2 48 11.2 L48 20 L-16 20 Z"
-          />
-          <path
-            className="thinking-dots__ring-back-outer"
-            d="M-16 11.2 C-12.5 11.2 -10.2 6.2 -6.5 6.2 C-3.2 6.2 -2.2 11.2 0 11.2 C3.5 11.2 5.8 6.2 9.5 6.2 C12.8 6.2 13.8 11.2 16 11.2 C19.5 11.2 21.8 6.2 25.5 6.2 C28.8 6.2 29.8 11.2 32 11.2 C35.5 11.2 37.8 6.2 41.5 6.2 C44.8 6.2 45.8 11.2 48 11.2"
-          />
-          <path
-            className="thinking-dots__ring-inner"
-            d="M-16 13.1 C-12.5 13.1 -10.2 8.3 -6.5 8.3 C-3.2 8.3 -2.2 13.1 0 13.1 C3.5 13.1 5.8 8.3 9.5 8.3 C12.8 8.3 13.8 13.1 16 13.1 C19.5 13.1 21.8 8.3 25.5 8.3 C28.8 8.3 29.8 13.1 32 13.1 C35.5 13.1 37.8 8.3 41.5 8.3 C44.8 8.3 45.8 13.1 48 13.1"
-          />
-        </g>
-
-        {/* Dorsal fin that randomly surfaces and slices across the water */}
-        <g
-          key={sharkPass?.key ?? 0}
-          className={`thinking-dots__shark ${sharkPass ? (sharkPass.reverse ? 'is-cruising-reverse' : 'is-cruising') : ''}`}
-          style={sharkPass ? { animationDuration: `${sharkPass.durationMs}ms`, '--shark-y': `${sharkPass.top}px` } as CSSProperties : undefined}
-        >
-          <path
-            className="thinking-dots__fin"
-            d="M-5.5 14.2 C-4.4 9.2 -1.6 5.2 2.8 3.5 C1.3 6.3 1.0 9.1 2.1 11.8 L-5.5 14.2 Z"
-          />
-          <path
-            className="thinking-dots__fin-bevel"
-            d="M-3.5 12.6 C-2.6 9.2 -0.5 6.2 2.0 4.5"
-          />
-        </g>
-
-        {/* Foreground woodblock breaking wave with layered contour ribs (period = 16) */}
-        <g className="thinking-dots__wave-main">
-          <path
-            className="thinking-dots__mound-fill"
-            d="M-16 14.2 C-12.0 14.2 -9.4 7.6 -5.0 7.6 C-1.8 7.6 -1.4 14.2 0 14.2 C4.0 14.2 6.6 7.6 11.0 7.6 C14.2 7.6 14.6 14.2 16 14.2 C20.0 14.2 22.6 7.6 27.0 7.6 C30.2 7.6 30.6 14.2 32 14.2 C36.0 14.2 38.6 7.6 43.0 7.6 C46.2 7.6 46.6 14.2 48 14.2 L48 22 L-16 22 Z"
-          />
-          <path
-            className="thinking-dots__ring-crest"
-            d="M-16 14.2 C-12.0 14.2 -9.4 7.6 -5.0 7.6 C-1.8 7.6 -1.4 14.2 0 14.2 C4.0 14.2 6.6 7.6 11.0 7.6 C14.2 7.6 14.6 14.2 16 14.2 C20.0 14.2 22.6 7.6 27.0 7.6 C30.2 7.6 30.6 14.2 32 14.2 C36.0 14.2 38.6 7.6 43.0 7.6 C46.2 7.6 46.6 14.2 48 14.2"
-          />
-          <path
-            className="thinking-dots__ring-mid"
-            d="M-16 16.2 C-12.0 16.2 -9.4 9.8 -5.0 9.8 C-1.8 9.8 -1.4 16.2 0 16.2 C4.0 16.2 6.6 9.8 11.0 9.8 C14.2 9.8 14.6 16.2 16 16.2 C20.0 16.2 22.6 9.8 27.0 9.8 C30.2 9.8 30.6 16.2 32 16.2 C36.0 16.2 38.6 9.8 43.0 9.8 C46.2 9.8 46.6 16.2 48 16.2"
-          />
-          <path
-            className="thinking-dots__ring-inner"
-            d="M-16 18.1 C-12.0 18.1 -9.4 12.0 -5.0 12.0 C-1.8 12.0 -1.4 18.1 0 18.1 C4.0 18.1 6.6 12.0 11.0 12.0 C14.2 12.0 14.6 18.1 16 18.1 C20.0 18.1 22.6 12.0 27.0 12.0 C30.2 12.0 30.6 18.1 32 18.1 C36.0 18.1 38.6 12.0 43.0 12.0 C46.2 12.0 46.6 18.1 48 18.1"
-          />
-        </g>
-
-        {/* Ukiyo-e foam hooks & sea-spray droplets along the breaking crests (period = 16) */}
-        <g className="thinking-dots__wave-crest">
-          {[-5, 11, 27, 43].map((cx) => (
-            <g key={`spray-${cx}`}>
-              <circle className="thinking-dots__spray-bright" cx={cx + 1.9} cy="6.3" r="0.7" />
-              <circle className="thinking-dots__spray-cyan" cx={cx + 3.2} cy="7.6" r="0.52" />
-            </g>
-          ))}
-        </g>
+      <svg viewBox="0 0 18 8" fill="none" focusable="false" aria-hidden="true">
+        <path d="M0 4 Q2.25 1 4.5 4 T9 4 T13.5 4 T18 4 T22.5 4 T27 4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       </svg>
     </span>
   )

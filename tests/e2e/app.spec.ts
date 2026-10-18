@@ -1849,7 +1849,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(workStatus).toHaveAttribute('role', 'status')
     await expect(workStatus.locator('.sr-only')).toHaveText('Working')
     await expect(page.locator('.activity-line--reasoning')).toContainText('Reviewing the available release channels')
-    await expect(page.locator('.thinking-dots svg.thinking-dots__wave > g')).toHaveCount(4)
+    await expect(page.locator('.thinking-dots svg > path')).toHaveCount(1)
     await expect(page.locator('.work-disclosure__button')).toHaveCount(0)
     await expect(dialog).toContainText('Question 1 of 2')
     const context = dialog.getByRole('textbox', { name: 'Additional context' })

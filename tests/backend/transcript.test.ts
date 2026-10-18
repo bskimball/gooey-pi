@@ -191,6 +191,21 @@ describe('tool result placement in assembled turns', () => {
   })
 })
 
+describe('persisted system-prompt snapshots', () => {
+  it('keeps the system-prompt message out of the rendered transcript', async () => {
+    const file = makeSessionFile()
+    writeFileSync(file, [
+      JSON.stringify({ type: 'session', id: 'session-1', cwd: '/tmp', timestamp: '2026-10-18T00:00:00.000Z' }),
+      JSON.stringify({ type: 'message', id: 'system-1', parentId: null, message: { role: 'system', content: '', sections: [{ text: 'You are Pi.' }], toolsAdded: ['read'] } }),
+      JSON.stringify({ type: 'message', id: 'user-1', parentId: 'system-1', message: { role: 'user', content: 'hello' } }),
+      '',
+    ].join('\n'))
+
+    const transcript = await readTranscript(file, false)
+    expect(transcript.map((message) => `${message.role}:${message.id}`)).toEqual(['user:user-1'])
+  })
+})
+
 function makeSessionFile(): string {
   const dir = mkdtempSync(join(tmpdir(), 'prime-work-transcript-'))
   dirs.push(dir)
