@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { CircleNotch } from './icons'
 import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
 import { ChangesCard } from './ChangesCard'
@@ -8,32 +8,14 @@ import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity, splitAssistantTurn } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
+import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { TurnNavigator } from './transcript/turn-navigator'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
 export { tokenizeSyntax } from './transcript/syntax'
 
-export function coalesceAssistantTurns(messages: TranscriptMessage[]): TranscriptMessage[] {
-  let changed = false
-  const grouped: TranscriptMessage[] = []
-  for (const message of messages) {
-    const previous = grouped.at(-1)
-    if (message.role !== 'assistant' || previous?.role !== 'assistant') {
-      grouped.push(message)
-      continue
-    }
-    changed = true
-    const streaming = Boolean(previous.streaming || message.streaming)
-    grouped[grouped.length - 1] = {
-      ...previous,
-      completedAt: streaming ? undefined : message.completedAt ?? previous.completedAt,
-      streaming,
-      parts: [...previous.parts, ...message.parts],
-    }
-  }
-  return changed ? grouped : messages
-}
+export { coalesceAssistantTurns } from './transcript/grouping'
 
 function timestampValue(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -93,7 +75,8 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
 
 
 export function Transcript({ messages, git, harness = 'prime', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference }: TranscriptProps) {
-  const groupedMessages = useMemo(() => coalesceAssistantTurns(messages), [messages])
+  const [coalesce] = useState(createAssistantTurnCoalescer)
+  const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
   const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages)
   const activeAssistantId = useMemo(() => active && groupedMessages.at(-1)?.role === 'assistant' ? groupedMessages.at(-1)?.id : undefined, [active, groupedMessages])
   const transcriptClasses = [

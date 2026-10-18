@@ -4,6 +4,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AssistantMessage } from '../../src/components/transcript/messages'
+import { Transcript } from '../../src/components/Transcript'
 import { WorkTimeline } from '../../src/components/transcript/timeline'
 import { replayPrimeEvents } from '../../src/lib/events'
 import type { TranscriptMessage } from '../../src/types/api'
@@ -30,6 +31,54 @@ function renderTimeline(message: TranscriptMessage): void {
 }
 
 describe('timeline part identity', () => {
+  it('does not render settled coalesced assistant rows during tail streaming', () => {
+    const readHistoricalText = vi.fn(() => 'Settled answer')
+    const history: TranscriptMessage[] = [
+      { id: 'question', role: 'user', parts: [{ type: 'text', text: 'Earlier question' }] },
+      { id: 'segment-a', role: 'assistant', parts: [{ type: 'text', get text() { return readHistoricalText() } }] },
+      { id: 'segment-b', role: 'assistant', parts: [{ type: 'text', text: 'Continuation' }] },
+      { id: 'next-question', role: 'user', parts: [{ type: 'text', text: 'Continue' }] },
+    ]
+    const git = { isRepo: false, files: [] }
+    const noop = () => undefined
+    const update = (text: string) => act(() => root.render(<Transcript
+      messages={[...history, { id: 'live', role: 'assistant', streaming: true, parts: [{ type: 'text', text }] }]}
+      git={git} active onOpenChanges={noop} onSuggestion={noop}
+    />))
+    update('First token')
+    expect(readHistoricalText).toHaveBeenCalled()
+    readHistoricalText.mockClear()
+    for (let index = 0; index < 10; index++) update(`More tokens ${index}`)
+    expect(readHistoricalText).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Settled answer')
+  })
+
+  it('defers closed tool formatting and retains expanded rows across unrelated updates', () => {
+    const toJSON = vi.fn(() => ({ command: 'echo done' }))
+    const parts: TranscriptMessage['parts'] = Array.from({ length: 80 }, (_, index) => [
+      { type: 'toolCall' as const, id: `tool-${index}`, name: 'bash', args: { command: 'echo done', toJSON } },
+      { type: 'toolResult' as const, name: 'bash', text: 'done' },
+    ]).flat()
+    renderTimeline({ id: 'tools', role: 'assistant', parts })
+    for (let update = 0; update < 10; update++) {
+      renderTimeline({ id: 'tools', role: 'assistant', parts: [...parts, { type: 'thinking', text: `Update ${update}` }] })
+    }
+    expect(toJSON).not.toHaveBeenCalled()
+    const summary = container.querySelector<HTMLButtonElement>('.activity-tool__summary')
+    expect(summary).not.toBeNull()
+    act(() => summary?.click())
+    expect(toJSON).toHaveBeenCalledTimes(1)
+    const details = container.querySelector('.activity-tool__details')
+    renderTimeline({ id: 'tools', role: 'assistant', parts: [...parts, { type: 'thinking', text: 'New thought' }] })
+    expect(container.querySelector('.activity-tool__details')).toBe(details)
+    expect(toJSON).toHaveBeenCalledTimes(1)
+    const updated = [...parts]
+    updated[1] = { type: 'toolResult', name: 'bash', text: 'changed result', isError: true }
+    renderTimeline({ id: 'tools', role: 'assistant', parts: updated })
+    expect(details?.textContent).toContain('changed result')
+    expect(container.querySelector('.activity-line--tool')?.classList.contains('is-error')).toBe(true)
+  })
+
   it('copies the promoted final report when reasoning trails it', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

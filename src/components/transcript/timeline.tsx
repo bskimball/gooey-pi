@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   CaretRight,
   ChatCircle,
@@ -19,6 +19,7 @@ import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
 import { SyntaxText } from './syntax'
+import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
 
 function timestamp(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -221,18 +222,20 @@ function outputTail(output: string, lines = 4): string {
   return output.slice(-4_000).trimEnd().split('\n').slice(-lines).join('\n')
 }
 
-function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall' }>; next?: MessagePart }) {
+const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<MessagePart, { type: 'toolCall' }>; result?: Extract<MessagePart, { type: 'toolResult' }> }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const resetCopiedTimerRef = useRef<number | null>(null)
-  const result = next?.type === 'toolResult' ? next : undefined
   const failed = result?.isError
   const finished = result && !result.streaming
   const kind = classifyTool(part.name)
-  const args = serialize(part.args, true)
   const output = result?.text ?? ''
-  const visibleOutput = boundText(`${args}${args && output ? '\n\n' : ''}${output}`, 200_000, '\n\n[Output truncated in the desktop view.]')
-  const canExpand = Boolean(visibleOutput)
+  const visibleOutput = useMemo(() => {
+    if (!open) return ''
+    const args = serialize(part.args, true)
+    return boundText(`${args}${args && output ? '\n\n' : ''}${output}`, 200_000, '\n\n[Output truncated in the desktop view.]')
+  }, [open, part.args, output])
+  const canExpand = Boolean(output || part.args !== undefined && part.args !== '')
   const state = failed ? 'error' : finished ? 'done' : kind === 'question' ? 'waiting' : 'running'
   const preview = toolPreview(part)
   useEffect(
@@ -275,7 +278,7 @@ function ToolPart({ part, next }: { part: Extract<MessagePart, { type: 'toolCall
       ) : null}
     </div>
   )
-}
+})
 
 function StandaloneToolResult({ part }: { part: Extract<MessagePart, { type: 'toolResult' }> }) {
   return <div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div>
@@ -344,22 +347,36 @@ function partKey(part: MessagePart, index: number): string {
 
 export function WorkTimeline({ parts, showReasoning, showTools, streaming = false }: { parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean }) {
   const pairedResults = new Set<number>()
-  return <div className="work-timeline">{parts.map((part, index) => {
+  const pendingKeys = new Set<string>()
+  const rows = parts.map((part, index) => {
     const key = partKey(part, index)
     if (part.type === 'toolResult' && pairedResults.has(index)) return null
-    if (part.type === 'compaction') return <CompactionPart key={key} part={part} />
+    if (part.type === 'compaction') {
+      if (part.status === 'running') pendingKeys.add(key)
+      return <CompactionPart key={key} part={part} />
+    }
     if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} streaming={streaming} /> : null
     if (part.type === 'toolCall') {
       if (!showTools) return null
       const next = parts[index + 1]
       if (next?.type === 'toolResult') pairedResults.add(index + 1)
-      return <ToolPart key={key} part={part} next={next} />
+      if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
+      return <ToolPart key={key} part={part} result={next?.type === 'toolResult' ? next : undefined} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
-    if (part.type === 'text') return <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} /></div>
+    if (part.type === 'text') return <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={streaming} /></div>
     return null
-  })}</div>
+  }).filter((row) => row !== null)
+  const pages = []
+  const pageCount = Math.ceil(rows.length / TIMELINE_PAGE_SIZE)
+  for (let index = 0; index < pageCount; index++) {
+    const start = index * TIMELINE_PAGE_SIZE
+    const page = rows.slice(start, start + TIMELINE_PAGE_SIZE)
+    const recent = index >= pageCount - RECENT_TIMELINE_PAGES || page.some((row) => row.key !== null && pendingKeys.has(String(row.key)))
+    pages.push(<TimelinePage key={page[0].key} recent={recent} start={start + 1} count={page.length}>{page}</TimelinePage>)
+  }
+  return <div className="work-timeline">{pages}</div>
 }
 
 const THINKING_STATUS_VERBS = [

@@ -110,10 +110,15 @@
    updates from shifting the adjacent dots around. */
 .live-elapsed { color: var(--text-tertiary); font-size: var(--chat-meta); font-weight: 500; font-variant-numeric: tabular-nums; }
 .work-timeline { display: flex; flex-direction: column; gap: 2px; padding: 3px 0 8px 5px; }
+.timeline-page, .timeline-page__body:not([hidden]) { display: flex; flex-direction: column; gap: 2px; }
+.timeline-page__body[hidden] { display: none; }
+.timeline-page__toggle { min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-radius: 5px; color: var(--text-tertiary); background: var(--surface-subtle); text-align: left; font-size: var(--chat-meta); }
+.timeline-page__toggle:hover { color: var(--text); background: var(--surface-hover); }
+.timeline-page__toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .work-disclosure.is-running .work-timeline { padding: 0 0 6px; }
 .work-disclosure.is-running .activity-line--reasoning { color: var(--text-tertiary); }
 /* Streamed rows ease in as they arrive; existing rows keep their keys and stay put. */
-.work-disclosure.is-running .work-timeline > * { animation: row-in 220ms cubic-bezier(.2, .8, .2, 1) both; }
+.work-disclosure.is-running .timeline-page__body > * { animation: row-in 220ms cubic-bezier(.2, .8, .2, 1) both; }
 .activity-line { position: relative; min-width: 0; color: var(--text-secondary); font-size: var(--chat-ui); line-height: 1.5; }
 .activity-line--reasoning { padding: 2px 0 8px; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
 .activity-line--reasoning .prose { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }

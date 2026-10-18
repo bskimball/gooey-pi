@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, memo } from 'react'
 import { tokenizeSyntaxText, type SyntaxTokenKind } from '@/lib/syntax-text'
 
 export type { SyntaxTokenKind }
@@ -32,11 +32,11 @@ export function tokenizeSyntax(text: string): SyntaxToken[] {
   return bounded
 }
 
-export function SyntaxText({ text }: { text: string }) {
+export const SyntaxText = memo(function SyntaxText({ text }: { text: string }) {
   return <>{tokenizeSyntax(text).map((token, index) => (
     <span className={token.kind === 'plain' ? undefined : `syntax-${token.kind}`} key={`${index}-${token.text.slice(0, 8)}`}>{token.text}</span>
   ))}</>
-}
+})
 
 export function InlineText({ text }: { text: string }) {
   const lines = text.split('\n')

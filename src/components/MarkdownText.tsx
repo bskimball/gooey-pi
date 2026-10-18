@@ -68,21 +68,20 @@ export interface StreamingParseState {
 
 /**
  * Decides how much of a streaming message to hand to the Markdown parser: the
- * boundary advances at most every STREAMING_PARSE_INTERVAL_MS, or immediately
- * when the unparsed tail crossed a newline; otherwise the caller keeps the
- * previous coherent snapshot visible and retries after `delayMs`.
+ * boundary advances at most every STREAMING_PARSE_INTERVAL_MS, including for
+ * newline-heavy code and lists. Keep the previous coherent snapshot visible
+ * between parses. Shrinking/replacing text and the final render can flush immediately.
  */
 export function advanceStreamingParse(
   state: StreamingParseState,
   textLength: number,
-  newlineInTail: boolean,
   now: number,
 ): { state: StreamingParseState; delayMs?: number } {
   if (state.boundary >= textLength) {
     return state.boundary === textLength ? { state } : { state: { boundary: textLength, lastParseAt: now } }
   }
   const elapsed = now - state.lastParseAt
-  if (newlineInTail || elapsed >= STREAMING_PARSE_INTERVAL_MS) {
+  if (elapsed >= STREAMING_PARSE_INTERVAL_MS) {
     return { state: { boundary: textLength, lastParseAt: now } }
   }
   return { state, delayMs: STREAMING_PARSE_INTERVAL_MS - elapsed }
@@ -90,21 +89,17 @@ export function advanceStreamingParse(
 
 /** Render model-authored Markdown without enabling raw HTML or remote images. */
 export const MarkdownText = memo(function MarkdownText({ text, streaming = false }: MarkdownTextProps) {
-  const parseStateRef = useRef<StreamingParseState>({ boundary: text.length, lastParseAt: 0 })
+  const parseStateRef = useRef<StreamingParseState>({ boundary: text.length, lastParseAt: Date.now() })
   const [, setParseRevision] = useState(0)
 
   useEffect(() => {
     if (!streaming) {
-      if (parseStateRef.current.boundary !== text.length) {
-        parseStateRef.current = { boundary: text.length, lastParseAt: parseStateRef.current.lastParseAt }
-        setParseRevision((revision) => revision + 1)
-      }
+      parseStateRef.current = { boundary: text.length, lastParseAt: Date.now() }
       return
     }
     const decide = (): number | undefined => {
       const current = parseStateRef.current
-      const newlineInTail = text.indexOf('\n', Math.min(current.boundary, text.length)) !== -1
-      const result = advanceStreamingParse(current, text.length, newlineInTail, Date.now())
+      const result = advanceStreamingParse(current, text.length, Date.now())
       if (result.state !== current) {
         parseStateRef.current = result.state
         setParseRevision((revision) => revision + 1)

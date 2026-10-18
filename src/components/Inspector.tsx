@@ -20,10 +20,8 @@ import { BrowserPanel } from "./inspector/BrowserPanel";
 import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
 import { SpecialistsPanel } from "./inspector/SpecialistsPanel";
-import {
-	extractPiSessionWidgets,
-	SummaryPanel,
-} from "./inspector/SummaryPanel";
+import { SummaryPanel } from "./inspector/SummaryPanel";
+import { createSessionSummarySelector } from "./inspector/session-summary";
 import { IconButton, useFocusTrap } from "./ui";
 
 export interface InspectorProps {
@@ -124,13 +122,9 @@ export const Inspector = memo(function Inspector({
 	const [selectedSpecialistId, setSelectedSpecialistId] = useState<
 		string | null
 	>(null);
-	const specialistCount = useMemo(
-		() =>
-			messages.length
-				? extractPiSessionWidgets(messages).specialists.length
-				: 0,
-		[messages],
-	);
+	const [selectSummary] = useState(createSessionSummarySelector);
+	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
+	const specialistCount = summary.specialists.length;
 	const moveTab = (current: number, key: string) => {
 		let next = current;
 		if (key === "ArrowRight") next = (current + 1) % tabs.length;
@@ -205,7 +199,7 @@ export const Inspector = memo(function Inspector({
 						shortName={shortName}
 						project={project}
 						runtime={runtime}
-						messages={messages}
+						summary={summary}
 						git={git}
 						automations={automations}
 						heartbeats={heartbeats}
