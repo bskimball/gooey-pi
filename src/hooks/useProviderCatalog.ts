@@ -62,6 +62,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
   const effortRef = useRef(effort)
   const fastRef = useRef(fast)
   const mutationRevisionRef = useRef(0)
+  const pendingMutationRuntimeRef = useRef<{ runtimeId: string; revision: number } | null>(null)
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const runtimeIdRef = useRef(runtime?.runtimeId)
   useLayoutEffect(() => { runtimeIdRef.current = runtime?.runtimeId })
@@ -76,25 +77,41 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
     rollback: () => void,
   ) => {
     const revision = ++mutationRevisionRef.current
+    pendingMutationRuntimeRef.current = { runtimeId, revision }
     mutationQueueRef.current = mutationQueueRef.current.then(async () => {
       try {
-        await command()
-      } catch (error) {
-        if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
-          rollback()
-          try { await syncRuntime(runtimeId) } catch (syncError) { reportError(syncError) }
+        try {
+          await command()
+        } catch (error) {
+          if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
+            rollback()
+            try { await syncRuntime(runtimeId) } catch (syncError) { reportError(syncError) }
+          }
+          reportError(error)
+          return
         }
-        reportError(error)
-        return
-      }
-      if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
-        try { await syncRuntime(runtimeId) } catch (error) { reportError(error) }
+        if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
+          try { await syncRuntime(runtimeId) } catch (error) { reportError(error) }
+        }
+      } finally {
+        if (pendingMutationRuntimeRef.current?.revision === revision) {
+          pendingMutationRuntimeRef.current = null
+        }
       }
     })
   }, [reportError, syncRuntime])
 
+  const flushPendingMutations = useCallback((targetRuntime?: RuntimeInfo) => {
+    if (targetRuntime) {
+      runtimeIdRef.current = targetRuntime.runtimeId
+      applyPendingSelectionToRuntimeRef.current(targetRuntime, sessionKeyRef.current)
+    }
+    return mutationQueueRef.current
+  }, [])
+
   useEffect(() => () => {
     mutationRevisionRef.current += 1
+    pendingMutationRuntimeRef.current = null
     runtimeIdRef.current = undefined
   }, [])
 
@@ -186,6 +203,47 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
   const sessionKey = activeSession?.id ?? ''
   const sessionKeyRef = useRef(sessionKey)
   useLayoutEffect(() => { sessionKeyRef.current = sessionKey })
+  const applyPendingSelectionToRuntime = useCallback((targetRuntime: RuntimeInfo, targetSessionKey: string): boolean => {
+    const pending = pendingSelectionsRef.current.get(targetSessionKey)
+    if (!pending) return false
+    pendingSelectionsRef.current.delete(targetSessionKey)
+    if (!bridge || !catalog) return false
+    const runtimeModel = targetRuntime.model?.provider && targetRuntime.model.id
+      ? catalog.models.find((candidate) => candidate.provider === targetRuntime.model?.provider && candidate.id === targetRuntime.model?.id && isUsable(candidate))
+      : undefined
+    const pendingModel = catalog.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
+    if (!pendingModel) return false
+    const nextEffort = pendingModel.availableThinkingLevels.includes(pending.effort)
+      ? pending.effort
+      : pendingModel.availableThinkingLevels.includes('medium') ? 'medium' : pendingModel.availableThinkingLevels[0] ?? 'off'
+    const modelChanged = runtimeModel?.key !== pendingModel.key
+    const effortChanged = targetRuntime.thinkingLevel !== nextEffort
+    if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
+    if (effortRef.current !== nextEffort) updateEffort(nextEffort)
+    if (!pendingModel.fastModeSupported) updateFast(false)
+    if (!modelChanged && !effortChanged) return false
+    const previousModel = runtimeModel?.key ?? modelRef.current
+    const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as PrimeThinkingLevel)
+      ? targetRuntime.thinkingLevel
+      : effortRef.current) as PrimeThinkingLevel
+    const previousFast = targetRuntime.serviceTier === 'priority'
+    queueRuntimeMutation(
+      targetRuntime.runtimeId,
+      async () => {
+        if (modelChanged) {
+          await bridge.agent.command(targetRuntime.runtimeId, { type: 'set_model', provider: pendingModel.provider, modelId: pendingModel.id })
+        }
+        if (modelChanged || effortChanged) {
+          await bridge.agent.command(targetRuntime.runtimeId, { type: 'set_thinking_level', level: nextEffort })
+        }
+        rememberSelectionRef.current(pendingModel.key)
+      },
+      () => { updateModel(previousModel); updateEffort(previousEffort); updateFast(previousFast) },
+    )
+    return true
+  }, [bridge, catalog, queueRuntimeMutation, updateEffort, updateFast, updateModel])
+  const applyPendingSelectionToRuntimeRef = useRef(applyPendingSelectionToRuntime)
+  useLayoutEffect(() => { applyPendingSelectionToRuntimeRef.current = applyPendingSelectionToRuntime })
   // Starts undefined so the first render with a catalog counts as a switch and
   // restores the initial session's effort as well as its model.
   const activeSessionIdRef = useRef<string | undefined>(undefined)
@@ -198,7 +256,8 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
     // session's persisted metadata. The latter two only apply when the tab
     // changes so a catalog refresh cannot revert what the user picked.
     if (runtime?.model?.provider && runtime.model.id) {
-      pendingSelectionsRef.current.delete(sessionKey)
+      if (pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
+      if (applyPendingSelectionToRuntime(runtime, sessionKey)) return
       const runtimeModel = catalog.models.find((candidate) => candidate.provider === runtime.model?.provider && candidate.id === runtime.model?.id && isUsable(candidate))
       if (runtimeModel) {
         if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
@@ -224,7 +283,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
     if (activeSession?.thinkingLevel && sessionModel?.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)) {
       if (effortRef.current !== activeSession.thinkingLevel) updateEffort(activeSession.thinkingLevel as PrimeThinkingLevel)
     }
-  }, [activeSession, catalog, runtime?.model?.id, runtime?.model?.provider, runtime?.thinkingLevel, sessionKey, updateEffort, updateModel])
+  }, [activeSession, applyPendingSelectionToRuntime, catalog, runtime, sessionKey, updateEffort, updateModel])
 
   // Scoped to the runtime's reported tier so a catalog refresh cannot revert
   // an optimistic fast-mode toggle that the runtime has not confirmed yet.
@@ -357,7 +416,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'prime', ru
 
   return {
     model, effort, fast, catalog, authEvent, selectedModel, reasoningLevels, modelsByProvider,
-    refresh, changeModel, changeEffort, changeFast,
+    refresh, changeModel, changeEffort, changeFast, flushPendingMutations,
     saveApiKey, logout, setEnabled, setAllEnabled, setAllDisabled, setModelEnabled, startOAuth, respondOAuth, cancelOAuth,
   }
 }

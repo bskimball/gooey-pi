@@ -417,6 +417,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         }
         await grantProject(admitted.project)
         if (workspace.workspaceRef.current.generation !== generation) return
+        await provider.flushPendingMutations?.()
+        if (workspace.workspaceRef.current.generation !== generation) return
         const selected = workspace.workspaceRef.current
         if (!selected.cwd) throw new Error('The selected workspace has no working directory.')
         const liveRuntimes = (await bridge.agent.list()).filter((candidate) => candidate.harness === activeHarness)
@@ -501,6 +503,10 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           throw new Error(`${HARNESS_AGENT_NAMES[activeHarness]} returned a runtime for a different workspace or session.`)
         }
         workspace.attachRuntime(activeRuntime, generation)
+        if (!startedRuntime && !activeRuntime.isStreaming && !modeCommand) {
+          await provider.flushPendingMutations?.(activeRuntime)
+          if (workspace.workspaceRef.current.generation !== generation) return
+        }
         if (compactCommand) {
           await bridge.agent.command(activeRuntime.runtimeId, {
             type: 'compact',
@@ -551,7 +557,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           completeQueuedFlush()
         } else {
           beginOptimisticPrompt()
-          workspace.setRuntime({ ...activeRuntime, isStreaming: true })
+          workspace.setRuntime((current) => current?.runtimeId === activeRuntime.runtimeId
+            ? { ...current, isStreaming: true }
+            : { ...activeRuntime, isStreaming: true })
           const response = await bridge.agent.command(activeRuntime.runtimeId, {
             type: 'prompt',
             message: prompt,

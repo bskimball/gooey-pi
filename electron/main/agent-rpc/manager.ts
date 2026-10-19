@@ -168,6 +168,23 @@ export class AgentRpcManager {
       })
       if (runtimeEnvironmentRevision < this.runtimeEnvironmentRevision) void this.retireWhenIdle(runtime)
       await runtime.handshake()
+      if (
+        selectedModel
+        && runtime.snapshot().model
+        && (runtime.snapshot().model?.provider !== selectedModel.provider || runtime.snapshot().model?.id !== selectedModel.id)
+      ) {
+        await runtime.command(this.adapter.translateCommand({
+          type: 'set_model',
+          provider: selectedModel.provider,
+          modelId: selectedModel.id,
+        }))
+        if (thinking !== undefined && runtime.snapshot().thinkingLevel !== thinking) {
+          await runtime.command(this.adapter.translateCommand({
+            type: 'set_thinking_level',
+            level: thinking,
+          }))
+        }
+      }
       await this.decorate(runtime)
       if (runtime.snapshot().fastModeSupported && options.fast === true) await runtime.setServiceTier('priority', true)
       try { this.runtimeStartListener(runtimeEnvironment, runtime.snapshot()) } catch { /* capability binding must never fail a start */ }

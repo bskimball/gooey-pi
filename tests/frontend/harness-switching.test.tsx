@@ -9,7 +9,9 @@ import { useAgentEvents } from '../../src/hooks/useAgentEvents'
 import { useBootstrap } from '../../src/hooks/useBootstrap'
 import { useExtensionUi } from '../../src/hooks/useExtensionUi'
 import { groupModelsByProvider, useProviderCatalog } from '../../src/hooks/useProviderCatalog'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
+import { createSingleFlightAdmission } from '../../src/lib/workspace'
 import { AgentSettings } from '../../src/pages/settings/AgentSettings'
 import { ProviderSettings } from '../../src/pages/settings/ProviderSettings'
 import { SettingsPage } from '../../src/pages/SettingsPage'
@@ -833,6 +835,179 @@ describe('provider catalog per harness', () => {
     act(() => state.changeModel(primeCatalog.models[0].key))
     await act(async () => { await state.refresh(true) })
     expect(state.model).toBe(primeCatalog.models[0].key)
+  })
+
+  it('applies a pending selection when a live runtime with a different model attaches, and does not revert while set_model is in flight', async () => {
+    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const setModelGate = deferred<Record<string, unknown>>()
+    const command = vi.fn(async (_runtimeId: string, payload: Record<string, unknown>) => {
+      if (payload.type === 'set_model') return setModelGate.promise
+      return { type: 'response', success: true }
+    })
+    const bridge = {
+      providers: { catalog: vi.fn(async () => catalog), onAuthEvent: vi.fn().mockReturnValue(() => undefined) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useProviderCatalog>
+    function CatalogProbe({ runtime, activeSession }: { runtime: RuntimeInfo | null; activeSession?: SessionRecord }) {
+      state = useProviderCatalog({ bridge, harness: 'prime', runtime, activeSession, syncRuntime, reportError })
+      return <Probe />
+    }
+
+    const sessionA: SessionRecord = {
+      ...primeSession,
+      id: 'session-a',
+      provider: 'openai-codex',
+      model: 'gpt-5.5',
+      thinkingLevel: 'low',
+    }
+    const staleRuntime: RuntimeInfo = {
+      ...primeRuntime,
+      model: { provider: 'openai-codex', id: 'gpt-5.5' },
+      thinkingLevel: 'low',
+    }
+
+    await act(async () => { root.render(<CatalogProbe runtime={null} activeSession={sessionA} />); await Promise.resolve() })
+    expect(state.model).toBe('openai-codex/gpt-5.5')
+
+    // User selects a new model before the runtime attaches.
+    act(() => state.changeModel(primeCatalog.models[0].key))
+    expect(state.model).toBe(primeCatalog.models[0].key)
+
+    // Attaching a runtime that still reports the old model pushes the user's pending selection to the runtime.
+    await act(async () => { root.render(<CatalogProbe runtime={staleRuntime} activeSession={sessionA} />); await Promise.resolve() })
+    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(command).toHaveBeenCalledWith(staleRuntime.runtimeId, {
+      type: 'set_model',
+      provider: primeCatalog.models[0].provider,
+      modelId: primeCatalog.models[0].id,
+    })
+
+    // Re-rendering activeSession while set_model is still in flight must not revert the optimistic selection.
+    await act(async () => {
+      root.render(<CatalogProbe runtime={staleRuntime} activeSession={{ ...sessionA, updatedAt: '2026-01-01T00:01:00.000Z' }} />)
+      await Promise.resolve()
+    })
+    expect(state.model).toBe(primeCatalog.models[0].key)
+
+    await act(async () => {
+      setModelGate.resolve({ type: 'response', success: true })
+      await state.flushPendingMutations()
+    })
+    expect(syncRuntime).toHaveBeenCalledWith(staleRuntime.runtimeId)
+  })
+
+  it('completes a detached model selection before sendPrompt dispatches prompt to a newly discovered runtime', async () => {
+    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const order: string[] = []
+    const setModelGate = deferred<Record<string, unknown>>()
+    const sessionA: SessionRecord = {
+      ...primeSession,
+      id: 'session-a',
+      provider: 'openai-codex',
+      model: 'gpt-5.5',
+      thinkingLevel: 'low',
+    }
+    const discoveredRuntime: RuntimeInfo = {
+      ...primeRuntime,
+      model: { provider: 'openai-codex', id: 'gpt-5.5' },
+      thinkingLevel: 'low',
+    }
+    const command = vi.fn(async (_runtimeId: string, payload: Record<string, unknown>) => {
+      order.push(String(payload.type))
+      if (payload.type === 'set_model') return setModelGate.promise
+      return { type: 'response', success: true }
+    })
+    const bridge = {
+      providers: { catalog: vi.fn(async () => catalog), onAuthEvent: vi.fn().mockReturnValue(() => undefined) },
+      agent: { list: vi.fn(async () => [discoveredRuntime]), command, start: vi.fn(), stop: vi.fn() },
+      projects: { grantInferred: vi.fn(async () => primeProject) },
+      sessions: { followUp: vi.fn(async () => false), list: vi.fn(async () => [sessionA]) },
+    } as unknown as PrimeWorkApi
+    const syncRuntime = vi.fn(async () => { order.push('syncRuntime') })
+    const reportError = vi.fn()
+    let provider!: ReturnType<typeof useProviderCatalog>
+    function CatalogProbe({ runtime }: { runtime: RuntimeInfo | null }) {
+      provider = useProviderCatalog({ bridge, harness: 'prime', runtime, activeSession: sessionA, syncRuntime, reportError })
+      return <Probe />
+    }
+
+    await act(async () => { root.render(<CatalogProbe runtime={null} />); await Promise.resolve() })
+    act(() => {
+      provider.changeModel(primeCatalog.models[0].key)
+      provider.changeEffort('high')
+    })
+
+    const workspace = {
+      runtime: null as RuntimeInfo | null,
+      runtimeIdRef: { current: null as string | null },
+      runtimeOwnerRef: { current: null as { runtimeId: string; generation: number } | null },
+      workspaceRef: { current: { generation: 1, project: primeProject, session: sessionA, cwd: primeProject.primaryFolder, sessionFile: sessionA.filePath } },
+      prepareForPrompt: () => true,
+      setMessages: vi.fn(),
+      setRuntime: vi.fn((updater: RuntimeInfo | null | ((current: RuntimeInfo | null) => RuntimeInfo | null)) => {
+        workspace.runtime = typeof updater === 'function' ? updater(workspace.runtime) : updater
+      }),
+      attachRuntime: vi.fn((next: RuntimeInfo | undefined, generation: number) => {
+        workspace.runtime = next ?? null
+        workspace.runtimeIdRef.current = next?.runtimeId ?? null
+        workspace.runtimeOwnerRef.current = next ? { runtimeId: next.runtimeId, generation } : null
+      }),
+      queuePrompt: vi.fn(),
+      removeQueuedPrompt: vi.fn(),
+      markQueuedPromptFlushFailed: vi.fn(),
+      acceptSteer: vi.fn(),
+      acknowledgeSteer: vi.fn(),
+    } as unknown as WorkspaceActionsDeps['workspace']
+
+    const actions = createWorkspaceActions(() => ({
+      bridge,
+      initialized: true,
+      projects: [primeProject],
+      sessions: [sessionA],
+      activeProject: primeProject,
+      workspace,
+      settingsState: { settings: DEFAULT_SETTINGS } as WorkspaceActionsDeps['settingsState'],
+      layout: {} as WorkspaceActionsDeps['layout'],
+      provider,
+      pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
+      submissionAdmissionRef: { current: createSingleFlightAdmission() },
+      gitRequestRef: { current: 0 },
+      demoTimerRef: { current: [] },
+      setProjects: () => undefined,
+      setSessions: () => undefined,
+      setGitSnapshot: () => undefined,
+      setView: () => undefined,
+      setPaletteOpen: () => undefined,
+      setToast: () => undefined,
+      setSubmitting: () => undefined,
+      refreshSchedules: async () => undefined,
+      refreshHeartbeats: async () => undefined,
+      resetBrowserView: () => undefined,
+      closeTerminalForSession: () => undefined,
+      clearSessionAttention: () => undefined,
+      reportError,
+    }))
+
+    let sendPromise!: Promise<void>
+    await act(async () => {
+      sendPromise = actions.sendPrompt('run the task')
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(order).toEqual(['set_model'])
+
+    await act(async () => {
+      setModelGate.resolve({ type: 'response', success: true })
+      await sendPromise
+    })
+    expect(order).toEqual(['set_model', 'set_thinking_level', 'syncRuntime', 'prompt'])
+    expect(provider.model).toBe(primeCatalog.models[0].key)
+    expect(provider.effort).toBe('high')
   })
 })
 

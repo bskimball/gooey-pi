@@ -18,12 +18,15 @@ afterEach(async () => {
 interface FakePiOptions {
   /** JavaScript statements the fake runs after acknowledging a prompt. */
   promptScript?: string
+  /** Initial model reported by get_state before any set_model RPC. */
+  initialModel?: { provider: string; id: string; name: string }
 }
 
 function fakePiAgent(options: FakePiOptions = {}): { cwd: string; executable: string } {
   const cwd = mkdtempSync(join(tmpdir(), 'prime-work-pi-rpc-'))
   dirs.push(cwd)
   const executable = join(cwd, 'fake-pi.cjs')
+  const initialModel = JSON.stringify(options.initialModel ?? { provider: 'openai-codex', id: 'gpt-5.6-luna', name: 'Luna GPT-5.6' })
   // Like the real pi, the fake pushes no ready frame and knows no native
   // negotiate_protocol, branch, or fast-mode commands; get_state carries
   // hostile serviceTier/fastModeEnabled/contextUsage fields the adapter must
@@ -31,6 +34,8 @@ function fakePiAgent(options: FakePiOptions = {}): { cwd: string; executable: st
   writeFileSync(executable, `#!/usr/bin/env node
 const readline = require('node:readline')
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
+let currentModel = ${initialModel}
+let currentThinking = 'medium'
 send({ type: 'fake_argv', argv: process.argv.slice(2) })
 send({ type: 'fake_cwd', cwd: process.cwd() })
 send({ type: 'fake_env', env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PI_'))) })
@@ -38,11 +43,19 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
   if (command.type === 'get_state') {
     send({ id: command.id, type: 'response', command: 'get_state', success: true, data: {
-      sessionId: 'pi-session', isStreaming: false, isCompacting: false, thinkingLevel: 'medium',
-      model: { provider: 'openai-codex', id: 'gpt-5.6-luna', name: 'Luna GPT-5.6' },
+      sessionId: 'pi-session', isStreaming: false, isCompacting: false, thinkingLevel: currentThinking,
+      model: currentModel,
       serviceTier: 'priority', fastModeEnabled: true,
       contextUsage: { tokens: 999999, contextWindow: 272000, percent: 99 },
     } })
+  } else if (command.type === 'set_model') {
+    currentModel = { provider: command.provider, id: command.modelId, name: command.modelId }
+    send({ type: 'fake_set_model', provider: command.provider, modelId: command.modelId })
+    send({ id: command.id, type: 'response', command: 'set_model', success: true, data: currentModel })
+  } else if (command.type === 'set_thinking_level') {
+    currentThinking = command.level
+    send({ type: 'fake_set_thinking_level', level: command.level })
+    send({ id: command.id, type: 'response', command: 'set_thinking_level', success: true })
   } else if (command.type === 'get_session_stats') {
     send({ id: command.id, type: 'response', command: 'get_session_stats', success: true, data: { contextUsage: { tokens: 12000, contextWindow: 272000, percent: 4 }, tokens: { input: 10000, output: 2000, cacheRead: 500, cacheWrite: 100, total: 12600 }, cost: 0.4321 } })
   } else if (command.type === 'fork' || command.type === 'get_fork_messages') {
@@ -252,6 +265,27 @@ describe('pi RPC handshake', () => {
     expect(argv).not.toContain('--approval-mode')
     const extensionPaths = argv.flatMap((value, index) => value === '--extension' ? [argv[index + 1]] : [])
     expect(extensionPaths).toEqual(['/extensions/pi-fast-mode.ts', '/extensions/schedules.ts', '/extensions/browser.ts', '/extensions/ask-user.ts', '/extensions/collaboration.ts'])
+  })
+
+  it('reconciles the requested model and thinking level when a startup extension overrides CLI flags', async () => {
+    const fake = fakePiAgent({
+      initialModel: { provider: 'openai', id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' },
+    })
+    const manager = piManager(fake.executable, { providers: piCatalog })
+    const events: Array<Record<string, unknown>> = []
+    manager.setEventSink(({ event }) => events.push(event))
+
+    const runtime = await manager.start({
+      cwd: fake.cwd,
+      sessionPath: '/sessions/bucket/run.jsonl',
+      model: 'openai-codex/gpt-5.6-luna',
+      thinking: 'high',
+    })
+
+    expect(runtime.model).toMatchObject({ provider: 'openai-codex', id: 'gpt-5.6-luna' })
+    expect(runtime.thinkingLevel).toBe('high')
+    expect(events).toContainEqual({ type: 'fake_set_model', provider: 'openai-codex', modelId: 'gpt-5.6-luna' })
+    expect(events).toContainEqual({ type: 'fake_set_thinking_level', level: 'high' })
   })
 })
 
