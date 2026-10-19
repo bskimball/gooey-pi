@@ -3,7 +3,7 @@ import { appendSessionRouting, findSessionMentions, routedSessionReferences, spl
 import type { SessionRecord } from '../../src/types/api'
 
 const session = (id: string, title: string): SessionRecord => ({
-  id, title, harness: 'omp', filePath: `/sessions/${id}.jsonl`, projectPath: '/project',
+  id, title, harness: 'pi', filePath: `/sessions/${id}.jsonl`, projectPath: '/project',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
 })
 
@@ -20,14 +20,14 @@ describe('session mentions', () => {
 
   it('adds stable UUID routing once and removes it for transcript rendering', () => {
     const routed = appendSessionRouting('Coordinate with @API owner and @API owner.', sessions)
-    expect(routed).toContain('omp session UUID 019f0000-0000-7000-8000-000000000001')
+    expect(routed).toContain('pi session UUID 019f0000-0000-7000-8000-000000000001')
     expect(routed.match(/019f0000-0000-7000-8000-000000000001/g)).toHaveLength(1)
     const split = splitSessionRouting(routed)
     expect(split.text).toBe('Coordinate with @API owner and @API owner.')
     expect(split.block).toContain('gooeypi_session_read, gooeypi_session_send, and gooeypi_session_wait')
     expect(routedSessionReferences(split.block)).toEqual([{
       label: '@API owner',
-      harness: 'omp',
+      harness: 'pi',
       sessionId: '019f0000-0000-7000-8000-000000000001',
     }])
   })
@@ -48,6 +48,6 @@ describe('session mentions', () => {
 
   it('ignores malformed or oversized model-facing reference lines', () => {
     expect(routedSessionReferences('- "@API owner": other session UUID unsafe.')).toEqual([])
-    expect(routedSessionReferences(`- ${JSON.stringify(`@${'x'.repeat(201)}`)}: omp session UUID safe-id.`)).toEqual([])
+    expect(routedSessionReferences(`- ${JSON.stringify(`@${'x'.repeat(201)}`)}: pi session UUID safe-id.`)).toEqual([])
   })
 })

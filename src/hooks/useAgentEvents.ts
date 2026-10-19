@@ -61,7 +61,7 @@ export function useAgentEvents({
     const unsubscribe = bridge.agent.onEvent(({ runtimeId, event }) => {
       const type = typeof event.type === 'string' ? event.type : ''
       if (type === 'session_persisted' && typeof event.sessionFile === 'string'
-        && (event.harness === 'prime' || event.harness === 'pi' || event.harness === 'omp')) {
+        && event.harness === 'pi') {
         const harness = event.harness
         runtimeSessionsRef.current.set(runtimeId, event.sessionFile)
         const isCurrentHarness = () => workspaceRef.current.project?.harness === harness

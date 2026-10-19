@@ -3,15 +3,13 @@ import { readdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import type { HarnessId, SessionChangeEvent, SessionRecord, TranscriptMessage } from '../../src/types/api'
-import { assertNoMcpAuthenticationCommand } from '../../src/lib/mcp-policy'
-import { queueDaemonFollowUp } from './agent-daemon'
 import { comparePaths, createAdmissionQueue, createSingleFlight, type AdmissionQueue } from './lib/async'
-import { resolveExecutable, runProcess, type ExecutableSource } from './process-utils'
+import type { ExecutableSource } from './process-utils'
 import { SessionMetadataCatalog, type SessionCatalogIo, type SessionNameTimestamp } from './sessions/catalog'
 import { createSessionMetadataReader, type SessionMetadata, type SessionMetadataReader } from './sessions/metadata'
 import { readTranscript } from './sessions/transcript'
 import type { JsonStateStore } from './store'
-import { isPathWithin, isRecord, requireBoolean, requireExistingDirectory, requireId, requireString } from './validation'
+import { isPathWithin, requireBoolean, requireExistingDirectory, requireString } from './validation'
 
 interface RuntimeSessionState { isStreaming: boolean; isCompacting?: boolean }
 
@@ -102,11 +100,10 @@ export class SessionService {
   private changeTimer: NodeJS.Timeout | null = null
   private readonly changedNames = new Set<string>()
   private catalogOnlyChange = false
-  private followUpsInFlight = 0
 
   constructor(
     private readonly store: JsonStateStore,
-    private readonly primeAgentPath: ExecutableSource,
+    executable: ExecutableSource,
     maxSessionFiles = MAX_SESSION_FILES,
     options: SessionServiceOptions = {},
   ) {
@@ -120,8 +117,8 @@ export class SessionService {
       pendingLimitError: () => new Error('Too many transcript reads are pending'),
       closedError: () => new Error('Too many transcript reads are pending'),
     })
-    this.harness = options.harness ?? 'prime'
-    this.sessionRoot = options.sessionRoot ?? join(homedir(), '.prime', 'agent', 'sessions')
+    this.harness = options.harness ?? 'pi'
+    this.sessionRoot = options.sessionRoot ?? join(homedir(), '.pi', 'agent', 'sessions')
     this.recursiveWatch = options.recursiveWatch === true
     this.metadataReader = options.metadataReader ?? createSessionMetadataReader()
     this.transcriptReader = options.transcriptReader ?? readTranscript
@@ -130,7 +127,7 @@ export class SessionService {
     this.watchDirectory = options.watchDirectory ?? watchSessionDirectory
     this.catalog = new SessionMetadataCatalog(
       () => this.sessionRoot,
-      primeAgentPath,
+      executable,
       maxSessionFiles,
       (filePath, knownStat) => this.readMetadata(filePath, knownStat),
       options.catalogIo,
@@ -218,52 +215,12 @@ export class SessionService {
     }))
   }
 
-  async followUp(filePath: unknown, message: unknown, intent: unknown = 'queue'): Promise<boolean> {
-    if (intent !== 'queue' && intent !== 'steer') throw new TypeError('Invalid active-session message intent')
-    const safeMessage = requireString(message, 'message', { min: 1, max: 64 * 1024 })
-    assertNoMcpAuthenticationCommand(safeMessage, this.harness)
-    if (this.followUpsInFlight >= 4) throw new Error('Too many active-session replies are in flight')
-    this.followUpsInFlight += 1
-    try { return await this.queueActiveFollowUp(filePath, safeMessage, intent) }
-    finally { this.followUpsInFlight -= 1 }
-  }
-
-  private async queueActiveFollowUp(filePath: unknown, message: unknown, intent: 'queue' | 'steer'): Promise<boolean> {
-    const safePath = await this.requireSessionPath(filePath)
-    const safeMessage = requireString(message, 'message', { min: 1, max: 64 * 1024 })
-    const primeAgentPath = resolveExecutable(this.primeAgentPath)
-    if (!primeAgentPath) throw new Error('Prime Agent executable was not found')
-
-    // The catalog canonicalizes candidate session files with bounded
-    // parallelism and caches the result; reuse it instead of re-listing with
-    // up to MAX_SESSION_FILES * 4 serial realpath calls.
-    const active = (await this.catalog.liveSessions()).get(safePath)
-    if (active?.lifecycle !== 'live' || active.isSessionActive !== true) return false
-    const activeSessionId = requireId(active.activeSessionId ?? active.id, 'activeSessionId')
-    if (activeSessionId.startsWith('-')) throw new Error('Prime Agent returned an invalid active session identifier')
-
-    const status = await runProcess(primeAgentPath, ['status', '--json'], { timeoutMs: 15_000, maxBytes: 1024 * 1024 })
-    if (status.code !== 0 || status.timedOut || status.outputExceeded) throw new Error('GooeyPi could not inspect the Prime Agent daemon')
-    let statuses: unknown
-    try { statuses = JSON.parse(status.stdout) } catch { throw new Error('Prime Agent returned an invalid daemon status') }
-    if (!Array.isArray(statuses) || statuses.length > 64) throw new Error('Prime Agent returned an invalid daemon status')
-    const current = statuses.find((value) => isRecord(value) && value.status === 'current' && value.isDefault === true)
-    if (!isRecord(current) || typeof current.socketPath !== 'string') throw new Error('Prime Agent did not report its active daemon socket')
-    await queueDaemonFollowUp(current.socketPath, activeSessionId, safeMessage, intent === 'steer' ? 'steer' : 'follow_up')
-    return true
-  }
-
   async rename(filePath: unknown, title: unknown): Promise<boolean> {
     const safePath = await this.requireSessionPath(filePath)
     const safeTitle = requireString(title, 'title', { min: 1, max: 200, trim: true })
     if (safeTitle.startsWith('-') || /[\r\n]/.test(safeTitle)) throw new TypeError('title contains invalid characters')
     if (await this.renameRuntimeSession(safePath, safeTitle)) return true
-    const primeAgentPath = resolveExecutable(this.primeAgentPath)
-    // OMP/pi services are constructed with a null CLI path (electron/main/index.ts).
-    if (!primeAgentPath) return this.renameFile?.(safePath, safeTitle) ?? false
-    const metadata = await this.readMetadata(safePath)
-    const result = await runProcess(primeAgentPath, ['rename', metadata.id, safeTitle, '--json'], { timeoutMs: 30_000 })
-    return result.code === 0
+    return this.renameFile?.(safePath, safeTitle) ?? false
   }
 
   async archive(filePath: unknown, archivedValue: unknown = true): Promise<boolean> {

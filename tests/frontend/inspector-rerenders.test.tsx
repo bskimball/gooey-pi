@@ -114,7 +114,6 @@ describe('inspector re-render containment', () => {
     expect(last.git).toBe(first.git)
     expect(last.browserAnnotations).toBe(first.browserAnnotations)
     expect(last.automations).toBe(first.automations)
-    expect(last.heartbeats).toBe(first.heartbeats)
     expect(last.onSelectAgentTab).toBe(first.onSelectAgentTab)
     expect(last.onPreviewContext).toBe(first.onPreviewContext)
     expect(last.onNavigateAgentTab).toBe(first.onNavigateAgentTab)

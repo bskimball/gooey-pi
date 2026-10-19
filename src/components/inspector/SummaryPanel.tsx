@@ -1,6 +1,6 @@
 import { memo } from 'react'
-import { CalendarDots, CaretRight, Check, CircleNotch, GitBranch, Heartbeat, Record as RecordIcon } from '../icons'
-import type { AutomationScheduleRecord, GitStatus, NativeHeartbeatRecord, ProjectRecord, RuntimeInfo } from '@/types/api'
+import { CalendarDots, CaretRight, Check, CircleNotch, GitBranch, Record as RecordIcon } from '../icons'
+import type { AutomationScheduleRecord, GitStatus, ProjectRecord, RuntimeInfo } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { formatSessionCost, formatSessionTokens } from '@/lib/format-cost'
 import { MarkdownText } from '../MarkdownText'
@@ -10,21 +10,20 @@ export { extractPiSessionWidgets, summarizeTranscript } from './session-summary'
 export type { PiSpecialistSummary, PiTodoItemSummary, TranscriptSummary } from './session-summary'
 
 interface SummaryPanelProps {
-  /** Active harness agent name ("Prime Agent" / "OMP"). */
+  /** Agent name for runtime status. */
   agentName?: string
-  /** Short harness name for working copy ("Prime" / "OMP"). */
+  /** Agent short name for working copy. */
   shortName?: string
   project?: ProjectRecord
   runtime?: RuntimeInfo | null
   summary: SessionSummary
   git: GitStatus
   automations: AutomationScheduleRecord[]
-  heartbeats: NativeHeartbeatRecord[]
   onOpenAutomation(id: string): void
   onOpenSpecialist?(id: string): void
 }
 
-export const SummaryPanel = memo(function SummaryPanel({ agentName = 'Prime Agent', shortName = 'Prime', project, runtime, summary, git, automations, heartbeats, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
+export const SummaryPanel = memo(function SummaryPanel({ agentName = 'Pi', shortName = 'Pi', project, runtime, summary, git, automations, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
   const { toolCount, lastText, todos, specialists } = summary
   const active = Boolean(runtime?.isStreaming || runtime?.isCompacting)
   const sessionCost = formatSessionCost(runtime?.sessionUsage)
@@ -76,14 +75,11 @@ export const SummaryPanel = memo(function SummaryPanel({ agentName = 'Prime Agen
       ) : null}
       <section className="summary-section"><h3>Workspace</h3><dl className="detail-list"><div><dt>Project</dt><dd>{project?.name ?? 'No project'}</dd></div><div><dt>Branch</dt><dd><GitBranch size={12} />{git.branch ?? project?.gitBranch ?? '—'}</dd></div><div><dt>Environment</dt><dd>Local</dd></div><div><dt>Working directory</dt><dd title={project?.primaryFolder} className="mono truncate">{project?.primaryFolder ?? '—'}</dd></div></dl></section>
       <section className="summary-section"><h3>Progress</h3><div className="progress-list"><div><Check size={13} /><span>Loaded project context</span></div><div><Check size={13} /><span>{toolCount} tool {toolCount === 1 ? 'call' : 'calls'} recorded</span></div><div className={git.files.length ? 'is-current' : ''}><RecordIcon size={13} /><span>{git.files.length ? `${git.files.length} files ready to review` : git.isRepo ? 'No uncommitted changes' : 'Git repository not detected'}</span></div></div></section>
-      {automations.length || heartbeats.length ? <section className="summary-section"><h3>Automations</h3><div className="summary-automation-list">
+      {automations.length ? <section className="summary-section"><h3>Automations</h3><div className="summary-automation-list">
         {automations.slice(0, 2).map((task) => <button type="button" key={task.id} onClick={() => onOpenAutomation(task.id)}>
           <span className="summary-automation-icon"><CalendarDots size={14}/></span><span><strong>{task.title}</strong><small>{task.status}{task.nextRunAt ? ` · Next ${formatRelative(task.nextRunAt)}` : ''}</small></span>
         </button>)}
-        {heartbeats.slice(0, Math.max(0, 2 - automations.length)).map((heartbeat) => <button type="button" key={heartbeat.id} onClick={() => onOpenAutomation(heartbeat.id)}>
-          <span className="summary-automation-icon is-heartbeat"><Heartbeat size={14}/></span><span><strong>{heartbeat.label ?? (heartbeat.source === 'heartbeat' ? 'Thread heartbeat' : 'Agent heartbeat')}</strong><small>{heartbeat.status}{heartbeat.nextRunAt ? ` · Next ${formatRelative(heartbeat.nextRunAt)}` : ''}</small></span>
-        </button>)}
-        {automations.length + heartbeats.length > 2 ? <button type="button" className="summary-automation-more" onClick={() => onOpenAutomation(automations[0]?.id ?? heartbeats[0]!.id)}>View all {automations.length + heartbeats.length} automations</button> : null}
+        {automations.length > 2 ? <button type="button" className="summary-automation-more" onClick={() => onOpenAutomation(automations[0].id)}>View all {automations.length} automations</button> : null}
       </div></section> : null}
       <section className="summary-section"><h3>Context</h3><div className="context-meter"><div><span>Session context</span><span>Managed</span></div><small>{agentName} monitors and compacts context when needed.</small></div>
         {sessionCost !== null ? <dl className="detail-list summary-cost"><div><dt>Cost</dt><dd title={sessionTokens ?? undefined}>{sessionCost}</dd></div>{sessionTokens ? <div><dt>Tokens</dt><dd className="mono truncate" title={sessionTokens}>{sessionTokens}</dd></div> : null}</dl> : null}</section>

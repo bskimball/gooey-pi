@@ -23,8 +23,8 @@ export function useTranscriptScroll(messages: TranscriptMessage[]) {
     } else if (streaming && pinnedToBottomRef.current) {
       frame = requestAnimationFrame(() => scroller && typeof scroller.scrollTo === 'function' && scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' }))
     }
-    if (previousStreamingRef.current && !streaming) setAnnouncement('Prime response complete.')
-    else if (!previousStreamingRef.current && streaming) setAnnouncement('Prime is working.')
+    if (previousStreamingRef.current && !streaming) setAnnouncement('Pi response complete.')
+    else if (!previousStreamingRef.current && streaming) setAnnouncement('Pi is working.')
     previousStreamingRef.current = streaming
     previousCountRef.current = messages.length
     return () => { if (frame !== undefined) cancelAnimationFrame(frame) }

@@ -354,7 +354,7 @@ describe('JsonStateStore', () => {
     const path = join(dir, 'state.json')
     writeFileSync(path, JSON.stringify({
       version: 2,
-      projects: [{ id: 'p1', name: 'One', path: '/one', folders: ['/one'], primaryFolder: '/one' }],
+      projects: [{ id: 'p1', harness: 'pi', name: 'One', path: '/one', folders: ['/one'], primaryFolder: '/one' }],
       settings: { ...defaultSettings(), terminalShell: '/bin/bash' },
       archivedSessions: ['/sessions/kept.jsonl'],
       dismissedProjectPaths: [],
@@ -380,7 +380,7 @@ describe('JsonStateStore', () => {
   it('migrates version 2 state: projects gain the prime harness and settings gain harness defaults', () => {
     const dir = makeDirectory()
     const path = join(dir, 'state.json')
-    const { activeHarness: _activeHarness, ompApprovalMode: _ompApprovalMode, ...legacySettings } = defaultSettings()
+    const { activeHarness: _activeHarness, ...legacySettings } = defaultSettings()
     writeFileSync(path, JSON.stringify({
       version: 2,
       projects: [{ id: 'legacy', name: 'Legacy', path: '/legacy', folders: ['/legacy'], primaryFolder: '/legacy' }],
@@ -392,8 +392,8 @@ describe('JsonStateStore', () => {
     const state = new JsonStateStore(path).snapshot()
     expect(state.version).toBe(4)
     expect(state.projects.map((project) => project.harness)).toEqual(['prime'])
-    expect(state.settings.activeHarness).toBe('prime')
-    expect(state.settings.ompApprovalMode).toBe('inherit')
+    expect(state.settings.activeHarness).toBe('pi')
+    expect(state.settings).not.toHaveProperty('ompApprovalMode')
     expect(state.settings.askUserEnabled).toBe(false)
   })
 
@@ -413,8 +413,8 @@ describe('JsonStateStore', () => {
     }))
     const kept = new JsonStateStore(path).snapshot()
     expect(kept.projects.map((project) => project.harness)).toEqual(['omp'])
-    expect(kept.settings.activeHarness).toBe('omp')
-    expect(kept.settings.ompApprovalMode).toBe('yolo')
+    expect(kept.settings.activeHarness).toBe('pi')
+    expect(kept.settings).not.toHaveProperty('ompApprovalMode')
 
     writeFileSync(path, JSON.stringify({
       version: 3,
@@ -424,7 +424,7 @@ describe('JsonStateStore', () => {
       dismissedProjectPaths: [],
       schedules: [],
     }))
-    expect(new JsonStateStore(path).snapshot().settings.activeHarness).toBe('prime')
+    expect(new JsonStateStore(path).snapshot().settings.activeHarness).toBe('pi')
 
     writeFileSync(path, JSON.stringify({
       version: 3,
@@ -435,8 +435,8 @@ describe('JsonStateStore', () => {
       schedules: [],
     }))
     const reset = new JsonStateStore(path).snapshot()
-    expect(reset.settings.activeHarness).toBe('omp')
-    expect(reset.settings.ompApprovalMode).toBe('inherit')
+    expect(reset.settings.activeHarness).toBe('pi')
+    expect(reset.settings).not.toHaveProperty('ompApprovalMode')
   })
 
   it('accepts the pi harness for projects and the active workspace', () => {
@@ -835,9 +835,9 @@ describe('JsonStateStore', () => {
       schedules: [],
     }))
     const state = new JsonStateStore(path).snapshot()
-    expect(state.settings.runtimePaths).toEqual({ prime: '/opt/prime-agent', omp: '', pi: '' })
+    expect(state.settings.runtimePaths).toEqual({ pi: '' })
     expect(state.settings.enabledHarnesses).toEqual(['pi'])
-    expect(state.settings.activeHarness).toBe('omp')
+    expect(state.settings.activeHarness).toBe('pi')
   })
 
   it('preserves an oversized state file and fails closed without rewriting it', async () => {

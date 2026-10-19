@@ -113,7 +113,7 @@ export function nativeRuntimeDirectory(target) {
   return target === 'win' ? 'win32' : target
 }
 
-/** The exact non-ZeroMQ native files each target must unpack; mirrors package.json build.<target>.asarUnpack. */
+/** The exact native files each target must unpack; mirrors package.json build.<target>.asarUnpack. */
 export function expectedNativeFiles(target, architecture) {
   if (target === 'linux') return ['node_modules/node-pty/build/Release/pty.node']
   // node-pty resolves prebuilds from `prebuilds/${process.platform}-${process.arch}` (hyphenated, no nesting).
@@ -129,26 +129,16 @@ export function expectedNativeFiles(target, architecture) {
   ]
 }
 
-/** Matches the single unpacked ZeroMQ addon for a target/architecture; agrees with package.json's win32 directory naming. */
-export function zeroMqAddonPattern(target, architecture) {
-  return new RegExp(`^node_modules/zeromq/build/${nativeRuntimeDirectory(target)}/${architecture}/node/[^/]+-Release/addon\\.node$`)
-}
-
 export function assertUnpackedNativeLayout(directory, target, architecture) {
   const files = listFiles(directory)
     .map((path) => relative(directory, path).replaceAll('\\', '/'))
     .sort()
   const required = expectedNativeFiles(target, architecture)
-  const zeroMqPattern = zeroMqAddonPattern(target, architecture)
   const allowed = new Set(required)
-  const unexpected = files.filter((path) => !allowed.has(path) && !zeroMqPattern.test(path))
+  const unexpected = files.filter((path) => !allowed.has(path))
   const missing = required.filter((path) => !files.includes(path))
-  const zeroMq = files.filter((path) => zeroMqPattern.test(path))
-  // ZeroMQ intentionally ships ABI and, on Linux, libc fallbacks. Its loader
-  // tries matching platform/architecture candidates from newest to oldest.
-  // Keep that bounded fallback set while still rejecting off-target paths.
-  if (missing.length || zeroMq.length === 0 || unexpected.length) {
-    throw new Error(`Unexpected native unpack layout (missing: ${missing.join(', ') || 'none'}; ZeroMQ addons: ${zeroMq.length}, expected at least 1; extra: ${unexpected.join(', ') || 'none'})`)
+  if (missing.length || unexpected.length) {
+    throw new Error(`Unexpected native unpack layout (missing: ${missing.join(', ') || 'none'}; extra: ${unexpected.join(', ') || 'none'})`)
   }
 }
 

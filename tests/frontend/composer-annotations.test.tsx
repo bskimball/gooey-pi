@@ -214,7 +214,7 @@ const sessionRecord = (
 	id = "019f0000-0000-7000-8000-000000000009",
 ): SessionRecord => ({
 	id,
-	harness: "prime",
+	harness: "pi",
 	filePath: `/sessions/${id}.jsonl`,
 	projectPath: "/project",
 	title,
@@ -408,7 +408,7 @@ describe("Composer skill mentions", () => {
 		await clickSend();
 		const [prompt] = onSend.mock.calls[0];
 		expect(prompt).toContain(
-			"prime session UUID 019f0000-0000-7000-8000-00000000000a",
+			"pi session UUID 019f0000-0000-7000-8000-00000000000a",
 		);
 		expect(prompt).not.toContain("browser-skill/SKILL.md");
 	});
@@ -464,7 +464,7 @@ describe("Composer skill mentions", () => {
 		await clickSend();
 		const [prompt] = onSend.mock.calls[0];
 		expect(prompt).toContain(
-			"prime session UUID 019f0000-0000-7000-8000-000000000009",
+			"pi session UUID 019f0000-0000-7000-8000-000000000009",
 		);
 		expect(prompt).toContain(
 			`- $Ownership: Read the skill file at ${JSON.stringify(skill.path)}`,
@@ -609,7 +609,7 @@ describe("Composer session mentions", () => {
 		const sessions: SessionRecord[] = [
 			{
 				id: "019f0000-0000-7000-8000-000000000001",
-				harness: "prime",
+				harness: "pi",
 				filePath: "/sessions/browser.jsonl",
 				projectPath: "/project",
 				title: "Browser",
@@ -992,14 +992,6 @@ describe("Composer sendSignal", () => {
 		expect(labels()).toEqual([
 			"Add context",
 			"Behavior mode",
-			"Model: Vision",
-			"Reasoning effort",
-			"Checkout: Checkout",
-			"Fast",
-		]);
-		renderComposer({ composerProps: { ...composerProps, harness: "omp" } });
-		expect(labels()).toEqual([
-			"Add context",
 			"Model: Vision",
 			"Reasoning effort",
 			"Checkout: Checkout",

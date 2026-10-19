@@ -2,9 +2,9 @@ import type { Stats } from 'node:fs'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, sep } from 'node:path'
 import { comparePaths, createSingleFlight, mapLimit } from '../lib/async'
-import { resolveExecutable, runProcess, type ExecutableSource } from '../process-utils'
-import { isPathWithin, isRecord } from '../validation'
-import { applyLiveMetadata, type JsonRecord, type SessionMetadata } from './metadata'
+import type { ExecutableSource } from '../process-utils'
+import { isPathWithin } from '../validation'
+import type { SessionMetadata } from './metadata'
 
 interface SessionFileCandidate {
   name: string
@@ -35,8 +35,6 @@ export type SessionCatalogReconcileResult =
   | { kind: 'reconciled'; paths: string[] }
   | { kind: 'full-scan' }
 
-const LIVE_CATALOG_TTL_MS = 2_000
-const LIVE_CATALOG_MIN_SPAWN_INTERVAL_MS = 2_000
 const FULL_SCAN = { kind: 'full-scan' } as const
 
 export interface SessionCatalogEntry {
@@ -125,12 +123,7 @@ export function boundedSessionDiscoveryNames(names: readonly string[], maxSessio
 }
 
 export class SessionMetadataCatalog {
-  private catalogCache: { executable: string; fetchedAt: number; revision: number; sessions: Map<string, JsonRecord> } | null = null
-  // Deduplicate only calls to the same executable. A refreshed runtime path
-  // must never inherit the previous executable's cache or in-flight request.
-  private readonly catalogRequests = createSingleFlight<string, Map<string, JsonRecord>>()
   private catalogRevision = 0
-  private lastCatalogSpawn: { executable: string; at: number } | null = null
   private readonly sessionScanRequests = createSingleFlight<string, SessionMetadata[]>()
   private readonly metadataCache = new Map<string, SessionMetadata>()
   private readonly metadataRequests = createSingleFlight<string, SessionMetadata>()
@@ -140,46 +133,31 @@ export class SessionMetadataCatalog {
   private preparedView: { revision: number; promise: Promise<SessionMetadata[]> } | null = null
   private reconcileTail: Promise<void> = Promise.resolve()
   private pendingReconciles = 0
-  private viewCache: {
-    snapshot: SessionCatalogSnapshot
-    live: ReadonlyMap<string, JsonRecord>
-    sessions: SessionMetadata[]
-  } | null = null
 
   constructor(
     private readonly sessionRoot: () => string,
-    private readonly primeAgentPath: ExecutableSource,
+    _agentPath: ExecutableSource,
     private readonly maxSessionFiles: number,
     private readonly readMetadata: (filePath: string, knownStat?: Stats) => Promise<SessionMetadata>,
     private readonly io: SessionCatalogIo = nodeSessionCatalogIo,
     private readonly nameTimestamp: SessionNameTimestamp = timestampFromSessionName,
   ) {}
 
-  /**
-   * Marks the catalog content stale without discarding the last snapshot: the
-   * `prime-agent list` spawn stays rate limited independently of change events,
-   * so append bursts keep serving the previous snapshot instead of respawning.
-   */
+  /** Marks the catalog stale without discarding the last filesystem snapshot. */
   invalidateLiveCatalog(): void {
     this.catalogRevision += 1
     this.preparedRevision = null
     this.preparedView = null
   }
 
-  /** Live Prime Agent session records keyed by canonical session file path. */
-  liveSessions(): Promise<ReadonlyMap<string, JsonRecord>> {
-    return this.liveCatalog()
-  }
-
   async all(): Promise<SessionMetadata[]> {
     await this.waitForReconciliations()
     const revision = this.catalogRevision
-    const executable = resolveExecutable(this.primeAgentPath)
     const snapshot = this.snapshot
     if (snapshot?.revision === revision && this.preparedRevision === revision) {
       const prepared = this.preparedView
       if (prepared?.revision === revision) return prepared.promise
-      const promise = this.materialize(snapshot, executable).finally(() => {
+      const promise = Promise.resolve(snapshot.sessions).finally(() => {
         if (this.preparedView?.promise !== promise) return
         this.preparedView = null
         if (this.preparedRevision === revision) this.preparedRevision = null
@@ -187,7 +165,7 @@ export class SessionMetadataCatalog {
       this.preparedView = { revision, promise }
       return promise
     }
-    return this.sessionScanRequests.run(`${revision}\0${executable ?? ''}`, () => this.scan(revision, executable))
+    return this.sessionScanRequests.run(String(revision), () => this.scan(revision))
   }
 
   // Reconcile known watcher paths; uncertainty falls back to a full scan.
@@ -336,7 +314,7 @@ export class SessionMetadataCatalog {
     return { kind: 'reconciled', paths: names.map((name) => candidatesByName.get(name)!.filePath) }
   }
 
-  private async scan(revision: number, executable: string | null): Promise<SessionMetadata[]> {
+  private async scan(revision: number): Promise<SessionMetadata[]> {
     let entries: readonly SessionCatalogEntry[]
     let root: string
     let rootStat: Stats
@@ -432,11 +410,9 @@ export class SessionMetadataCatalog {
       }
     }
 
-    const catalogPromise = this.liveCatalog(executable)
     const metadata = await mapLimit(selected, 6, async (candidate) => {
       try { return { candidate, metadata: await this.cachedMetadata(candidate, revision) } } catch { return null }
     })
-    const catalog = await catalogPromise
     const metadataByPath = new Map(metadata.map((entry) => [entry.candidate.filePath, entry.metadata]))
     const successful = selected.filter((candidate) => metadataByPath.has(candidate.filePath))
     const sessions = successful.map((candidate) => metadataByPath.get(candidate.filePath)!)
@@ -452,7 +428,7 @@ export class SessionMetadataCatalog {
       sessions,
     }
     if (this.catalogRevision === revision) this.snapshot = snapshot
-    return this.materialize(snapshot, executable, catalog)
+    return snapshot.sessions
   }
 
   private async ancestorsUnchanged(snapshot: SessionCatalogSnapshot, candidates: readonly SessionFileCandidate[]): Promise<boolean> {
@@ -466,28 +442,6 @@ export class SessionMetadataCatalog {
       } catch { return null }
     })
     return current.length === paths.length
-  }
-
-  private async materialize(
-    snapshot: SessionCatalogSnapshot,
-    executable: string | null,
-    knownLive?: ReadonlyMap<string, JsonRecord>,
-  ): Promise<SessionMetadata[]> {
-    const live = knownLive ?? await this.liveCatalog(executable)
-    if (!live.size) return snapshot.sessions
-    const previous = this.viewCache
-    const sessions = snapshot.sessions.map((original) => {
-      const overlay = live.get(original.filePath)
-      if (!overlay) return original
-      const previousIndex = previous?.snapshot.indexByPath.get(original.filePath)
-      if (previous && previous.live === live && previousIndex !== undefined
-        && previous.snapshot.sessions[previousIndex] === original) return previous.sessions[previousIndex]
-      const item = { ...original }
-      applyLiveMetadata(item, overlay)
-      return item
-    })
-    this.viewCache = { snapshot, live, sessions }
-    return sessions
   }
 
   private async cachedMetadata(candidate: SessionFileCandidate, revision: number): Promise<SessionMetadata> {
@@ -505,44 +459,4 @@ export class SessionMetadataCatalog {
     return { ...metadata }
   }
 
-  private async liveCatalog(executable = resolveExecutable(this.primeAgentPath)): Promise<Map<string, JsonRecord>> {
-    const primeAgentPath = executable
-    if (!primeAgentPath) return new Map()
-    const revision = this.catalogRevision
-    const cache = this.catalogCache
-    const now = Date.now()
-    if (cache && cache.executable === primeAgentPath && cache.revision === revision
-      && now - cache.fetchedAt < LIVE_CATALOG_TTL_MS) return cache.sessions
-    const inFlight = this.catalogRequests.get(primeAgentPath)
-    if (inFlight) return inFlight
-    // Invalidation marks content stale; the CLI spawn is throttled on its own
-    // clock so change-event bursts reuse the last snapshot.
-    if (cache && cache.executable === primeAgentPath && this.lastCatalogSpawn?.executable === primeAgentPath
-      && now - this.lastCatalogSpawn.at < LIVE_CATALOG_MIN_SPAWN_INTERVAL_MS) return cache.sessions
-    this.lastCatalogSpawn = { executable: primeAgentPath, at: now }
-    return this.catalogRequests.run(primeAgentPath, async () => {
-      const sessions = new Map<string, JsonRecord>()
-      try {
-        const result = await runProcess(primeAgentPath, ['list', '--all', '--json'], { timeoutMs: 15_000, maxBytes: 16 * 1024 * 1024 })
-        if (result.code === 0) {
-          const parsed: unknown = JSON.parse(result.stdout)
-          if (isRecord(parsed) && Array.isArray(parsed.sessions)
-            && parsed.sessions.length <= this.maxSessionFiles * 4) {
-            await mapLimit(parsed.sessions, 32, async (raw) => {
-              if (!isRecord(raw) || typeof raw.sessionFile !== 'string'
-                || raw.sessionFile.length > 4_096 || !isAbsolute(raw.sessionFile)) return null
-              try {
-                sessions.set(await realpath(raw.sessionFile), raw)
-                return true
-              } catch { return null }
-            })
-          }
-        }
-      } catch { /* JSONL remains authoritative when the live catalog is unavailable. */ }
-      if (resolveExecutable(this.primeAgentPath) === primeAgentPath && this.catalogRevision === revision) {
-        this.catalogCache = { executable: primeAgentPath, fetchedAt: Date.now(), revision, sessions }
-      }
-      return sessions
-    })
-  }
 }

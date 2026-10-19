@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
-import type { HarnessId, PrimeModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../../src/types/api'
+import type { PrimeModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../../src/types/api'
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import type { AgentRpcManager } from '../agent-rpc'
@@ -56,11 +56,11 @@ interface CollaborationTarget {
 
 export interface AgentCollaborationBridgeOptions {
   extensionPath: string
-  sessions: Record<HarnessId, CollaborationSessionService>
-  agents: Record<HarnessId, AgentRpcManager>
-  catalogs: Record<HarnessId, ModelCatalogProvider>
-  disabledProviders: Record<HarnessId, () => ReadonlySet<string>>
-  disabledModels: Record<HarnessId, () => ReadonlySet<string>>
+  sessions: Record<'pi', CollaborationSessionService>
+  agents: Record<'pi', AgentRpcManager>
+  catalogs: Record<'pi', ModelCatalogProvider>
+  disabledProviders: Record<'pi', () => ReadonlySet<string>>
+  disabledModels: Record<'pi', () => ReadonlySet<string>>
   waitClock?: CollaborationWaitClock
 }
 
@@ -216,7 +216,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   }
 
   private async sourceFor(claim: CapabilityClaim): Promise<CollaborationTarget> {
-    if (!claim.harness || !claim.sessionPath) throw new Error('Session collaboration is not available yet for this thread; try again in a moment')
+    if (claim.harness !== 'pi' || !claim.sessionPath) throw new Error('Session collaboration is not available yet for this thread; try again in a moment')
     const cached = this.sourcesByToken.get(claim.token)
     if (cached) return cached
     const sessions = await this.options.sessions[claim.harness].list(undefined, true, true)
@@ -237,6 +237,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     // Prime peers (and likewise for OMP/pi), but its token never grants access
     // to another harness's session catalog even when the cwd text matches.
     const harness = source.session.harness
+    if (harness !== 'pi') throw new Error('Invalid collaboration harness')
     const service = this.options.sessions[harness]
     const sessions = await service.list(source.session.projectPath, false, true)
     for (const session of sessions) {
@@ -261,6 +262,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
 
   private async modelsFor(source: CollaborationTarget): Promise<PrimeModelDescriptor[]> {
     const harness = source.session.harness
+    if (harness !== 'pi') throw new Error('Invalid collaboration harness')
     return availableModels(this.options.catalogs[harness], this.options.disabledProviders[harness](), this.options.disabledModels[harness]())
   }
 

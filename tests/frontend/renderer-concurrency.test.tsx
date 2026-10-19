@@ -30,17 +30,17 @@ function deferred<T>(): Deferred<T> {
 }
 
 const project: ProjectRecord = {
-  id: 'project', harness: 'prime', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project', pinned: false,
+  id: 'project', harness: 'pi', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project', pinned: false,
   createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 1,
 }
 const session: SessionRecord = {
-  id: 'session', harness: 'prime', projectPath: '/project', filePath: '/sessions/current.jsonl', title: 'Current',
+  id: 'session', harness: 'pi', projectPath: '/project', filePath: '/sessions/current.jsonl', title: 'Current',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
 }
 const message = (text: string): TranscriptMessage => ({
   id: text, role: 'assistant', timestamp: 1, streaming: true, parts: [{ type: 'text', text }],
 })
-const runtime: RuntimeInfo = { runtimeId: 'runtime', harness: 'prime', cwd: '/project', sessionFile: session.filePath, isStreaming: false }
+const runtime: RuntimeInfo = { runtimeId: 'runtime', harness: 'pi', cwd: '/project', sessionFile: session.filePath, isStreaming: false }
 
 let container: HTMLDivElement
 let root: Root
@@ -460,7 +460,7 @@ describe('bootstrap critical path', () => {
       const listSessions = vi.fn()
         .mockResolvedValueOnce([session])
         .mockImplementationOnce(() => delayedCatalog.promise)
-      let catalogChanged!: (change: { filePath?: string; harness?: 'prime' }) => void
+      let catalogChanged!: (change: { filePath?: string; harness?: 'pi' }) => void
       let agentEvent!: (payload: { runtimeId: string; event: Record<string, unknown> }) => void
       const bridge = {
         projects: { list: async () => [project] },
@@ -539,7 +539,7 @@ describe('bootstrap critical path', () => {
       expect(renderedSessions[0]).toMatchObject({ status: 'complete', unread: false, eventRevision: 1, statusEventRevision: 1 })
 
       act(() => {
-        catalogChanged({ filePath: session.filePath, harness: 'prime' })
+        catalogChanged({ filePath: session.filePath, harness: 'pi' })
         vi.advanceTimersByTime(80)
       })
       expect(listSessions).toHaveBeenCalledTimes(2)
@@ -628,7 +628,7 @@ describe('bootstrap critical path', () => {
     // A live event arrives while agent.list() is still in flight.
     runtimeSessionsRef.current.set('live-runtime', '/sessions/live.jsonl')
     await act(async () => {
-      runtimes.resolve([{ runtimeId: 'listed-runtime', harness: 'prime', cwd: '/project', sessionFile: '/sessions/listed.jsonl', isStreaming: false }])
+      runtimes.resolve([{ runtimeId: 'listed-runtime', harness: 'pi', cwd: '/project', sessionFile: '/sessions/listed.jsonl', isStreaming: false }])
       await runtimes.promise
       await Promise.resolve()
     })
@@ -827,13 +827,13 @@ describe('plugin request ownership', () => {
     const skill = (id: string): SkillRecord => ({ id, name: id, description: id, kind: 'skill', location: 'project', enabled: true })
     let state!: ReturnType<typeof usePluginSkills>
     function PluginProbe({ scope, generation }: { scope?: string; generation: number }) {
-      state = usePluginSkills({ bridge, harness: 'prime', scope, generation, initialSkills: [], reportError })
+      state = usePluginSkills({ bridge, harness: 'pi', scope, generation, initialSkills: [], reportError })
       return <Probe />
     }
     await act(async () => { root.render(<PluginProbe generation={0} />) })
-    expect(list).toHaveBeenNthCalledWith(1, undefined, 'prime')
+    expect(list).toHaveBeenNthCalledWith(1, undefined, 'pi')
     await act(async () => { root.render(<PluginProbe scope="/project" generation={1} />) })
-    expect(list).toHaveBeenNthCalledWith(2, '/project', 'prime')
+    expect(list).toHaveBeenNthCalledWith(2, '/project', 'pi')
 
     await act(async () => { requests[0].resolve({ skills: [skill('stale-global')], warnings: [] }); await requests[0].promise })
     expect(state.skills).toEqual([])

@@ -13,7 +13,7 @@ import type {
   ScheduleTiming,
   HarnessId,
 } from '../../../src/types/api'
-import type { JsonStateStore } from '../store'
+import { isPiSchedule, type JsonStateStore } from '../store'
 import { rejectUnknownKeys, requireId, requireRecord, requireString } from '../validation'
 import {
   countMissedOccurrences,
@@ -138,7 +138,7 @@ export class AutomationService {
     const updatedAt = this.now().toISOString()
     await this.store.update((state) => {
       for (const task of state.schedules) {
-        if (task.status !== 'active') continue
+        if (!isPiSchedule(task) || task.status !== 'active') continue
         try { this.options.validatePrompt!(task.prompt, task.harness) }
         catch (error) {
           if (!(error instanceof TypeError)) throw error
@@ -159,7 +159,7 @@ export class AutomationService {
   private async reconcileInterruptedRuns(): Promise<void> {
     const finishedAt = this.now().toISOString()
     await this.store.update((state) => {
-      for (const task of state.schedules) {
+      for (const task of state.schedules.filter(isPiSchedule)) {
         for (const run of task.runs) {
           if (run.status !== 'queued' && run.status !== 'running') continue
           run.status = 'interrupted'
@@ -185,11 +185,11 @@ export class AutomationService {
   }
 
   hasActiveSchedules(): boolean {
-    return this.store.snapshot().schedules.some((task) => task.status === 'active')
+    return this.store.snapshot().schedules.some((task) => isPiSchedule(task) && task.status === 'active')
   }
 
   list(harness?: HarnessId): AutomationScheduleRecord[] {
-    return this.store.snapshot().schedules.filter((task) => harness === undefined || task.harness === harness).map(cloneTask).sort((left, right) => {
+    return this.store.snapshot().schedules.filter(isPiSchedule).filter((task) => harness === undefined || task.harness === harness).map(cloneTask).sort((left, right) => {
       const next = (left.nextRunAt ?? 'z').localeCompare(right.nextRunAt ?? 'z')
       return next || right.updatedAt.localeCompare(left.updatedAt)
     })
@@ -197,7 +197,7 @@ export class AutomationService {
 
   get(idValue: unknown): AutomationScheduleRecord {
     const id = requireId(idValue, 'schedule id')
-    const task = this.store.snapshot().schedules.find((candidate) => candidate.id === id)
+    const task = this.store.snapshot().schedules.filter(isPiSchedule).find((candidate) => candidate.id === id)
     if (!task) throw new Error('Scheduled task was not found')
     return cloneTask(task)
   }
@@ -210,9 +210,10 @@ export class AutomationService {
     return { timing, occurrences: previewScheduleOccurrences(timing, count, now) }
   }
 
-  async create(inputValue: unknown, createdBy: 'user' | 'agent' = 'user', harness: HarnessId = 'prime'): Promise<AutomationScheduleRecord> {
+  async create(inputValue: unknown, createdBy: 'user' | 'agent' = 'user', harness: HarnessId = 'pi'): Promise<AutomationScheduleRecord> {
     const now = this.now()
     const input = parseInput(inputValue, now)
+    if (harness !== 'pi') throw new TypeError('Invalid harness')
     this.options.validatePrompt?.(input.prompt, harness)
     await Promise.all([this.options.validateTarget(input.target, harness), this.options.validateExecution(input.execution, harness)])
     const nextRunAt = nextScheduleOccurrence(input.timing, new Date(now.getTime() - 1))
@@ -260,7 +261,7 @@ export class AutomationService {
     let updated!: AutomationScheduleRecord
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === id)
-      if (!task) throw new Error('Scheduled task was not found')
+      if (!task || !isPiSchedule(task)) throw new Error('Scheduled task was not found')
       if (task.revision !== patch.revision) throw new Error('Scheduled task changed; reload it before saving')
       updated = {
         ...task,
@@ -295,7 +296,7 @@ export class AutomationService {
     let updated!: AutomationScheduleRecord
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === id)
-      if (!task) throw new Error('Scheduled task was not found')
+      if (!task || !isPiSchedule(task)) throw new Error('Scheduled task was not found')
       task.status = 'active'
       task.blockedReason = undefined
       task.nextRunAt = nextRunAt
@@ -316,7 +317,7 @@ export class AutomationService {
   async delete(idValue: unknown): Promise<boolean> {
     const id = requireId(idValue, 'schedule id')
     const removed = await this.store.update((state) => {
-      const index = state.schedules.findIndex((candidate) => candidate.id === id)
+      const index = state.schedules.findIndex((candidate) => isPiSchedule(candidate) && candidate.id === id)
       if (index < 0) return false
       state.schedules.splice(index, 1)
       return true
@@ -344,7 +345,7 @@ export class AutomationService {
     let updated!: AutomationScheduleRecord
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === id)
-      if (!task) throw new Error('Scheduled task was not found')
+      if (!task || !isPiSchedule(task)) throw new Error('Scheduled task was not found')
       task.status = status
       task.nextRunAt = undefined
       task.blockedReason = undefined
@@ -361,7 +362,7 @@ export class AutomationService {
     if (this.closed) return
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    const next = this.store.snapshot().schedules
+    const next = this.store.snapshot().schedules.filter(isPiSchedule)
       .filter((task) => task.status === 'active' && task.nextRunAt)
       .map((task) => Date.parse(task.nextRunAt!))
       .filter(Number.isFinite)
@@ -379,7 +380,7 @@ export class AutomationService {
 
   private async recoverMissed(): Promise<void> {
     const now = this.now()
-    const snapshot = this.store.snapshot().schedules
+    const snapshot = this.store.snapshot().schedules.filter(isPiSchedule)
     for (const task of snapshot) {
       if (task.status !== 'active' || !task.nextRunAt || Date.parse(task.nextRunAt) >= now.getTime() - DUE_GRACE_MS) continue
       await this.skipMissed(task, now)
@@ -389,7 +390,7 @@ export class AutomationService {
   private async processDue(): Promise<void> {
     if (this.closed) return
     const now = this.now()
-    const due = this.store.snapshot().schedules
+    const due = this.store.snapshot().schedules.filter(isPiSchedule)
       .filter((task) => task.status === 'active' && task.nextRunAt && Date.parse(task.nextRunAt) <= now.getTime())
       .sort((left, right) => left.nextRunAt!.localeCompare(right.nextRunAt!))
     for (const task of due) {
@@ -409,7 +410,7 @@ export class AutomationService {
     }
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === snapshot.id)
-      if (task?.status !== 'active' || task.nextRunAt !== scheduledFor) return
+      if (!task || !isPiSchedule(task) || task.status !== 'active' || task.nextRunAt !== scheduledFor) return
       this.pushRun(task, run)
       const next = nextScheduleOccurrence(task.timing, now)
       if (next) task.nextRunAt = next
@@ -425,7 +426,7 @@ export class AutomationService {
     let claimed: AutomationScheduleRecord | undefined
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === snapshot.id)
-      if (task?.status !== 'active' || task.nextRunAt !== scheduledFor) return
+      if (!task || !isPiSchedule(task) || task.status !== 'active' || task.nextRunAt !== scheduledFor) return
       const next = nextScheduleOccurrence(task.timing, new Date(Date.parse(scheduledFor) + 1))
       if (next) task.nextRunAt = next
       else { task.nextRunAt = undefined; task.status = 'completed' }
@@ -443,7 +444,7 @@ export class AutomationService {
     }
     await this.store.update((state) => {
       const current = state.schedules.find((candidate) => candidate.id === task.id)
-      if (!current) throw new Error('Scheduled task was deleted before its run could start')
+      if (!current || !isPiSchedule(current)) throw new Error('Scheduled task was deleted before its run could start')
       this.pushRun(current, run)
     })
     this.pending.push({ task: cloneTask(task), runId: run.id })
@@ -484,7 +485,7 @@ export class AutomationService {
       if (reason instanceof ScheduleBlockedError) {
         await this.store.update((state) => {
           const current = state.schedules.find((candidate) => candidate.id === task.id)
-          if (!current || current.revision !== task.revision) return
+          if (!current || !isPiSchedule(current) || current.revision !== task.revision) return
           current.status = 'blocked'
           current.blockedReason = error
           current.nextRunAt = undefined
@@ -498,7 +499,7 @@ export class AutomationService {
   private async markRunStarted(taskId: string, runId: string, expectedRevision: number, startedAt: string): Promise<boolean> {
     return this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === taskId)
-      if (!task) return false
+      if (!task || !isPiSchedule(task)) return false
       const run = task.runs.find((candidate) => candidate.id === runId)
       if (run?.status !== 'queued') return false
       if (run.taskRevision !== expectedRevision || task.revision !== expectedRevision) {
@@ -516,7 +517,7 @@ export class AutomationService {
   private async updateRun(taskId: string, runId: string, patch: Partial<ScheduleRunRecord>): Promise<void> {
     await this.store.update((state) => {
       const task = state.schedules.find((candidate) => candidate.id === taskId)
-      const run = task?.runs.find((candidate) => candidate.id === runId)
+      const run = task && isPiSchedule(task) ? task.runs.find((candidate) => candidate.id === runId) : undefined
       if (run) Object.assign(run, patch)
     })
   }

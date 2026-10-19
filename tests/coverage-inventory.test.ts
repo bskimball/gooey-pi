@@ -31,7 +31,6 @@ const REQUIRED_SAFETY_MODULES = [
   'electron/main/collaboration/message-envelope.ts',
   'electron/main/schedules/agent-bridge.ts',
   'electron/main/schedules/executor.ts',
-  'electron/main/schedules/heartbeats.ts',
   'electron/main/schedules/recurrence.ts',
   'electron/main/schedules/service.ts',
   'electron/main/projects.ts',
@@ -106,7 +105,6 @@ describe('safety-critical coverage inventory', () => {
       'assets/extensions/omp-work-collaboration.ts',
       'assets/extensions/omp-work-schedules.ts',
       'assets/extensions/pi-work-fast-mode.ts',
-      'assets/extensions/prime-work-browser.ts',
     ])
 
     const projectRoot = mkdtempSync(join(tmpdir(), 'gooeypi-coverage-inventory-'))

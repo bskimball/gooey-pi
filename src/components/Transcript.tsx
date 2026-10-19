@@ -5,7 +5,7 @@ import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
 import { MarkdownText } from './MarkdownText'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
-import { OmpMark, PiMark, PiWelcomeMark, PrimeMark } from './ui'
+import { PiMark, PiWelcomeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity, splitAssistantTurn } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
@@ -44,7 +44,7 @@ interface TranscriptProps {
 }
 
 
-const ASSISTANT_MARKS = { omp: OmpMark, prime: PrimeMark, pi: PiMark } satisfies Record<HarnessId, unknown>
+const ASSISTANT_MARKS = { pi: PiMark } satisfies Record<HarnessId, unknown>
 function AssistantMark({ harness, size = 24 }: { harness: HarnessId; size?: number }) {
   const Mark = ASSISTANT_MARKS[harness]
   return <Mark size={size} />
@@ -74,7 +74,7 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
 
 
 
-export function Transcript({ messages, git, harness = 'prime', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference }: TranscriptProps) {
+export function Transcript({ messages, git, harness = 'pi', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference }: TranscriptProps) {
   const [coalesce] = useState(createAssistantTurnCoalescer)
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
   const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages)

@@ -1,4 +1,4 @@
-import { supportsFastMode } from 'prime-agent-ai'
+import { supportsFastMode } from '../../assets/extensions/pi-work-fast-mode'
 import type { PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '../../src/types/api'
 import { catalogLimitWarnings, limitCatalogRelations, type ModelCatalogProvider } from './model-catalog'
 import { withModelVisibility } from './model-visibility'
@@ -43,7 +43,7 @@ export function boundedInteger(value: unknown): number {
  * regardless of the API value.
  */
 export function toFastModeSupported(provider: string, id: string): boolean {
-  return supportsFastMode({ provider, id, api: 'openai-codex-responses' } as Parameters<typeof supportsFastMode>[0])
+  return supportsFastMode({ provider, id, api: 'openai-codex-responses' })
 }
 
 /** The fields every CLI model entry shares, or null when any of them is hostile or malformed. */
@@ -114,7 +114,6 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
   /** Warning served when the harness CLI is not installed. */
   protected abstract readonly notInstalledWarning: string
   /** Provider auth label, naming the CLI that owns the credentials. */
-  protected abstract readonly credentialsLabel: string
   /** Fetches the untrusted raw model entries from the harness CLI. */
   protected abstract fetchModelEntries(executable: string): Promise<unknown[]>
   /** Maps one untrusted raw entry to a descriptor, or null when it is malformed. */
@@ -204,7 +203,6 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
       name: id.slice(0, 200),
       authMethod: 'external',
       configured: true,
-      authLabel: this.credentialsLabel,
       modelCount: 0,
       availableModelCount: 0,
       enabled: true,

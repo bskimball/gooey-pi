@@ -28,8 +28,8 @@ export function AboutSettings({ meta, updateState, onCheckForUpdates, onOpenDocs
   const checking = updateState.phase === 'checking'
   return (
     <>
-      <header><h1>About GooeyPi</h1><p>A playful desktop workspace for OMP and Prime Agent.</p></header>
-      <section className="about-card"><GooeyPiMark size={48} /><div><h2>GooeyPi</h2><p>OMP + Prime Agent workspace · Version {version}</p></div></section>
+      <header><h1>About GooeyPi</h1><p>A desktop workspace for Pi.</p></header>
+      <section className="about-card"><GooeyPiMark size={48} /><div><h2>GooeyPi</h2><p>Pi workspace · Version {version}</p></div></section>
       <section className="settings-group">
         <div className="settings-row"><span><strong>Software updates</strong><small role="status">{updateStatusCopy(updateState, version)}</small></span><button className="button" type="button" disabled={checking || updateState.phase === 'downloading' || updateState.phase === 'unsupported'} onClick={() => { void onCheckForUpdates() }}><ArrowClockwise className={checking ? 'spin' : undefined} size={13} /> {checking ? 'Checking…' : 'Check for updates'}</button></div>
         <div className="settings-row"><span><strong>Platform</strong><small>{meta?.platform ?? 'macOS'}</small></span></div>

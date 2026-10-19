@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defaultSettings, JsonStateStore } from '../../electron/main/store'
 import type { DesktopState } from '../../electron/main/store'
+import { reconcileActiveHarness } from '../../electron/main/harness-discovery'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -161,6 +162,29 @@ describe('persisted project parsing', () => {
 })
 
 describe('persisted settings parsing', () => {
+  it('round-trips retired preferences across startup and later writes without exposing them to Pi', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gooeypi-retired-settings-'))
+    dirs.push(dir)
+    const path = join(dir, 'state.json')
+    const historical = {
+      disabledProviders: ['old-provider'], disabledModels: ['old-provider/model'],
+      ompDisabledProviders: ['other-provider'], ompDisabledModels: ['other-provider/model'], ompApprovalMode: 'yolo',
+    }
+    const runtimePaths = { prime: '/old/prime', omp: '/old/omp', pi: '/current/pi' }
+    const lastSelectedModels = { prime: 'old-provider/model', omp: 'other-provider/model', pi: 'pi-provider/model' }
+    writeFileSync(path, JSON.stringify({ version: 4, settings: { ...historical, runtimePaths, lastSelectedModels, activeHarness: 'omp' } }))
+    let store = new JsonStateStore(path)
+    await reconcileActiveHarness(store, { pi: { path: null, version: null } })
+    for (let index = 0; index < 2; index += 1) {
+      await store.update((state) => { state.settings.theme = 'dark' })
+      expect(store.getSettings()).toMatchObject({ activeHarness: 'pi', theme: 'dark', runtimePaths: { pi: '/current/pi' } })
+      expect(store.getSettings().runtimePaths).toEqual({ pi: '/current/pi' })
+      for (const key of Object.keys(historical)) expect(store.getSettings()).not.toHaveProperty(key)
+      expect(JSON.parse(readFileSync(path, 'utf8')).settings).toMatchObject({ ...historical, runtimePaths, lastSelectedModels })
+      store = new JsonStateStore(path)
+    }
+  })
+
   it('falls back to defaults when settings are missing or not a record', () => {
     expect(loadState({ version: 3 }).settings).toEqual(defaultSettings())
     expect(loadState({ version: 3, settings: 'dark' }).settings).toEqual(defaultSettings())
@@ -172,9 +196,26 @@ describe('persisted settings parsing', () => {
       version: 3,
       settings: { runtimePaths: { prime: '/usr/local/bin/prime', omp: 'omp', pi: '/'.padEnd(4_097, 'x') }, enabledHarnesses: ['omp', 'omp', 'ollama'], activeHarness: 'ollama' },
     })
-    expect(settings.runtimePaths).toEqual({ prime: '/usr/local/bin/prime', omp: '', pi: '' })
-    expect(settings.enabledHarnesses).toEqual(['omp'])
-    expect(settings.activeHarness).toBe('omp')
+    expect(settings.runtimePaths).toEqual({ pi: '' })
+    expect(settings.enabledHarnesses).toEqual(['pi'])
+    expect(settings.activeHarness).toBe('pi')
+  })
+
+  it.each([1, 2, 3, 4])('selects Pi for version %s without reassigning legacy project ownership', (version) => {
+    const project = {
+      id: 'legacy-project', name: 'Legacy', path: '/repos/legacy',
+      folders: ['/repos/legacy'], primaryFolder: '/repos/legacy',
+    }
+    for (const activeHarness of ['prime', 'omp', 'pi', undefined]) {
+      const state = loadState({
+        version,
+        settings: { activeHarness, enabledHarnesses: ['prime', 'omp'] },
+        projects: [{ ...project, harness: 'prime' }, { ...project, id: 'omp-project', harness: 'omp' }],
+      })
+      expect(state.settings.activeHarness).toBe('pi')
+      expect(state.settings.enabledHarnesses).toEqual(['pi'])
+      expect(state.projects.map(({ harness }) => harness)).toEqual(['prime', 'omp'])
+    }
   })
 
   it('defaults background behavior off and preserves valid opt-in values', () => {
@@ -204,10 +245,10 @@ describe('persisted settings parsing', () => {
         piDisabledModels: ['openai/gpt-5'],
       },
     })
-    expect(settings.disabledProviders).toEqual(['openai'])
-    expect(settings.disabledModels).toEqual(['openai/gpt-5'])
-    expect(settings.ompDisabledProviders).toEqual(['anthropic'])
-    expect(settings.ompDisabledModels).toEqual([])
+    expect(settings).not.toHaveProperty('disabledProviders')
+    expect(settings).not.toHaveProperty('disabledModels')
+    expect(settings).not.toHaveProperty('ompDisabledProviders')
+    expect(settings).not.toHaveProperty('ompDisabledModels')
     expect(settings.piDisabledProviders).toEqual([])
     expect(settings.piDisabledModels).toEqual(['openai/gpt-5'])
   })
@@ -223,11 +264,7 @@ describe('persisted settings parsing', () => {
         },
       },
     })
-    expect(settings.lastSelectedModels).toEqual({
-      prime: 'openai-codex/gpt-5.6-sol',
-      omp: '',
-      pi: 'anthropic/claude-sonnet-4',
-    })
+    expect(settings.lastSelectedModels).toEqual({ pi: 'anthropic/claude-sonnet-4' })
   })
 })
 

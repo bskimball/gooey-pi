@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { installOmpExtension, validateExtensionInstallInput } from '../../electron/main/plugins/extension-installation'
+import { validateExtensionInstallInput } from '../../electron/main/plugins/extension-installation'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -61,56 +61,5 @@ describe('validateExtensionInstallInput', () => {
     const source = writeExtension(root)
     expect(() => validateExtensionInstallInput({ source, scope: 'global' })).toThrow('Extension scope must be user or project')
     expect(() => validateExtensionInstallInput({ source, scope: 'project' })).toThrow('projectPath must be a string')
-  })
-})
-
-describe('installOmpExtension', () => {
-  it('installs into the OMP user extension directory with owner-only permissions', async () => {
-    const root = makeRoot()
-    const agentDir = join(root, 'agent')
-    const source = writeExtension(root)
-    const outcome = await installOmpExtension({ source, scope: 'user' }, agentDir)
-    expect(outcome).toEqual({ ok: true, output: 'Installed OMP extension “clock.ts”. Start a new OMP session to load it.' })
-    const installed = join(agentDir, 'extensions', 'clock.ts')
-    expect(readFileSync(installed, 'utf8')).toContain('export default')
-    expect(statSync(installed).mode & 0o777).toBe(0o600)
-  })
-
-  it('installs into the project .omp/extensions directory', async () => {
-    const root = makeRoot()
-    const project = join(root, 'project')
-    mkdirSync(project)
-    const source = writeExtension(root)
-    const outcome = await installOmpExtension({ source, scope: 'project', projectPath: project }, join(root, 'agent'), realpathSync(project))
-    expect(outcome.ok).toBe(true)
-    expect(readFileSync(join(project, '.omp', 'extensions', 'clock.ts'), 'utf8')).toContain('export default')
-  })
-
-  it('reports a blocked outcome instead of overwriting an existing extension', async () => {
-    const root = makeRoot()
-    const agentDir = join(root, 'agent')
-    const source = writeExtension(root)
-    await installOmpExtension({ source, scope: 'user' }, agentDir)
-    writeFileSync(source, 'export default () => 1\n')
-    const duplicate = await installOmpExtension({ source, scope: 'user' }, agentDir)
-    expect(duplicate).toEqual({ ok: false, reason: 'blocked', output: 'An OMP extension named “clock.ts” already exists in this scope.' })
-    expect(readFileSync(join(agentDir, 'extensions', 'clock.ts'), 'utf8')).toContain('=> undefined')
-  })
-
-  it('refuses a symlinked OMP extension directory', async () => {
-    const root = makeRoot()
-    const agentDir = join(root, 'agent')
-    const elsewhere = join(root, 'elsewhere')
-    mkdirSync(agentDir)
-    mkdirSync(elsewhere)
-    symlinkSync(elsewhere, join(agentDir, 'extensions'))
-    await expect(installOmpExtension({ source: writeExtension(root), scope: 'user' }, agentDir)).rejects.toThrow('must be a real directory')
-  })
-
-  it('refuses a source that grew past the size limit after validation', async () => {
-    const root = makeRoot()
-    const source = join(root, 'grown.ts')
-    writeFileSync(source, Buffer.alloc(4 * 1024 * 1024 + 1, 0x20))
-    await expect(installOmpExtension({ source, scope: 'user' }, join(root, 'agent'))).rejects.toThrow('must not exceed 4194304 bytes')
   })
 })

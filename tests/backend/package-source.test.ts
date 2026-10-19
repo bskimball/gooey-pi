@@ -107,7 +107,6 @@ describe('validatePackageSource', () => {
     expect(validatePackageSource('git:https://github.com/owner/repo.git')).toBe('git:https://github.com/owner/repo.git')
     expect(validatePackageSource('ssh://git@github.com/owner/repo.git')).toBe('ssh://git@github.com/owner/repo.git')
     expect(validatePackageSource('https://example.test/pkg.tgz')).toBe('https://example.test/pkg.tgz')
-    expect(validatePackageSource('formatter@marketplace', { allowOmpMarketplaceTarget: true })).toBe('formatter@marketplace')
   })
 
   it('rejects plaintext remote package transports in raw and nested git forms', () => {
@@ -162,7 +161,7 @@ describe('validatePackageSource', () => {
 })
 
 describe('PluginService package source validation', () => {
-  it.each(['prime', 'pi', 'omp'] as const)('does not launch the %s executable for rejected npm sources', async (harness) => {
+  it.each(['pi'] as const)('does not launch the %s executable for rejected npm sources', async (harness) => {
     const root = mkdtempSync(join(tmpdir(), 'prime-work-package-service-'))
     dirs.push(root)
     const agentDir = join(root, 'agent')

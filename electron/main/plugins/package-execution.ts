@@ -23,10 +23,9 @@ function requireSecurePackageTransport(url: URL): void {
   if (url.protocol === 'http:' && !isLoopbackHostname(url.hostname)) throw new TypeError('Remote package sources must use HTTPS or SSH; plain HTTP is allowed only on this computer')
 }
 
-export function validatePackageSource(value: unknown, options: { allowOmpMarketplaceTarget?: boolean } = {}): string {
+export function validatePackageSource(value: unknown): string {
   const source = requireString(value, 'package source', { min: 1, max: 2_048, trim: true })
   if (source.startsWith('-') || /[\r\n\u2028\u2029]/.test(source)) throw new TypeError('Invalid package source')
-  if (options.allowOmpMarketplaceTarget && /^[a-z0-9][a-z0-9.-]{0,63}@[a-z0-9][a-z0-9.-]{0,63}$/i.test(source)) return source
   if (source.startsWith('npm:')) {
     if (!isNpmRegistrySource(source)) throw new TypeError('Invalid npm package source')
     return source
@@ -59,34 +58,7 @@ export function validatePackageSource(value: unknown, options: { allowOmpMarketp
   throw new TypeError('Package source must be npm:, git:, a protocol URL, or an existing absolute path')
 }
 
-export async function executePackageInstall(primeAgentPath: string, source: string, localCwd?: string): Promise<ProcessOutcome> {
-  const args = localCwd ? ['package', 'install', '--local', source] : ['package', 'install', source]
-  const result = await runProcess(primeAgentPath, args, { cwd: localCwd, timeoutMs: 10 * 60_000, maxBytes: 8 * 1024 * 1024 })
-  return processOutcome(result, stripAnsi(`${result.stdout}${result.stderr}`).trim())
-}
-
-export async function executePackageRemove(primeAgentPath: string, source: string, localCwd?: string): Promise<ProcessOutcome> {
-  const args = localCwd ? ['package', 'remove', '--local', source] : ['package', 'remove', source]
-  const result = await runProcess(primeAgentPath, args, { cwd: localCwd, timeoutMs: 10 * 60_000, maxBytes: 8 * 1024 * 1024 })
-  return processOutcome(result, stripAnsi(`${result.stdout}${result.stderr}`).trim())
-}
-
-export async function executeOmpPluginInstall(ompPath: string, source: string): Promise<ProcessOutcome> {
-  const target = source.startsWith('npm:') || source.startsWith('git:') ? source.slice(4) : source
-  const result = await runProcess(ompPath, ['plugin', 'install', target, '--json'], { timeoutMs: 10 * 60_000, maxBytes: 8 * 1024 * 1024 })
-  return processOutcome(result, stripAnsi(`${result.stdout}${result.stderr}`).trim())
-}
-
-export async function executeOmpPluginAction(ompPath: string, action: 'enable' | 'disable' | 'uninstall', source: string, project = false): Promise<ProcessOutcome> {
-  const target = source.startsWith('npm:') || source.startsWith('git:') ? source.slice(4) : source
-  const args = ['plugin', action, target, '--json', ...(project ? ['--scope', 'project'] : [])]
-  const result = await runProcess(ompPath, args, { timeoutMs: 10 * 60_000, maxBytes: 8 * 1024 * 1024 })
-  return processOutcome(result, stripAnsi(`${result.stdout}${result.stderr}`).trim())
-}
-
-// Pi has no --json output for install/remove; stdout is untrusted, bounded by
-// maxBytes, and ANSI-stripped before it reaches the renderer. The source is
-// passed verbatim like Prime's `package install` (pi is Prime's ancestor CLI).
+// Pi has no --json output for install/remove. Bound and strip CLI output.
 export async function executePiPluginInstall(piPath: string, source: string, localCwd?: string): Promise<ProcessOutcome> {
   const args = localCwd ? ['install', '-l', source] : ['install', source]
   const result = await runProcess(piPath, args, { cwd: localCwd, timeoutMs: 10 * 60_000, maxBytes: 8 * 1024 * 1024 })

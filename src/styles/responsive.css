@@ -7,6 +7,9 @@
 }
 
 @container (max-width: 490px) {
+  .composer__controls { flex-wrap: wrap; }
+  .worktree-picker, .model-picker { position: static; }
+  .worktree-picker__menu, .model-picker__popover { max-width: 100%; }
   .select-control { position: relative; width: 28px; flex: 0 0 28px; justify-content: center; gap: 0; padding-inline: 0; }
   .select-control select, .select-control__trigger { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; opacity: 0; cursor: pointer; }
   .select-control:focus-within:not(:has(.select-control__menu)), .select-control:has(.select-control__trigger:focus-visible, select:focus-visible) { color: var(--text); border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -48,10 +51,6 @@
 
 @media (max-width: 720px) {
 
-  .native-heartbeats__header { align-items: flex-start; flex-direction: column; gap: 3px; }
-  .native-heartbeat { grid-template-columns: 32px minmax(0, 1fr); }
-  .native-heartbeat__actions { grid-column: 2; }
-  .native-heartbeat__actions .button { min-height: 40px; }
   .title-toolbar { padding-inline: 6px; }
   .title-toolbar__nav .icon-button:not(:first-child) { display: none; }
   .traffic-light-clearance--toolbar { width: 64px; flex-basis: 64px; }

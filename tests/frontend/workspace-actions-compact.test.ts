@@ -4,7 +4,7 @@ import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from
 
 const baseProject = {
   id: 'compact-project',
-  harness: 'prime' as const,
+  harness: 'pi' as const,
   name: 'Compact project',
   path: '/compact-project',
   folders: ['/compact-project'],
@@ -17,7 +17,7 @@ const baseProject = {
 
 const session = (status: SessionRecord['status'] = 'idle'): SessionRecord => ({
   id: 'compact-session',
-  harness: 'prime',
+  harness: 'pi',
   filePath: '/compact-project/session.jsonl',
   projectPath: '/compact-project',
   title: 'Compact session',
@@ -29,7 +29,7 @@ const session = (status: SessionRecord['status'] = 'idle'): SessionRecord => ({
 
 const runtime = (runtimeId = 'idle-runtime', isStreaming = false): RuntimeInfo => ({
   runtimeId,
-  harness: 'prime',
+  harness: 'pi',
   cwd: baseProject.primaryFolder,
   sessionFile: session().filePath,
   isStreaming,
@@ -40,14 +40,14 @@ interface FixtureOptions {
   sessionStatus?: SessionRecord['status']
   ownsStreaming?: boolean
   withSession?: boolean
-  harness?: 'prime' | 'pi'
+  harness?: 'pi'
   /** Pi `get_commands` listing; omitted means the runtime reports none. */
   commands?: Array<{ name: string; source: string }>
   startError?: Error
   flushPendingMutations?(runtime?: RuntimeInfo): Promise<void>
 }
 
-function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'prime', commands = [], startError, flushPendingMutations }: FixtureOptions = {}) {
+function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'pi', commands = [], startError, flushPendingMutations }: FixtureOptions = {}) {
   const project = { ...baseProject, harness }
   if (configuredRuntime) configuredRuntime = { ...configuredRuntime, harness }
   let currentRuntime = configuredRuntime
@@ -127,7 +127,6 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     setToast,
     setSubmitting: vi.fn(),
     refreshSchedules: vi.fn(),
-    refreshHeartbeats: vi.fn(),
     resetBrowserView: vi.fn(),
     closeTerminalForSession: vi.fn(),
     clearSessionAttention: vi.fn(),

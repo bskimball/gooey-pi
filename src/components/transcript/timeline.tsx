@@ -105,7 +105,7 @@ function ReasoningPart({ part, streaming = false }: { part: Extract<MessagePart,
 export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
   // One ink line, two periods wide, sliding one period per loop so the seam never shows.
   return (
-    <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Prime is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
+    <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
       <svg viewBox="0 0 18 8" fill="none" focusable="false" aria-hidden="true">
         <path d="M0 4 Q2.25 1 4.5 4 T9 4 T13.5 4 T18 4 T22.5 4 T27 4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       </svg>

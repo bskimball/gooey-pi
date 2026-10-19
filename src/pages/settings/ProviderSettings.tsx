@@ -1,51 +1,32 @@
-import { ArrowsClockwise, ArrowSquareOut, CaretRight, Gauge, Key, Lightning, MagnifyingGlass, SignIn, SignOut } from '@/components/icons'
+import { ArrowsClockwise, ArrowSquareOut, CaretRight, Gauge, Lightning, MagnifyingGlass } from '@/components/icons'
 import { useMemo, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
-import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '@/types/api'
+import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, } from '@/types/api'
 import { HARNESS_AGENT_NAMES } from '@/lib/harness'
-import { Modal } from '@/components/ui'
 
 interface ProviderSettingsProps {
-  /** Active harness. OMP and Pi credentials stay CLI-owned; visibility toggles only affect GooeyPi. */
+  /** Pi credentials stay CLI-owned; visibility toggles only affect GooeyPi. */
   harness?: HarnessId
   catalog: PrimeModelCatalog | null
   onRefresh(): Promise<void>
-  onSaveApiKey(providerId: string, apiKey: string): Promise<void>
-  onLogout(providerId: string): Promise<void>
   onSetEnabled(providerId: string, enabled: boolean): Promise<void>
   onSetAllEnabled(): Promise<void>
   onSetAllDisabled(): Promise<void>
   onSetModelEnabled(modelKey: string, enabled: boolean): Promise<void>
-  onStartOAuth(providerId: string): Promise<void>
   onOpenDocs(): void
-}
-
-function authDescription(provider: PrimeProviderDescriptor): string {
-  if (!provider.configured) return provider.authMethod === 'external' ? 'Uses credentials configured outside GooeyPi' : 'Not connected'
-  const source = provider.authSource === 'environment' ? provider.authLabel ? `Environment · ${provider.authLabel}` : 'Environment'
-    : provider.authSource === 'prime_cli' ? 'Prime CLI account'
-      : provider.authSource === 'models_json_key' || provider.authSource === 'models_json_command' ? 'models.json'
-        : provider.authSource === 'stored' ? provider.authMethod === 'oauth' ? 'Connected account' : 'Stored API key'
-          : provider.authSource ?? 'Configured'
-  return `${source} · ${provider.availableModelCount.toLocaleString()} available models`
 }
 
 function activeFirst<T extends { enabled?: boolean }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => Number(right.enabled !== false) - Number(left.enabled !== false))
 }
 
-export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSaveApiKey, onLogout, onSetEnabled, onSetAllEnabled, onSetAllDisabled, onSetModelEnabled, onStartOAuth, onOpenDocs }: ProviderSettingsProps) {
-  // OMP and Pi own their credentials in their CLIs; GooeyPi only toggles visibility.
-  const externalAuth = harness !== 'prime'
+export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnabled, onSetAllEnabled, onSetAllDisabled, onSetModelEnabled, onOpenDocs }: ProviderSettingsProps) {
   const agentName = HARNESS_AGENT_NAMES[harness]
   const [view, setView] = useState<'providers' | 'models'>('providers')
   const [query, setQuery] = useState('')
-  const [apiKeyProvider, setApiKeyProvider] = useState<PrimeProviderDescriptor | null>(null)
-  const [apiKey, setApiKey] = useState('')
   const [busyProvider, setBusyProvider] = useState<string | null>(null)
   const [collapsedModelProviders, setCollapsedModelProviders] = useState<ReadonlySet<string>>(() => new Set())
   const [error, setError] = useState('')
-  const [apiKeyError, setApiKeyError] = useState('')
   const providers = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     const matches = normalized
@@ -86,23 +67,6 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
     try { await action() } catch (failure) { setError(errorMessage(failure)) } finally { setBusyProvider(null) }
   }
 
-  const saveApiKey = async () => {
-    const provider = apiKeyProvider
-    if (!provider || !apiKey.trim()) return
-    setBusyProvider(provider.id)
-    setApiKeyError('')
-    try {
-      await onSaveApiKey(provider.id, apiKey)
-      setApiKey('')
-      setApiKeyProvider(null)
-    } catch (failure) {
-      setApiKeyError(errorMessage(failure))
-    } finally {
-      setBusyProvider(null)
-    }
-  }
-
-  const closeApiKey = () => { setApiKey(''); setApiKeyError(''); setApiKeyProvider(null) }
   const toggleModelProvider = (providerId: string) => setCollapsedModelProviders((current) => {
     const next = new Set(current)
     if (next.has(providerId)) next.delete(providerId)
@@ -119,8 +83,8 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
 
   return (
     <section className="settings-group provider-settings">
-      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>{externalAuth ? 'Hide all' : 'Disable all'}</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>{externalAuth ? 'Show all' : 'Enable all'}</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></button></div></div>
-      <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{externalAuth ? `${availableModelCount.toLocaleString()} models are shown in GooeyPi; ${agentName} checks credentials when you launch one` : `${availableModelCount.toLocaleString()} models are available with your current ${agentName} credentials`}</small> : null}</div>
+      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></button></div></div>
+      <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in GooeyPi; ${agentName} checks credentials when you launch one`}</small> : null}</div>
       {catalog?.warning ? <p className="provider-catalog-warning" role="status">{catalog.warning}</p> : null}
       <div className="provider-catalog-tabs" role="tablist" aria-label="Provider catalogue view">
         <button type="button" role="tab" aria-selected={view === 'providers'} className={view === 'providers' ? 'is-active' : ''} onClick={() => { setView('providers'); setQuery('') }}>Providers <span>{providerCount.toLocaleString()}</span></button>
@@ -133,13 +97,8 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
           const busy = busyProvider === provider.id
           return <div className="provider-row" key={provider.id}>
             <label className="provider-row__toggle" title={provider.enabled ? `Hide provider in ${agentName}` : `Show provider in ${agentName}`}><input type="checkbox" aria-label={`Show ${provider.name} provider`} checked={provider.enabled} disabled={busy} onChange={(event) => void run(provider.id, () => onSetEnabled(provider.id, event.target.checked))} /><i aria-hidden="true"><span /></i></label>
-            <div className="provider-row__identity"><strong>{provider.name}</strong><small>{externalAuth ? `${provider.authLabel ?? `Credentials managed by the ${harness} CLI`} · ${provider.availableModelCount.toLocaleString()} models` : authDescription(provider)}</small></div>
-            {externalAuth ? <div className="provider-row__actions"><button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Credential setup</button></div> : <div className="provider-row__actions">
-              {provider.authMethod === 'oauth' ? <button type="button" className="button" disabled={busy} onClick={() => void run(provider.id, () => onStartOAuth(provider.id))}><SignIn size={13} /> {provider.configured ? 'Reconnect' : 'Connect'}</button> : null}
-              {provider.authMethod === 'api_key' ? <button type="button" className="button" disabled={busy} onClick={() => { setError(''); setApiKeyError(''); setApiKey(''); setApiKeyProvider(provider) }}><Key size={13} /> {provider.configured ? 'Replace key' : 'Add key'}</button> : null}
-              {provider.authMethod === 'external' ? <button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Setup</button> : null}
-              {provider.configured && provider.authSource === 'stored' ? <button type="button" className="button button--icon" aria-label={`Log out of ${provider.name}`} disabled={busy} onClick={() => void run(provider.id, () => onLogout(provider.id))}><SignOut size={13} /></button> : null}
-            </div>}
+            <div className="provider-row__identity"><strong>{provider.name}</strong><small>{`Credentials managed by the pi CLI · ${provider.availableModelCount.toLocaleString()} models`}</small></div>
+            <div className="provider-row__actions"><button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Credential setup</button></div>
           </div>
         })}
       </div> : <div className="provider-list provider-model-list">
@@ -153,7 +112,7 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
             <div className="provider-model-row__capabilities">
               {model.reasoning ? <span title={`${model.availableThinkingLevels.length} reasoning levels`}><Gauge size={11} /> Reasoning</span> : null}
               {model.fastModeSupported ? <span><Lightning size={11} /> Fast</span> : null}
-              <span className={model.available && model.enabled !== false ? 'is-available' : ''}>{model.enabled === false ? (externalAuth ? 'Hidden' : 'Disabled') : externalAuth ? 'Shown' : model.available ? 'Available' : 'Needs credentials'}</span>
+              <span className={model.available && model.enabled !== false ? 'is-available' : ''}>{model.enabled === false ? 'Hidden' : 'Shown'}</span>
             </div>
             <label className="provider-row__toggle provider-model-row__toggle" title={model.enabled === false ? `Show model in ${agentName}` : `Hide model in ${agentName}`}><input type="checkbox" aria-label={`Show ${model.name} model`} checked={model.enabled !== false} disabled={busyProvider === `model:${model.key}`} onChange={(event) => void run(`model:${model.key}`, () => onSetModelEnabled(model.key, event.target.checked))} /><i aria-hidden="true"><span /></i></label>
           </div>)}</div>
@@ -161,22 +120,19 @@ export function ProviderSettings({ harness = 'prime', catalog, onRefresh, onSave
       </div>}
       {catalog && view === 'providers' && !providers.length ? <p className="settings-empty">No providers match your search.</p> : null}
       {catalog && view === 'models' && !modelGroups.length ? <p className="settings-empty">No models match your search.</p> : null}
-      {apiKeyProvider ? <Modal title={`Connect ${apiKeyProvider.name}`} onClose={() => { if (!busyProvider) closeApiKey() }} footer={<><button type="button" className="button" disabled={Boolean(busyProvider)} onClick={closeApiKey}>Cancel</button><button type="button" className="button button--primary" disabled={Boolean(busyProvider) || !apiKey.trim()} onClick={() => void saveApiKey()}>Save API key</button></>}><p className="modal-intro">The key is sent directly to Prime Agent’s protected auth store. GooeyPi clears it from renderer state when this dialog closes.</p>{apiKeyError ? <p className="settings-error" role="alert">{apiKeyError}</p> : null}<label className="field"><span>API key</span><input autoFocus type="password" value={apiKey} autoComplete="off" spellCheck={false} onChange={(event) => setApiKey(event.target.value)} /></label></Modal> : null}
     </section>
   )
 }
 
 const PROVIDERS_PAGE_INTROS: Record<HarnessId, string> = {
-  omp: 'Choose which OMP providers and models appear in GooeyPi. These visibility settings do not change OMP itself; credentials remain managed by OMP. You may need to log in to or out of providers in the OMP CLI before they appear on this screen.',
   pi: 'Choose which Pi providers and models appear in GooeyPi. These visibility settings do not change Pi itself; Pi provider authentication is managed by the pi CLI. You may need to log in to or out of providers in the Pi CLI before they appear on this screen.',
-  prime: 'Connect accounts, choose which providers and their models appear in GooeyPi, and browse every model Prime Agent supports. You may need to log in to or out of providers in the Prime Agent CLI before they appear on this screen.',
 }
 
 /** The Providers settings page: heading plus the provider/model catalog section. */
 export function ProvidersSettings(props: ProviderSettingsProps) {
   return (
     <>
-      <header><h1>Providers</h1><p>{PROVIDERS_PAGE_INTROS[props.harness ?? 'prime']}</p></header>
+      <header><h1>Providers</h1><p>{PROVIDERS_PAGE_INTROS[props.harness ?? 'pi']}</p></header>
       <ProviderSettings {...props} />
     </>
   )

@@ -70,7 +70,7 @@ describe('PluginsPage bundled capability controls', () => {
     const browser: SkillRecord = { id: 'prime-work-browser', name: 'Browser', description: 'In-app browser.', kind: 'skill', location: 'system', enabled: false }
     const render = async (enabled: boolean) => act(async () => {
       root.render(<PluginsPage
-        harness="prime" skills={[browser]} warnings={[]} loading={false}
+        harness="pi" skills={[browser]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={enabled} onSetBrowserEnabled={setBrowserEnabled}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -98,12 +98,12 @@ describe('PluginsPage bundled capability controls', () => {
     const mutateCapability = vi.fn(async () => ({ ok: true, output: '' }))
     const refresh = vi.fn(async () => undefined)
     const notion: SkillRecord = {
-      id: 'prime-mcp-notion', name: 'Notion', description: 'Official MCP.', kind: 'mcp', location: 'bundled', enabled: false,
+      id: 'mcp:bundled:notion', name: 'Notion', description: 'Official MCP.', kind: 'mcp', location: 'bundled', enabled: false,
       availability: { available: false, detail: 'Network MCP servers are managed outside GooeyPi.' },
     }
     const render = async (enabled: boolean) => act(async () => {
       root.render(<PluginsPage
-        harness="prime" skills={[{ ...notion, enabled }]} warnings={[]} loading={false}
+        harness="pi" skills={[{ ...notion, enabled }]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -136,7 +136,7 @@ describe('PluginsPage bundled capability controls', () => {
     }
     const render = async (enabled: boolean) => act(async () => {
       root.render(<PluginsPage
-        harness="omp" skills={[{ ...docs, enabled }]} warnings={[]} loading={false}
+        harness="pi" skills={[{ ...docs, enabled }]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -168,7 +168,7 @@ describe('PluginsPage bundled capability controls', () => {
     } as SkillRecord & { definitionKey: string }
     await act(async () => {
       root.render(<PluginsPage
-        harness="prime" skills={[docs]} warnings={[]} loading={false}
+        harness="pi" skills={[docs]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -186,7 +186,7 @@ describe('PluginsPage bundled capability controls', () => {
     expect(container.querySelector(`#${actions.lastElementChild?.getAttribute('aria-describedby')}`)?.textContent).toContain('Network MCP servers are managed outside GooeyPi.')
     await act(async () => { remove.click() })
     const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
-    expect(dialog.textContent).toContain('only the server definition. Prime authorization is unchanged')
+    expect(dialog.textContent).toContain('only the server definition; Pi-owned authorization is not changed')
     expect(dialog.textContent).toContain('Other packages and MCP entries will be kept')
     await act(async () => { [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Yes, remove completely')!.click(); await Promise.resolve() })
     expect(mutateCapability).toHaveBeenCalledWith({ kind: 'mcp', action: 'remove', name: 'team docs', definitionKey: 'team/docs', scope: 'user', projectPath: undefined })
@@ -196,11 +196,11 @@ describe('PluginsPage bundled capability controls', () => {
     const record: SkillRecord = {
       id: 'mcp:user:oversized', name: 'oversized definition', description: 'Externally managed format.',
       kind: 'mcp', location: 'user', enabled: true, definitionRemovalAvailable: false,
-      availability: { available: false, detail: 'Prime Agent MCP servers are managed outside GooeyPi.' },
+      availability: { available: false, detail: 'Network MCP servers are managed outside GooeyPi.' },
     }
     await act(async () => {
       root.render(<PluginsPage
-        harness="prime" skills={[record]} warnings={[]} loading={false}
+        harness="pi" skills={[record]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -219,7 +219,7 @@ describe('PluginsPage bundled capability controls', () => {
     const openExternal = vi.fn()
     await act(async () => {
       root.render(<PluginsPage
-        harness="omp" skills={[computerUse]} warnings={[]} loading={false}
+        harness="pi" skills={[computerUse]} warnings={[]} loading={false}
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={setEnabled} onOpenExternal={openExternal}
@@ -238,33 +238,12 @@ describe('PluginsPage bundled capability controls', () => {
     expect(container.textContent).toContain('Install Cua Driver before enabling Computer Use.')
   })
 
-  it('disables Prime MCP creation and only submits local stdio servers for OMP', async () => {
+  it('only submits local stdio servers through the enabled Pi adapter', async () => {
     const connect = vi.fn(async () => ({ ok: true, output: 'saved server' }))
+    const adapter: SkillRecord = { id: 'gooeypi-pi-mcp', name: 'Pi MCP Adapter', description: 'Adapter enabled.', kind: 'extension', location: 'system', enabled: true }
     await act(async () => {
       root.render(<PluginsPage
-        harness="prime" skills={[]} warnings={[]} loading={false} activeProjectPath="/repo"
-        askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
-        browserEnabled={true} onSetBrowserEnabled={async () => undefined}
-        computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
-        onRefresh={async () => undefined} onInstall={async () => ({ ok: true, output: '' })}
-        onInstallExtension={async () => ({ ok: true, output: '' })}
-        onSetMcpSupport={async () => ({ ok: true, output: '' })}
-        onConnectMcp={connect}
-        onSetMcpEnabled={async () => ({ ok: true, output: '' })}
-      />)
-    })
-    await act(async () => { container.querySelector<HTMLButtonElement>('.button--primary')!.click() })
-    let dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
-    const primeAddMcp = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Add MCP'))!
-    expect(primeAddMcp.disabled).toBe(true)
-    expect(primeAddMcp.textContent).toContain('managed outside GooeyPi')
-    expect(dialog.textContent).not.toContain('Server URL')
-    expect(dialog.textContent).not.toContain('Authentication')
-    expect(connect).not.toHaveBeenCalled()
-
-    await act(async () => {
-      root.render(<PluginsPage
-        harness="omp" skills={[]} warnings={[]} loading={false} activeProjectPath="/repo"
+        harness="pi" skills={[adapter]} warnings={[]} loading={false} activeProjectPath="/repo"
         askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
         browserEnabled={true} onSetBrowserEnabled={async () => undefined}
         computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
@@ -273,7 +252,8 @@ describe('PluginsPage bundled capability controls', () => {
         onConnectMcp={connect} onSetMcpEnabled={async () => ({ ok: true, output: '' })}
       />)
     })
-    dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    await act(async () => { container.querySelector<HTMLButtonElement>('.button--primary')!.click() })
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
     await act(async () => { [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Add MCP'))!.click() })
     expect(dialog.textContent).toContain('local stdio server')
     expect(dialog.textContent).not.toContain('Server URL')
@@ -316,21 +296,6 @@ describe('PluginsPage bundled capability controls', () => {
     expect(refresh).not.toHaveBeenCalled()
     expect(container.querySelector('[role="status"]')?.textContent).toContain('Pi MCP Adapter installed.')
 
-    await act(async () => {
-      root.render(<PluginsPage
-        harness="prime" skills={[]} warnings={[]} loading={false}
-        askUserEnabled={true} onSetAskUserEnabled={async () => undefined}
-        browserEnabled={true} onSetBrowserEnabled={async () => undefined}
-        computerUseEnabled={false} onSetComputerUseEnabled={async () => undefined} onOpenExternal={() => undefined}
-        onRefresh={refresh} onInstall={async () => ({ ok: true, output: '' })}
-        onInstallExtension={async () => ({ ok: true, output: '' })}
-        onSetMcpSupport={setMcpSupport}
-        onConnectMcp={async () => ({ ok: true, output: '' })}
-        onSetMcpEnabled={async () => ({ ok: true, output: '' })}
-      />)
-    })
-    expect(container.querySelector('[role="status"]')).toBeNull()
-    expect(container.textContent).not.toContain('Pi MCP Adapter installed.')
   })
 
   it('greys out Pi MCP until its adapter is enabled and opens the extension form separately', async () => {
@@ -403,7 +368,7 @@ describe('PluginsPage bundled capability controls', () => {
     expect(setMcpEnabled).not.toHaveBeenCalled()
   })
 
-  it.each(['omp', 'pi'] as const)('keeps unaddressable local %s MCP keys externally managed', async (harness) => {
+  it.each(['pi'] as const)('keeps unaddressable local %s MCP keys externally managed', async (harness) => {
     const setMcpEnabled = vi.fn(async () => ({ ok: true, output: '' }))
     const mutateCapability = vi.fn(async () => ({ ok: true, output: '' }))
     const unusual: SkillRecord = {

@@ -1,6 +1,5 @@
 import type { PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '../../src/types/api'
 import type { ProviderCatalog } from './agent-rpc'
-import type { PrimeProviderService } from './providers'
 
 /**
  * The model-catalog surface shared by every agent harness provider service.
@@ -103,10 +102,3 @@ export function catalogLimitWarnings(
   }
   return warnings
 }
-
-/**
- * Compile-time proof that PrimeProviderService structurally satisfies the
- * shared surface without editing providers.ts. Harness wiring can use this to
- * hand either service to catalog consumers.
- */
-export const asModelCatalogProvider = (service: PrimeProviderService): ModelCatalogProvider => service

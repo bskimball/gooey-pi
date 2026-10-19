@@ -7,7 +7,7 @@ import { assertNoMcpAuthenticationCommand } from '../../src/lib/mcp-policy'
 import { streamingBehaviorForIntent } from '../../src/lib/session-actions'
 import type {
   AppSettings,
-  HarnessId,
+  RuntimeHarnessId as HarnessId,
   PrimeModelDescriptor,
   ProjectRecord,
   VoiceCredentialProvider,
@@ -110,7 +110,7 @@ function silentWav(): Uint8Array {
 }
 
 function harnessId(value: unknown): HarnessId {
-  if (value !== 'prime' && value !== 'omp' && value !== 'pi') throw new TypeError('Invalid voice harness')
+  if (value !== 'pi') throw new TypeError('Invalid voice harness')
   return value
 }
 
@@ -272,7 +272,7 @@ class VoiceSecretStore {
 function orchestrationInstructions(harness: HarnessId): string {
   const harnessName = HARNESSES[harness].agentName
   return [
-    'You are the voice orchestrator inside GooeyPi, a desktop client for the Prime Agent, OMP, and Pi harnesses.',
+    'You are the voice orchestrator inside GooeyPi, a desktop client for Pi.',
     `This voice session is locked to the currently selected ${harnessName} harness. Never switch harnesses.`,
     'Be concise and conversational. Answer general questions directly.',
     'Use get_local_context for the local date, time, time zone, approximate location, locale, or selected harness. Use search_web for current information. Use list_projects to resolve a project within the selected harness. Use list_models to resolve a requested model and its supported reasoning levels.',
@@ -474,8 +474,6 @@ export class VoiceService {
   private disabledProviders(harness: HarnessId): ReadonlySet<string> {
     const settings = this.options.settings()
     const disabled: Record<HarnessId, string[]> = {
-      prime: settings.disabledProviders,
-      omp: settings.ompDisabledProviders,
       pi: settings.piDisabledProviders,
     }
     return new Set(disabled[harness])
@@ -484,8 +482,6 @@ export class VoiceService {
   private disabledModels(harness: HarnessId): ReadonlySet<string> {
     const settings = this.options.settings()
     const disabled: Record<HarnessId, string[]> = {
-      prime: settings.disabledModels,
-      omp: settings.ompDisabledModels,
       pi: settings.piDisabledModels,
     }
     return new Set(disabled[harness])
@@ -548,7 +544,7 @@ export class VoiceService {
     const current = manager.list().find((candidate) => candidate.runtimeId === runtime.runtimeId) ?? runtime
     if (!current.sessionFile) {
       await manager.stop(runtime.runtimeId).catch(() => false)
-      throw new Error(`${HARNESSES[project.harness].agentName} accepted the prompt but did not create a visible session. The task was not reported as started.`)
+      throw new Error(`${HARNESSES.pi.agentName} accepted the prompt but did not create a visible session. The task was not reported as started.`)
     }
     const task: VoiceTaskStarted = {
       projectId: project.id, projectName: project.name, harness: project.harness,

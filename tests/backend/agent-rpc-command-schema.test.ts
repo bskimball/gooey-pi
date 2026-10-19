@@ -156,23 +156,6 @@ describe('validateRpcCommand session commands', () => {
   })
 })
 
-describe('validateRpcCommand heartbeat commands', () => {
-  it('validates set_heartbeat with an optional delivery mode', async () => {
-    await expect(validate({ type: 'set_heartbeat', schedule: ' every hour ', prompt: 'check CI' })).resolves.toEqual({ type: 'set_heartbeat', schedule: 'every hour', prompt: 'check CI' })
-    await expect(validate({ type: 'set_heartbeat', schedule: 'every hour', prompt: 'check CI', deliveryMode: 'follow_up' })).resolves.toEqual({ type: 'set_heartbeat', schedule: 'every hour', prompt: 'check CI', deliveryMode: 'follow_up' })
-    await expect(validate({ type: 'set_heartbeat', schedule: 'every hour', prompt: 'check CI', deliveryMode: 'followUp' })).rejects.toThrow('Invalid deliveryMode')
-    await expect(validate({ type: 'set_heartbeat', schedule: '   ', prompt: 'check CI' })).rejects.toThrow('schedule is too short')
-  })
-
-  it('validates heartbeat updates and management', async () => {
-    await expect(validate({ type: 'update_heartbeat', action: 'pause' })).resolves.toEqual({ type: 'update_heartbeat', action: 'pause' })
-    await expect(validate({ type: 'update_heartbeat', action: 'stop' })).rejects.toThrow('Invalid heartbeat action')
-    await expect(validate({ type: 'manage_heartbeat', activeSessionId: 'session-3', jobId: 'job-1', action: 'stop' })).resolves.toEqual({ type: 'manage_heartbeat', activeSessionId: 'session-3', jobId: 'job-1', action: 'stop' })
-    await expect(validate({ type: 'manage_heartbeat', activeSessionId: 'session-3', jobId: 'job-1', action: 'clear' })).rejects.toThrow('Invalid heartbeat management action')
-    await expect(validate({ type: 'manage_heartbeat', activeSessionId: 'session-3', action: 'stop' })).rejects.toThrow('jobId must be a string')
-  })
-})
-
 describe('validateRpcCommand extension UI responses', () => {
   it('accepts cancellations, confirmations, and values as mutually exclusive shapes', async () => {
     await expect(validate({ type: 'extension_ui_response', id: 'ui-1', cancelled: true })).resolves.toEqual({ type: 'extension_ui_response', id: 'ui-1', cancelled: true })

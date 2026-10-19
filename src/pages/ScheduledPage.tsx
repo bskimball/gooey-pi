@@ -23,7 +23,6 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type {
   AutomationScheduleRecord,
   HarnessId,
-  NativeHeartbeatRecord,
   PrimeModelDescriptor,
   PrimeThinkingLevel,
   ProjectRecord,
@@ -68,7 +67,6 @@ type ScheduleForm = {
 interface ScheduledPageProps {
   harness: HarnessId
   schedules: AutomationScheduleRecord[]
-  nativeHeartbeats: NativeHeartbeatRecord[]
   projects: ProjectRecord[]
   sessions: SessionRecord[]
   models: PrimeModelDescriptor[]
@@ -85,7 +83,6 @@ interface ScheduledPageProps {
   onRunNow(id: string): Promise<void>
   onPreview(timing: ScheduleTiming): Promise<SchedulePreview>
   onOpenSession(sessionFile: string): void
-  onManageHeartbeat(id: string, action: 'pause' | 'resume' | 'stop'): Promise<void>
 }
 
 const DEVICE_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
@@ -302,8 +299,8 @@ function runIcon(status: ScheduleRunRecord['status']) {
 
 
 export function ScheduledPage({
-  harness, schedules, nativeHeartbeats, projects, sessions, models, lastSelectedModel, error, initialProjectId, initialSessionId, selectedScheduleId,
-  onCreate, onUpdate, onPause, onResume, onDelete, onRunNow, onPreview, onOpenSession, onManageHeartbeat,
+  harness, schedules, projects, sessions, models, lastSelectedModel, error, initialProjectId, initialSessionId, selectedScheduleId,
+  onCreate, onUpdate, onPause, onResume, onDelete, onRunNow, onPreview, onOpenSession,
 }: ScheduledPageProps) {
   const [filter, setFilter] = useState<ScheduleFilter>('active')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -578,14 +575,6 @@ export function ScheduledPage({
           <CaretRight className="schedule-row__chevron" size={16} />
         </button>
       })}</div> : <EmptyState icon={<CalendarDots size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <button type="button" className="button button--primary" onClick={openCreate}><Plus size={13} /> Create schedule</button>}> {schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
-      {nativeHeartbeats.length ? <section className="native-heartbeats" aria-labelledby="native-heartbeats-title">
-        <div className="native-heartbeats__header"><div><span className="schedule-page__kicker">Prime Agent</span><h2 id="native-heartbeats-title">Agent heartbeats</h2></div><small>Auto-discovered; the owning runtime is authoritative</small></div>
-        <div className="native-heartbeats__list">{nativeHeartbeats.map((heartbeat) => <article key={heartbeat.id} className="native-heartbeat">
-          <span className={`schedule-row__status schedule-row__status--${heartbeat.status}`}><CalendarDots size={15} /></span>
-          <div className="native-heartbeat__main"><span><strong>{heartbeat.label || (heartbeat.source === 'heartbeat' ? 'Thread heartbeat' : 'Agent heartbeat')}</strong><i className={`schedule-state schedule-state--${heartbeat.status}`}>{heartbeat.status}</i></span><p>{heartbeat.prompt}</p><small>{heartbeat.schedule}{heartbeat.nextRunAt ? ` · next ${formatRelative(heartbeat.nextRunAt)}` : ''}</small></div>
-          <div className="native-heartbeat__actions">{heartbeat.status === 'active' ? <button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'pause'), 'Heartbeat paused.')}>Pause</button> : <button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'resume'), 'Heartbeat resumed.')}>Resume</button>}<button type="button" className="button" disabled={Boolean(action)} onClick={() => void perform(`heartbeat:${heartbeat.id}`, () => onManageHeartbeat(heartbeat.id, 'stop'), 'Heartbeat stopped.')}>Stop</button></div>
-        </article>)}</div>
-      </section> : null}
       {editorModal}
     </div></div>
   )

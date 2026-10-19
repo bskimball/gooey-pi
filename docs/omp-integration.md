@@ -1,5 +1,7 @@
 # OMP (Oh My Pi) integration design
 
+> **Superseded:** OMP and Prime Agent support has been removed; Pi is GooeyPi's only runtime. This document is kept as a historical design record and does not describe current behavior. Existing OMP CLI session files are preserved but not read, and OMP-owned project grants are not converted to Pi grants.
+
 This document is the working spec for adding OMP (`omp`, [omp.sh](https://omp.sh/), [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi)) as a second agent harness alongside Prime Agent. Both harnesses descend from the same Pi base (pi-mono), so the integration reuses the existing transport, event, and UI machinery wherever the protocols agree, and adapts only where they genuinely differ.
 
 ## Product behavior

@@ -445,7 +445,7 @@ describe('Composer message delivery shortcuts', () => {
     })
   }
 
-  it('queues with Enter and steers with Ctrl+Enter while Prime is working', async () => {
+  it('queues with Enter and steers with Ctrl+Enter while Pi is working', async () => {
     const onSend = renderComposer(vi.fn(async () => undefined), true, true)
     await enterDraft('Queue this')
     await enterDraft('Steer with this', { ctrlKey: true })
@@ -547,7 +547,7 @@ describe('Composer context usage and stop control', () => {
     expect(dial?.textContent).toBe('—')
     expect(dial?.hasAttribute('aria-valuenow')).toBe(false)
     expect(dial?.title).toContain('unavailable')
-    expect(container.querySelector('button[aria-label="Stop Prime"] .ph-square')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="Stop Pi"] .ph-square')).not.toBeNull()
     expect(container.querySelector('.ph-stop-circle')).toBeNull()
   })
 })

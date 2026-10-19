@@ -5,11 +5,11 @@ import type { BigIntStats, Dirent } from 'node:fs'
 import { dialog, type BrowserWindow } from 'electron'
 import { homedir } from 'node:os'
 import { sortProjects } from '../../src/lib/project-order'
-import type { GitWorktree, HarnessId, ProjectFileEntry, ProjectFileListing, ProjectRecord, ProjectScripts, SessionRecord } from '../../src/types/api'
+import type { GitWorktree, ProjectFileEntry, ProjectFileListing, ProjectRecord, ProjectScripts, SessionRecord } from '../../src/types/api'
 import { listGitWorktrees } from './git'
 import { HARNESSES } from './harness'
 import { mapLimit } from './lib/async'
-import type { FolderIdentity, JsonStateStore, PersistedProject } from './store'
+import { isPiProject, type FolderIdentity, type JsonStateStore, type PersistedProject, type StoredProject } from './store'
 import { isPathWithin, rejectUnknownKeys, requireBoolean, requireExistingDirectory, requireExistingPath, requireId, requireInteger, requireRecord, requireString } from './validation'
 
 const MAX_CONCURRENT_BRANCH_LOOKUPS = 4
@@ -156,13 +156,13 @@ export class ProjectService {
   constructor(
     private readonly store: JsonStateStore,
     private readonly windowProvider: () => BrowserWindow | null,
-    private readonly harness: HarnessId = 'prime',
+    private readonly harness: 'pi' = 'pi',
     private readonly identityFilesystem: FolderIdentityFilesystem = defaultFolderIdentityFilesystem,
   ) {}
 
   /** Persisted projects visible to this instance: exactly its own harness's records. */
-  private ownProjects(projects: readonly PersistedProject[]): PersistedProject[] {
-    return projects.filter((project) => project.harness === this.harness)
+  private ownProjects(projects: readonly StoredProject[]): PersistedProject[] {
+    return projects.filter(isPiProject)
   }
 
   private async captureFolderIdentity(pathValue: string): Promise<{ path: string; identity: FolderIdentity }> {

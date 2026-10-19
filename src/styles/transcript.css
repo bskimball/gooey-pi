@@ -51,8 +51,8 @@
 .message--assistant { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; }
 .assistant-mark { position: relative; padding-top: 1px; }
 /* In the gutter the harness glyph stands bare in quiet ink; the brand tile stays for chrome. */
-.assistant-mark > :is(.pi-mark, .prime-mark, .omp-mark) { border: 0; color: color-mix(in srgb, var(--prime) 35%, var(--text-tertiary)); background: none; box-shadow: none; }
-.assistant-mark > :is(.pi-mark, .prime-mark, .omp-mark) svg { width: 68%; height: 68%; }
+.assistant-mark > .pi-mark { border: 0; color: color-mix(in srgb, var(--prime) 35%, var(--text-tertiary)); background: none; box-shadow: none; }
+.assistant-mark > .pi-mark svg { width: 68%; height: 68%; }
 /* The harness mark only earns its gutter while the turn is live; settled replies keep the
    column alignment but retire the icon, and the running work rail supplies the only line. */
 .message--assistant:not(:has(.work-disclosure.is-running, .streaming-state)) .assistant-mark { opacity: 0; }

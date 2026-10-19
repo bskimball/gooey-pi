@@ -91,9 +91,9 @@ interface ComposerProps {
 	fast: boolean;
 	fastSupported: boolean;
 	fastAvailable: boolean;
-	/** Active harness agent name for tooltips ("Prime Agent" / "OMP"). */
+	/** Agent name for tooltips. */
 	agentName?: string;
-	/** Active harness short name for inline copy ("Prime" / "OMP"). */
+	/** Agent short name for inline copy. */
 	shortName?: string;
 	harness?: HarnessId;
 	imageInputSupported: boolean;
@@ -116,10 +116,8 @@ interface ComposerProps {
 	terminalSelection?: TerminalSelectionContext;
 	/** Reads the active xterm buffer only at submit time, avoiding output-driven renderer updates. */
 	getTerminalContext?(): TerminalPromptContext | undefined;
-	/** Messages accepted by Prime but waiting for a turn boundary. */
+	/** Messages waiting for a turn boundary. */
 	queuedMessages?: QueuedPrompt[];
-	/** Messages held inside the harness when it exposes only a count, not previews. */
-	harnessQueuedMessageCount?: number;
 	onDeleteQueuedMessage?(message: QueuedPrompt): void;
 	onEditQueuedMessage?(message: QueuedPrompt): void;
 	/** Each bump submits the current draft immediately (Ctrl/Cmd+Enter from the annotation popover). */
@@ -151,11 +149,6 @@ const commands = [
 	{ command: "/plan", detail: "Create an implementation plan" },
 	{ command: "/compact", detail: "Compact session context" },
 	{ command: "/status", detail: "Show runtime status" },
-];
-
-const primeCommands = [
-	...commands,
-	{ command: "/mcp", detail: "View MCP integrations and local servers" },
 ];
 
 const piCommands = [
@@ -195,9 +188,9 @@ export const Composer = memo(function Composer({
 	fast,
 	fastSupported,
 	fastAvailable,
-	agentName = "Prime Agent",
-	shortName = "Prime",
-	harness = "prime",
+	agentName = "Pi",
+	shortName = "Pi",
+	harness = "pi",
 	imageInputSupported,
 	messageEnterAction = "queue",
 	contextUsage,
@@ -213,7 +206,6 @@ export const Composer = memo(function Composer({
 	terminalSelection,
 	getTerminalContext,
 	queuedMessages = [],
-	harnessQueuedMessageCount = 0,
 	onDeleteQueuedMessage,
 	onEditQueuedMessage,
 	sendSignal = 0,
@@ -617,12 +609,7 @@ export const Composer = memo(function Composer({
 
 	const suggestions =
 		menu === "command"
-			? (harness === "prime"
-					? primeCommands
-					: harness === "pi"
-						? piCommands
-						: commands
-				)
+			? piCommands
 					.filter((item) => item.command.startsWith(value))
 					.map((item) => ({
 						key: item.command,
@@ -732,11 +719,9 @@ export const Composer = memo(function Composer({
 					<ExtensionTabPill tab={extensionTab} extension={browserExtension} />
 				</div>
 			) : null}
-			{queuedMessages.length || harnessQueuedMessageCount ? (
+			{queuedMessages.length ? (
 				<ComposerQueue
 					queuedMessages={queuedMessages}
-					harnessQueuedMessageCount={harnessQueuedMessageCount}
-					agentName={agentName}
 					onSendNow={(queued) => {
 						void sendQueuedMessageImmediately(queued);
 					}}
@@ -1205,7 +1190,7 @@ export const Composer = memo(function Composer({
 							<button
 								type="button"
 								className="send-button send-button--stop"
-								aria-label="Stop Prime"
+								aria-label="Stop Pi"
 								onClick={() => void onStop()}
 							>
 								<Square size={10} fill="currentColor" aria-hidden="true" />

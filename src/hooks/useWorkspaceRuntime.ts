@@ -61,7 +61,7 @@ interface UseWorkspaceRuntimeOptions {
 
 export function useWorkspaceRuntime({
   bridge,
-  harness = 'prime',
+  harness = 'pi',
   initialProject,
   initialSession,
   sessions,

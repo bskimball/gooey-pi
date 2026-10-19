@@ -1,12 +1,12 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { HarnessId } from '../../../src/types/api'
+import type { StoredHarnessId } from '../store'
 import { isRecord } from '../validation'
 
 const BEGIN = '===== BEGIN GOOEYPI AGENT MESSAGE ====='
 const END = '===== END GOOEYPI AGENT MESSAGE ====='
-const HARNESSES = new Set<HarnessId>(['prime', 'omp', 'pi'])
+const HISTORICAL_HARNESSES = new Set<StoredHarnessId>(['pi', 'prime', 'omp'])
 const KEY_BYTES = 32
 let signingKey: Buffer | undefined
 
@@ -14,7 +14,7 @@ export interface GooeyPiAgentMessage {
   fromSessionId: string
   /** Legacy display metadata is parsed for saved v1 messages, never emitted in new model-facing envelopes. */
   fromTitle?: string
-  fromHarness?: HarnessId
+  fromHarness?: StoredHarnessId
   text: string
 }
 
@@ -22,7 +22,7 @@ interface SignedMetadataV1 {
   version: 1
   from_session_id: string
   from_title: string
-  from_harness: HarnessId
+  from_harness: StoredHarnessId
   reply_with?: 'session_send'
   nonce: string
   sent_at: string
@@ -117,13 +117,13 @@ export function parseGooeyPiAgentMessage(value: string): GooeyPiAgentMessage | u
   if (!text) return undefined
   if (!signingKey) return undefined
   let fromTitle: string | undefined
-  let fromHarness: HarnessId | undefined
+  let fromHarness: StoredHarnessId | undefined
   let unsigned: SignedMetadata
   if (metadata.version === 1) {
     if (typeof metadata.from_title !== 'string' || metadata.from_title.length < 1 || metadata.from_title.length > 200) return undefined
-    if (typeof metadata.from_harness !== 'string' || !HARNESSES.has(metadata.from_harness as HarnessId)) return undefined
+    if (typeof metadata.from_harness !== 'string' || !HISTORICAL_HARNESSES.has(metadata.from_harness as StoredHarnessId)) return undefined
     fromTitle = metadata.from_title
-    fromHarness = metadata.from_harness as HarnessId
+    fromHarness = metadata.from_harness as StoredHarnessId
     unsigned = {
       version: 1, from_session_id: fromSessionId, from_title: fromTitle, from_harness: fromHarness,
       ...(replyWith === 'session_send' ? { reply_with: replyWith } : {}), nonce, sent_at: sentAt,

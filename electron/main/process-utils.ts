@@ -527,18 +527,6 @@ export function resolveExecutable(source: ExecutableSource): string | null {
   return typeof source === 'function' ? source() : source
 }
 
-export function primeAgentExecutableName(platform = process.platform): string {
-  return HARNESSES.prime.executableName(platform)
-}
-
-export function primeAgentCandidates(env: NodeJS.ProcessEnv = process.env, platform = process.platform): string[] {
-  return harnessExecutableCandidates(HARNESSES.prime, env, platform)
-}
-
-export async function findPrimeAgent(): Promise<string | null> {
-  return findHarnessExecutable(HARNESSES.prime)
-}
-
 export function runProcess(file: string, args: readonly string[], options: {
   cwd?: string
   timeoutMs?: number

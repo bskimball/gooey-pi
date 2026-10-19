@@ -136,7 +136,6 @@ describe('Pi model catalog service', () => {
     const google = catalog.providers[0]
     expect(google.authMethod).toBe('external')
     expect(google.configured).toBe(true)
-    expect(google.authLabel).toBe('Credentials managed by the pi CLI')
     expect(google.modelCount).toBe(3)
     expect(google.availableModelCount).toBe(3)
     expect(google.enabled).toBe(true)

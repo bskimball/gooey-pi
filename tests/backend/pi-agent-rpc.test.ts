@@ -94,8 +94,6 @@ function piManager(executable: string, options: { providers?: ProviderCatalog } 
     async (path) => path,
     options.providers,
     () => new Set(),
-    PI_RPC_ADAPTER,
-    () => undefined,
   )
   managers.push(manager)
   return manager
@@ -125,10 +123,6 @@ describe('pi RPC adapter argv', () => {
       .toEqual(['--mode', 'rpc', '--model', 'gpt-5.6-luna'])
     expect(() => PI_RPC_ADAPTER.buildStartArgs({ ...baseInput, modelId: '--resume' })).toThrow('Invalid model')
     expect(() => PI_RPC_ADAPTER.buildStartArgs({ ...baseInput, providerId: 'p', modelId: 'model\nid' })).toThrow('Invalid model')
-  })
-
-  it('ignores the OMP-only approval override', () => {
-    expect(PI_RPC_ADAPTER.buildStartArgs({ ...baseInput, approvalMode: 'yolo' })).toEqual(['--mode', 'rpc'])
   })
 
   it('injects only the enabled computer-use skill and forwards the scoped app extensions', () => {
@@ -316,7 +310,7 @@ describe('pi RPC command translation', () => {
     await expect(manager.command(runtime.runtimeId, { type: 'clone' }))
       .rejects.toThrow('RPC command clone is not supported by the Pi harness')
     await expect(manager.command(runtime.runtimeId, { type: 'list_heartbeats' }))
-      .rejects.toThrow('RPC command list_heartbeats is not supported by the Pi harness')
+      .rejects.toThrow('RPC command list_heartbeats is not exposed to the renderer')
     expect(events.some((event) => event.type === 'fake_unknown_command')).toBe(false)
   })
 

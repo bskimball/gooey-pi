@@ -1,23 +1,14 @@
 import { ArrowsClockwise, Keyboard, Robot, ShieldCheck } from '@/components/icons'
 import { useState } from 'react'
-import { HARNESS_IDS, OMP_APPROVAL_MODES, type HarnessId, type OmpApprovalMode } from '@/types/api'
+import { HARNESS_IDS, type HarnessId } from '@/types/api'
 import { errorMessage } from '@/lib/errors'
-import { HARNESS_AGENT_NAMES, HARNESS_PRODUCT_NAMES } from '@/lib/harness'
+import { HARNESS_AGENT_NAMES } from '@/lib/harness'
 import { detectRendererPlatform, shortcutLabel } from '@/lib/platform-shortcuts'
 import type { SettingsMetaSectionProps } from './contracts'
 import { DraftSettingField } from './DraftSettingField'
 import { SettingsToggle } from './SettingsToggle'
 
-const APPROVAL_MODE_LABELS: Record<OmpApprovalMode, string> = {
-  'inherit': 'Inherit omp config',
-  'always-ask': 'Always ask',
-  'write': 'Prompt for exec only (write)',
-  'yolo': 'YOLO (never prompt)',
-}
-
 export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: SettingsMetaSectionProps) {
-  const activeHarness = settings.activeHarness
-  const detectedHarnesses = HARNESS_IDS.filter((harness) => Boolean(meta?.harnesses[harness].path))
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
   const platform = meta?.platform ?? detectRendererPlatform()
@@ -37,23 +28,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
   }
   return (
     <>
-      <header><h1>Harness</h1><p>Runtime discovery, model providers, and workspace permissions.</p></header>
-      <section className="settings-group">
-        <h2>Harness</h2>
-        <label className="settings-row">
-          <span><strong>Default harness</strong><small>The harness opened by default; mirrors the current choice in the Harness menu.</small></span>
-          <select value={detectedHarnesses.includes(activeHarness) ? activeHarness : ''} disabled={!detectedHarnesses.length} onChange={(event) => { void onUpdate({ activeHarness: event.target.value as HarnessId }) }}>
-            {!detectedHarnesses.length ? <option value="">No harness detected</option> : null}
-            {detectedHarnesses.map((harness) => <option key={harness} value={harness}>{HARNESS_PRODUCT_NAMES[harness]}</option>)}
-          </select>
-        </label>
-        <label className="settings-row">
-          <span><strong>OMP approval mode</strong><small>How OMP asks before running tools; Inherit leaves your omp configuration in charge.</small></span>
-          <select value={settings.ompApprovalMode} onChange={(event) => { void onUpdate({ ompApprovalMode: event.target.value as OmpApprovalMode }) }}>
-            {OMP_APPROVAL_MODES.map((mode) => <option key={mode} value={mode}>{APPROVAL_MODE_LABELS[mode]}</option>)}
-          </select>
-        </label>
-      </section>
+      <header><h1>Pi</h1><p>Runtime discovery, model providers, and workspace permissions.</p></header>
       <section className="settings-group">
         <div className="settings-group__heading">
           <h2>Runtime</h2>

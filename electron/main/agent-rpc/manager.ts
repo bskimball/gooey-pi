@@ -5,7 +5,7 @@ import { resolveExecutable, type ExecutableSource } from '../process-utils'
 import { canonicalSessionPath } from '../session-paths'
 import { isPathWithin, isRecord, rejectUnknownKeys, requireId, requireRecord, requireString } from '../validation'
 import { isThinkingLevel, validateRpcCommand } from './command-schema'
-import { PRIME_RPC_ADAPTER, type HarnessRpcAdapter } from './harness-adapter'
+import { PI_RPC_ADAPTER, type HarnessRpcAdapter } from './harness-adapter'
 import { RpcRuntime } from './runtime'
 import type { RpcObject } from './types'
 import type { WorkspaceUseLease, WorkspaceUseOwner } from '../repository-use-gate'
@@ -44,9 +44,7 @@ export class AgentRpcManager {
     private readonly validateSessionPath: (path: string) => Promise<string>,
     private readonly providers?: ProviderCatalog,
     private readonly disabledProviders: () => ReadonlySet<string> = () => new Set(),
-    private readonly adapter: HarnessRpcAdapter = PRIME_RPC_ADAPTER,
-    /** Approval-mode override consumed only by harness arg builders that support it (OMP). */
-    private readonly approvalMode: () => string | undefined = () => undefined,
+    private readonly adapter: HarnessRpcAdapter = PI_RPC_ADAPTER,
   ) {}
 
   setEventSink(sink: (envelope: PrimeEventEnvelope) => void): void { this.eventSink = sink }
@@ -141,7 +139,6 @@ export class AgentRpcManager {
         providerId: selectedModel?.provider,
         modelId,
         thinking,
-        approvalMode: this.approvalMode(),
         environment: runtimeEnvironment,
       })
       runtime = await this.admitRuntime(() => {
@@ -238,7 +235,7 @@ export class AgentRpcManager {
     this.requireOpen()
     const policyPrompt = command.type === 'prompt' || command.type === 'steer' || command.type === 'follow_up'
       ? command.message
-      : command.type === 'set_heartbeat' ? command.prompt : undefined
+      : undefined
     if (typeof policyPrompt === 'string') assertNoMcpAuthenticationCommand(policyPrompt, this.adapter.id)
     // Validation is harness-independent; the harness vocabulary applies after
     // it. set_service_tier passes through untranslated because the fast-mode
@@ -258,17 +255,11 @@ export class AgentRpcManager {
     }
     const response = await runtime.command(translated)
     if (command.type === 'steer' || command.type === 'follow_up') {
-      // OMP reports only queuedMessageCount, while Prime reports the full
-      // scheduler snapshot. Refresh after admission so both shapes reach the
-      // renderer before a queued row can appear to vanish.
+      // Refresh the action snapshot after admission when the runtime exposes it.
       try {
         const state = await runtime.command({ type: 'get_state' })
         const explicitActions = isRecord(state.data) ? parseSessionActionSnapshot(state.data.sessionActions) : null
-        const sessionActions = explicitActions ?? runtime.snapshot().sessionActions
-        // Zero without an active-turn marker is not proof that a steer was read.
-        if (explicitActions || (this.adapter.id === 'omp' && sessionActions && sessionActions.queuedCount > 0)) {
-          return { ...response, sessionActions }
-        }
+        if (explicitActions) return { ...response, sessionActions: explicitActions }
       } catch { /* action events remain the fallback */ }
       return response
     }

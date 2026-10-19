@@ -156,7 +156,6 @@ export type PiModelCatalogOptions = CliModelCatalogOptions
 export class PiModelCatalogService extends CliModelCatalogService {
   protected readonly harnessLabel = 'Pi'
   protected readonly notInstalledWarning = PI_NOT_INSTALLED_WARNING
-  protected readonly credentialsLabel = 'Credentials managed by the pi CLI'
 
   /** The CLI prints a bare semver such as `0.84.1`. */
   protected parseVersion(stdout: string): string | null {

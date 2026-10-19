@@ -20,7 +20,7 @@ const electron = vi.hoisted(() => ({
 vi.mock('electron', () => electron)
 
 import { extensionRuntimeEnvironment, type CapabilityExtensionPaths } from '../../electron/main/index'
-import { OMP_RPC_ADAPTER, PI_RPC_ADAPTER, PRIME_RPC_ADAPTER } from '../../electron/main/agent-rpc'
+import { PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
 
 const extensionPaths: CapabilityExtensionPaths = {
   schedule: '/app/extensions/omp-work-schedules.ts',
@@ -41,7 +41,7 @@ const browserBridgeEnvironment = {
   PRIME_WORK_BROWSER_SKILL_PATH: '/app/skills/prime-work-browser',
 }
 
-describe('capability extension environment parity (OMP and pi)', () => {
+describe('Pi capability extension environment', () => {
   it('populates the three shared extension paths and strips the Prime-only skill paths', () => {
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths)
 
@@ -60,7 +60,6 @@ describe('capability extension environment parity (OMP and pi)', () => {
   })
 
   it.each([
-    ['omp', OMP_RPC_ADAPTER],
     ['pi', PI_RPC_ADAPTER],
   ] as const)('turns the shared environment into all three --extension injections for %s runtimes', (_harness, adapter) => {
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths)
@@ -79,26 +78,24 @@ describe('capability extension environment parity (OMP and pi)', () => {
     expect(args).not.toContain('--skill')
   })
 
-  it('injects the Pi-only fast-mode compatibility extension without adding it to OMP', () => {
+  it('injects the Pi fast-mode compatibility extension', () => {
     const environment = {
       ...extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths),
       GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: '/app/extensions/pi-work-fast-mode.ts',
     }
     expect(PI_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment })).toContain('/app/extensions/pi-work-fast-mode.ts')
-    expect(OMP_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment })).not.toContain('/app/extensions/pi-work-fast-mode.ts')
   })
 
   it('keeps standalone copies suppressed while omitting the bundled tool when disabled', () => {
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths, false)
     expect(environment.GOOEYPI_MANAGES_ASK_USER).toBe('1')
     expect(environment.PRIME_WORK_ASK_USER_EXTENSION_PATH).toBeUndefined()
-    for (const adapter of [OMP_RPC_ADAPTER, PI_RPC_ADAPTER]) {
+    for (const adapter of [PI_RPC_ADAPTER]) {
       expect(adapter.buildStartArgs({ cwd: '/work', environment })).not.toContain(extensionPaths.askUser)
     }
   })
 
   it.each([
-    ['omp', OMP_RPC_ADAPTER],
     ['pi', PI_RPC_ADAPTER],
   ] as const)('does not mint or inject a browser claim for %s when Browser is disabled', (_harness, adapter) => {
     const mintBrowserClaim = vi.fn(() => browserBridgeEnvironment)
@@ -110,17 +107,7 @@ describe('capability extension environment parity (OMP and pi)', () => {
     expect(adapter.buildStartArgs({ cwd: '/work', environment })).not.toContain(extensionPaths.browser)
   })
 
-  it('injects the bundled ask_user extension into Prime interactive runtimes', () => {
-    const args = PRIME_RPC_ADAPTER.buildStartArgs({
-      cwd: '/work',
-      environment: { PRIME_WORK_ASK_USER_EXTENSION_PATH: extensionPaths.askUser },
-    })
-    expect(args.slice(-2)).toEqual(['--extension', extensionPaths.askUser])
-  })
-
   it.each([
-    ['prime', PRIME_RPC_ADAPTER],
-    ['omp', OMP_RPC_ADAPTER],
     ['pi', PI_RPC_ADAPTER],
   ] as const)('injects session collaboration into %s without accepting an unsafe path', (_harness, adapter) => {
     const args = adapter.buildStartArgs({ cwd: '/work', environment: { GOOEYPI_COLLABORATION_EXTENSION_PATH: '/app/extensions/omp-work-collaboration.ts' } })

@@ -12,11 +12,11 @@ afterEach(async () => {
 })
 
 const source: SessionRecord = {
-  id: '019f0000-0000-7000-8000-000000000001', harness: 'prime', filePath: '/sessions/source.jsonl', projectPath: '/project', title: 'Planner',
+  id: '019f0000-0000-7000-8000-000000000001', harness: 'pi', filePath: '/sessions/source.jsonl', projectPath: '/project', title: 'Planner',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'running', depth: 0,
 }
 const target: SessionRecord = {
-  id: '019f0000-0000-7000-8000-000000000002', harness: 'prime', filePath: '/sessions/target.jsonl', projectPath: '/project', title: 'API owner',
+  id: '019f0000-0000-7000-8000-000000000002', harness: 'pi', filePath: '/sessions/target.jsonl', projectPath: '/project', title: 'API owner',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:01:00.000Z', status: 'idle', depth: 0,
 }
 const foreign: SessionRecord = {
@@ -119,17 +119,15 @@ async function fixture(
     [target.filePath]: targetTranscript,
   })
   const targetRuntime: RuntimeInfo | undefined = live ? {
-    runtimeId: 'runtime-target', harness: 'prime', sessionId: target.id, sessionFile: target.filePath, cwd: '/project', isStreaming: false,
+    runtimeId: 'runtime-target', harness: 'pi', sessionId: target.id, sessionFile: target.filePath, cwd: '/project', isStreaming: false,
   } : undefined
   const primeManager = manager(targetRuntime, () => records.push(created))
-  const emptySessions = service([])
-  const emptyManager = manager()
   const bridge = new AgentCollaborationBridge({
     extensionPath: '/app/extensions/omp-work-collaboration.ts',
-    sessions: { prime: primeSessions, omp: emptySessions, pi: emptySessions },
-    agents: { prime: primeManager as unknown as AgentRpcManager, omp: emptyManager as unknown as AgentRpcManager, pi: emptyManager as unknown as AgentRpcManager },
+    sessions: { pi: primeSessions },
+    agents: { pi: primeManager as unknown as AgentRpcManager },
     catalogs: {
-      prime: {
+      pi: {
         catalog: vi.fn(async (_force = false, disabled: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()) => ({
           primeVersion: 'test', refreshedAt: '2026-01-01T00:00:00.000Z',
           providers: [
@@ -149,16 +147,14 @@ async function fixture(
           }],
         })),
       },
-      omp: { catalog: vi.fn(async () => ({ primeVersion: 'test', refreshedAt: '', providers: [], models: [] })) },
-      pi: { catalog: vi.fn(async () => ({ primeVersion: 'test', refreshedAt: '', providers: [], models: [] })) },
     } as unknown as ConstructorParameters<typeof AgentCollaborationBridge>[0]['catalogs'],
-    disabledProviders: { prime: () => new Set(['hidden']), omp: () => new Set(), pi: () => new Set() },
-    disabledModels: { prime: () => new Set(['openai-codex/desktop-hidden']), omp: () => new Set(), pi: () => new Set() },
+    disabledProviders: { pi: () => new Set(['hidden']) },
+    disabledModels: { pi: () => new Set(['openai-codex/desktop-hidden']) },
     ...(waitClock ? { waitClock } : {}),
   })
   await bridge.start()
   bridges.push(bridge)
-  const environment = bridge.environmentFor({ cwd: '/project', sessionPath: source.filePath, harness: 'prime' })
+  const environment = bridge.environmentFor({ cwd: '/project', sessionPath: source.filePath, harness: 'pi' })
   const call = async (method: string, params: Record<string, unknown> = {}, token = environment.GOOEYPI_COLLABORATION_TOKEN) => {
     const response = await fetch(environment.GOOEYPI_COLLABORATION_URL!, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ method, params }),
@@ -172,7 +168,7 @@ describe('AgentCollaborationBridge', () => {
   it('revokes a runtime claim and clears its cached and pending session bindings', async () => {
     const { bridge, call, environment } = await fixture()
     const token = environment.GOOEYPI_COLLABORATION_TOKEN!
-    const active = bridge.environmentFor({ cwd: '/project', sessionPath: source.filePath, harness: 'prime' })
+    const active = bridge.environmentFor({ cwd: '/project', sessionPath: source.filePath, harness: 'pi' })
     await expect(call('list')).resolves.toMatchObject({ status: 200 })
     bridge.bindSession(token, undefined, 'runtime-pending')
 
@@ -203,7 +199,7 @@ describe('AgentCollaborationBridge', () => {
     const read = await call('read', { target_session_id: target.id })
     expect(read.status).toBe(200)
     expect(read.body.result).toMatchObject({
-      session: { id: target.id, harness: 'prime' },
+      session: { id: target.id, harness: 'pi' },
       live: true,
       estimated_tokens: expect.any(Number),
       token_limit: 30_000,
@@ -307,7 +303,7 @@ describe('AgentCollaborationBridge', () => {
 
   it('lists GUI-visible models and creates a readable peer with the selected model and reasoning', async () => {
     const { bridge, call, primeManager } = await fixture()
-    const createdEnvironment = bridge.environmentFor({ cwd: '/project', harness: 'prime' })
+    const createdEnvironment = bridge.environmentFor({ cwd: '/project', harness: 'pi' })
     bridge.bindSession(createdEnvironment.GOOEYPI_COLLABORATION_TOKEN, undefined, 'runtime-created')
     const models = await call('models', { query: 'GPT five six sol' })
     expect(models.status).toBe(200)
@@ -325,7 +321,7 @@ describe('AgentCollaborationBridge', () => {
     expect(response.status).toBe(200)
     expect(response.body.result).toMatchObject({
       created: true,
-      session: { id: created.id, harness: 'prime', title: 'Model reviewer', live: true },
+      session: { id: created.id, harness: 'pi', title: 'Model reviewer', live: true },
       runtime_id: 'runtime-created',
       model: { key: 'openai-codex/gpt-5.6-sol' },
       reasoning: 'max',
@@ -348,7 +344,7 @@ describe('AgentCollaborationBridge', () => {
   it('rejects an MCP auth creation prompt before starting a peer runtime', async () => {
     const { call, primeManager } = await fixture()
 
-    const response = await call('create', { prompt: '/mcp login notion' })
+    const response = await call('create', { prompt: '/mcp-auth notion' })
 
     expect(response.status).toBe(400)
     expect(response.body.error).toContain('Network MCP authentication is managed outside GooeyPi')
@@ -358,7 +354,7 @@ describe('AgentCollaborationBridge', () => {
   it('rejects an MCP auth delivery before waking or queuing a peer runtime', async () => {
     const { call, primeManager } = await fixture(false)
 
-    const response = await call('send', { target_session_id: target.id, message: '/mcp login notion' })
+    const response = await call('send', { target_session_id: target.id, message: '/mcp-auth notion' })
 
     expect(response.status).toBe(400)
     expect(response.body.error).toContain('Network MCP authentication is managed outside GooeyPi')
@@ -473,7 +469,7 @@ describe('AgentCollaborationBridge', () => {
     expect(offline.body.result).toMatchObject({ delivered: true, awakened: true })
     expect((await call('list', {}, 'wrong')).status).toBe(401)
 
-    const unbound = bridge.environmentFor({ cwd: '/project', harness: 'prime' as HarnessId })
+    const unbound = bridge.environmentFor({ cwd: '/project', harness: 'pi' as HarnessId })
     const response = await fetch(unbound.GOOEYPI_COLLABORATION_URL!, {
       method: 'POST', headers: { authorization: `Bearer ${unbound.GOOEYPI_COLLABORATION_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ method: 'list', params: {} }),
     })
@@ -484,7 +480,7 @@ describe('AgentCollaborationBridge', () => {
 
   it('rejects a subagent source even when its runtime token is otherwise valid', async () => {
     const { bridge, environment } = await fixture()
-    const childEnvironment = bridge.environmentFor({ cwd: '/project', sessionPath: child.filePath, harness: 'prime' })
+    const childEnvironment = bridge.environmentFor({ cwd: '/project', sessionPath: child.filePath, harness: 'pi' })
     const response = await fetch(environment.GOOEYPI_COLLABORATION_URL!, {
       method: 'POST', headers: { authorization: `Bearer ${childEnvironment.GOOEYPI_COLLABORATION_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ method: 'list', params: {} }),
     })

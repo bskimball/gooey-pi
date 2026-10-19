@@ -19,7 +19,7 @@ function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function supportsFastMode(model: PiFastModeContext['model']): boolean {
+export function supportsFastMode(model: PiFastModeContext['model']): boolean {
   if (model?.provider !== 'openai-codex' || model.api !== 'openai-codex-responses' || typeof model.id !== 'string') return false
   return model.id === 'gpt-5.4' || model.id === 'gpt-5.5' || model.id === 'gpt-5.6' || model.id.startsWith('gpt-5.6-')
 }

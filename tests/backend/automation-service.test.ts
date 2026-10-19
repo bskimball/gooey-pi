@@ -40,7 +40,7 @@ describe('AutomationService', () => {
       title: 'Triage', prompt: 'Review issues', target,
       timing: onceAt('2030-01-02T09:00:00Z'), execution,
     })
-    expect(created).toMatchObject({ harness: 'prime', revision: 1, status: 'active', createdBy: 'user', nextRunAt: '2030-01-02T09:00:00.000Z' })
+    expect(created).toMatchObject({ harness: 'pi', revision: 1, status: 'active', createdBy: 'user', nextRunAt: '2030-01-02T09:00:00.000Z' })
 
     now = new Date('2030-01-01T01:00:00Z')
     const updated = await service.update(created.id, { revision: 1, title: 'Morning triage', timing: onceAt('2030-01-03T09:00:00Z') })
@@ -64,7 +64,7 @@ describe('AutomationService', () => {
       now: () => new Date('2030-01-01T00:00:00Z'),
     })
     const normal = await legacy.create({ prompt: 'Allowed', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
-    const forbidden = await legacy.create({ prompt: '/mcp login notion', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
+    const forbidden = await legacy.create({ prompt: '/mcp-auth notion', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
     await legacy.pause(forbidden.id)
     const validateTarget = vi.fn(async () => undefined)
     const validateExecution = vi.fn(async () => undefined)
@@ -77,8 +77,8 @@ describe('AutomationService', () => {
       now: () => new Date('2030-01-01T01:00:00Z'),
     })
 
-    await expect(service.create({ prompt: '/mcp login create', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
-    await expect(service.update(normal.id, { revision: normal.revision, prompt: '/mcp login update' })).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
+    await expect(service.create({ prompt: '/mcp-auth create', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
+    await expect(service.update(normal.id, { revision: normal.revision, prompt: '/mcp-auth update' })).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
     await expect(service.resume(forbidden.id)).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
     await expect(service.runNow(forbidden.id)).rejects.toThrow(NETWORK_MCP_AUTH_UNAVAILABLE)
 
@@ -98,8 +98,8 @@ describe('AutomationService', () => {
       run: async () => ({}),
       now: () => new Date('2030-01-01T00:00:00Z'),
     })
-    const active = await legacy.create({ prompt: '/mcp login active', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
-    const paused = await legacy.create({ prompt: '/mcp login paused', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
+    const active = await legacy.create({ prompt: '/mcp-auth active', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
+    const paused = await legacy.create({ prompt: '/mcp-auth paused', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
     const pausedRecord = await legacy.pause(paused.id)
     const validateTarget = vi.fn(async () => undefined)
     const validateExecution = vi.fn(async () => undefined)
@@ -133,32 +133,38 @@ describe('AutomationService', () => {
     await service.stop()
   })
 
-  it('keeps OMP and pi schedules isolated and routes validation and runs by harness', async () => {
-    const validateTarget = vi.fn(async () => undefined)
-    const validateExecution = vi.fn(async () => undefined)
+  it('preserves historical schedules without listing, recovering, or executing them as Pi', async () => {
+    const stateStore = store()
+    let now = new Date('2030-01-01T00:00:00Z')
     const run = vi.fn(async () => ({}))
-    const service = new AutomationService(store(), {
-      validateTarget,
-      validateExecution,
+    const service = new AutomationService(stateStore, {
+      validateTarget: async () => undefined,
+      validateExecution: async () => undefined,
+      validatePrompt: assertNoMcpAuthenticationCommand,
       run,
-      now: () => new Date('2030-01-01T00:00:00Z'),
+      now: () => now,
     })
+    const seed = await service.create({ prompt: 'Historical run', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
+    await stateStore.update((state) => {
+      state.schedules = [
+        { ...seed, id: 'legacy-prime', harness: 'prime' },
+        { ...seed, id: 'legacy-omp', harness: 'omp' },
+      ]
+    })
+    const historical = stateStore.snapshot().schedules
+    now = new Date('2030-01-03T00:00:00Z')
     await service.start()
-    const prime = await service.create({ prompt: 'Prime run', target, timing: onceAt('2030-01-02T00:00:00Z'), execution })
-    const omp = await service.create({ prompt: 'OMP run', target, timing: onceAt('2030-01-02T00:00:00Z'), execution }, 'user', 'omp')
-    const pi = await service.create({ prompt: 'Pi run', target, timing: onceAt('2030-01-02T00:00:00Z'), execution }, 'user', 'pi')
-    expect(service.list('prime').map((task) => task.id)).toEqual([prime.id])
-    expect(service.list('omp').map((task) => task.id)).toEqual([omp.id])
-    expect(service.list('pi').map((task) => task.id)).toEqual([pi.id])
-    expect(validateTarget).toHaveBeenCalledWith(target, 'omp')
-    expect(validateExecution).toHaveBeenCalledWith(execution, 'omp')
-    expect(validateTarget).toHaveBeenCalledWith(target, 'pi')
-    expect(validateExecution).toHaveBeenCalledWith(execution, 'pi')
-    await service.runNow(omp.id)
-    await eventually(() => expect(run).toHaveBeenCalledWith(expect.objectContaining({ id: omp.id, harness: 'omp' })))
-    await service.runNow(pi.id)
-    await eventually(() => expect(run).toHaveBeenCalledWith(expect.objectContaining({ id: pi.id, harness: 'pi' })))
-    await service.stop()
+    try {
+      expect(service.list()).toEqual([])
+      expect(service.hasActiveSchedules()).toBe(false)
+      expect(() => service.get('legacy-prime')).toThrow('Scheduled task was not found')
+      await expect(service.runNow('legacy-omp')).rejects.toThrow('Scheduled task was not found')
+      expect(await service.delete('legacy-prime')).toBe(false)
+      expect(run).not.toHaveBeenCalled()
+      expect(stateStore.snapshot().schedules).toEqual(historical)
+    } finally {
+      await service.stop()
+    }
   })
 
   it('runs a manual project task and persists its linked session result', async () => {

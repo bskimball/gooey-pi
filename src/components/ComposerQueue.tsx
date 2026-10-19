@@ -3,8 +3,6 @@ import { ArrowUp, Clock, PencilSimpleLine, Trash } from "./icons";
 
 interface ComposerQueueProps {
 	queuedMessages: QueuedPrompt[];
-	harnessQueuedMessageCount: number;
-	agentName?: string;
 	onSendNow(message: QueuedPrompt): void;
 	onEdit(message: QueuedPrompt): void;
 	onDelete?(message: QueuedPrompt): void;
@@ -13,8 +11,6 @@ interface ComposerQueueProps {
 /** Messages waiting for a turn boundary, shown above the composer. */
 export function ComposerQueue({
 	queuedMessages,
-	harnessQueuedMessageCount,
-	agentName,
 	onSendNow,
 	onEdit,
 	onDelete,
@@ -30,7 +26,7 @@ export function ComposerQueue({
 					<Clock size={13} />
 					Queued messages
 				</span>
-				<strong>{queuedMessages.length + harnessQueuedMessageCount}</strong>
+				<strong>{queuedMessages.length}</strong>
 			</div>
 			<div className="composer-queue__list">
 				{queuedMessages.map((queued) => (
@@ -67,15 +63,6 @@ export function ComposerQueue({
 						</span>
 					</div>
 				))}
-				{harnessQueuedMessageCount ? (
-					<div className="composer-queue__item composer-queue__item--harness">
-						<span className="composer-queue__text">
-							{agentName} is holding {harnessQueuedMessageCount}{" "}
-							{harnessQueuedMessageCount === 1 ? "message" : "messages"} for the
-							next turn.
-						</span>
-					</div>
-				) : null}
 			</div>
 		</section>
 	);

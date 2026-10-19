@@ -5,7 +5,7 @@ import type { SessionRecord } from '../../src/types/api'
 
 const session = (): SessionRecord => ({
   id: 'session',
-  harness: 'prime',
+  harness: 'pi',
   filePath: '/sessions/session.jsonl',
   projectPath: '/project',
   title: 'Session',

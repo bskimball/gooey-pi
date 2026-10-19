@@ -10,11 +10,11 @@ import { createSingleFlightAdmission } from '../../src/lib/workspace'
 import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../src/types/api'
 
 const project: ProjectRecord = {
-  id: 'project', harness: 'prime', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',
+  id: 'project', harness: 'pi', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',
   pinned: false, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 1,
 }
 const session: SessionRecord = {
-  id: 'session', harness: 'prime', filePath: '/sessions/session.jsonl', projectPath: '/project', title: 'Session',
+  id: 'session', harness: 'pi', filePath: '/sessions/session.jsonl', projectPath: '/project', title: 'Session',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
 }
 
@@ -24,7 +24,7 @@ const noop = () => undefined
 
 function Probe({
   bridge,
-  harness = 'prime',
+  harness = 'pi',
   initialProject = project,
   initialSession = session,
   sessions = [session],
@@ -73,7 +73,7 @@ describe('prompt admission versus background transcript reads', () => {
     const generation = latest.workspaceRef.current.generation
     const prompt: TranscriptMessage = { id: 'first', role: 'user', timestamp: 1, parts: [{ type: 'text', text: 'Keep this prompt' }] }
     act(() => {
-      latest.attachRuntime({ runtimeId: 'first-runtime', harness: 'prime', cwd: '/project', sessionFile: session.filePath, isStreaming: true }, generation)
+      latest.attachRuntime({ runtimeId: 'first-runtime', harness: 'pi', cwd: '/project', sessionFile: session.filePath, isStreaming: true }, generation)
       latest.setMessages([prompt])
       latest.promoteStartedSession(session, 'first-runtime')
     })
@@ -98,45 +98,30 @@ describe('prompt admission versus background transcript reads', () => {
     expect(latest.pendingQueuedPrompts[0].flushAttemptFailed).toBeUndefined()
   })
 
-  it('keeps queued prompts with their thread when navigating away and back', () => {
-    const ompProject: ProjectRecord = {
-      ...project,
-      id: 'omp-project',
-      harness: 'omp',
-      path: '/omp-project',
-      folders: ['/omp-project'],
-      primaryFolder: '/omp-project',
-    }
-    const ompSession: SessionRecord = {
-      ...session,
-      id: 'omp-session',
-      harness: 'omp',
-      filePath: '/omp-sessions/session.jsonl',
-      projectPath: '/omp-project',
-    }
+  it('keeps queued Pi prompts with their thread when navigating away and back', () => {
     const otherSession: SessionRecord = {
-      ...ompSession,
+      ...session,
       id: 'other-session',
-      filePath: '/omp-sessions/other-session.jsonl',
+      filePath: '/sessions/other-session.jsonl',
       title: 'Other session',
     }
-    act(() => { root.render(createElement(Probe, { bridge: null, initialProject: ompProject, initialSession: ompSession, sessions: [ompSession, otherSession] })) })
+    act(() => { root.render(createElement(Probe, { bridge: null, sessions: [session, otherSession] })) })
 
-    act(() => { latest.queuePrompt('keep this OMP follow-up', 'queue') })
-    expect(latest.pendingQueuedPrompts.map((prompt) => prompt.text)).toEqual(['keep this OMP follow-up'])
+    act(() => { latest.queuePrompt('keep this Pi follow-up', 'queue') })
+    expect(latest.pendingQueuedPrompts.map((prompt) => prompt.text)).toEqual(['keep this Pi follow-up'])
 
-    act(() => { latest.activateWorkspace(ompProject, otherSession) })
+    act(() => { latest.activateWorkspace(project, otherSession) })
     expect(latest.pendingQueuedPrompts).toEqual([])
     act(() => { latest.queuePrompt('other thread follow-up', 'queue') })
 
-    act(() => { latest.activateWorkspace(ompProject, ompSession) })
-    expect(latest.pendingQueuedPrompts.map((prompt) => prompt.text)).toEqual(['keep this OMP follow-up'])
+    act(() => { latest.activateWorkspace(project, session) })
+    expect(latest.pendingQueuedPrompts.map((prompt) => prompt.text)).toEqual(['keep this Pi follow-up'])
 
-    act(() => { latest.activateWorkspace(ompProject, otherSession) })
+    act(() => { latest.activateWorkspace(project, otherSession) })
     expect(latest.pendingQueuedPrompts.map((prompt) => prompt.text)).toEqual(['other thread follow-up'])
   })
 
-  it.each(['prime', 'omp', 'pi'] as const)('promotes an acknowledged %s steer into history while leaving true queued prompts pending', (harness) => {
+  it.each(['pi'] as const)('promotes an acknowledged %s steer into history while leaving true queued prompts pending', (harness) => {
     let flushFrame: FrameRequestCallback | undefined
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { flushFrame = callback; return 1 }))
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
@@ -264,7 +249,7 @@ describe('prompt admission versus background transcript reads', () => {
       latest.activateWorkspace(project, otherSession)
       return false
     })
-    const start = vi.fn(async () => ({ runtimeId: 'started', harness: 'prime' as const, cwd: '/project', sessionFile: '/sessions/session.jsonl', isStreaming: false }))
+    const start = vi.fn(async () => ({ runtimeId: 'started', harness: 'pi' as const, cwd: '/project', sessionFile: '/sessions/session.jsonl', isStreaming: false }))
     const bridge = {
       sessions: {
         read: vi.fn(async (filePath: string) => filePath === otherSession.filePath
@@ -299,7 +284,7 @@ describe('prompt admission versus background transcript reads', () => {
       workspace: latest,
       settingsState: { settings: DEFAULT_SETTINGS } as WorkspaceActionsDeps['settingsState'],
       layout: {} as WorkspaceActionsDeps['layout'],
-      provider: { model: 'prime/test-model', effort: 'medium', fast: false, selectedModel: { input: ['text'] } } as unknown as WorkspaceActionsDeps['provider'],
+      provider: { model: 'fixture/test-model', effort: 'medium', fast: false, selectedModel: { input: ['text'] } } as unknown as WorkspaceActionsDeps['provider'],
       pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
       submissionAdmissionRef: { current: admission },
       gitRequestRef: { current: 0 },
@@ -312,7 +297,6 @@ describe('prompt admission versus background transcript reads', () => {
       setToast: () => undefined,
       setSubmitting: () => undefined,
       refreshSchedules: async () => undefined,
-      refreshHeartbeats: async () => undefined,
       resetBrowserView: () => undefined,
       closeTerminalForSession: () => undefined,
       clearSessionAttention: () => undefined,

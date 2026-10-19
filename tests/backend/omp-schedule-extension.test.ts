@@ -44,7 +44,7 @@ async function fixture() {
     now: () => new Date('2030-01-01T00:00:00Z'),
   })
   const bridge = new AgentScheduleBridge({
-    service, harness: 'omp', skillPath: '/app/skills/schedules',
+    service, harness: 'pi', skillPath: '/app/skills/schedules',
     resolveScope: async ({ sessionPath }) => ({ projectId: 'omp-project', sessionId: sessionPath ? 'omp-session' : undefined }),
   })
   await bridge.start()
@@ -65,14 +65,14 @@ describe('omp-work-schedules extension', () => {
     expect(tools).toEqual([])
   })
 
-  it('creates, lists, updates, and manages OMP schedules through the broker', async () => {
+  it('creates, lists, updates, and manages Pi schedules through the shared broker extension', async () => {
     const { service, tools, tool } = await fixture()
     expect(tools.map((candidate) => candidate.name)).toEqual([
       'scheduled_tasks_list', 'scheduled_task_create_once', 'scheduled_task_create_recurring', 'scheduled_task_update', 'scheduled_task_manage',
     ])
     await tool('scheduled_task_create_once').execute('one', { prompt: 'Check OMP', at: '2030-01-02T00:00:00Z', target: 'current_session' })
-    const task = service.list('omp')[0]
-    expect(task).toMatchObject({ harness: 'omp', prompt: 'Check OMP', target: { kind: 'session', sessionId: 'omp-session' } })
+    const task = service.list('pi')[0]
+    expect(task).toMatchObject({ harness: 'pi', prompt: 'Check OMP', target: { kind: 'session', sessionId: 'omp-session' } })
     await tool('scheduled_task_update').execute('two', { id: task.id, title: 'Updated OMP task', thinking: 'high' })
     expect(service.get(task.id)).toMatchObject({ title: 'Updated OMP task', execution: { model: 'auto', thinking: 'high', speed: 'normal' } })
     await tool('scheduled_task_manage').execute('three', { id: task.id, action: 'pause' })

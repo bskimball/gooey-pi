@@ -4,7 +4,7 @@ GooeyPi lets top-level sessions in the same harness and working directory coordi
 
 Skills use `$` instead: type `$` and part of an enabled skill name, then press Tab or Enter. The visible `$name` is sent with a model-only block pointing at that skill's file. `@` still lists sessions and other enabled capabilities such as extensions and MCP servers.
 
-Every Prime, OMP, and pi runtime receives six app-owned tools:
+Every Pi runtime receives six app-owned tools:
 
 - `gooeypi_session_list`: list accessible peer titles, UUIDs, status, and liveness.
 - `gooeypi_session_models`: list models available to this harness from providers currently active in GooeyPi, including each model's exact key and reasoning levels.
@@ -15,7 +15,7 @@ Every Prime, OMP, and pi runtime receives six app-owned tools:
 
 ## Upstream research
 
-The three harnesses do not provide one common top-level-session API:
+Historical research from when GooeyPi also hosted OMP and Prime Agent (both since removed) showed that no harness provided a common top-level-session API:
 
 | Runtime | Existing collaboration | Missing piece |
 |---|---|---|
@@ -24,7 +24,7 @@ The three harnesses do not provide one common top-level-session API:
 | OMP 17.2.15 | Task subagents can follow up/await inside one parent run; `/collab` and `omp join` provide a live shared relay room. | No arbitrary saved top-level session UUID/name read/send/wait RPC. |
 | pi 0.84.1 | Current-session RPC, `switch_session`, and illustrative subprocess subagent/handoff extensions. | `switch_session` replaces the caller's runtime; there is no durable peer mailbox or arbitrary target API. |
 
-Using Prime's daemon transport only for Prime would create three different semantics and would bypass its deliberate family restrictions. Mutating OMP/pi JSONL would violate harness ownership. The minimal uniform design is therefore a GooeyPi-owned broker over the existing per-harness RPC managers.
+Mutating Pi JSONL would violate harness ownership. The minimal uniform design is therefore a GooeyPi-owned broker over the existing per-harness RPC managers.
 
 ## Trust and lifecycle boundaries
 
@@ -37,6 +37,6 @@ Using Prime's daemon transport only for Prime would create three different seman
 - An offline send may start a normal runtime only after the existing manager reauthorizes both cwd and canonical session path. Concurrent wake requests share one in-flight start, and each source token may have only one session creation in flight.
 - Routing blocks are stripped from the rendered user transcript. User-supplied routing delimiters are neutralized before GooeyPi adds its own block.
 
-Native Prime subagent messaging, OMP task subagents/relay rooms, and pi extensions remain unchanged. Session collaboration is an additional top-level coordination surface.
+Native Pi extensions remain unchanged. Session collaboration is an additional top-level coordination surface.
 
 Incoming peer prompts use a signed, app-local envelope. New envelopes expose only the sender UUID, a `gooeypi_session_send` reply hint, envelope-authenticity fields, and the actual message to the recipient model; they never include the sender title, harness, opening prompt, or transcript context. The signature survives app restarts and is verified before the transcript can render a user record with native agent-message styling, so ordinary prompt text cannot impersonate another session. The signing key stays in Electron's user-data directory with owner-only permissions and is never exposed to a harness or the renderer. Saved version-1 and version-2 envelopes remain readable for transcript compatibility, but are never newly emitted.

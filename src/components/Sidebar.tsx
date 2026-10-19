@@ -24,7 +24,7 @@ import {
   Trash,
 } from './icons'
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { PROJECT_SORT_MODES, type AppMeta, type AppUpdateState, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
+import { PROJECT_SORT_MODES, type AppUpdateState, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
@@ -42,11 +42,9 @@ export interface SidebarProps {
   activeSessionId?: string
   activeView: WorkspaceView
   activeHarness?: HarnessId
-  harnesses?: AppMeta['harnesses'] | null
   clearedAttention?: Record<string, string>
   updateState?: AppUpdateState
   onUpdateAction?(): void | Promise<void>
-  onSelectHarness?(harness: HarnessId): void
   onSelectProject(project: ProjectRecord): void
   onSelectSession(session: SessionRecord): void
   onNavigate(view: WorkspaceView): void
@@ -356,11 +354,9 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.activeSessionId === next.activeSessionId
     && previous.activeView === next.activeView
     && previous.activeHarness === next.activeHarness
-    && previous.harnesses === next.harnesses
     && previous.clearedAttention === next.clearedAttention
     && previous.updateState === next.updateState
     && previous.onUpdateAction === next.onUpdateAction
-    && previous.onSelectHarness === next.onSelectHarness
     && previous.onSelectProject === next.onSelectProject
     && previous.onSelectSession === next.onSelectSession
     && previous.onNavigate === next.onNavigate

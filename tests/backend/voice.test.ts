@@ -8,7 +8,7 @@ import type { HarnessId, RuntimeInfo } from '../../src/types/api'
 
 const directories: string[] = []
 
-function project(harness: HarnessId = 'prime', inferred = false) {
+function project(harness: HarnessId = 'pi', inferred = false) {
   return {
     id: `${harness}-project`, harness, name: `${harness} project`, path: `/tmp/${harness}`,
     folders: [`/tmp/${harness}`], primaryFolder: `/tmp/${harness}`, pinned: false,
@@ -31,8 +31,8 @@ function makeService(overrides: Partial<VoiceServiceOptions> = {}) {
   directories.push(directory)
   const command = vi.fn(async () => ({}))
   const stop = vi.fn(async () => true)
-  const start = vi.fn(async (): Promise<RuntimeInfo> => ({ runtimeId: 'runtime-1', harness: 'prime', cwd: '/tmp/prime', isStreaming: false }))
-  const list = vi.fn(() => [{ runtimeId: 'runtime-1', harness: 'prime', cwd: '/tmp/prime', isStreaming: true, sessionId: 'session-1', sessionFile: '/tmp/session.jsonl' }])
+  const start = vi.fn(async (): Promise<RuntimeInfo> => ({ runtimeId: 'runtime-1', harness: 'pi', cwd: '/tmp/pi', isStreaming: false }))
+  const list = vi.fn(() => [{ runtimeId: 'runtime-1', harness: 'pi', cwd: '/tmp/pi', isStreaming: true, sessionId: 'session-1', sessionFile: '/tmp/session.jsonl' }])
   const agent = { start, command, stop, list }
   const catalog = async (_force = false, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()) => ({
     primeVersion: 'test', refreshedAt: '2026-01-01T00:00:00.000Z',
@@ -48,8 +48,7 @@ function makeService(overrides: Partial<VoiceServiceOptions> = {}) {
       model('anthropic/claude-opus-hidden', 'Claude Opus Hidden', ['high'], false),
     ].map((entry) => ({ ...entry, enabled: !disabledModels.has(entry.key) })),
   })
-  const primeCatalog = vi.fn(catalog)
-  const ompCatalog = vi.fn(catalog)
+  const piCatalog = vi.fn(catalog)
   const options: VoiceServiceOptions = {
     secretPath: join(directory, 'voice-secrets.json'),
     secretCodec: {
@@ -59,15 +58,11 @@ function makeService(overrides: Partial<VoiceServiceOptions> = {}) {
     },
     settings: defaultSettings,
     projects: {
-      prime: { list: vi.fn(async () => [project('prime')]) },
-      omp: { list: vi.fn(async () => [project('omp')]) },
       pi: { list: vi.fn(async () => [project('pi')]) },
     } as unknown as VoiceServiceOptions['projects'],
-    agents: { prime: agent, omp: agent, pi: agent } as unknown as VoiceServiceOptions['agents'],
+    agents: { pi: agent } as unknown as VoiceServiceOptions['agents'],
     catalogs: {
-      prime: { catalog: primeCatalog },
-      omp: { catalog: ompCatalog },
-      pi: { catalog: vi.fn(catalog) },
+      pi: { catalog: piCatalog },
     } as unknown as VoiceServiceOptions['catalogs'],
     runProcess: vi.fn(),
     environment: {},
@@ -129,7 +124,7 @@ describe('VoiceService', () => {
       source: { openai: 'saved' },
       storage: { available: false, message },
     })
-    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'prime' })).rejects.toThrow(message)
+    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'pi' })).rejects.toThrow(message)
     expect(decrypt).not.toHaveBeenCalled()
 
     await expect(service.saveApiKey('openai', 'sk-session-value')).resolves.toEqual({
@@ -137,7 +132,7 @@ describe('VoiceService', () => {
       source: { openai: 'session' },
       storage: { available: false, message },
     })
-    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'prime' })).resolves.toContain('o=answer')
+    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'pi' })).resolves.toContain('o=answer')
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(decrypt).not.toHaveBeenCalled()
   })
@@ -226,7 +221,7 @@ describe('VoiceService', () => {
       const form = init?.body as FormData
       const session = JSON.parse(String(form.get('session'))) as { instructions: string; tools: Array<{ name: string; parameters: { properties: Record<string, unknown> } }> }
       expect(session.instructions).toContain('Do not ask for a second confirmation')
-      expect(session.instructions).toContain('locked to the currently selected OMP harness')
+      expect(session.instructions).toContain('locked to the currently selected Pi harness')
       expect(session.instructions).toContain('Do not include phrases such as start a session')
       expect(session.instructions).toContain('"Determine the next logical feature to add to this project and explain why."')
       expect(session.instructions).toContain('first call get_local_context, then call search_web')
@@ -239,7 +234,7 @@ describe('VoiceService', () => {
     })
     const { service } = makeService({ fetch: fetchMock as typeof fetch })
     await service.saveApiKey('openai', 'sk-test')
-    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'omp' })).resolves.toContain('o=answer')
+    await expect(service.createRealtimeCall({ mode: 'conversation', sdp: 'v=0\r\no=offer-value', harness: 'pi' })).resolves.toContain('o=answer')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
@@ -258,21 +253,19 @@ describe('VoiceService', () => {
 
   it('starts an explicitly requested task immediately in an existing granted project', async () => {
     const { service, agent } = makeService()
-    const result = await service.executeTool({ name: 'start_task', arguments: { project_id: 'prime-project', prompt: 'Implement the feature', title: 'Voice feature' } }, 'prime')
-    expect(agent.start).toHaveBeenCalledWith({ cwd: '/tmp/prime' })
+    const result = await service.executeTool({ name: 'start_task', arguments: { project_id: 'pi-project', prompt: 'Implement the feature', title: 'Voice feature' } }, 'pi')
+    expect(agent.start).toHaveBeenCalledWith({ cwd: '/tmp/pi' })
     expect(agent.command).toHaveBeenNthCalledWith(1, 'runtime-1', {
       type: 'prompt', message: 'Implement the feature', streamingBehavior: 'followUp',
     })
     expect(agent.command).toHaveBeenCalledWith('runtime-1', { type: 'get_state' })
     expect(result.task).toEqual({
-      projectId: 'prime-project', projectName: 'prime project', harness: 'prime',
+      projectId: 'pi-project', projectName: 'pi project', harness: 'pi',
       runtimeId: 'runtime-1', sessionId: 'session-1', sessionFile: '/tmp/session.jsonl',
     })
   })
 
   it.each([
-    ['prime', '/mcp login notion'],
-    ['omp', '/mcp reauth docs'],
     ['pi', '/mcp-auth files'],
   ] as const)('rejects a %s MCP auth voice task before runtime start', async (harness, prompt) => {
     const { service, agent, options } = makeService()
@@ -285,9 +278,9 @@ describe('VoiceService', () => {
   })
 
   it('lists only available models from GUI-visible providers and searches approximate names', async () => {
-    const settings = { ...defaultSettings(), disabledProviders: ['anthropic'] }
+    const settings = { ...defaultSettings(), piDisabledProviders: ['anthropic'] }
     const { service } = makeService({ settings: () => settings })
-    const result = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT five six sol' } }, 'prime')
+    const result = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT five six sol' } }, 'pi')
     expect(JSON.parse(result.output)).toEqual({
       models: [{
         key: 'openai-codex/gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai-codex',
@@ -302,21 +295,10 @@ describe('VoiceService', () => {
     })
   })
 
-  it('keeps Prime and OMP provider visibility independent during model discovery', async () => {
-    const settings = { ...defaultSettings(), disabledProviders: ['openai-codex'], ompDisabledProviders: ['anthropic'] }
-    const { service, options } = makeService({ settings: () => settings })
-    const primeResult = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT' } }, 'prime')
-    const ompResult = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT' } }, 'omp')
-    expect(JSON.parse(primeResult.output).models).toEqual([])
-    expect(JSON.parse(ompResult.output).models).toHaveLength(2)
-    expect(options.catalogs.prime.catalog).toHaveBeenCalledWith(false, new Set(['openai-codex']), new Set())
-    expect(options.catalogs.omp.catalog).toHaveBeenCalledWith(false, new Set(['anthropic']), new Set())
-  })
-
   it('omits desktop-disabled models without hiding their provider siblings', async () => {
-    const settings = { ...defaultSettings(), disabledModels: ['openai-codex/gpt-5.6-sol'] }
+    const settings = { ...defaultSettings(), piDisabledModels: ['openai-codex/gpt-5.6-sol'] }
     const { service } = makeService({ settings: () => settings })
-    const result = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT five six' } }, 'prime')
+    const result = await service.executeTool({ name: 'list_models', arguments: { query: 'GPT five six' } }, 'pi')
     const keys = JSON.parse(result.output).models.map((entry: { key: string }) => entry.key) as string[]
     expect(keys).toContain('openai-codex/gpt-5.6-luna')
     expect(keys).not.toContain('openai-codex/gpt-5.6-sol')
@@ -327,11 +309,11 @@ describe('VoiceService', () => {
     const result = await service.executeTool({
       name: 'start_task',
       arguments: {
-        project_id: 'prime-project', prompt: 'Implement it', model: 'GPT five six sol', reasoning: 'very high',
+        project_id: 'pi-project', prompt: 'Implement it', model: 'GPT five six sol', reasoning: 'very high',
       },
-    }, 'prime')
+    }, 'pi')
     expect(agent.start).toHaveBeenCalledWith({
-      cwd: '/tmp/prime', model: 'openai-codex/gpt-5.6-sol', thinking: 'max',
+      cwd: '/tmp/pi', model: 'openai-codex/gpt-5.6-sol', thinking: 'max',
     })
     expect(result.task).toMatchObject({
       model: { key: 'openai-codex/gpt-5.6-sol', name: 'GPT-5.6 Sol' },
@@ -344,25 +326,25 @@ describe('VoiceService', () => {
     await service.executeTool({
       name: 'start_task',
       arguments: {
-        project_id: 'prime-project', prompt: 'Implement it', model: 'Claude Sonnet 4.6', reasoning: 'high',
+        project_id: 'pi-project', prompt: 'Implement it', model: 'Claude Sonnet 4.6', reasoning: 'high',
       },
-    }, 'prime')
+    }, 'pi')
     expect(agent.start).toHaveBeenCalledWith({
-      cwd: '/tmp/prime', model: 'anthropic/claude-sonnet-4-6', thinking: 'max',
+      cwd: '/tmp/pi', model: 'anthropic/claude-sonnet-4-6', thinking: 'max',
     })
   })
 
   it('applies approximate reasoning to the harness default model before prompting', async () => {
     const { service, agent } = makeService()
     agent.start.mockResolvedValue({
-      runtimeId: 'runtime-1', harness: 'prime', cwd: '/tmp/prime', isStreaming: false,
+      runtimeId: 'runtime-1', harness: 'pi', cwd: '/tmp/pi', isStreaming: false,
       availableThinkingLevels: ['minimal', 'high'],
     })
     const result = await service.executeTool({
       name: 'start_task',
-      arguments: { project_id: 'prime-project', prompt: 'Implement it', reasoning: 'somewhere in the middle' },
-    }, 'prime')
-    expect(agent.start).toHaveBeenCalledWith({ cwd: '/tmp/prime' })
+      arguments: { project_id: 'pi-project', prompt: 'Implement it', reasoning: 'somewhere in the middle' },
+    }, 'pi')
+    expect(agent.start).toHaveBeenCalledWith({ cwd: '/tmp/pi' })
     expect(agent.command).toHaveBeenNthCalledWith(1, 'runtime-1', { type: 'set_thinking_level', level: 'high' })
     expect(agent.command).toHaveBeenNthCalledWith(2, 'runtime-1', {
       type: 'prompt', message: 'Implement it', streamingBehavior: 'followUp',
@@ -373,49 +355,30 @@ describe('VoiceService', () => {
   it('does not report success when the harness fails to expose a saved session', async () => {
     const { service, agent } = makeService()
     agent.list.mockReturnValue([])
-    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'prime-project', prompt: 'Implement it' } }, 'prime')).rejects.toThrow(/did not create a visible session/)
+    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'pi-project', prompt: 'Implement it' } }, 'pi')).rejects.toThrow(/did not create a visible session/)
     expect(agent.stop).toHaveBeenCalledWith('runtime-1')
   })
 
   it('never promotes an inferred project into a voice task grant', async () => {
     const { service, options } = makeService()
-    vi.mocked(options.projects.prime.list).mockResolvedValue([project('prime', true)])
-    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'prime-project', prompt: 'Run it' } }, 'prime')).rejects.toThrow(/explicitly granted/)
+    vi.mocked(options.projects.pi.list).mockResolvedValue([project('pi', true)])
+    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'pi-project', prompt: 'Run it' } }, 'pi')).rejects.toThrow(/explicitly granted/)
   })
 
-  it('scopes project lookup and task starts to the selected harness', async () => {
-    const { service, options } = makeService()
-    const listed = await service.executeTool({ name: 'list_projects', arguments: {} }, 'omp')
-    expect(JSON.parse(listed.output)).toEqual({ projects: [{ id: 'omp-project', name: 'omp project', harness: 'omp', lastOpenedAt: '2026-01-01T00:00:00.000Z' }] })
-    expect(options.projects.omp.list).toHaveBeenCalled()
-    expect(options.projects.prime.list).not.toHaveBeenCalled()
-    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'prime-project', prompt: 'Run it' } }, 'omp')).rejects.toThrow(/selected OMP harness/)
-  })
-
-  it('dispatches an OMP-scoped voice task only through the OMP manager', async () => {
-    const manager = (harness: 'prime' | 'omp') => ({
-      start: vi.fn(async () => ({ runtimeId: `${harness}-runtime`, harness, cwd: `/tmp/${harness}`, isStreaming: false })),
-      command: vi.fn(async () => ({})),
-      stop: vi.fn(async () => true),
-      list: vi.fn(() => [{ runtimeId: `${harness}-runtime`, harness, cwd: `/tmp/${harness}`, isStreaming: true, sessionFile: `/tmp/${harness}-session.jsonl` }]),
-    })
-    const primeAgent = manager('prime')
-    const ompAgent = manager('omp')
-    const { service } = makeService({ agents: { prime: primeAgent, omp: ompAgent } as unknown as VoiceServiceOptions['agents'] })
-    const result = await service.executeTool({ name: 'start_task', arguments: { project_id: 'omp-project', prompt: 'Determine the next logical feature.' } }, 'omp')
-    expect(primeAgent.start).not.toHaveBeenCalled()
-    expect(ompAgent.start).toHaveBeenCalledWith({ cwd: '/tmp/omp' })
-    expect(ompAgent.command).toHaveBeenNthCalledWith(1, 'omp-runtime', {
-      type: 'prompt', message: 'Determine the next logical feature.', streamingBehavior: 'followUp',
-    })
-    expect(result.task?.harness).toBe('omp')
+  it('lists Pi projects and rejects tasks outside the granted catalog', async () => {
+    const { service, options, agent } = makeService()
+    const listed = await service.executeTool({ name: 'list_projects', arguments: {} }, 'pi')
+    expect(JSON.parse(listed.output)).toEqual({ projects: [{ id: 'pi-project', name: 'pi project', harness: 'pi', lastOpenedAt: '2026-01-01T00:00:00.000Z' }] })
+    expect(options.projects.pi.list).toHaveBeenCalled()
+    await expect(service.executeTool({ name: 'start_task', arguments: { project_id: 'missing-project', prompt: 'Run it' } }, 'pi')).rejects.toThrow(/selected Pi harness/)
+    expect(agent.start).not.toHaveBeenCalled()
   })
 
   it('returns bounded local context without a calculation tool', async () => {
     const { service } = makeService()
-    const result = await service.executeTool({ name: 'get_local_context', arguments: {} }, 'omp')
+    const result = await service.executeTool({ name: 'get_local_context', arguments: {} }, 'pi')
     const context = JSON.parse(result.output) as Record<string, string>
-    expect(context.active_harness).toBe('omp')
+    expect(context.active_harness).toBe('pi')
     expect(context.time_zone).toBeTruthy()
     expect(context.utc_offset).toMatch(/^[+-]\d{2}:\d{2}$/)
     expect(context.location_hint).toBeTruthy()
@@ -433,7 +396,7 @@ describe('VoiceService', () => {
     })
     const { service } = makeService({ fetch: fetchMock as typeof fetch })
     await service.saveApiKey('openai', 'sk-test')
-    await expect(service.executeTool({ name: 'search_web', arguments: { query: 'What happened today?' } }, 'prime')).resolves.toEqual({
+    await expect(service.executeTool({ name: 'search_web', arguments: { query: 'What happened today?' } }, 'pi')).resolves.toEqual({
       output: JSON.stringify({ answer: 'A quick cited answer.' }),
     })
   })

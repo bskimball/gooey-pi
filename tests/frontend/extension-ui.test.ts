@@ -139,10 +139,8 @@ describe('pending extension UI ownership', () => {
     const pairCommand = '/mode fusion-set sidekick model Provider/Family/Model-ID'
     expect(parsePiModeCommand(pairCommand, 'pi')).toBe(pairCommand)
     expect(parsePiModeCommand('/mode fusion-set lead thinking xhigh', 'pi')).toBe('/mode fusion-set lead thinking xhigh')
-    expect(parsePiModeCommand(pairCommand, 'prime')).toBeUndefined()
     expect(piModeFromCommand(pairCommand)).toBeUndefined()
     expect(parsePiModeCommand('/orchestrate on', 'pi')).toBe('/orchestrate on')
-    expect(parsePiModeCommand('/mode fusion', 'prime')).toBeUndefined()
     expect(piModeFromStatusText('Apex Orchestrate')).toBe('apex-orchestrate')
     expect(piModeFromStatusText('Fusion')).toBe('fusion')
     expect(piModeFromCommand('/mode apex-orchestrate')).toBe('apex-orchestrate')

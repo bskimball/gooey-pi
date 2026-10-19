@@ -21,15 +21,6 @@ function serviceStub(): Record<string, unknown> {
   return new Proxy({}, { get: () => vi.fn(async () => undefined) })
 }
 
-function harnessStub(): Record<string, unknown> {
-  return {
-    projects: { ...serviceStub(), authorizePath: vi.fn(async () => { throw new Error('denied') }) },
-    sessions: { ...serviceStub(), onDidChange: vi.fn(() => () => undefined), requireSessionPath: vi.fn(async () => { throw new Error('denied') }) },
-    agents: { ...serviceStub(), has: vi.fn(() => false) },
-    catalog: serviceStub(),
-  }
-}
-
 function services(): Record<string, unknown> {
   return {
     meta: { version: '0.0.0-test' },
@@ -39,14 +30,11 @@ function services(): Record<string, unknown> {
     terminals: { ...serviceStub(), input: vi.fn(), killOwner: vi.fn(async () => undefined) },
     git: serviceStub(),
     plugins: serviceStub(),
-    providers: serviceStub(),
+    catalog: serviceStub(),
     settings: serviceStub(),
-    heartbeats: serviceStub(),
     schedules: { ...serviceStub(), onDidChange: vi.fn(() => () => undefined) },
     browser: { ...serviceStub(), onDidChange: vi.fn(() => vi.fn()), onPointer: vi.fn(() => vi.fn()), onActivity: vi.fn(() => vi.fn()) },
     pets: { list: vi.fn(async () => [{ id: 'orb' }]), sprite: vi.fn(async () => 'data:image/webp;base64,pet') },
-    omp: harnessStub(),
-    pi: harnessStub(),
     applyInterfaceZoom: vi.fn(),
   }
 }
@@ -144,25 +132,49 @@ describe('registerIpc verify gate', () => {
     registration.dispose()
   })
 
-  it('recycles all harness runtimes when the universal ask_user toggle changes', async () => {
+  it('recycles Pi runtimes when the ask_user toggle changes', async () => {
     const event = fakeEvent()
-    const refreshPrime = vi.fn(async () => undefined)
-    const refreshOmp = vi.fn(async () => undefined)
     const refreshPi = vi.fn(async () => undefined)
     stubs.settings = {
       get: () => ({ askUserEnabled: true }),
       update: vi.fn(async () => ({ interfaceFontScale: 110, askUserEnabled: false })),
     }
-    stubs.agents = { ...serviceStub(), requestRuntimeEnvironmentRefresh: refreshPrime }
-    ;(stubs.omp as { agents: unknown }).agents = { ...serviceStub(), requestRuntimeEnvironmentRefresh: refreshOmp }
-    ;(stubs.pi as { agents: unknown }).agents = { ...serviceStub(), requestRuntimeEnvironmentRefresh: refreshPi }
+    stubs.agents = { ...serviceStub(), requestRuntimeEnvironmentRefresh: refreshPi }
     registration.authorize(event.sender as never)
 
     await handlers.get('settings:update')!(event, { askUserEnabled: false })
 
-    expect(refreshPrime).toHaveBeenCalledOnce()
-    expect(refreshOmp).toHaveBeenCalledOnce()
     expect(refreshPi).toHaveBeenCalledOnce()
+    registration.dispose()
+  })
+
+  it('routes omitted harnesses to Pi and rejects removed runtime identifiers', async () => {
+    const event = fakeEvent()
+    const start = vi.fn(async (options) => ({ harness: 'pi', ...options }))
+    const list = vi.fn(async () => ['pi-project'])
+    stubs.agents = { start }
+    stubs.projects = { list }
+    registration.authorize(event.sender as never)
+
+    await expect(handlers.get('agent:start')!(event, { cwd: '/repo' })).resolves.toMatchObject({ harness: 'pi', cwd: '/repo' })
+    await expect(handlers.get('projects:list')!(event)).resolves.toEqual(['pi-project'])
+    for (const harness of ['prime', 'omp']) {
+      expect(() => handlers.get('agent:start')!(event, { cwd: '/repo', harness })).toThrow('Invalid harness')
+      expect(() => handlers.get('projects:list')!(event, harness)).toThrow('Invalid harness')
+      expect(() => handlers.get('providers:catalog')!(event, false, harness)).toThrow('Invalid harness')
+      expect(() => handlers.get('schedules:list')!(event, harness)).toThrow('Invalid harness')
+    }
+    expect(start).toHaveBeenCalledOnce()
+    expect(list).toHaveBeenCalledOnce()
+    stubs.schedules = { get: () => ({ id: 'legacy-schedule', harness: 'omp' }) }
+    for (const channel of ['schedules:get', 'schedules:update', 'schedules:pause', 'schedules:resume', 'schedules:delete', 'schedules:run-now']) {
+      expect(() => handlers.get(channel)!(event, 'legacy-schedule', {})).toThrow('Invalid harness')
+    }
+    stubs.sessions = { requireSessionPath: vi.fn(async () => { throw new TypeError('Session path is outside the Pi session directory') }) }
+    await expect(handlers.get('sessions:read')!(event, '/home/user/.omp/agent/sessions/legacy.jsonl')).rejects.toThrow('outside the Pi session directory')
+    for (const channel of ['heartbeats:list', 'heartbeats:manage', 'providers:save-api-key', 'providers:logout', 'providers:start-oauth', 'providers:respond-oauth', 'providers:cancel-oauth']) {
+      expect(handlers.has(channel)).toBe(false)
+    }
     registration.dispose()
   })
 

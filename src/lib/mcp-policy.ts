@@ -2,14 +2,12 @@ import type { HarnessId } from '../types/api'
 
 /**
  * GooeyPi does not own the network transport or OAuth discovery performed by
- * Prime, OMP, or Pi. Keep network MCP management outside the app instead of
+ * Pi. Keep network MCP management outside the app instead of
  * implying that selected app-side validation can secure an upstream runtime.
  */
 export const NETWORK_MCP_UNAVAILABLE_DETAIL = 'Network MCP servers are managed outside GooeyPi. GooeyPi does not create, enable, disable, or authenticate HTTP/SSE servers; use the harness directly. Externally configured definitions are read-only here except explicit definition removal. Authorization is never inspected or changed by GooeyPi.'
 
 export const NETWORK_MCP_AUTH_UNAVAILABLE = 'Network MCP authentication is managed outside GooeyPi. Use the harness directly; GooeyPi does not inspect or change MCP credentials.'
-
-export const PRIME_MCP_MANAGEMENT_UNAVAILABLE_DETAIL = 'Prime Agent MCP servers are managed outside GooeyPi. GooeyPi only manages local stdio MCP definitions for OMP and Pi; Prime definitions may only be removed here, and Prime authorization must be managed directly in Prime Agent.'
 
 export const PI_MCP_ADAPTER_REQUIRED_DETAIL = 'Pi core does not include MCP. Install GooeyPi\'s supported adapter first: pi install npm:pi-mcp-adapter'
 
@@ -32,10 +30,8 @@ function parsedAuthenticationCommand(match: RegExpMatchArray | null): McpAuthent
 }
 
 /** Recognizes the authentication command exposed by each harness without executing it. */
-export function parseMcpAuthenticationCommand(prompt: string, harness: HarnessId): McpAuthenticationCommand | undefined {
+export function parseMcpAuthenticationCommand(prompt: string, _harness: HarnessId): McpAuthenticationCommand | undefined {
   const value = prompt.trim()
-  if (harness === 'prime') return parsedAuthenticationCommand(value.match(/^\/mcp\s+login(?:\s+([\s\S]*))?$/i))
-  if (harness === 'omp') return parsedAuthenticationCommand(value.match(/^\/mcp\s+reauth(?:\s+([\s\S]*))?$/i))
   return parsedAuthenticationCommand(value.match(/^\/mcp-auth(?:\s+([\s\S]*))?$/i))
 }
 

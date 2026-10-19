@@ -4,7 +4,7 @@ import { indexStartedSession } from '../../src/hooks/useWorkspaceActions'
 import type { PrimeWorkApi, SessionRecord } from '../../src/types/api'
 
 const existing: SessionRecord = {
-  id: 'existing', harness: 'prime', filePath: '/sessions/existing.jsonl', projectPath: '/project', title: 'Existing chat',
+  id: 'existing', harness: 'pi', filePath: '/sessions/existing.jsonl', projectPath: '/project', title: 'Existing chat',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0, unread: false,
 }
 const created: SessionRecord = { ...existing, id: 'created', filePath: '/sessions/created.jsonl', title: 'First prompt', status: 'running' }
@@ -19,12 +19,12 @@ describe('new session indexing', () => {
     }
     const indexing = indexStartedSession({
       bridge: { sessions: { list } } as unknown as PrimeWorkApi,
-      harness: 'prime', sessionFile: created.filePath, setSessions,
+      harness: 'pi', sessionFile: created.filePath, setSessions,
     })
     sessions = [{ ...existing, title: 'Renamed during scan' }]
     resolveList([existing, created])
     expect(await indexing).toEqual(created)
-    expect(list).toHaveBeenCalledWith(undefined, true, 'prime', true)
+    expect(list).toHaveBeenCalledWith(undefined, true, 'pi', true)
     expect(sessions).toEqual([{ ...existing, title: 'Renamed during scan' }, created])
   })
 
@@ -34,7 +34,7 @@ describe('new session indexing', () => {
     let sessions = [created]
     const indexing = indexStartedSession({
       bridge: { sessions: { list } } as unknown as PrimeWorkApi,
-      harness: 'prime', sessionFile: created.filePath,
+      harness: 'pi', sessionFile: created.filePath,
       setSessions: (update) => { sessions = typeof update === 'function' ? update(sessions) : update },
     })
     const completed = applySessionLifecycleEvent(created, { type: 'agent_end' }, false)
@@ -45,7 +45,7 @@ describe('new session indexing', () => {
     expect(sessions[0]).toMatchObject({ status: 'complete', unread: true, eventRevision: 1, statusEventRevision: 1 })
   })
 
-  it('does not merge a stale catalog after the harness changes', async () => {
+  it('does not merge a stale catalog after workspace ownership changes', async () => {
     let resolveList!: (sessions: SessionRecord[]) => void
     const list = vi.fn(() => new Promise<SessionRecord[]>((resolve) => { resolveList = resolve }))
     let current = true
@@ -55,7 +55,7 @@ describe('new session indexing', () => {
     }
     const indexing = indexStartedSession({
       bridge: { sessions: { list } } as unknown as PrimeWorkApi,
-      harness: 'prime', sessionFile: created.filePath, setSessions, isCurrent: () => current,
+      harness: 'pi', sessionFile: created.filePath, setSessions, isCurrent: () => current,
     })
     current = false
     resolveList([existing, created])

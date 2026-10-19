@@ -62,7 +62,6 @@ import {
   expectedAuthenticodeSigner,
   expectedNativeFiles,
   nativeRuntimeDirectory,
-  zeroMqAddonPattern,
 } from '../scripts/release/verify-cross-platform-package.mjs'
 
 // js-yaml ships no type declarations, so it is required rather than imported.
@@ -77,18 +76,9 @@ const baseEnvironment = {
   APPLE_TEAM_ID: 'TEAM123',
 }
 
-const FIXTURE_ZEROMQ_DIRECTORIES = new Map([
-  ['arm64', 'arm64'],
-  ['x86_64', 'x64'],
-])
-
-function fixtureAddonPath(architecture: string, runtime = 'libc-115-Release') {
-  return `node_modules/zeromq/build/darwin/${FIXTURE_ZEROMQ_DIRECTORIES.get(architecture)}/node/${runtime}/addon.node`
-}
-
 function createUnpackedFixture(architectures = new Set(['arm64'])) {
   const directory = mkdtempSync(join(tmpdir(), 'prime-work-unpacked-'))
-  const relativePaths = [...expectedUnpackedNativeLayout(architectures).files, ...[...architectures].map((architecture) => fixtureAddonPath(architecture))]
+  const relativePaths = expectedUnpackedNativeLayout(architectures).files
   for (const relativePath of relativePaths) {
     const path = join(directory, relativePath)
     mkdirSync(dirname(path), { recursive: true })
@@ -1183,14 +1173,7 @@ describe('post-package verification helpers', () => {
   })
 
   test('requires the ASAR and rejects duplicated renderer dependencies', () => {
-    const entries = [
-      '/out/main/index.js',
-      '/out/preload/index.js',
-      '/out/renderer/index.html',
-      '/node_modules/node-pty/lib/index.js',
-      '/node_modules/zeromq/lib/index.js',
-      '/node_modules/zeromq/build/manifest.json',
-    ]
+    const entries = ['/out/main/index.js', '/out/preload/index.js', '/out/renderer/index.html', '/node_modules/node-pty/lib/index.js']
     expect(() => assertAsarLayout(entries)).not.toThrow()
     expect(() => assertAsarLayout([...entries, '/node_modules/react/index.js'])).toThrow(/duplicated/)
     expect(() => assertAsarLayout(entries.filter((entry) => !entry.includes('node-pty')))).toThrow(/missing required/)
@@ -1200,7 +1183,7 @@ describe('post-package verification helpers', () => {
   test('keeps every platform native unpack allowlist exact and architecture-specific', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
     expect(packageJson.author).toEqual({ name: 'GooeyPi contributors', email: '42459108+am-will@users.noreply.github.com' })
-    expect(packageJson.description).toBe('A desktop workspace for Pi, OMP, and Prime Agent')
+    expect(packageJson.description).toBe('A desktop workspace for Pi')
     expect(packageJson.homepage).toBe('https://github.com/am-will/gooey-pi')
     expect(packageJson.build.productName).toBe('GooeyPi')
     expect(packageJson.build.appId).toBe('app.gooeypi.desktop')
@@ -1230,12 +1213,8 @@ describe('post-package verification helpers', () => {
     expect(macIconChunks.get('ic05')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
     expect(macIconChunks.has('ic11')).toBe(true)
     expect(packageJson.build.asarUnpack).toBeUndefined()
-    expect(packageJson.build.mac.asarUnpack).toEqual([
-      '**/node_modules/node-pty/build/Release/pty.node',
-      '**/node_modules/node-pty/build/Release/spawn-helper',
-      '**/node_modules/zeromq/build/darwin/${arch}/node/*-Release/addon.node',
-    ])
-    expect(packageJson.build.linux.asarUnpack).toEqual(['**/node_modules/node-pty/build/Release/pty.node', '**/node_modules/zeromq/build/linux/${arch}/node/*-Release/addon.node'])
+    expect(packageJson.build.mac.asarUnpack).toEqual(['**/node_modules/node-pty/build/Release/pty.node', '**/node_modules/node-pty/build/Release/spawn-helper'])
+    expect(packageJson.build.linux.asarUnpack).toEqual(['**/node_modules/node-pty/build/Release/pty.node'])
     expect(packageJson.build.win.asarUnpack).toEqual([
       '**/node_modules/node-pty/prebuilds/win32-${arch}/pty.node',
       '**/node_modules/node-pty/prebuilds/win32-${arch}/conpty.node',
@@ -1244,7 +1223,6 @@ describe('post-package verification helpers', () => {
       '**/node_modules/node-pty/prebuilds/win32-${arch}/winpty.dll',
       '**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/OpenConsole.exe',
       '**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/conpty.dll',
-      '**/node_modules/zeromq/build/win32/${arch}/node/*-Release/addon.node',
     ])
     expect(packageJson.build.linux.target).toEqual(['AppImage', 'deb', 'rpm', 'pacman'])
     expect(packageJson.build.win.target).toEqual(['nsis', 'zip', 'appx'])
@@ -1316,23 +1294,13 @@ describe('post-package verification helpers', () => {
     expect(script).toContain('$certificate.Thumbprint.ToUpperInvariant() -ne $env:GOOEYPI_WINDOWS_CERT_THUMBPRINT')
   })
 
-  test('excludes other platform native build trees and declares zeromq directly', () => {
+  test('excludes other platform native build trees and removed runtime dependencies', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-    const optimizedAgentExclusions = [
-      '!**/node_modules/prime-agent/docs/**',
-      '!**/node_modules/prime-agent/dist/bundle/**',
-      '!**/node_modules/prime-agent/dist/modes/**',
-      '!**/node_modules/prime-agent/**/*.map',
-      '!**/node_modules/prime-agent/**/*.d.ts',
-      '!**/node_modules/@earendil-works/pi-tui/**',
-      '!**/node_modules/koffi/**',
-    ]
+    const optimizedAgentExclusions: string[] = []
     expect(packageJson.build.mac.files).toEqual([
       'out/**/*',
       'package.json',
       ...optimizedAgentExclusions,
-      '!**/node_modules/zeromq/build/linux/**',
-      '!**/node_modules/zeromq/build/win32/**',
       '!**/node_modules/extract-zip/index.linux-*.node',
       '!**/node_modules/extract-zip/index.win32-*.node',
     ])
@@ -1340,8 +1308,6 @@ describe('post-package verification helpers', () => {
       'out/**/*',
       'package.json',
       ...optimizedAgentExclusions,
-      '!**/node_modules/zeromq/build/darwin/**',
-      '!**/node_modules/zeromq/build/win32/**',
       '!**/node_modules/extract-zip/index.darwin-*.node',
       '!**/node_modules/extract-zip/index.win32-*.node',
     ])
@@ -1349,41 +1315,12 @@ describe('post-package verification helpers', () => {
       'out/**/*',
       'package.json',
       ...optimizedAgentExclusions,
-      '!**/node_modules/zeromq/build/darwin/**',
-      '!**/node_modules/zeromq/build/linux/**',
       '!**/node_modules/extract-zip/index.darwin-*.node',
       '!**/node_modules/extract-zip/index.linux-*.node',
     ])
-    // Pin the app to the zeromq range prime-agent uses so the packaged addon
-    // and the agent's runtime expectations cannot drift apart silently.
-    const primeAgent = JSON.parse(readFileSync(new URL('../node_modules/prime-agent/package.json', import.meta.url), 'utf8'))
-    expect(packageJson.dependencies.zeromq).toBe(primeAgent.dependencies.zeromq)
-  })
-
-  test('accepts bounded ZeroMQ ABI fallbacks per architecture', () => {
-    const architectures = new Set(['arm64'])
-    const fallbackDirectory = createUnpackedFixture(architectures)
-    const fallback = join(fallbackDirectory, fixtureAddonPath('arm64', 'libc-999-Release'))
-    mkdirSync(dirname(fallback), { recursive: true })
-    writeFileSync(fallback, 'fixture')
-    try {
-      expect(() => assertUnpackedNativeLayout(fallbackDirectory, architectures, () => architectures)).not.toThrow()
-    } finally {
-      rmSync(fallbackDirectory, { recursive: true, force: true })
-    }
-
-    const futureDirectory = mkdtempSync(join(tmpdir(), 'prime-work-unpacked-'))
-    for (const relativePath of [...expectedUnpackedNativeLayout(architectures).files, fixtureAddonPath('arm64', 'libc-999-Release')]) {
-      const path = join(futureDirectory, relativePath)
-      mkdirSync(dirname(path), { recursive: true })
-      writeFileSync(path, 'fixture')
-    }
-    try {
-      // A future runtime-library name still matches the bounded wildcard.
-      expect(() => assertUnpackedNativeLayout(futureDirectory, architectures, () => architectures)).not.toThrow()
-    } finally {
-      rmSync(futureDirectory, { recursive: true, force: true })
-    }
+    expect(Object.keys(packageJson.dependencies)).not.toContain('zeromq')
+    expect(Object.keys(packageJson.dependencies)).not.toContain('prime-agent')
+    expect(Object.keys(packageJson.dependencies)).not.toContain('prime-agent-ai')
   })
 
   test('accepts the exact unpacked native fixture with complete architecture coverage', () => {
@@ -1429,8 +1366,8 @@ describe('post-package verification helpers', () => {
     const architectures = new Set(['arm64'])
     const directory = createUnpackedFixture(architectures)
     try {
-      expect(() => assertUnpackedNativeLayout(directory, architectures, (path: string) => (path.endsWith('addon.node') ? new Set(['x86_64']) : new Set(['arm64'])))).toThrow(
-        /addon\.node is missing app architecture.*arm64/,
+      expect(() => assertUnpackedNativeLayout(directory, architectures, (path: string) => (path.endsWith('pty.node') ? new Set(['x86_64']) : new Set(['arm64'])))).toThrow(
+        /pty\.node is missing app architecture.*arm64/,
       )
     } finally {
       rmSync(directory, { recursive: true, force: true })
@@ -1508,22 +1445,15 @@ describe('cross-platform packaging repair', () => {
       for (const file of expectedNativeFiles(target, architecture)) {
         expect(globs, `verifier requires ${file} but no ${target} asarUnpack glob produces it`).toContain(file)
       }
-      const zeroMqGlob = globs.find((glob) => glob.includes('zeromq'))
-      expect(zeroMqGlob).toBe(`node_modules/zeromq/build/${nativeRuntimeDirectory(target)}/${architecture}/node/*-Release/addon.node`)
-      const sampleAddon = `node_modules/zeromq/build/${nativeRuntimeDirectory(target)}/${architecture}/node/glibc-x64-115-Release/addon.node`
-      expect(zeroMqAddonPattern(target, architecture).test(sampleAddon)).toBe(true)
+      expect(globs).toEqual(expectedNativeFiles(target, architecture))
     }
     expect(nativeRuntimeDirectory('win')).toBe('win32')
     expect(nativeRuntimeDirectory('linux')).toBe('linux')
   })
 
-  test('accepts ZeroMQ ABI and libc fallbacks only within the target architecture', () => {
+  test('requires the exact target native layout and rejects removed runtime addons', () => {
     const directory = mkdtempSync(join(tmpdir(), 'prime-work-cross-platform-unpacked-'))
-    const nativeFiles = [
-      ...expectedNativeFiles('linux', 'x64'),
-      'node_modules/zeromq/build/linux/x64/node/glibc-127-Release/addon.node',
-      'node_modules/zeromq/build/linux/x64/node/musl-127-Release/addon.node',
-    ]
+    const nativeFiles = expectedNativeFiles('linux', 'x64')
     for (const relativePath of nativeFiles) {
       const path = join(directory, relativePath)
       mkdirSync(dirname(path), { recursive: true })
@@ -1531,8 +1461,13 @@ describe('cross-platform packaging repair', () => {
     }
     try {
       expect(() => assertCrossPlatformUnpackedNativeLayout(directory, 'linux', 'x64')).not.toThrow()
-      rmSync(join(directory, 'node_modules/zeromq'), { recursive: true, force: true })
-      expect(() => assertCrossPlatformUnpackedNativeLayout(directory, 'linux', 'x64')).toThrow(/expected at least 1/)
+      const extra = join(directory, 'node_modules/zeromq/build/linux/x64/node/glibc-127-Release/addon.node')
+      mkdirSync(dirname(extra), { recursive: true })
+      writeFileSync(extra, 'fixture')
+      expect(() => assertCrossPlatformUnpackedNativeLayout(directory, 'linux', 'x64')).toThrow(/extra:.*zeromq/)
+      rmSync(extra)
+      rmSync(join(directory, nativeFiles[0]))
+      expect(() => assertCrossPlatformUnpackedNativeLayout(directory, 'linux', 'x64')).toThrow(/missing:.*pty\.node/)
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -1654,13 +1589,8 @@ describe('vendored supply-chain pins', () => {
       ([, entry]) => typeof entry.resolved === 'string' && entry.resolved.length > 0 && !entry.resolved.startsWith('https://registry.npmjs.org'),
     )
 
-    // The lockfile sha512 hashes are the supply-chain integrity boundary for
-    // the vendored Prime Agent tarballs. A regenerated lockfile silently
-    // re-anchors them to whatever bytes are present; this pin file makes that
-    // a deliberate, reviewed change. To upgrade Prime Agent on purpose:
-    // verify the new tarballs, replace them in vendor/, update the lockfile,
-    // then mirror the new resolved/integrity values here in the same commit.
-    expect(nonRegistry.length).toBeGreaterThan(0)
+    expect(Object.keys(lockfile.packages).filter((name) => /prime-agent|@earendil-works\/pi-(agent-core|ai|tui)/.test(name))).toEqual([])
+    expect(nonRegistry).toEqual([])
     for (const [name, entry] of nonRegistry) {
       const pin = pins[name]
       expect(pin, `unpinned non-registry dependency: ${name}`).toBeDefined()
@@ -1687,7 +1617,7 @@ describe('vendored supply-chain pins', () => {
       ),
     ].map((entry) => JSON.parse(entry) as { path: string; integrity: string })
 
-    expect(vendored.length).toBeGreaterThan(0)
+    expect(vendored).toEqual([])
     for (const { path, integrity } of vendored) {
       const digest = `sha512-${createHash('sha512').update(readFileSync(path)).digest('base64')}`
       expect(digest, `vendored tarball bytes drifted from pin: ${path}`).toBe(integrity)
@@ -1754,17 +1684,7 @@ describe('vendored supply-chain pins', () => {
     const packagedInputs = JSON.stringify({ files: build.files, extraResources: build.extraResources, mac: build.mac?.files, linux: build.linux?.files, win: build.win?.files })
     expect(packagedInputs).not.toContain('vendor/npm-')
     expect(packagedInputs).not.toContain('vendor/**')
-    expect(build.files).toEqual([
-      'out/**/*',
-      'package.json',
-      '!**/node_modules/prime-agent/docs/**',
-      '!**/node_modules/prime-agent/dist/bundle/**',
-      '!**/node_modules/prime-agent/dist/modes/**',
-      '!**/node_modules/prime-agent/**/*.map',
-      '!**/node_modules/prime-agent/**/*.d.ts',
-      '!**/node_modules/@earendil-works/pi-tui/**',
-      '!**/node_modules/koffi/**',
-    ])
+    expect(build.files).toEqual(['out/**/*', 'package.json'])
   })
 })
 

@@ -14,7 +14,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 vi.mock('../../src/components/ui', async () => {
   const actual = await vi.importActual<typeof import('../../src/components/ui')>('../../src/components/ui')
   const { createElement: element } = await import('react')
-  return { ...actual, PrimeMark: ({ size = 24 }: { size?: number }) => element('span', { className: 'prime-mark', style: { width: size, height: size } }) }
+  return { ...actual, PiMark: ({ size = 24 }: { size?: number }) => element('span', { className: 'pi-mark', style: { width: size, height: size } }) }
 })
 
 const git = { isRepo: false, files: [] }
@@ -158,12 +158,10 @@ describe('transcript rendering', () => {
     expect(html).toContain('Worked for 1s')
     expect(html).not.toContain('Prior completed reasoning.')
     expect(html).toContain('transcript-active-placeholder')
-    expect(html).toContain('Prime is working')
+    expect(html).toContain('Pi is working')
   })
 
   it.each([
-    ['prime', 'Prime'],
-    ['omp', 'OMP'],
     ['pi', 'Pi'],
   ] as const)('keeps an accepted %s steer in history without duplicating the working indicator', (harness, shortName) => {
     const html = renderToStaticMarkup(createElement(Transcript, {
@@ -248,7 +246,7 @@ describe('transcript rendering', () => {
 
   it('hides model-only session UUID routing from the visible user transcript', () => {
     const html = render([{
-      id: 'session-reference', role: 'user', parts: [{ type: 'text', text: 'Coordinate with @API owner.\n\n===== BEGIN GOOEYPI SESSION REFERENCES =====\n- "@API owner": prime session UUID secret-uuid. Use gooeypi_session_read.\n===== END GOOEYPI SESSION REFERENCES =====' }],
+      id: 'session-reference', role: 'user', parts: [{ type: 'text', text: 'Coordinate with @API owner.\n\n===== BEGIN GOOEYPI SESSION REFERENCES =====\n- "@API owner": pi session UUID secret-uuid. Use gooeypi_session_read.\n===== END GOOEYPI SESSION REFERENCES =====' }],
     }])
     expect(html).toContain('Coordinate with ')
     expect(html).toContain('>@API owner</button>.')
@@ -356,7 +354,7 @@ describe('transcript rendering', () => {
   it('renders system failures as compact expandable activity instead of red boxes', () => {
     const html = render([{ id: 'failure', role: 'system', parts: [{ type: 'text', text: 'Request failed with details.' }] }])
     expect(html).toContain('message--activity')
-    expect(html).toContain('Prime message')
+    expect(html).toContain('Pi message')
     expect(html).toContain('failed')
     expect(html).toContain('aria-expanded="false"')
     expect(html).not.toContain('Request failed with details.')
@@ -374,7 +372,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('overflow recovery')
     expect(html).toContain('99,175 tokens before')
     expect(html).toContain('aria-expanded="false"')
-    expect(html).not.toContain('Prime message')
+    expect(html).not.toContain('Pi message')
   })
 
   it('renders standalone informational output as a collapsed tool row', () => {
@@ -431,7 +429,7 @@ describe('transcript rendering', () => {
     expect(renderToStaticMarkup(createElement(LiveElapsed, {}))).toBe('')
   })
 
-  it('renders the Seigaiha Fin Mon welcome emblem on blank chat and the Apex Fang mark on pi messages', () => {
+  it('renders the Seigaiha Fin Mon welcome emblem on blank chat and the Pi mark on messages', () => {
     const emptyHtml = renderToStaticMarkup(createElement(Transcript, {
       messages: [],
       git,
@@ -451,7 +449,7 @@ describe('transcript rendering', () => {
       onSuggestion: noop,
     }))
     expect(replyHtml).toContain('pi-mark')
-    expect(replyHtml).toContain('viewBox="0 0 100 100"')
+    expect(replyHtml).not.toContain('harness-mark--prime')
   })
 
   it('anchors the live thinking/working status indicator below active timeline items', () => {

@@ -10,16 +10,9 @@ export type WorkspaceView = 'session' | 'projects' | 'activity' | 'scheduled' | 
 export type InspectorTab = 'summary' | 'specialists' | 'changes' | 'browser' | 'files'
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'complete' | 'failed' | 'unknown'
 
-export const HARNESS_IDS = ['omp', 'prime', 'pi'] as const
-export type HarnessId = (typeof HARNESS_IDS)[number]
-
-/**
- * OMP tool-approval preference. 'inherit' defers to OMP's own
- * `~/.omp/agent/config.yml`; the other values are passed to the omp CLI as
- * `--approval-mode` when starting an OMP runtime.
- */
-export const OMP_APPROVAL_MODES = ['inherit', 'always-ask', 'write', 'yolo'] as const
-export type OmpApprovalMode = (typeof OMP_APPROVAL_MODES)[number]
+export const HARNESS_IDS = ['pi'] as const
+export type RuntimeHarnessId = (typeof HARNESS_IDS)[number]
+export type HarnessId = RuntimeHarnessId
 
 export interface HarnessStatus {
   path: string | null
@@ -226,7 +219,6 @@ export const PRIME_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high',
 export type PrimeThinkingLevel = (typeof PRIME_THINKING_LEVELS)[number]
 export type PrimeServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority' | null
 export type ProviderAuthMethod = 'oauth' | 'api_key' | 'external'
-export type ProviderAuthSource = 'stored' | 'runtime' | 'environment' | 'prime_cli' | 'fallback' | 'models_json_key' | 'models_json_command' | 'stale'
 
 export interface PrimeModelDescriptor {
   key: string
@@ -249,8 +241,6 @@ export interface PrimeProviderDescriptor {
   name: string
   authMethod: ProviderAuthMethod
   configured: boolean
-  authSource?: ProviderAuthSource
-  authLabel?: string
   modelCount: number
   availableModelCount: number
   enabled: boolean
@@ -263,14 +253,6 @@ export interface PrimeModelCatalog {
   providers: PrimeProviderDescriptor[]
   warning?: string
 }
-
-export type ProviderAuthEvent =
-  | { flowId: string; providerId: string; type: 'auth'; url: string; instructions?: string }
-  | { flowId: string; providerId: string; type: 'progress'; message: string }
-  | { flowId: string; providerId: string; type: 'prompt'; promptId: string; message: string; placeholder?: string; allowEmpty?: boolean }
-  | { flowId: string; providerId: string; type: 'select'; promptId: string; message: string; options: Array<{ id: string; label: string }> }
-  | { flowId: string; providerId: string; type: 'complete' | 'cancelled' }
-  | { flowId: string; providerId: string; type: 'error'; error: string }
 
 export interface PrimeEventEnvelope {
   runtimeId: string
@@ -515,24 +497,14 @@ export interface AppSettings {
   browserEnabled: boolean
   /** Expose the separately installed TryCUA driver to new sessions through its official CLI. */
   computerUseEnabled: boolean
-  /** Providers hidden from Prime Work's Prime model picker. */
-  disabledProviders: string[]
-  /** Models hidden from Prime Work's Prime model picker, stored as provider/model keys. */
-  disabledModels: string[]
-  /** Providers hidden from Prime Work's OMP model picker; OMP config is untouched. */
-  ompDisabledProviders: string[]
-  /** Models hidden from Prime Work's OMP model picker; OMP config is untouched. */
-  ompDisabledModels: string[]
   /** Providers hidden from Prime Work's pi model picker; pi config is untouched. */
   piDisabledProviders: string[]
   /** Models hidden from Prime Work's pi model picker; pi config is untouched. */
   piDisabledModels: string[]
   /** Last usable model selected in each harness; blank falls back to the first usable catalog model. */
   lastSelectedModels: Record<HarnessId, string>
-  /** Harness whose workspace the renderer shows; new installs default to 'omp'. */
-  activeHarness: HarnessId
-  /** OMP tool-approval override; 'inherit' leaves OMP's own config in charge. */
-  ompApprovalMode: OmpApprovalMode
+  /** The runtime used by the desktop workspace. */
+  activeHarness: RuntimeHarnessId
   /** Desktop companion shown above the workspace. */
   petEnabled: boolean
   /** Built-in or discovered pet selection id. */
@@ -700,22 +672,6 @@ export interface ScheduleChangeEvent {
   reason: 'created' | 'updated' | 'deleted' | 'run'
 }
 
-export interface NativeHeartbeatRecord {
-  id: string
-  source: 'heartbeat' | 'rlm_heartbeat'
-  status: 'active' | 'paused'
-  prompt: string
-  schedule: string
-  sessionId: string
-  sessionFile: string
-  activeSessionId: string
-  deliveryMode?: 'steer' | 'follow_up'
-  nextRunAt?: string
-  lastRunAt?: string
-  label?: string
-  runtimeId?: string
-}
-
 /** One agent-controlled browser tab. The registry lives in the main process; the renderer hosts the webview guests and mirrors this state. */
 export interface AgentBrowserTabRecord {
   backend?: 'webview' | 'extension'
@@ -804,15 +760,9 @@ export interface PrimeWorkApi {
   }
   providers: {
     catalog(force?: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
-    saveApiKey(providerId: string, apiKey: string): Promise<PrimeModelCatalog>
-    logout(providerId: string): Promise<PrimeModelCatalog>
     setEnabled(providerId: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
     setDisabled(providerIds: string[], harness?: HarnessId): Promise<PrimeModelCatalog>
     setModelEnabled(modelKey: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
-    startOAuth(providerId: string): Promise<{ flowId: string }>
-    respondOAuth(flowId: string, promptId: string, value?: string): Promise<boolean>
-    cancelOAuth(flowId: string): Promise<boolean>
-    onAuthEvent(callback: (event: ProviderAuthEvent) => void): () => void
   }
   voice: {
     credentialStatus(): Promise<VoiceCredentialStatus>
@@ -866,10 +816,6 @@ export interface PrimeWorkApi {
     onChanged(callback: (state: AgentBrowserState) => void): () => void
     onPointer(callback: (event: AgentBrowserPointerEvent) => void): () => void
     onActivity(callback: (event: AgentBrowserActivityEvent) => void): () => void
-  }
-  heartbeats: {
-    list(): Promise<NativeHeartbeatRecord[]>
-    manage(id: string, action: 'pause' | 'resume' | 'stop'): Promise<NativeHeartbeatRecord | null>
   }
   schedules: {
     list(harness?: HarnessId): Promise<AutomationScheduleRecord[]>

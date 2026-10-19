@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { OMP_RPC_ADAPTER, PI_RPC_ADAPTER, PRIME_RPC_ADAPTER } from '../../electron/main/agent-rpc'
+import { PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
 import { parseSessionActionSnapshot } from '../../src/lib/session-actions'
 
 const adapters = [
-  ['Prime Agent', PRIME_RPC_ADAPTER],
-  ['OMP', OMP_RPC_ADAPTER],
   ['Pi', PI_RPC_ADAPTER],
 ] as const
 

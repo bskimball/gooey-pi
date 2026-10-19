@@ -1,6 +1,5 @@
-import { appendFileSync, chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, type Stats } from 'node:fs'
+import { appendFileSync, chmodSync, createReadStream, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, type Stats } from 'node:fs'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +7,7 @@ import { AgentRpcManager } from '../../electron/main/agent-rpc'
 import { ProjectService } from '../../electron/main/projects'
 import { SessionService, type SessionServiceOptions } from '../../electron/main/sessions'
 import { boundedSessionDiscoveryNames, SessionMetadataCatalog, type SessionCatalogIo } from '../../electron/main/sessions/catalog'
-import { applyLiveMetadata, createSessionMetadataReader, METADATA_VERIFY_TAIL_BYTES, readSessionMetadata, type SessionMetadata } from '../../electron/main/sessions/metadata'
+import { createSessionMetadataReader, METADATA_VERIFY_TAIL_BYTES, readSessionMetadata, type SessionMetadata } from '../../electron/main/sessions/metadata'
 import { JsonStateStore } from '../../electron/main/store'
 import { waitUntil } from '../helpers/wait'
 
@@ -50,29 +49,6 @@ function metadata(filePath: string, projectPath: string, id: string): SessionMet
     unread: false,
   }
 }
-
-describe('live session metadata', () => {
-  const liveMetadata = (): SessionMetadata => ({
-    id: 'session', filePath: '/sessions/session.jsonl', projectPath: '/project', title: 'Untitled session',
-    createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z',
-    status: 'unknown', depth: 0, pinned: false,
-  })
-
-  it('does not show stale inactive daemon work as running', () => {
-    const record = liveMetadata()
-    applyLiveMetadata(record, { lifecycle: 'live', isSessionActive: false, activity: 'working', isStreaming: true })
-    expect(record.status).toBe('idle')
-  })
-
-  it('keeps active and legacy busy daemon sessions running', () => {
-    const active = liveMetadata()
-    const legacy = liveMetadata()
-    applyLiveMetadata(active, { lifecycle: 'live', isSessionActive: true, activity: 'working' })
-    applyLiveMetadata(legacy, { lifecycle: 'live', isStreaming: true })
-    expect(active.status).toBe('running')
-    expect(legacy.status).toBe('running')
-  })
-})
 
 describe('session discovery work bounds', () => {
   it('uses UUIDv7 timestamps for deterministic bounded pre-I/O admission', () => {
@@ -140,7 +116,7 @@ describe('SessionService catalog scaling', () => {
     const info = lstatSync(project, { bigint: true })
     const now = new Date().toISOString()
     await store.update((state) => { state.projects.push({
-      id: 'project', harness: 'prime', name: 'Project', path: project, folders: [project], primaryFolder: project,
+      id: 'project', harness: 'pi', name: 'Project', path: project, folders: [project], primaryFolder: project,
       pinned: false, createdAt: now, lastOpenedAt: now,
       folderIdentities: { [project]: { dev: info.dev.toString(), ino: info.ino.toString() } },
     }) })
@@ -411,164 +387,7 @@ describe('SessionService user-message ordering', () => {
   })
 })
 
-describe('SessionMetadataCatalog live synchronization', () => {
-  it('keeps live overlays when a known-file reconcile refreshes JSONL metadata', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-live-reconcile-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'live.jsonl')
-    writeSession(file, project, 'live-v0')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ sessions: [{ sessionFile: ${JSON.stringify(file)}, isStreaming: true }] }))
-`)
-    chmodSync(executable, 0o755)
-    const reader = createSessionMetadataReader()
-    const catalog = new SessionMetadataCatalog(() => root, executable, 20, reader)
-    expect(await catalog.all()).toMatchObject([{ id: 'live-v0', status: 'running' }])
-
-    writeSession(file, project, 'live-v1', '2025-02-01T00:00:00.000Z')
-    await expect(catalog.reconcileKnownChanges(['live.jsonl'])).resolves.toMatchObject({ kind: 'reconciled' })
-
-    expect(await catalog.all()).toMatchObject([{ id: 'live-v1', status: 'running' }])
-  })
-
-  it('does not join an in-flight scan owned by the previous executable', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-scan-executable-race-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'scan.jsonl')
-    writeSession(file, project, 'scan')
-    const firstStarted = join(dir, 'first-started')
-    const firstRelease = join(dir, 'first-release')
-    const makeExecutable = (name: string, streaming: boolean, wait = false) => {
-      const executable = join(dir, name)
-      writeFileSync(executable, `#!/usr/bin/env node
-const fs = require('node:fs')
-${wait ? `fs.writeFileSync(${JSON.stringify(firstStarted)}, '')
-const deadline = Date.now() + 5000
-while (!fs.existsSync(${JSON.stringify(firstRelease)}) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)` : ''}
-process.stdout.write(JSON.stringify({ sessions: [{ sessionFile: ${JSON.stringify(file)}, isStreaming: ${JSON.stringify(streaming)} }] }))
-`)
-      chmodSync(executable, 0o755)
-      return executable
-    }
-    const firstExecutable = makeExecutable('first-agent.cjs', false, true)
-    const secondExecutable = makeExecutable('second-agent.cjs', true)
-    let executable = firstExecutable
-    const catalog = new SessionMetadataCatalog(
-      () => root,
-      () => executable,
-      20,
-      async (filePath) => metadata(filePath, project, 'scan'),
-    )
-
-    const stale = catalog.all()
-    await waitUntil(() => existsSync(firstStarted))
-    executable = secondExecutable
-    const current = catalog.all()
-    await expect(current).resolves.toMatchObject([{ status: 'running' }])
-    writeFileSync(firstRelease, '')
-    await expect(stale).resolves.toMatchObject([{ status: 'idle' }])
-  })
-
-  it('does not reuse the previous executable cache after runtime discovery changes', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-catalog-executable-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const firstFile = join(root, 'first.jsonl')
-    const secondFile = join(root, 'second.jsonl')
-    writeSession(firstFile, project, 'first')
-    writeSession(secondFile, project, 'second')
-    const makeExecutable = (name: string, sessionFile: string) => {
-      const executable = join(dir, name)
-      writeFileSync(executable, `#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ sessions: [{ sessionFile: ${JSON.stringify(sessionFile)}, isStreaming: true }] }))\n`)
-      chmodSync(executable, 0o755)
-      return executable
-    }
-    const firstExecutable = makeExecutable('first-agent.cjs', firstFile)
-    const secondExecutable = makeExecutable('second-agent.cjs', secondFile)
-    let executable = firstExecutable
-    const catalog = new SessionMetadataCatalog(
-      () => root,
-      () => executable,
-      20,
-      async (filePath) => metadata(filePath, project, filePath === firstFile ? 'first' : 'second'),
-    )
-
-    expect((await catalog.liveSessions()).has(realpathSync(firstFile))).toBe(true)
-    executable = secondExecutable
-    const refreshed = await catalog.liveSessions()
-    expect(refreshed.has(realpathSync(firstFile))).toBe(false)
-    expect(refreshed.has(realpathSync(secondFile))).toBe(true)
-  })
-
-  it('canonicalizes daemon session paths and never regresses the JSONL update time', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-live-catalog-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'live.jsonl')
-    writeSession(file, project, 'live', '2025-02-01T00:00:00.000Z')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-if (process.argv[2] === 'list') {
-  process.stdout.write(JSON.stringify({ sessions: [{ sessionFile: ${JSON.stringify(file)}, isStreaming: true, modified: '2024-01-01T00:00:00.000Z' }] }))
-  process.exit(0)
-}
-process.exit(2)
-`)
-    chmodSync(executable, 0o755)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), executable)
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-
-    const record = (await service.list())[0]
-    expect(record?.filePath).toBe(realpathSync(file))
-    expect(record?.status).toBe('running')
-    expect(record?.updatedAt).toBe('2025-02-01T00:00:00.000Z')
-  })
-
-  it('rate limits the live-catalog CLI spawn independently of change events', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-catalog-throttle-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'burst.jsonl')
-    writeSession(file, project, 'burst')
-    const spawnLog = join(dir, 'spawns.log')
-    writeFileSync(spawnLog, '')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-require('node:fs').appendFileSync(${JSON.stringify(spawnLog)}, 'spawn\\n')
-process.stdout.write(JSON.stringify({ sessions: [{ sessionFile: ${JSON.stringify(file)}, isStreaming: true }] }))
-process.exit(0)
-`)
-    chmodSync(executable, 0o755)
-    const catalog = new SessionMetadataCatalog(
-      () => root,
-      executable,
-      20,
-      async (filePath) => metadata(filePath, project, 'burst'),
-    )
-    const spawnCount = () => readFileSync(spawnLog, 'utf8').split('\n').filter(Boolean).length
-
-    expect((await catalog.all())[0]?.status).toBe('running')
-    expect(spawnCount()).toBe(1)
-    // A burst of change events within the throttle window serves the previous
-    // live snapshot instead of respawning the CLI.
-    for (let round = 0; round < 5; round += 1) {
-      appendFileSync(file, `${JSON.stringify({ type: 'message', id: `burst-${round}`, message: { role: 'user', content: 'burst' } })}\n`)
-      catalog.invalidateLiveCatalog()
-      expect((await catalog.all())[0]?.status).toBe('running')
-    }
-    expect(spawnCount()).toBe(1)
-
-    // Once the minimum spawn interval elapses, the next stale read respawns.
-    const throttleHarness = catalog as unknown as { lastCatalogSpawn: { executable: string; at: number } }
-    throttleHarness.lastCatalogSpawn.at = Date.now() - 60_000
-    catalog.invalidateLiveCatalog()
-    await catalog.all()
-    expect(spawnCount()).toBe(2)
-  })
-
+describe('SessionMetadataCatalog refresh synchronization', () => {
   it('does not let an in-flight pre-append scan satisfy a post-invalidation refresh', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'prime-work-scan-race-')); dirs.push(dir)
     const root = join(dir, 'sessions'); mkdirSync(root)
@@ -1024,154 +843,6 @@ describe('SessionService transcript bounds', () => {
 
 
 describe('SessionService orchestration', () => {
-  it('rejects a Prime MCP auth command before daemon or session-path work', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-auth-command-')); dirs.push(dir)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), null)
-
-    await expect(service.followUp(join(dir, 'missing.jsonl'), '/mcp login notion'))
-      .rejects.toThrow('Network MCP authentication is managed outside GooeyPi')
-  })
-
-  it('queues a follow-up through the active Prime Agent daemon instead of resuming its locked session', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-active-session-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'active.jsonl')
-    writeSession(file, project, 'active')
-    const socketPath = join(dir, 'daemon.sock')
-    const deliveredMessages: Array<Record<string, unknown>> = []
-    const daemon = createServer((socket) => {
-      socket.write(`${JSON.stringify({ type: 'daemon_hello', protocol: { name: 'prime-agent.daemon', version: 7 }, serverCapabilities: ['session_input_admission'] })}\n`)
-      let buffer = ''
-      socket.on('data', (chunk: Buffer) => {
-        buffer += chunk.toString('utf8')
-        while (buffer.includes('\n')) {
-          const index = buffer.indexOf('\n')
-          const line = buffer.slice(0, index)
-          buffer = buffer.slice(index + 1)
-          const envelope = JSON.parse(line) as { id?: string; command?: Record<string, unknown> }
-          if (envelope.command?.type !== 'follow_up' && envelope.command?.type !== 'steer') continue
-          deliveredMessages.push(envelope)
-          socket.write(`${JSON.stringify({ id: envelope.id, type: 'response', command: envelope.command.type, success: true, data: {} })}\n`)
-        }
-      })
-    })
-    await new Promise<void>((resolveListen, rejectListen) => {
-      daemon.once('error', rejectListen)
-      daemon.listen(socketPath, resolveListen)
-    })
-
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-const args = process.argv.slice(2)
-if (args[0] === 'list') {
-  process.stdout.write(JSON.stringify({ sessions: [{ id: 'active-worker', activeSessionId: 'active-worker', lifecycle: 'live', isSessionActive: true, sessionFile: ${JSON.stringify(file)} }] }))
-  process.exit(0)
-}
-if (args[0] === 'status') {
-  process.stdout.write(JSON.stringify([{ isDefault: true, status: 'current', socketPath: ${JSON.stringify(socketPath)} }]))
-  process.exit(0)
-}
-process.exit(2)
-`)
-    chmodSync(executable, 0o755)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), executable)
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-
-    try {
-      await expect(service.followUp(file, 'queue this reply')).resolves.toBe(true)
-      await expect(service.followUp(file, 'change direction', 'steer')).resolves.toBe(true)
-      expect(deliveredMessages).toHaveLength(2)
-      expect(deliveredMessages[0]).toMatchObject({
-        type: 'command',
-        protocol: { name: 'prime-agent.daemon', version: 7 },
-        command: { type: 'follow_up', activeSessionId: 'active-worker', message: 'queue this reply' },
-      })
-      expect(deliveredMessages[1]).toMatchObject({
-        command: { type: 'steer', activeSessionId: 'active-worker', message: 'change direction' },
-      })
-      await expect(service.followUp(file, 'invalid', 'later')).rejects.toThrow('Invalid active-session message intent')
-    } finally {
-      await new Promise<void>((resolveClose) => daemon.close(() => resolveClose()))
-    }
-  })
-
-  it('rejects a daemon endpoint that is not a same-user Unix socket', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-untrusted-daemon-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'active.jsonl')
-    writeSession(file, project, 'active')
-    const socketPath = join(dir, 'not-a-socket')
-    writeFileSync(socketPath, 'not a daemon')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-const args = process.argv.slice(2)
-if (args[0] === 'list') {
-  process.stdout.write(JSON.stringify({ sessions: [{ id: 'active-worker', lifecycle: 'live', isSessionActive: true, sessionFile: ${JSON.stringify(file)} }] }))
-  process.exit(0)
-}
-if (args[0] === 'status') {
-  process.stdout.write(JSON.stringify([{ status: 'current', isDefault: true, socketPath: ${JSON.stringify(socketPath)} }]))
-  process.exit(0)
-}
-process.exit(2)
-`)
-    chmodSync(executable, 0o755)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), executable)
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-
-    await expect(service.followUp(file, 'do not disclose this')).rejects.toThrow('untrusted daemon socket')
-  })
-
-  it('resolves follow-up candidates through the cached live catalog instead of a second listing', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-followup-catalog-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'busy.jsonl')
-    writeSession(file, project, 'busy')
-    const countFile = join(dir, 'list-count')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-const fs = require('node:fs')
-if (process.argv[2] === 'list') {
-  fs.appendFileSync(${JSON.stringify(countFile)}, 'x')
-  process.stdout.write(JSON.stringify({ sessions: [{ id: 'busy-worker', activeSessionId: 'busy-worker', lifecycle: 'live', isSessionActive: false, sessionFile: ${JSON.stringify(file)} }] }))
-  process.exit(0)
-}
-process.exit(9)
-`)
-    chmodSync(executable, 0o755)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), executable)
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-
-    await service.list()
-    await expect(service.followUp(file, 'reuse the catalog')).resolves.toBe(false)
-    const { readFileSync } = await import('node:fs')
-    expect(readFileSync(countFile, 'utf8')).toBe('x')
-  })
-
-  it('does not send a follow-up when the session is no longer active', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-inactive-session-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'inactive.jsonl')
-    writeSession(file, project, 'inactive')
-    const executable = join(dir, 'prime-agent.cjs')
-    writeFileSync(executable, `#!/usr/bin/env node
-if (process.argv[2] === 'list') {
-  process.stdout.write(JSON.stringify({ sessions: [{ id: 'inactive-worker', activeSessionId: 'inactive-worker', lifecycle: 'live', isSessionActive: false, sessionFile: ${JSON.stringify(file)} }] }))
-  process.exit(0)
-}
-process.exit(9)
-`)
-    chmodSync(executable, 0o755)
-    const service = new SessionService(new JsonStateStore(join(dir, 'state.json')), executable)
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-
-    await expect(service.followUp(file, 'start normally instead')).resolves.toBe(false)
-  })
-
   it('snapshots runtimes once per list() instead of once per session', async () => {
     const { root, project, service } = setup()
     for (let index = 0; index < 5; index += 1) writeSession(join(root, `snapshot-${index}.jsonl`), project, `snapshot-${index}`)
@@ -1285,23 +956,4 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     expect(renameFile).not.toHaveBeenCalled()
   })
 
-  it('does not call renameFile for Prime when a CLI path exists', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-rename-cli-')); dirs.push(dir)
-    const root = join(dir, 'sessions'); mkdirSync(root)
-    const project = join(dir, 'project'); mkdirSync(project)
-    const file = join(root, 'prime.jsonl')
-    writeSession(file, project, 'prime')
-    const renameFile = vi.fn(() => true)
-    const store = new JsonStateStore(join(dir, 'state.json'))
-    const service = new SessionService(store, process.execPath, undefined, { renameFile })
-    Object.defineProperty(service, 'sessionRoot', { value: root })
-    service.bindRuntimeHooks({
-      get: () => undefined,
-      stop: async () => undefined,
-      rename: async () => false,
-    })
-
-    await expect(service.rename(file, 'Prime title')).resolves.toBe(false)
-    expect(renameFile).not.toHaveBeenCalled()
-  })
 })

@@ -3,12 +3,12 @@ import { waitForVoiceSession } from '../../src/lib/voice'
 import type { SessionRecord } from '../../src/types/api'
 
 const session: SessionRecord = {
-  id: 'omp-session', harness: 'omp', projectPath: '/tmp/omp', filePath: '/tmp/omp/session.jsonl', title: 'OMP voice task',
+  id: 'pi-session', harness: 'pi', projectPath: '/tmp/pi', filePath: '/tmp/pi/session.jsonl', title: 'Pi voice task',
   createdAt: '2026-08-08T00:00:00.000Z', updatedAt: '2026-08-08T00:00:00.000Z', status: 'running', depth: 0,
 }
 
 describe('voice task session reconciliation', () => {
-  it('waits for a newly created OMP session to enter the project catalog', async () => {
+  it('waits for a newly created Pi session to enter the project catalog', async () => {
     const load = vi.fn()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
@@ -34,7 +34,7 @@ describe('voice task session reconciliation', () => {
   it('resolves by the harness session id when its reported path differs from the catalog path', async () => {
     const load = vi.fn(async () => [session])
 
-    await expect(waitForVoiceSession('/tmp/omp/reported-session.jsonl', session.id, load)).resolves.toEqual({ session, sessions: [session] })
+    await expect(waitForVoiceSession('/tmp/pi/reported-session.jsonl', session.id, load)).resolves.toEqual({ session, sessions: [session] })
     expect(load).toHaveBeenCalledWith(false)
   })
 })

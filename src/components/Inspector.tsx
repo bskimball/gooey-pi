@@ -9,7 +9,6 @@ import type {
 	AutomationScheduleRecord,
 	GitStatus,
 	InspectorTab,
-	NativeHeartbeatRecord,
 	ProjectRecord,
 	RuntimeInfo,
 	TranscriptMessage,
@@ -30,9 +29,9 @@ export interface InspectorProps {
 	activeTab: InspectorTab;
 	onTabChange(tab: InspectorTab): void;
 	onClose(): void;
-	/** Active harness agent name ("Prime Agent" / "OMP"). */
+	/** Agent name for runtime status. */
 	agentName?: string;
-	/** Short harness name for working copy ("Prime" / "OMP"). */
+	/** Agent short name for working copy. */
 	shortName?: string;
 	project?: ProjectRecord;
 	cwd?: string;
@@ -40,7 +39,6 @@ export interface InspectorProps {
 	messages: TranscriptMessage[];
 	git: GitStatus;
 	automations: AutomationScheduleRecord[];
-	heartbeats: NativeHeartbeatRecord[];
 	onOpenAutomation(id: string): void;
 	browserHome: string;
 	browserNavigationRequest?: { id: number; url: string };
@@ -92,7 +90,6 @@ export const Inspector = memo(function Inspector({
 	messages,
 	git,
 	automations,
-	heartbeats,
 	onOpenAutomation,
 	browserHome,
 	browserNavigationRequest,
@@ -202,8 +199,7 @@ export const Inspector = memo(function Inspector({
 						summary={summary}
 						git={git}
 						automations={automations}
-						heartbeats={heartbeats}
-						onOpenAutomation={onOpenAutomation}
+							onOpenAutomation={onOpenAutomation}
 						onOpenSpecialist={(id) => {
 							setSelectedSpecialistId(id);
 							onTabChange("specialists");

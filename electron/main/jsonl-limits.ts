@@ -15,10 +15,7 @@
  *   stdout. Larger than the write tier because responses embed tool output.
  * - RPC_WRITE_FRAME_LIMIT_BYTES (2 MiB): frames Prime Work writes to an agent
  *   RPC child's stdin (commands, prompts, and base64 image payloads).
- * - DAEMON_FRAME_LIMIT_BYTES (1 MiB): control frames on the Prime Agent
- *   daemon socket; these are small protocol envelopes.
  */
 export const SESSION_FILE_RECORD_LIMIT_BYTES = 64 * 1024 * 1024
 export const RPC_READ_FRAME_LIMIT_BYTES = 16 * 1024 * 1024
 export const RPC_WRITE_FRAME_LIMIT_BYTES = 2 * 1024 * 1024
-export const DAEMON_FRAME_LIMIT_BYTES = 1024 * 1024

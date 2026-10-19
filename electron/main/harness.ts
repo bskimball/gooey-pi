@@ -1,4 +1,4 @@
-import { join, win32 } from 'node:path'
+import { join } from 'node:path'
 
 import type { HarnessId } from '../../src/types/api'
 
@@ -25,35 +25,7 @@ export interface HarnessDescriptor {
   sessionRoot: (home: string) => string
 }
 
-export const HARNESSES: Record<HarnessId, HarnessDescriptor> = {
-  prime: {
-    id: 'prime',
-    productName: 'Prime Work',
-    agentName: 'Prime Agent',
-    executableName: (platform) => platform === 'win32' ? 'prime-agent.exe' : 'prime-agent',
-    binaryEnvVar: 'PRIME_AGENT_BINARY',
-    bundledResourceDirs: [['agent'], ['agent', 'bin']],
-    candidateDirs: (platform, home, env) => platform === 'win32' ? [] : [
-      join(env.XDG_DATA_HOME ?? join(home, '.local', 'share'), 'prime-agent-node', 'current', 'bin'),
-    ],
-    windowsNpmShim: { shim: 'prime-agent.cmd', entrypoint: ['prime-agent', 'dist', 'bundle', 'cli.js'] },
-    agentDir: (home) => join(home, '.prime', 'agent'),
-    sessionRoot: (home) => join(home, '.prime', 'agent', 'sessions'),
-  },
-  omp: {
-    id: 'omp',
-    productName: 'OMP Work',
-    agentName: 'OMP',
-    executableName: (platform) => platform === 'win32' ? 'omp.exe' : 'omp',
-    binaryEnvVar: 'OMP_BINARY',
-    bundledResourceDirs: [],
-    candidateDirs: (platform, _home, env) => {
-      if (platform === 'win32') return env.LOCALAPPDATA ? [win32.join(env.LOCALAPPDATA, 'omp')] : []
-      return env.PI_INSTALL_DIR ? [env.PI_INSTALL_DIR] : []
-    },
-    agentDir: (home) => join(home, '.omp', 'agent'),
-    sessionRoot: (home) => join(home, '.omp', 'agent', 'sessions'),
-  },
+export const HARNESSES = {
   pi: {
     id: 'pi',
     productName: 'Pi Work',
@@ -68,4 +40,4 @@ export const HARNESSES: Record<HarnessId, HarnessDescriptor> = {
     agentDir: (home) => join(home, '.pi', 'agent'),
     sessionRoot: (home) => join(home, '.pi', 'agent', 'sessions'),
   },
-}
+} satisfies Record<'pi', HarnessDescriptor>

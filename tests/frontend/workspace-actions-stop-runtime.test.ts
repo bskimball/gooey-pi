@@ -17,7 +17,7 @@ function deferred<T>(): Deferred<T> {
 
 const runtime = (runtimeId: string, isStreaming = true): RuntimeInfo => ({
   runtimeId,
-  harness: 'prime',
+  harness: 'pi',
   cwd: '/project',
   sessionFile: `/sessions/${runtimeId}.jsonl`,
   isStreaming,
@@ -185,8 +185,6 @@ describe('workspace runtime abort ownership', () => {
 
 describe('workspace MCP command policy', () => {
   it.each([
-    ['prime', '/mcp login notion', 'Prime Agent', 'notion'],
-    ['omp', '/mcp reauth docs', 'OMP', 'docs'],
     ['pi', '/mcp-auth files', 'Pi', 'files'],
   ] as const)('does not forward %s remote-auth commands to the harness', async (harness, prompt, agentName, server) => {
     const agentStart = vi.fn()
@@ -213,7 +211,7 @@ describe('workspace MCP command policy', () => {
 describe('idle prompt streaming behavior', () => {
   const project = {
     id: 'idle-project',
-    harness: 'prime' as const,
+    harness: 'pi' as const,
     name: 'Idle project',
     path: '/idle-project',
     folders: ['/idle-project'],
@@ -225,7 +223,7 @@ describe('idle prompt streaming behavior', () => {
   }
   const session = {
     id: 'idle-session',
-    harness: 'prime' as const,
+    harness: 'pi' as const,
     filePath: '/idle-project/session.jsonl',
     projectPath: '/idle-project',
     title: 'Idle session',
@@ -244,7 +242,7 @@ describe('idle prompt streaming behavior', () => {
     let currentRuntime: RuntimeInfo | null = null
     const runtime = {
       runtimeId: 'idle-runtime',
-      harness: 'prime' as const,
+      harness: 'pi' as const,
       cwd: project.primaryFolder,
       sessionFile: session.filePath,
       isStreaming: false,
@@ -279,7 +277,7 @@ describe('idle prompt streaming behavior', () => {
       sessions: [session],
       activeProject: project,
       workspace,
-      settingsState: { settings: { activeHarness: 'prime' } },
+      settingsState: { settings: { activeHarness: 'pi' } },
       provider: { model: 'auto', effort: 'medium', fast: false },
       submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
       initialized: true,
@@ -295,7 +293,6 @@ describe('idle prompt streaming behavior', () => {
       setToast: vi.fn(),
       setSubmitting: vi.fn(),
       refreshSchedules: vi.fn(),
-      refreshHeartbeats: vi.fn(),
       resetBrowserView: vi.fn(),
       closeTerminalForSession: vi.fn(),
       clearSessionAttention: vi.fn(),
@@ -352,7 +349,7 @@ describe('idle prompt streaming behavior', () => {
       sessions: [session],
       activeProject: project,
       workspace,
-      settingsState: { settings: { activeHarness: 'prime' } },
+      settingsState: { settings: { activeHarness: 'pi' } },
       provider: { model: 'auto', effort: 'medium', fast: false },
       submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
       initialized: true,
@@ -368,7 +365,6 @@ describe('idle prompt streaming behavior', () => {
       setToast: vi.fn(),
       setSubmitting: vi.fn(),
       refreshSchedules: vi.fn(),
-      refreshHeartbeats: vi.fn(),
       resetBrowserView: vi.fn(),
       closeTerminalForSession: vi.fn(),
       clearSessionAttention: vi.fn(),

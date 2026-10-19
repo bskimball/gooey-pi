@@ -1,9 +1,6 @@
-import { lstatSync, mkdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, extname, isAbsolute, join } from 'node:path'
-import type { ProcessOutcome } from '../../../src/types/api'
+import { lstatSync, realpathSync } from 'node:fs'
+import { extname, isAbsolute } from 'node:path'
 import { isRecord, requireString } from '../validation'
-import { errorCode, readAtMost } from './file-io'
-import { prepareProjectSettingsPath } from './mcp'
 
 const EXTENSION_SUFFIXES = new Set(['.ts', '.js', '.mjs', '.cjs'])
 const MAX_EXTENSION_BYTES = 4 * 1024 * 1024
@@ -29,49 +26,4 @@ export function validateExtensionInstallInput(value: unknown): ValidatedExtensio
     ? requireString(value.projectPath, 'projectPath', { min: 1, max: 4_096 })
     : undefined
   return { source, scope: value.scope, projectPath }
-}
-
-function sameFile(path: string, dev: bigint, ino: bigint): boolean {
-  try {
-    const stat = lstatSync(path, { bigint: true })
-    return stat.isFile() && !stat.isSymbolicLink() && stat.dev === dev && stat.ino === ino
-  } catch { return false }
-}
-
-export async function installOmpExtension(
-  input: ValidatedExtensionInstallInput,
-  agentDir: string,
-  safeProjectPath?: string,
-): Promise<ProcessOutcome> {
-  const { content, truncated } = await readAtMost(input.source, MAX_EXTENSION_BYTES)
-  if (truncated) throw new TypeError(`Extension source must not exceed ${MAX_EXTENSION_BYTES} bytes`)
-  const name = basename(input.source)
-  const target = input.scope === 'project'
-    ? await prepareProjectSettingsPath(safeProjectPath!, { segments: ['.omp', 'extensions'], filename: name })
-    : (() => {
-        const directory = join(agentDir, 'extensions')
-        mkdirSync(directory, { recursive: true, mode: 0o700 })
-        const stat = lstatSync(directory)
-        if (stat.isSymbolicLink() || !stat.isDirectory()) throw new TypeError('OMP extension directory must be a real directory')
-        return { path: join(directory, name), verify: async () => {
-          const current = lstatSync(directory)
-          if (current.isSymbolicLink() || !current.isDirectory()) throw new TypeError('OMP extension directory changed during install')
-        } }
-      })()
-
-  await target.verify()
-  try {
-    writeFileSync(target.path, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-  } catch (error) {
-    if (errorCode(error) === 'EEXIST') return { ok: false, reason: 'blocked', output: `An OMP extension named “${name}” already exists in this scope.` }
-    throw error
-  }
-  const installed = lstatSync(target.path, { bigint: true })
-  try {
-    await target.verify()
-  } catch (error) {
-    if (sameFile(target.path, installed.dev, installed.ino)) unlinkSync(target.path)
-    throw error
-  }
-  return { ok: true, output: `Installed OMP extension “${name}”. Start a new OMP session to load it.` }
 }

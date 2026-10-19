@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentRpcManager, OMP_RPC_ADAPTER, PI_RPC_ADAPTER, PRIME_RPC_ADAPTER } from '../../electron/main/agent-rpc'
+import { AgentRpcManager, PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
 import { validateRpcCommand } from '../../electron/main/agent-rpc/command-schema'
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from '../../electron/main/agent-rpc/limits'
 import { RpcRuntime } from '../../electron/main/agent-rpc/runtime'
 import { FramedRpcTransport } from '../../electron/main/agent-rpc/transport'
 import type { RpcObject } from '../../electron/main/agent-rpc/types'
-import { PrimeProviderService } from '../../electron/main/providers'
+import type { ProviderCatalog } from '../../electron/main/agent-rpc'
 import { RepositoryUseGate } from '../../electron/main/repository-use-gate'
 import type { RuntimeInfo } from '../../src/types/api'
 import { waitUntil } from '../helpers/wait'
@@ -22,54 +22,6 @@ const managers: AgentRpcManager[] = []
 afterEach(async () => {
   await Promise.all(managers.splice(0).map((manager) => manager.stopAll()))
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
-})
-
-describe('first prompt persistence', () => {
-  it('flushes the real Prime session manager before any assistant response', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-first-prompt-'))
-    dirs.push(cwd)
-    const executable = join(cwd, 'session-agent.mjs')
-    const sessionManagerUrl = new URL('./core/session-manager.js', import.meta.resolve('prime-agent')).href
-    writeFileSync(executable, `#!/usr/bin/env node
-import { createInterface } from 'node:readline'
-import { SessionManager } from ${JSON.stringify(sessionManagerUrl)}
-const session = SessionManager.create(${JSON.stringify(cwd)}, ${JSON.stringify(join(cwd, 'sessions'))})
-const send = value => process.stdout.write(JSON.stringify(value) + '\\n')
-createInterface({ input: process.stdin }).on('line', line => {
-  const command = JSON.parse(line)
-  const respond = data => send({ id: command.id, type: 'response', command: command.type, success: true, data })
-  if (command.type === 'get_state') respond({ sessionId: session.getSessionId(), sessionFile: session.getSessionFile(), isStreaming: true })
-  else if (command.type === 'prompt') {
-    respond({ disposition: 'started' })
-    const message = { role: 'user', content: [{ type: 'text', text: command.message }], timestamp: Date.now() }
-    send({ type: 'message_end', message })
-    session.appendMessage(message)
-  } else if (command.type === 'set_session_name') {
-    session.appendSessionInfo(command.name)
-    respond({})
-  } else respond({})
-})
-`)
-    chmodSync(executable, 0o755)
-    const events: Record<string, unknown>[] = []
-    const runtime = new RpcRuntime(executable, [], cwd, ({ event }) => events.push(event), () => undefined)
-    runtime.persistFirstPrompt()
-    try {
-      await runtime.handshake()
-      await runtime.command({ type: 'prompt', message: 'Keep my first prompt before the model responds' })
-      await waitUntil(() => events.some((event) => event.type === 'session_persisted'))
-      const file = runtime.snapshot().sessionFile
-      expect(file).toBeDefined()
-      const lines = readFileSync(file!, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
-      expect(lines.filter((entry) => entry.type === 'message')).toMatchObject([
-        { message: { role: 'user', content: [{ text: 'Keep my first prompt before the model responds' }] } },
-      ])
-      expect(lines.some((entry) => entry.type === 'session_info' && entry.name === 'Keep my first prompt before the model responds')).toBe(true)
-      expect(events.some((event) => event.type === 'error')).toBe(false)
-    } finally {
-      await runtime.stop()
-    }
-  })
 })
 
 describe('agent RPC exit details', () => {
@@ -126,7 +78,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       const request = (runtime as unknown as { request(command: RpcObject, timeoutMs: number): Promise<RpcObject> }).request.bind(runtime)
       const error = await request({ type: 'trigger_exit' }, 10_000).catch((reason: unknown) => reason)
       expect(error).toBeInstanceOf(Error)
-      expect((error as Error).message).toBe('Prime Agent RPC exited (1)')
+      expect((error as Error).message).toBe('Pi RPC exited (1)')
     } finally {
       await runtime.stop()
     }
@@ -188,7 +140,7 @@ describe('agent RPC command frame bounds', () => {
     manager.setWorkspaceUseProvider(begin)
 
     const runtime = await manager.start({ cwd: fake.cwd })
-    expect(begin).toHaveBeenCalledWith(fake.cwd, expect.objectContaining({ kind: 'agent', harness: 'prime' }), expect.any(Function))
+    expect(begin).toHaveBeenCalledWith(fake.cwd, expect.objectContaining({ kind: 'agent', harness: 'pi' }), expect.any(Function))
     expect(release).not.toHaveBeenCalled()
 
     await manager.stop(runtime.runtimeId)
@@ -287,8 +239,6 @@ describe('agent RPC command frame bounds', () => {
   })
 
   it.each([
-    ['prime', PRIME_RPC_ADAPTER, '/mcp login notion'],
-    ['omp', OMP_RPC_ADAPTER, '/mcp reauth docs'],
     ['pi', PI_RPC_ADAPTER, '/mcp-auth files'],
   ] as const)('rejects forged %s auth commands for every main-process delivery mode', async (harness, adapter, message) => {
     const wireCommand = vi.fn(async () => ({ type: 'response', command: 'prompt', success: true, data: {} }))
@@ -305,7 +255,6 @@ describe('agent RPC command frame bounds', () => {
         { type: 'prompt', message, images: [{ type: 'image', data: png, mimeType: 'image/png' }] },
         { type: 'steer', message },
         { type: 'follow_up', message },
-        { type: 'set_heartbeat', schedule: '0 * * * *', prompt: message },
       ]) {
         await expect(manager.command('runtime-auth-policy', command)).rejects.toThrow('Network MCP authentication is managed outside GooeyPi')
       }
@@ -318,8 +267,6 @@ describe('agent RPC command frame bounds', () => {
 
 describe('agent RPC prompt admission capabilities', () => {
   it.each([
-    ['prime', PRIME_RPC_ADAPTER, true],
-    ['omp', OMP_RPC_ADAPTER, false],
     ['pi', PI_RPC_ADAPTER, false],
   ] as const)('keeps or strips streamingBehavior for %s at the wire seam', async (harness, adapter, accepts) => {
     const cwd = mkdtempSync(join(tmpdir(), `prompt-capability-${harness}-`))
@@ -375,9 +322,9 @@ describe('agent RPC responses', () => {
     const manager = new AgentRpcManager(() => executable, async (cwd) => cwd, async (path) => path)
     managers.push(manager)
 
-    await expect(manager.start({ cwd: fake.cwd })).rejects.toThrow('Prime Agent executable was not found')
+    await expect(manager.start({ cwd: fake.cwd })).rejects.toThrow('Pi executable was not found')
     executable = fake.executable
-    await expect(manager.start({ cwd: fake.cwd })).resolves.toMatchObject({ harness: 'prime', cwd: fake.cwd })
+    await expect(manager.start({ cwd: fake.cwd })).resolves.toMatchObject({ harness: 'pi', cwd: fake.cwd })
   })
 
   it('hydrates and refreshes authoritative context-window usage', async () => {
@@ -821,7 +768,14 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   it('decorates runtime reasoning and fast-mode capabilities from the Prime catalog', async () => {
     const state = "{ id: command.id, type: 'response', command: 'get_state', success: true, data: { sessionId: 'session-1', thinkingLevel: 'high', isStreaming: false, model: { provider: 'openai-codex', id: 'gpt-5.4', name: 'GPT-5.4' } } }"
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }", state)
-    const providers = new PrimeProviderService({ authPath: join(fake.cwd, 'auth.json'), modelsPath: join(fake.cwd, 'models.json') })
+    const providers = {
+      capabilities: async () => ({
+        key: 'openai-codex/gpt-5.4', provider: 'openai-codex', id: 'gpt-5.4', name: 'GPT-5.4', reasoning: true,
+        input: ['text', 'image'], contextWindow: 200_000, maxTokens: 16_000,
+        availableThinkingLevels: ['off', 'low', 'medium', 'high', 'xhigh'], fastModeSupported: true, available: true,
+      }),
+      requireAvailableModel: async () => undefined,
+    } as unknown as ProviderCatalog
     const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, async (path) => path, providers)
     managers.push(manager)
 
@@ -842,7 +796,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
         input: ['text'], contextWindow: 1_000, maxTokens: 100, availableThinkingLevels: ['off'], fastModeSupported: false, available: true,
       }),
       requireAvailableModel: async () => { throw new Error('not used') },
-    } as unknown as PrimeProviderService
+    } as unknown as ProviderCatalog
     const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, async (path) => path, providers)
     managers.push(manager)
     const runtime = await manager.start({ cwd: fake.cwd })

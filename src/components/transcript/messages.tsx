@@ -9,7 +9,7 @@ import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { MarkdownText } from '../MarkdownText'
-import { OmpMark, PiMark, PrimeMark } from '../ui'
+import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { TranscriptImage } from './TranscriptImage'
 import { LiveWorkVerb, ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
@@ -151,7 +151,7 @@ function MessageActions({ message, text: suppliedText }: { message: TranscriptMe
   )
 }
 
-const HARNESS_MARKS = { omp: OmpMark, prime: PrimeMark, pi: PiMark } satisfies Record<HarnessId, unknown>
+const HARNESS_MARKS = { pi: PiMark } satisfies Record<HarnessId, unknown>
 
 function AssistantHarnessMark({ harness, size = 24 }: { harness: HarnessId; size?: number }) {
   const Mark = HARNESS_MARKS[harness]
@@ -159,7 +159,7 @@ function AssistantHarnessMark({ harness, size = 24 }: { harness: HarnessId; size
 }
 
 export const AssistantMessage = memo(
-  function AssistantMessage({ message, harness = 'prime', showReasoning, showTools }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean }) {
+  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean }) {
     const { before, work, after } = splitAssistantTurn(message.parts)
     const hasVisibleActivity = work.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
@@ -289,7 +289,7 @@ export const SteerReadMarker = memo(function SteerReadMarker({ message }: { mess
   return <div className="message message--steer-read" role="status"><span>{messageText(message)}</span></div>
 })
 
-export const ActivityMessage = memo(function ActivityMessage({ message, harness = 'prime' }: { message: TranscriptMessage; harness?: HarnessId }) {
+export const ActivityMessage = memo(function ActivityMessage({ message, harness = 'pi' }: { message: TranscriptMessage; harness?: HarnessId }) {
   const activityLabel = `${HARNESS_SHORT_NAMES[harness]} message`
   const sourceParts: MessagePart[] =
     message.role === 'system' && !message.parts.some((part) => part.type === 'compaction')

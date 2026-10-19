@@ -49,8 +49,6 @@ function spawnFailure(error: unknown): HarnessProbeFailure {
 }
 
 const emptyStatuses = (): Record<HarnessId, HarnessStatus> => ({
-  omp: { path: null, version: null },
-  prime: { path: null, version: null },
   pi: { path: null, version: null },
 })
 
@@ -84,15 +82,10 @@ export function detectedHarnesses(statuses: Record<HarnessId, HarnessStatus>): H
 /** Serializes active-harness reconciliation with every other persisted setting mutation. */
 export function reconcileActiveHarness(
   store: Pick<JsonStateStore, 'update'>,
-  statuses: Record<HarnessId, HarnessStatus>,
+  _statuses: Record<HarnessId, HarnessStatus>,
 ): Promise<AppSettings> {
-  const detected = detectedHarnesses(statuses)
   return store.update((state) => {
-    if (statuses.pi.path) {
-      state.settings.activeHarness = 'pi'
-    } else if (detected.length && !detected.includes(state.settings.activeHarness)) {
-      state.settings.activeHarness = detected[0]
-    }
+    state.settings.activeHarness = 'pi'
     return structuredClone(state.settings)
   })
 }
@@ -116,7 +109,7 @@ export class HarnessDiscoveryService {
     this.probeExecutable = options.probeExecutable ?? probeHarnessExecutable
   }
 
-  executable(harness: HarnessId): string | null {
+  executable(harness: 'pi'): string | null {
     return this.statuses[harness].path
   }
 

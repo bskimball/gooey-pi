@@ -2,7 +2,7 @@
 	"name": "gooeypi",
 	"version": "1.1.17",
 	"private": true,
-	"description": "A desktop workspace for Pi, OMP, and Prime Agent",
+	"description": "A desktop workspace for Pi",
 	"main": "out/main/index.js",
 	"desktopName": "gooeypi.desktop",
 	"author": {
@@ -47,15 +47,9 @@
 		"electron-updater": "^6.8.9",
 		"js-yaml": "^5.3.0",
 		"node-pty": "^1.1.0",
-		"prime-agent": "file:vendor/prime-agent-0.7.0-gooeypi.1.tgz",
-		"prime-agent-ai": "file:vendor/prime-agent-ai-0.7.0-gooeypi.1.tgz",
-		"rrule": "^2.8.1",
-		"zeromq": "^6.1.2"
+		"rrule": "^2.8.1"
 	},
 	"overrides": {
-		"@earendil-works/pi-agent-core": "file:vendor/prime-agent-core-0.7.0.tgz",
-		"@earendil-works/pi-ai": "$prime-agent-ai",
-		"@earendil-works/pi-tui": "file:vendor/prime-agent-tui-0.7.0.tgz",
 		"extract-zip": "npm:@electron-internal/extract-zip@1.0.5"
 	},
 	"devDependencies": {
@@ -93,14 +87,7 @@
 		},
 		"files": [
 			"out/**/*",
-			"package.json",
-			"!**/node_modules/prime-agent/docs/**",
-			"!**/node_modules/prime-agent/dist/bundle/**",
-			"!**/node_modules/prime-agent/dist/modes/**",
-			"!**/node_modules/prime-agent/**/*.map",
-			"!**/node_modules/prime-agent/**/*.d.ts",
-			"!**/node_modules/@earendil-works/pi-tui/**",
-			"!**/node_modules/koffi/**"
+			"package.json"
 		],
 		"mac": {
 			"category": "public.app-category.developer-tools",
@@ -119,28 +106,18 @@
 			"notarize": true,
 			"asarUnpack": [
 				"**/node_modules/node-pty/build/Release/pty.node",
-				"**/node_modules/node-pty/build/Release/spawn-helper",
-				"**/node_modules/zeromq/build/darwin/${arch}/node/*-Release/addon.node"
+				"**/node_modules/node-pty/build/Release/spawn-helper"
 			],
 			"files": [
 				"out/**/*",
 				"package.json",
-				"!**/node_modules/prime-agent/docs/**",
-				"!**/node_modules/prime-agent/dist/bundle/**",
-				"!**/node_modules/prime-agent/dist/modes/**",
-				"!**/node_modules/prime-agent/**/*.map",
-				"!**/node_modules/prime-agent/**/*.d.ts",
-				"!**/node_modules/@earendil-works/pi-tui/**",
-				"!**/node_modules/koffi/**",
-				"!**/node_modules/zeromq/build/linux/**",
-				"!**/node_modules/zeromq/build/win32/**",
 				"!**/node_modules/extract-zip/index.linux-*.node",
 				"!**/node_modules/extract-zip/index.win32-*.node"
 			]
 		},
 		"linux": {
 			"category": "Development",
-			"synopsis": "A desktop workspace for Pi, OMP, and Prime Agent",
+			"synopsis": "A desktop workspace for Pi",
 			"syncDesktopName": true,
 			"desktop": {
 				"entry": {
@@ -156,21 +133,11 @@
 			"artifactName": "${productName}-${version}-linux-${arch}.${ext}",
 			"icon": "assets/icon.png",
 			"asarUnpack": [
-				"**/node_modules/node-pty/build/Release/pty.node",
-				"**/node_modules/zeromq/build/linux/${arch}/node/*-Release/addon.node"
+				"**/node_modules/node-pty/build/Release/pty.node"
 			],
 			"files": [
 				"out/**/*",
 				"package.json",
-				"!**/node_modules/prime-agent/docs/**",
-				"!**/node_modules/prime-agent/dist/bundle/**",
-				"!**/node_modules/prime-agent/dist/modes/**",
-				"!**/node_modules/prime-agent/**/*.map",
-				"!**/node_modules/prime-agent/**/*.d.ts",
-				"!**/node_modules/@earendil-works/pi-tui/**",
-				"!**/node_modules/koffi/**",
-				"!**/node_modules/zeromq/build/darwin/**",
-				"!**/node_modules/zeromq/build/win32/**",
 				"!**/node_modules/extract-zip/index.darwin-*.node",
 				"!**/node_modules/extract-zip/index.win32-*.node"
 			]
@@ -190,21 +157,11 @@
 				"**/node_modules/node-pty/prebuilds/win32-${arch}/winpty-agent.exe",
 				"**/node_modules/node-pty/prebuilds/win32-${arch}/winpty.dll",
 				"**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/OpenConsole.exe",
-				"**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/conpty.dll",
-				"**/node_modules/zeromq/build/win32/${arch}/node/*-Release/addon.node"
+				"**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/conpty.dll"
 			],
 			"files": [
 				"out/**/*",
 				"package.json",
-				"!**/node_modules/prime-agent/docs/**",
-				"!**/node_modules/prime-agent/dist/bundle/**",
-				"!**/node_modules/prime-agent/dist/modes/**",
-				"!**/node_modules/prime-agent/**/*.map",
-				"!**/node_modules/prime-agent/**/*.d.ts",
-				"!**/node_modules/@earendil-works/pi-tui/**",
-				"!**/node_modules/koffi/**",
-				"!**/node_modules/zeromq/build/darwin/**",
-				"!**/node_modules/zeromq/build/linux/**",
 				"!**/node_modules/extract-zip/index.darwin-*.node",
 				"!**/node_modules/extract-zip/index.linux-*.node"
 			]

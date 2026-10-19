@@ -17,7 +17,7 @@ const identities = (...paths: string[]) => Object.fromEntries(paths.map((path) =
 describe('security boundaries', () => {
   it('does not expose project-configured files outside the project root', async () => {
     const project = temp('prime-work-plugin-')
-    const config = join(project, '.prime', 'agent')
+    const config = join(project, '.pi')
     mkdirSync(config, { recursive: true })
     writeFileSync(join(config, 'settings.json'), JSON.stringify({ prompts: ['/etc/hosts'] }))
     const service = new PluginService(null, async () => resolve(project))
@@ -29,10 +29,10 @@ describe('security boundaries', () => {
     const dir = temp('prime-work-project-')
     const folder = join(dir, 'project'); mkdirSync(folder)
     const store = new JsonStateStore(join(dir, 'state.json'))
-    await store.update((state) => { state.projects.push({ id: 'project-1', harness: 'prime', name: 'Project', path: folder, folders: [folder], primaryFolder: folder, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(folder) }) })
+    await store.update((state) => { state.projects.push({ id: 'project-1', harness: 'pi', name: 'Project', path: folder, folders: [folder], primaryFolder: folder, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(folder) }) })
     const service = new ProjectService(store, () => null)
     service.bindProviders({
-      sessions: async () => [{ id: 'unsafe', harness: 'prime', filePath: join(dir, 'unsafe.jsonl'), projectPath: '/', title: 'unsafe', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), status: 'idle', depth: 0, pinned: false, unread: false } satisfies SessionRecord],
+      sessions: async () => [{ id: 'unsafe', harness: 'pi', filePath: join(dir, 'unsafe.jsonl'), projectPath: '/', title: 'unsafe', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), status: 'idle', depth: 0, pinned: false, unread: false } satisfies SessionRecord],
       branch: async () => undefined,
     })
     const listed = await service.list()
@@ -50,7 +50,7 @@ describe('security boundaries', () => {
     const service = new ProjectService(store, () => null)
     let branchCalls = 0
     service.bindProviders({
-      sessions: async () => [{ id: 'session', harness: 'prime', filePath: join(dir, 'session.jsonl'), projectPath: folder, title: 'session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), status: 'idle', depth: 0, pinned: false, unread: false } satisfies SessionRecord],
+      sessions: async () => [{ id: 'session', harness: 'pi', filePath: join(dir, 'session.jsonl'), projectPath: folder, title: 'session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), status: 'idle', depth: 0, pinned: false, unread: false } satisfies SessionRecord],
       branch: async () => { branchCalls += 1; return undefined },
     })
     const listed = await service.list()

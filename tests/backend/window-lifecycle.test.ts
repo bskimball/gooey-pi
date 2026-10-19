@@ -84,7 +84,7 @@ describe('application window lifecycle', () => {
   })
 
   it('asks nothing when no agent run or schedule is active', () => {
-    const idle: RuntimeInfo = { runtimeId: 'a', harness: 'prime', cwd: '/tmp', isStreaming: false }
+    const idle: RuntimeInfo = { runtimeId: 'a', harness: 'pi', cwd: '/tmp', isStreaming: false }
 
     expect(activeShutdownWork([idle], false)).toEqual({ runningAgents: 0, activeSchedules: false })
     expect(shutdownPrompt(activeShutdownWork([idle], false))).toBeNull()
@@ -92,7 +92,7 @@ describe('application window lifecycle', () => {
   })
 
   it('names the work at risk for streaming, compacting, queued, and scheduled state', () => {
-    const base = { harness: 'prime' as const, cwd: '/tmp', isStreaming: false }
+    const base = { harness: 'pi' as const, cwd: '/tmp', isStreaming: false }
     const actions = { queuedCount: 0, steering: [], followUps: [] }
     const runtimes: RuntimeInfo[] = [
       { ...base, runtimeId: 'a', isStreaming: true },

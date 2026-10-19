@@ -16,44 +16,40 @@ function deferred<T>() {
 describe('HarnessDiscoveryService', () => {
   it('reconciles against the settings state inside the serialized transaction', async () => {
     const state = { settings: defaultSettings() } as DesktopState
-    state.settings.activeHarness = 'prime'
+    state.settings.activeHarness = 'pi'
     let releaseFirst!: () => void
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
     let queue = Promise.resolve()
     const store = {
       update<T>(mutator: (draft: DesktopState) => T): Promise<T> {
         const operation = queue.then(async () => {
-          if (state.settings.activeHarness === 'prime') await firstGate
+          await firstGate
           return mutator(state)
         })
         queue = operation.then(() => undefined, () => undefined)
         return operation
       },
     }
-    const userSelection = store.update((draft) => { draft.settings.activeHarness = 'omp' })
+    const userSelection = store.update((draft) => { draft.settings.activeHarness = 'pi' })
     const reconciliation = reconcileActiveHarness(store, {
-      omp: { path: '/bin/omp', version: '1' },
-      prime: { path: '/bin/prime-agent', version: '1' },
       pi: { path: null, version: null },
     })
     releaseFirst()
 
     await userSelection
-    await expect(reconciliation).resolves.toMatchObject({ activeHarness: 'omp' })
-    expect(state.settings.activeHarness).toBe('omp')
+    await expect(reconciliation).resolves.toMatchObject({ activeHarness: 'pi' })
+    expect(state.settings.activeHarness).toBe('pi')
 
     await expect(reconcileActiveHarness(store, {
-      omp: { path: '/bin/omp', version: '1' },
-      prime: { path: '/bin/prime-agent', version: '1' },
       pi: { path: '/bin/pi', version: '1' },
     })).resolves.toMatchObject({ activeHarness: 'pi' })
     expect(state.settings.activeHarness).toBe('pi')
   })
 
   it('publishes one atomic status snapshot using the current runtime overrides', async () => {
-    const runtimePaths = { omp: '/configured/omp', prime: '', pi: '' }
+    const runtimePaths = { omp: '/configured/omp', prime: '/configured/prime', pi: '/configured/pi' }
     const findExecutable = vi.fn(async (descriptor: HarnessDescriptor, configured?: string, accept?: (candidate: string) => Promise<boolean>) => {
-      const candidate = descriptor.id === 'omp' ? configured ?? null : descriptor.id === 'pi' ? '/usr/bin/pi' : null
+      const candidate = descriptor.id === 'pi' ? configured ?? null : null
       return candidate && await accept?.(candidate) ? candidate : null
     })
     const probeExecutable = vi.fn(async (path: string) => ({ runnable: true, version: `${path}-version` }))
@@ -62,22 +58,21 @@ describe('HarnessDiscoveryService', () => {
     const statuses = await discovery.refresh()
 
     expect(statuses).toEqual({
-      omp: { path: '/configured/omp', version: '/configured/omp-version' },
-      prime: { path: null, version: null },
-      pi: { path: '/usr/bin/pi', version: '/usr/bin/pi-version' },
+      pi: { path: '/configured/pi', version: '/configured/pi-version' },
     })
-    expect(discovery.executable('omp')).toBe('/configured/omp')
-    expect(detectedHarnesses(statuses)).toEqual(['omp', 'pi'])
-    expect(findExecutable).toHaveBeenCalledWith(expect.objectContaining({ id: 'omp' }), '/configured/omp', expect.any(Function), expect.any(Function))
+    expect(discovery.executable('pi')).toBe('/configured/pi')
+    expect(detectedHarnesses(statuses)).toEqual(['pi'])
+    expect(findExecutable).toHaveBeenCalledOnce()
+    expect(findExecutable).toHaveBeenCalledWith(expect.objectContaining({ id: 'pi' }), '/configured/pi', expect.any(Function), expect.any(Function))
   })
 
   it('excludes existing but non-runnable candidates and continues discovery', async () => {
     const discovery = new HarnessDiscoveryService(
-      () => ({ omp: '/broken/omp', prime: '', pi: '' }),
+      () => ({ omp: '', prime: '', pi: '/broken/pi' }),
       {
         findExecutable: async (descriptor, _configured, accept) => {
-          if (descriptor.id !== 'omp' || !accept) return null
-          for (const candidate of ['/broken/omp', '/working/omp']) if (await accept(candidate)) return candidate
+          if (descriptor.id !== 'pi' || !accept) return null
+          for (const candidate of ['/broken/pi', '/working/pi']) if (await accept(candidate)) return candidate
           return null
         },
         probeExecutable: async (path) => path.includes('working')
@@ -87,20 +82,20 @@ describe('HarnessDiscoveryService', () => {
     )
 
     await expect(discovery.refresh()).resolves.toMatchObject({
-      omp: { path: '/working/omp', version: '2.0.0' },
+      pi: { path: '/working/pi', version: '2.0.0' },
     })
   })
 
   it('prevents an older overlapping refresh from replacing newer results', async () => {
-    const firstOmp = deferred<string | null>()
+    const firstPi = deferred<string | null>()
     let generation = 0
     const discovery = new HarnessDiscoveryService(
       () => ({ omp: '', prime: '', pi: '' }),
       {
         findExecutable: async (descriptor, _configured, accept) => {
-          if (descriptor.id !== 'omp') return null
+          if (descriptor.id !== 'pi') return null
           generation += 1
-          const candidate = generation === 1 ? await firstOmp.promise : '/new/omp'
+          const candidate = generation === 1 ? await firstPi.promise : '/new/pi'
           return candidate && await accept?.(candidate) ? candidate : null
         },
         probeExecutable: async () => ({ runnable: true, version: null }),
@@ -109,11 +104,11 @@ describe('HarnessDiscoveryService', () => {
 
     const stale = discovery.refresh()
     const current = await discovery.refresh()
-    firstOmp.resolve('/old/omp')
+    firstPi.resolve('/old/pi')
 
-    expect(current.omp.path).toBe('/new/omp')
-    await expect(stale).resolves.toMatchObject({ omp: { path: '/new/omp' } })
-    expect(discovery.executable('omp')).toBe('/new/omp')
+    expect(current.pi.path).toBe('/new/pi')
+    await expect(stale).resolves.toMatchObject({ pi: { path: '/new/pi' } })
+    expect(discovery.executable('pi')).toBe('/new/pi')
   })
 
   it.each([

@@ -13,8 +13,6 @@ const meta: AppMeta = {
   platform: 'darwin',
   homeDir: '/Users/you',
   harnesses: {
-    prime: { path: null, version: null },
-    omp: { path: null, version: null },
     pi: { path: null, version: null },
   },
 }

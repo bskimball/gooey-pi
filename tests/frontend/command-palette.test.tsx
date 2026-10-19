@@ -10,7 +10,7 @@ import App from '../../src/App'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const harnessState = vi.hoisted(() => ({ activeHarness: 'prime' as HarnessId }))
+const harnessState = vi.hoisted(() => ({ activeHarness: 'pi' as HarnessId }))
 
 vi.mock('../../src/hooks/useAppSettings', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/hooks/useAppSettings')>()
@@ -94,7 +94,7 @@ const expectedOrder = [
   'Open Settings',
 ]
 
-describe.each<HarnessId>(['prime', 'omp', 'pi'])('command palette for %s', (harness) => {
+describe.each<HarnessId>(['pi'])('command palette for %s', (harness) => {
   it('keeps Scheduled searchable and activatable by keyboard and pointer', async () => {
     harnessState.activeHarness = harness
     await act(async () => { root.render(<App />) })

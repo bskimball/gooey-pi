@@ -5,7 +5,7 @@ import type { ProjectRecord } from '../../src/types/api'
 function project(id: string, overrides: Partial<ProjectRecord> = {}): ProjectRecord {
   return {
     id,
-    harness: 'prime',
+    harness: 'pi',
     name: id,
     path: `/${id}`,
     folders: [`/${id}`],

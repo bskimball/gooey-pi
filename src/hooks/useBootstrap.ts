@@ -119,7 +119,7 @@ export function mergeSessionCatalog(
 export function useBootstrap({
   bridge,
   ready = true,
-  harness = 'prime',
+  harness = 'pi',
   setProjects,
   setSessions,
   setSchedules,
@@ -249,8 +249,7 @@ export function useBootstrap({
     let pendingCatalogRevision = 0
     let nextRevision = 0
     const unsubscribe = bridge.sessions.onChanged((change) => {
-      // Events that predate harness scoping carry no harness and mean prime.
-      if ((change.harness ?? 'prime') !== harness) return
+      if (change.harness !== harness) return
       const revision = ++nextRevision
       if (change.filePath) pendingChangedFiles.set(change.filePath, revision)
       else pendingCatalogRevision = revision

@@ -80,10 +80,6 @@ body.is-resizing-horizontal, body.is-resizing-horizontal * { cursor: row-resize 
 .button--danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 .button--danger:hover { background: var(--danger); filter: brightness(.94); }
 
-.prime-mark { display: inline-grid; place-items: center; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(125,211,252,.2); border-radius: 26%; color: white; background: #0b1119; box-shadow: 0 2px 6px rgba(2,8,18,.26), inset 0 1px 0 rgba(125,211,252,.1); }
-.prime-mark svg { width: 92%; height: 92%; display: block; pointer-events: none; }
-.omp-mark { display: inline-grid; place-items: center; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(125,211,252,.2); border-radius: 26%; color: #f4f8fb; background: #0b1119; box-shadow: 0 2px 6px rgba(2,8,18,.26), inset 0 1px 0 rgba(125,211,252,.1); }
-.omp-mark svg { width: 78%; height: 78%; display: block; pointer-events: none; }
 .pi-mark { display: inline-grid; place-items: center; flex: 0 0 auto; overflow: hidden; border: 1px solid rgba(125,211,252,.24); border-radius: 26%; color: #f4f8fb; background: radial-gradient(circle at 50% 18%, #152538, #0b1119 74%); box-shadow: 0 2px 6px rgba(2,8,18,.28), inset 0 1px 0 rgba(125,211,252,.14); }
 .pi-mark svg { width: 82%; height: 82%; display: block; pointer-events: none; }
 .pi-welcome-mark { display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: #f4f8fb; filter: drop-shadow(0 10px 26px rgba(2,10,22,.34)) drop-shadow(0 0 18px rgba(56,189,248,.12)); }
