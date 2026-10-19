@@ -3,6 +3,7 @@ import { contextUsageFromEvent, sessionUsageFromEvent } from '@/app/agent-events
 import { applySessionLifecycleEvent, sessionLifecycleChange } from '@/app/session-attention'
 import { fallbackModelFromRecord } from '@/lib/events/model-fallback'
 import { parseSessionActionSnapshot } from '@/lib/session-actions'
+import { indexStartedSession } from './useWorkspaceActions'
 import type { WorkspaceSnapshot } from '@/app/workspace'
 import type { PrimeWorkApi, RuntimeInfo, SessionActionSnapshot, SessionRecord } from '@/types/api'
 
@@ -14,6 +15,7 @@ interface UseAgentEventsOptions {
   workspaceRef: React.RefObject<WorkspaceSnapshot>
   setSessions: React.Dispatch<React.SetStateAction<SessionRecord[]>>
   setRuntime: React.Dispatch<React.SetStateAction<RuntimeInfo | null>>
+  promoteStartedSession?(session: SessionRecord, runtimeId: string): void
   reconcileQueuedPrompts?(snapshot: SessionActionSnapshot): void
   clearQueuedPromptFlushFailures?(): void
   clearQueuedPrompts?(): void
@@ -34,6 +36,7 @@ export function useAgentEvents({
   workspaceRef,
   setSessions,
   setRuntime,
+  promoteStartedSession,
   reconcileQueuedPrompts = () => undefined,
   clearQueuedPromptFlushFailures = () => undefined,
   clearQueuedPrompts = () => undefined,
@@ -57,6 +60,16 @@ export function useAgentEvents({
     }
     const unsubscribe = bridge.agent.onEvent(({ runtimeId, event }) => {
       const type = typeof event.type === 'string' ? event.type : ''
+      if (type === 'session_persisted' && typeof event.sessionFile === 'string'
+        && (event.harness === 'prime' || event.harness === 'pi' || event.harness === 'omp')) {
+        const harness = event.harness
+        runtimeSessionsRef.current.set(runtimeId, event.sessionFile)
+        const isCurrentHarness = () => workspaceRef.current.project?.harness === harness
+        void indexStartedSession({ bridge, harness, sessionFile: event.sessionFile, setSessions, isCurrent: isCurrentHarness })
+          .then((session) => { if (session && isCurrentHarness()) promoteStartedSession?.(session, runtimeId) })
+          .catch(() => undefined)
+        return
+      }
       const sessionFile = runtimeSessionsRef.current.get(runtimeId)
         ?? (runtimeIdRef.current === runtimeId ? workspaceRef.current.sessionFile : undefined)
       if (sessionFile) {
@@ -156,6 +169,7 @@ export function useAgentEvents({
     runtimeOwnerRef,
     runtimeSessionsRef,
     setRuntime,
+    promoteStartedSession,
     setSessions,
     showExtensionUi,
   ])

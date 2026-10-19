@@ -44,9 +44,10 @@ interface FixtureOptions {
   /** Pi `get_commands` listing; omitted means the runtime reports none. */
   commands?: Array<{ name: string; source: string }>
   startError?: Error
+  flushPendingMutations?(runtime?: RuntimeInfo): Promise<void>
 }
 
-function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'prime', commands = [], startError }: FixtureOptions = {}) {
+function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'prime', commands = [], startError, flushPendingMutations }: FixtureOptions = {}) {
   const project = { ...baseProject, harness }
   if (configuredRuntime) configuredRuntime = { ...configuredRuntime, harness }
   let currentRuntime = configuredRuntime
@@ -68,7 +69,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
       : null as { runtimeId: string; generation: number } | null,
   }
   const command = vi.fn(async (_runtimeId: string, request: Record<string, unknown>): Promise<Record<string, unknown>> => request.type === 'get_commands' ? { data: { commands } } : {})
-  const start = vi.fn(async () => {
+  const start = vi.fn(async (): Promise<RuntimeInfo> => {
     if (startError) throw startError
     return { ...runtime('started-runtime'), harness }
   })
@@ -111,7 +112,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     activeProject: project,
     workspace,
     settingsState: { settings: { activeHarness: harness } },
-    provider: { model: 'auto', effort: 'medium', fast: false },
+    provider: { model: 'auto', effort: 'medium', fast: false, flushPendingMutations },
     submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
     initialized: true,
     layout: {},
@@ -133,8 +134,47 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     reportError,
   } as unknown as WorkspaceActionsDeps))
 
-  return { actions, command, agentList, workspace, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
+  return { actions, bridge, command, agentList, workspace, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
 }
+
+describe('first prompt navigation', () => {
+  it('delivers from an unsaved existing runtime after navigation during its model flush', async () => {
+    let resolveFlush!: () => void
+    const flushPendingMutations = vi.fn(async (active?: RuntimeInfo) => {
+      if (active) await new Promise<void>((resolve) => { resolveFlush = resolve })
+    })
+    const state = fixture({ withSession: false, runtime: runtime(), ownsStreaming: true, flushPendingMutations })
+    const sending = state.actions.sendPrompt('First ordinary prompt after a mode command')
+    await vi.waitFor(() => expect(flushPendingMutations).toHaveBeenCalledTimes(2))
+    state.workspace.workspaceRef.current.generation += 1
+    state.workspace.setMessages([])
+    resolveFlush()
+    await sending
+    expect(state.command).toHaveBeenCalledWith('idle-runtime', expect.objectContaining({
+      type: 'prompt', message: 'First ordinary prompt after a mode command',
+    }))
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.messages()).toEqual([])
+  })
+
+  it('delivers a submitted prompt once even when navigation wins the startup race', async () => {
+    const state = fixture({ withSession: false })
+    let resolveStart!: (value: RuntimeInfo) => void
+    state.start.mockImplementationOnce(() => new Promise((resolve) => { resolveStart = resolve }))
+    const sending = state.actions.sendPrompt('Keep this long first prompt before any assistant response')
+    await vi.waitFor(() => expect(state.start).toHaveBeenCalledOnce())
+    state.workspace.workspaceRef.current.generation += 1
+    state.workspace.setMessages([])
+    resolveStart(runtime('started-runtime'))
+    await sending
+    expect(state.command).toHaveBeenCalledWith('started-runtime', expect.objectContaining({
+      type: 'prompt', message: 'Keep this long first prompt before any assistant response',
+    }))
+    expect(state.bridge.agent.stop).not.toHaveBeenCalled()
+    expect(state.currentRuntime()).toBeNull()
+    expect(state.messages()).toEqual([])
+  })
+})
 
 describe('/compact dispatch', () => {
   it('sends compact to an idle runtime without a prompt command or user message', async () => {

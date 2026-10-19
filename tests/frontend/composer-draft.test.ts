@@ -5,6 +5,7 @@ import {
   clearComposerDraft,
   composerDraftStorageKey,
   readComposerDraft,
+  restoreComposerDraft,
   saveComposerDraft,
   takeComposerDraft,
 } from '../../src/lib/composer-draft'
@@ -14,6 +15,16 @@ afterEach(() => {
 })
 
 describe('composer draft storage', () => {
+  it('restores a failed submission only when its scoped slot has no newer draft', () => {
+    saveComposerDraft('project:new', { text: 'Newer prompt B' })
+    restoreComposerDraft('project:new', { text: 'Failed older prompt A' })
+    expect(readComposerDraft('project:new')?.text).toBe('Newer prompt B')
+    clearComposerDraft('project:new')
+    saveComposerDraft('other:new', { text: 'Unrelated legacy fallback' })
+    restoreComposerDraft('project:new', { text: 'Failed older prompt A' })
+    expect(readComposerDraft('project:new')?.text).toBe('Failed older prompt A')
+  })
+
   it('round-trips text and model selection for a workspace scope', () => {
     saveComposerDraft('project:new', { text: 'Ship the sidebar', model: 'openai:gpt-5.2', effort: 'high', fast: true })
     expect(readComposerDraft('project:new')).toEqual({

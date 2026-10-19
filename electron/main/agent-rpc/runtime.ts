@@ -87,6 +87,29 @@ export class RpcRuntime {
   private stopPromise: Promise<boolean> | null = null
   private readonly eventForwarder: AgentEventForwarder
   private stopped = false
+  private firstPromptNeedsPersistence = false
+
+  persistFirstPrompt(): void {
+    this.firstPromptNeedsPersistence = true
+  }
+
+  private async persistStartedSession(message: Record<string, unknown>): Promise<void> {
+    try {
+      const state = await this.request({ type: 'get_state' }, 60_000)
+      this.updateFromState(state.data)
+      const content = Array.isArray(message.content) ? message.content : []
+      const text = typeof message.content === 'string' ? message.content
+        : content.filter(isRecord).filter((part) => part.type === 'text' && typeof part.text === 'string').map((part) => part.text).join(' ')
+      const title = text.replace(/\s+/g, ' ').trim()
+      const existingName = isRecord(state.data) && typeof state.data.sessionName === 'string' ? state.data.sessionName : ''
+      // This request runs in the child after message_end's synchronous append.
+      // A session_info entry also flushes Prime's buffered first user message.
+      await this.request({ type: 'set_session_name', name: existingName || (title.length > 100 ? `${title.slice(0, 99)}…` : title) || 'New session' }, 60_000)
+      this.emit({ type: 'session_persisted', sessionFile: this.info.sessionFile, harness: this.adapter.id })
+    } catch (error) {
+      this.emit({ type: 'error', error: `The first prompt was accepted, but saving the session failed: ${errorMessage(error)}` })
+    }
+  }
   private info: RuntimeInfo
   private requestedServiceTier: PrimeServiceTier = 'default'
   private contextUsageRefresh: Promise<void> | null = null
@@ -481,6 +504,10 @@ export class RpcRuntime {
     }
     const value = this.adapter.normalizeEvent(raw)
     if (!value) return
+    if (this.firstPromptNeedsPersistence && value.type === 'message_end' && isRecord(value.message) && value.message.role === 'user') {
+      this.firstPromptNeedsPersistence = false
+      void this.persistStartedSession(value.message)
+    }
     const blockingUiId = blockingExtensionUiRequestId(value)
     if (blockingUiId && this.hasPendingPrompt()) {
       // A dialog's own timeout resolves it in the extension without a reply.

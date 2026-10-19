@@ -142,6 +142,7 @@ export function useWorkspaceRuntime({
   }, [flushAgentEvents])
 
   const attachRuntime = useCallback((nextRuntime: RuntimeInfo | undefined, generation: number) => {
+    if (nextRuntime?.sessionFile) runtimeSessionsRef.current.set(nextRuntime.runtimeId, nextRuntime.sessionFile)
     if (workspaceRef.current.generation !== generation) return
     const next = nextRuntime ?? null
     const previousQueueOwner = activeQueuedPromptOwnerRef.current
@@ -158,10 +159,18 @@ export function useWorkspaceRuntime({
       pendingQueuedPromptsRef.current = nextQueue
       setPendingQueuedPrompts(nextQueue)
     }
-    if (next?.sessionFile) runtimeSessionsRef.current.set(next.runtimeId, next.sessionFile)
     runtimeIdRef.current = next?.runtimeId ?? null
     runtimeOwnerRef.current = next ? { runtimeId: next.runtimeId, generation } : null
     setRuntime(next)
+  }, [])
+
+  const promoteStartedSession = useCallback((session: SessionRecord, runtimeId: string) => {
+    if (runtimeIdRef.current !== runtimeId || workspaceRef.current.sessionFile) return
+    workspaceRef.current = { ...workspaceRef.current, session, sessionFile: session.filePath }
+    // The prompt already owns this transcript. Do not start a disk read that
+    // could replace its optimistic rows with a partial first turn.
+    lastTranscriptReadWorkspaceRef.current = { generation: workspaceRef.current.generation, sessionFile: session.filePath }
+    setActiveSessionId(session.id)
   }, [])
 
   const activateWorkspace = useCallback((project?: ProjectRecord, session?: SessionRecord, nextRuntime?: RuntimeInfo) => {
@@ -600,6 +609,7 @@ export function useWorkspaceRuntime({
     acknowledgeSteer,
     activeProjectId,
     activeSessionId,
+    promoteStartedSession,
     runtime,
     setRuntime,
     workspaceGeneration,

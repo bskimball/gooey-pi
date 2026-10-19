@@ -16,6 +16,7 @@ import {
 import {
 	clearComposerDraft,
 	readComposerDraft,
+	restoreComposerDraft,
 	saveComposerDraft,
 	takeComposerDraft,
 } from "@/lib/composer-draft";
@@ -519,10 +520,13 @@ export const Composer = memo(function Composer({
 		setMenu(null);
 		try {
 			await onSend(promptWithContext, submittedImages, intent);
-			if (draftKey) clearComposerDraft(draftKey);
+			if (draftKey && mountedRef.current) clearComposerDraft(draftKey);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (currentAnnotations.length > 0) onClearAnnotations();
 		} catch {
+			if (!mountedRef.current && draftKey) {
+				restoreComposerDraft(draftKey, { text: submittedValue, model, effort, fast });
+			}
 			if (mountedRef.current) {
 				setValue((current) => current || submittedValue);
 				const restoration = imageAttachments.restoreWithinLimits(

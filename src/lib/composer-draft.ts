@@ -45,6 +45,13 @@ export function saveComposerDraft(scope: string, snapshot: ComposerDraftSnapshot
   } catch { /* storage unavailable */ }
 }
 
+/** A late failed submission must not replace text typed in a newer composer. */
+export function restoreComposerDraft(scope: string, snapshot: ComposerDraftSnapshot): void {
+  try {
+    if (!window.sessionStorage.getItem(composerDraftStorageKey(scope))) saveComposerDraft(scope, snapshot)
+  } catch { /* storage unavailable */ }
+}
+
 export function readComposerDraft(scope: string): ComposerDraftSnapshot | null {
   try {
     const raw = window.sessionStorage.getItem(composerDraftStorageKey(scope))

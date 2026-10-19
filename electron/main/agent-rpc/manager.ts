@@ -161,6 +161,7 @@ export class AgentRpcManager {
           {},
           this.adapter,
         )
+        if (!sessionPath) created.persistFirstPrompt()
         // Record the environment generation before admission resolves so a
         // concurrent settings refresh cannot mistake this child for a new one.
         this.runtimeEnvironmentRevisions.set(created.runtimeId, runtimeEnvironmentRevision)

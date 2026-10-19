@@ -67,6 +67,26 @@ afterEach(() => {
 const flush = async () => { await act(async () => { await Promise.resolve() }) }
 
 describe('prompt admission versus background transcript reads', () => {
+  it('promotes the first persisted session without clearing the admitted transcript or generation', () => {
+    act(() => { root.render(createElement(Probe, { bridge: null })) })
+    act(() => { latest.activateWorkspace(project) })
+    const generation = latest.workspaceRef.current.generation
+    const prompt: TranscriptMessage = { id: 'first', role: 'user', timestamp: 1, parts: [{ type: 'text', text: 'Keep this prompt' }] }
+    act(() => {
+      latest.attachRuntime({ runtimeId: 'first-runtime', harness: 'prime', cwd: '/project', sessionFile: session.filePath, isStreaming: true }, generation)
+      latest.setMessages([prompt])
+      latest.promoteStartedSession(session, 'first-runtime')
+    })
+    expect(latest.activeSessionId).toBe(session.id)
+    expect(latest.workspaceRef.current.sessionFile).toBe(session.filePath)
+    expect(latest.workspaceRef.current.generation).toBe(generation)
+    expect(latest.messages).toEqual([prompt])
+    act(() => { latest.activateWorkspace(project) })
+    act(() => { latest.promoteStartedSession(session, 'first-runtime') })
+    expect(latest.activeSessionId).toBeUndefined()
+    expect(latest.workspaceRef.current.sessionFile).toBeUndefined()
+  })
+
   it('marks failed queued flushes across the active owner and clears them at a boundary', () => {
     act(() => { root.render(createElement(Probe, { bridge: null })) })
     act(() => { latest.queuePrompt('retry this prompt', 'queue') })

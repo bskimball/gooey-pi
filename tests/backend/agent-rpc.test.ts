@@ -24,6 +24,54 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
+describe('first prompt persistence', () => {
+  it('flushes the real Prime session manager before any assistant response', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-first-prompt-'))
+    dirs.push(cwd)
+    const executable = join(cwd, 'session-agent.mjs')
+    const sessionManagerUrl = new URL('./core/session-manager.js', import.meta.resolve('prime-agent')).href
+    writeFileSync(executable, `#!/usr/bin/env node
+import { createInterface } from 'node:readline'
+import { SessionManager } from ${JSON.stringify(sessionManagerUrl)}
+const session = SessionManager.create(${JSON.stringify(cwd)}, ${JSON.stringify(join(cwd, 'sessions'))})
+const send = value => process.stdout.write(JSON.stringify(value) + '\\n')
+createInterface({ input: process.stdin }).on('line', line => {
+  const command = JSON.parse(line)
+  const respond = data => send({ id: command.id, type: 'response', command: command.type, success: true, data })
+  if (command.type === 'get_state') respond({ sessionId: session.getSessionId(), sessionFile: session.getSessionFile(), isStreaming: true })
+  else if (command.type === 'prompt') {
+    respond({ disposition: 'started' })
+    const message = { role: 'user', content: [{ type: 'text', text: command.message }], timestamp: Date.now() }
+    send({ type: 'message_end', message })
+    session.appendMessage(message)
+  } else if (command.type === 'set_session_name') {
+    session.appendSessionInfo(command.name)
+    respond({})
+  } else respond({})
+})
+`)
+    chmodSync(executable, 0o755)
+    const events: Record<string, unknown>[] = []
+    const runtime = new RpcRuntime(executable, [], cwd, ({ event }) => events.push(event), () => undefined)
+    runtime.persistFirstPrompt()
+    try {
+      await runtime.handshake()
+      await runtime.command({ type: 'prompt', message: 'Keep my first prompt before the model responds' })
+      await waitUntil(() => events.some((event) => event.type === 'session_persisted'))
+      const file = runtime.snapshot().sessionFile
+      expect(file).toBeDefined()
+      const lines = readFileSync(file!, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+      expect(lines.filter((entry) => entry.type === 'message')).toMatchObject([
+        { message: { role: 'user', content: [{ text: 'Keep my first prompt before the model responds' }] } },
+      ])
+      expect(lines.some((entry) => entry.type === 'session_info' && entry.name === 'Keep my first prompt before the model responds')).toBe(true)
+      expect(events.some((event) => event.type === 'error')).toBe(false)
+    } finally {
+      await runtime.stop()
+    }
+  })
+})
+
 describe('agent RPC exit details', () => {
   const writeExitingAgent = (body: string): { cwd: string; executable: string } => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-exit-'))
