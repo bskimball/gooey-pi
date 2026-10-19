@@ -279,6 +279,23 @@ describe("Composer skill mentions", () => {
 		expect(prompt).not.toContain("/disabled/SKILL.md");
 	});
 
+	it("invokes the selected @prompt file instead of an unresolvable catalog ID", async () => {
+		const prompt = skillRecord("ship", {
+			id: "f564f966285e35df629790ba8b753aab",
+			kind: "prompt",
+			path: "/home/user/.pi/agent/prompts/ship.md",
+		});
+		const { onSend } = renderComposer({ skills: [prompt] });
+		await setDraft("@ship");
+		await clickSend();
+
+		const [sent] = onSend.mock.calls[0];
+		expect(sent).not.toContain(prompt.id);
+		expect(sent).toContain(
+			`- @ship: Read the prompt file at ${JSON.stringify(prompt.path)}`,
+		);
+	});
+
 	it("lists only enabled skills for $ and accepts the arrow-highlighted one with Tab", async () => {
 		const { onSend } = renderComposer({
 			sessions: [sessionRecord("Unicorn session")],
