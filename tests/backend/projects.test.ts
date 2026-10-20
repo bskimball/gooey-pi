@@ -19,6 +19,7 @@ vi.mock('electron', () => electronMocks)
 vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
 const dirs: string[] = []
+const stores: JsonStateStore[] = []
 function identity(path: string): { dev: string; ino: string; birthtimeNs?: string } {
   const info = lstatSync(path, { bigint: true })
   return {
@@ -28,7 +29,11 @@ function identity(path: string): { dev: string; ino: string; birthtimeNs?: strin
   }
 }
 const identities = (...paths: string[]) => Object.fromEntries(paths.map((path) => [realpathSync(path), identity(path)]))
-afterEach(() => {
+afterEach(async () => {
+  for (const store of stores.splice(0)) {
+    await store.ready()
+    await store.beginShutdown()
+  }
   electronMocks.dialog.showOpenDialog.mockReset()
   electronMocks.dialog.showSaveDialog.mockReset()
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -38,6 +43,7 @@ function setup(): { root: string; service: ProjectService; store: JsonStateStore
   const dir = mkdtempSync(join(tmpdir(), 'prime-work-files-')); dirs.push(dir)
   const root = join(dir, 'project'); mkdirSync(root)
   const store = new JsonStateStore(join(dir, 'state.json'))
+  stores.push(store)
   const service = new ProjectService(store, () => null)
   return { root, service, store }
 }
@@ -767,7 +773,9 @@ describe('ProjectService file listing', () => {
     await expect(service.authorizeCwd(root)).rejects.toThrow(/identity changed/)
     await expect(service.listFiles(root)).rejects.toThrow(/identity changed/)
 
-    const restarted = new ProjectService(new JsonStateStore(resolve(root, '..', 'state.json')), () => null)
+    const restartedStore = new JsonStateStore(resolve(root, '..', 'state.json'))
+    stores.push(restartedStore)
+    const restarted = new ProjectService(restartedStore, () => null)
     restarted.bindProviders({ sessions: async () => [], branch: async () => undefined })
     await restarted.list()
     await expect(restarted.authorizeCwd(root)).rejects.toThrow(/identity changed/)
