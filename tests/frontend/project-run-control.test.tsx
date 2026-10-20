@@ -11,7 +11,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const project: ProjectRecord = {
   id: 'project-1',
   harness: 'pi',
-  name: 'GooeyPi',
+  name: 'Apex',
   path: '/repo',
   folders: ['/repo'],
   primaryFolder: '/repo',

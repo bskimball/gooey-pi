@@ -156,8 +156,8 @@ export function bootstrapNpm(options = {}) {
   assertSupportedNpm(installed, toolchain)
   if (installed !== toolchain.npm) throw new Error(`Expected pinned npm ${toolchain.npm} after bootstrap, found ${installed}`)
 
-  const githubPathUpdated = persist(layout.shimDirectory, env.GITHUB_PATH, platform)
-  const githubEnvUpdated = persistNpmCliPath(layout.cliPath, env.GITHUB_ENV, platform)
+  const githubPathUpdated = persist(layout.shimDirectory, env.GITHUB_PATH ?? '', platform)
+  const githubEnvUpdated = persistNpmCliPath(layout.cliPath, env.GITHUB_ENV ?? '', platform)
   console.log(`Repository toolchain bootstrap passed: Node ${nodeVersion} and npm ${installed}.`)
   return { current, installed, artifactPath: artifact.path, artifactIntegrity: artifact.integrity, ...layout, githubPathUpdated, githubEnvUpdated }
 }

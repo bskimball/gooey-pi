@@ -52,7 +52,7 @@ describe('persisted project parsing', () => {
       projects: [{
         id: 'project-1',
         harness: 'prime',
-        name: 'GooeyPi',
+        name: 'Apex',
         path: '/repos/gooey-pi',
         primaryFolder: '/repos/gooey-pi',
         pinned: 'yes',
@@ -80,7 +80,7 @@ describe('persisted project parsing', () => {
       projects: [{
         id: 'project-1',
         harness: 'prime',
-        name: 'GooeyPi',
+        name: 'Apex',
         path: '/repos/gooey-pi',
         folders: ['/repos/gooey-pi', 7],
         primaryFolder: '/repos/gooey-pi',
@@ -119,7 +119,7 @@ describe('persisted project parsing', () => {
   it.each([3, 4])('drops version %s projects whose harness is absent or unknown', (version) => {
     const project = {
       id: 'project-1',
-      name: 'GooeyPi',
+      name: 'Apex',
       path: '/repos/gooey-pi',
       folders: ['/repos/gooey-pi'],
       primaryFolder: '/repos/gooey-pi',
@@ -135,7 +135,7 @@ describe('persisted project parsing', () => {
     const project = {
       id: 'project-1',
       harness: 'prime',
-      name: 'GooeyPi',
+      name: 'Apex',
       path: '/repos/gooey-pi',
       folders: ['/repos/gooey-pi'],
       primaryFolder: '/repos/gooey-pi',

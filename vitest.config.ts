@@ -11,6 +11,7 @@ export default defineConfig({
   esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',
+    ...(process.platform === 'win32' ? { maxWorkers: 2 } : {}),
     include: ['tests/**/*.test.{ts,tsx}'],
     // Vitest 5 defaults clearMocks to true; suites assert on import-time mock calls.
     clearMocks: false,

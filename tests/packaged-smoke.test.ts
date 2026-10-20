@@ -1,4 +1,5 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -60,7 +61,7 @@ describe('packaged smoke argument parsing', () => {
 describe('packaged smoke launcher invocation', () => {
   it('runs the executable directly when a display is available', () => {
     expect(launcher.launchCommand('/app/gooeypi', ['--flag'], { platform: 'linux', display: ':0' })).toEqual({ command: '/app/gooeypi', args: ['--flag'] })
-    expect(launcher.launchCommand('C:\\app\\GooeyPi.exe', ['--flag'], { platform: 'win32', display: '' })).toEqual({ command: 'C:\\app\\GooeyPi.exe', args: ['--flag'] })
+    expect(launcher.launchCommand('C:\\app\\Apex.exe', ['--flag'], { platform: 'win32', display: '' })).toEqual({ command: 'C:\\app\\Apex.exe', args: ['--flag'] })
   })
 
   it('wraps a headless Linux launch in a virtual display', () => {
@@ -106,12 +107,14 @@ describe('packaged smoke launch', () => {
   let unpacked: string
 
   const writeFakeApplication = (script: string): void => {
-    const executable = join(unpacked, 'gooeypi')
-    writeFileSync(executable, `#!/usr/bin/env bash\nset -euo pipefail\n${script}\n`, { encoding: 'utf8' })
-    chmodSync(executable, 0o755)
+    writeFileSync(join(unpacked, 'gooeypi'), script, { encoding: 'utf8' })
   }
 
-  const markerArgument = 'for argument in "$@"; do case "$argument" in --packaged-smoke=*) marker="${argument#--packaged-smoke=}";; esac; done'
+  const spawnProcess: launcher.SpawnProcess = (command, args, options) => {
+    if (command !== join(unpacked, 'gooeypi')) throw new Error(`Unexpected fixture executable: ${command}`)
+    return spawn(process.execPath, [command, ...args], options)
+  }
+  const markerArgument = `const marker = process.argv.slice(2).find(argument => argument.startsWith('${PACKAGED_SMOKE_FLAG}')).slice('${PACKAGED_SMOKE_FLAG}'.length);`
 
   beforeAll(() => {
     sandbox = mkdtempSync(join(tmpdir(), 'gooeypi-smoke-test-'))
@@ -135,18 +138,18 @@ describe('packaged smoke launch', () => {
   const temporaryWorkspaces = (): string[] => readdirSync(tmpdir()).filter((name) => name.startsWith('gooeypi-packaged-smoke-'))
 
   it('accepts an application that reports readiness and leaves no temporary state', async () => {
-    writeFakeApplication(`${markerArgument}\nprintf '{"event":"${PACKAGED_SMOKE_READY_EVENT}","url":"${PACKAGED_RENDERER_URL}","version":"9.9.9"}' > "$marker"`)
+    writeFakeApplication(`${markerArgument}\nrequire('node:fs').writeFileSync(marker, JSON.stringify({ event: '${PACKAGED_SMOKE_READY_EVENT}', url: '${PACKAGED_RENDERER_URL}', version: '9.9.9' }))`)
     const before = temporaryWorkspaces()
 
-    await expect(launcher.smokePackagedApp('linux', 'x64')).resolves.toEqual({ event: PACKAGED_SMOKE_READY_EVENT, url: PACKAGED_RENDERER_URL, version: '9.9.9' })
+    await expect(launcher.smokePackagedApp('linux', 'x64', { spawnProcess })).resolves.toEqual({ event: PACKAGED_SMOKE_READY_EVENT, url: PACKAGED_RENDERER_URL, version: '9.9.9' })
 
     expect(temporaryWorkspaces()).toEqual(before)
   })
 
   it('fails when the application exits without reporting readiness, and writes bounded diagnostics', async () => {
-    writeFakeApplication('echo "renderer failed to load" >&2\nexit 3')
+    writeFakeApplication('console.error("renderer failed to load"); process.exit(3)')
 
-    await expect(launcher.smokePackagedApp('linux', 'x64')).rejects.toThrow('exited with code 3')
+    await expect(launcher.smokePackagedApp('linux', 'x64', { spawnProcess })).rejects.toThrow('exited with code 3')
 
     const diagnostics = readFileSync(join(sandbox, 'release', 'linux', 'x64', 'packaged-smoke-diagnostics.log'), 'utf8')
     expect(diagnostics).toContain('renderer failed to load')
@@ -154,17 +157,17 @@ describe('packaged smoke launch', () => {
   })
 
   it('fails when a started application never reports readiness', async () => {
-    writeFakeApplication(`${markerArgument}\nexit 0`)
+    writeFakeApplication('process.exit(0)')
 
-    await expect(launcher.smokePackagedApp('linux', 'x64')).rejects.toThrow('exited without reporting renderer readiness')
+    await expect(launcher.smokePackagedApp('linux', 'x64', { spawnProcess })).rejects.toThrow('exited without reporting renderer readiness')
   })
 
   it('kills a hung application at its deadline instead of waiting for it', async () => {
     const survived = join(sandbox, 'survived-the-deadline')
-    writeFakeApplication(`sleep 30\ntouch ${survived}`)
+    writeFakeApplication(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(survived)}, ''), 30_000)`)
     const before = temporaryWorkspaces()
 
-    await expect(launcher.smokePackagedApp('linux', 'x64', { timeoutMs: 750 })).rejects.toThrow('did not report renderer readiness within 750ms')
+    await expect(launcher.smokePackagedApp('linux', 'x64', { timeoutMs: 750, spawnProcess })).rejects.toThrow('did not report renderer readiness within 750ms')
 
     expect(readdirSync(sandbox)).not.toContain('survived-the-deadline')
     expect(temporaryWorkspaces()).toEqual(before)
@@ -173,7 +176,7 @@ describe('packaged smoke launch', () => {
   it('reports a missing packaged executable rather than launching something else', async () => {
     rmSync(join(unpacked, 'gooeypi'), { force: true })
 
-    await expect(launcher.smokePackagedApp('linux', 'x64')).rejects.toThrow('missing its executable')
+    await expect(launcher.smokePackagedApp('linux', 'x64', { spawnProcess })).rejects.toThrow('missing its executable')
 
     // Every failure leaves the diagnostics artifact CI uploads.
     expect(readFileSync(join(sandbox, 'release', 'linux', 'x64', 'packaged-smoke-diagnostics.log'), 'utf8')).toContain('missing its executable')

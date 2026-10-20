@@ -31,7 +31,7 @@ export function resolveCommandInvocation(command, args, platform = process.platf
     return { file: process.execPath, args: [localRequire.resolve('electron-builder/cli.js'), ...args], shell: false }
   }
   if (command === 'npm') {
-    const npmCli = env.npm_execpath
+    const npmCli = platform === 'win32' ? Object.entries(env).find(([name]) => name.toLowerCase() === 'npm_execpath')?.[1] : env.npm_execpath
     if (npmCli) {
       const validatedNpmCli = validateAbsoluteSingleLinePath(npmCli, 'npm_execpath', platform)
       if (!/\.[cm]?js$/i.test(validatedNpmCli)) {

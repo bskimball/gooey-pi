@@ -264,7 +264,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const mcpCommand = parseMcpCommand(prompt, commandHarness)
     if (mcpCommand?.type === 'authenticate') {
       const target = mcpCommand.server ? ` to sign in to ${mcpCommand.server}` : ' to authenticate network MCP servers'
-      setToast(`Network MCP authentication is managed outside GooeyPi. Use ${HARNESS_AGENT_NAMES[commandHarness]} directly${target}.`)
+      setToast(`Network MCP authentication is managed outside Apex. Use ${HARNESS_AGENT_NAMES[commandHarness]} directly${target}.`)
       return
     }
     if (compactCommand && images.length > 0) {
@@ -403,7 +403,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         if (compactCommand && !activeRuntime) {
           if (!selected.sessionFile) { setToast('Nothing to compact yet.'); return }
           if (selectedSession?.status === 'running') {
-            setToast('Compaction is unavailable while this session is running outside GooeyPi.')
+            setToast('Compaction is unavailable while this session is running outside Apex.')
             return
           }
         }
@@ -427,7 +427,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         if (!activeRuntime) {
           workspace.attachRuntime(undefined, generation)
           if (images.length > 0 && selected.sessionFile && selectedSession?.status === 'running') {
-            throw new Error('Image attachments cannot be queued while this session is active outside GooeyPi. Wait for it to finish, then try again.')
+            throw new Error('Image attachments cannot be queued while this session is active outside Apex. Wait for it to finish, then try again.')
           }
           if (images.length === 0 && selected.sessionFile && selectedSession?.status === 'running') {
             if (await followUpExternalSession(selected.sessionFile)) {

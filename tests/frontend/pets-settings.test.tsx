@@ -25,7 +25,7 @@ describe('PetsSettings', () => {
     const pets = {
       list: vi.fn(async () => [
         { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'Orb.', source: 'built-in', kind: 'orb' } as PetDefinition,
-        { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'GooeyPi', description: 'Gooey.', source: 'built-in', kind: 'spritesheet' } as PetDefinition,
+        { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'Apex', description: 'Gooey.', source: 'built-in', kind: 'spritesheet' } as PetDefinition,
         rocky,
       ]),
       sprite: vi.fn(async () => 'data:image/webp;base64,UklGRgQAAABXRUJQ'),
@@ -35,7 +35,7 @@ describe('PetsSettings', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
-    expect(container.textContent).toContain('GooeyPi')
+    expect(container.textContent).toContain('Apex')
     expect(container.textContent).toContain('Rocky')
     expect(container.textContent).toContain('1 Codex pet found')
     expect(container.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]')?.textContent).toContain('Orb')

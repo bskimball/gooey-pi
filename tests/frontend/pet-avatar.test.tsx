@@ -10,7 +10,7 @@ import type { PetDefinition, PrimeWorkApi } from '../../src/types/api'
 const pet: PetDefinition = {
   id: 'gooey-pi',
   petId: 'gooey-pi',
-  displayName: 'GooeyPi',
+  displayName: 'Apex',
   description: 'Gooey.',
   source: 'built-in',
   kind: 'spritesheet',

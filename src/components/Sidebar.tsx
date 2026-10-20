@@ -118,17 +118,17 @@ function SessionStatusMark({ status, attention }: { status: SessionRecord['statu
 function updateControlCopy(state: AppUpdateState): { label: string; title: string } {
   const version = state.version ? ` ${state.version}` : ''
   switch (state.phase) {
-    case 'checking': return { label: 'Checking for updates', title: 'Checking GitHub Releases for a new GooeyPi version' }
-    case 'available': return { label: `Download${version}`, title: `Download and restart GooeyPi${version}` }
+    case 'checking': return { label: 'Checking for updates', title: 'Checking GitHub Releases for a new Apex version' }
+    case 'available': return { label: `Download${version}`, title: `Download and restart Apex${version}` }
     case 'downloading': return {
       label: state.percent === undefined ? `Downloading${version}` : `Downloading${version} · ${state.percent}%`,
-      title: `Downloading GooeyPi${version}`,
+      title: `Downloading Apex${version}`,
     }
-    case 'downloaded': return { label: `Restart for${version}`, title: `Restart GooeyPi and install version${version}` }
-    case 'not-available': return { label: 'GooeyPi is up to date', title: 'Check again for a new GooeyPi release' }
+    case 'downloaded': return { label: `Restart for${version}`, title: `Restart Apex and install version${version}` }
+    case 'not-available': return { label: 'Apex is up to date', title: 'Check again for a new Apex release' }
     case 'error': return { label: version ? `Retry update${version}` : 'Retry update', title: state.message ?? 'Update failed — try checking again' }
     case 'unsupported': return { label: 'Automatic updates', title: state.message ?? 'Automatic updates are available in installed builds' }
-    default: return { label: 'Release updates', title: 'Check for a new GooeyPi release' }
+    default: return { label: 'Release updates', title: 'Check for a new Apex release' }
   }
 }
 
@@ -136,22 +136,22 @@ function updateControlCopy(state: AppUpdateState): { label: string; title: strin
 function updateAnnouncement(state: AppUpdateState): string {
   const version = state.version ? ` ${state.version}` : ''
   switch (state.phase) {
-    case 'available': return `GooeyPi update${version} is available`
-    case 'downloading': return `Downloading GooeyPi update${version}`
-    case 'downloaded': return `GooeyPi update${version} is ready to install`
-    case 'error': return `GooeyPi update failed. ${state.message ?? 'Try again.'}`
+    case 'available': return `Apex update${version} is available`
+    case 'downloading': return `Downloading Apex update${version}`
+    case 'downloaded': return `Apex update${version} is ready to install`
+    case 'error': return `Apex update failed. ${state.message ?? 'Try again.'}`
     default: return ''
   }
 }
 
 function updateConfirmCopy(state: AppUpdateState): { title: string; body: string } {
   if (state.phase === 'downloaded') return {
-    title: 'Restart GooeyPi to install the update?',
-    body: 'GooeyPi will close and restart to finish installing the update.',
+    title: 'Restart Apex to install the update?',
+    body: 'Apex will close and restart to finish installing the update.',
   }
   return {
-    title: 'Download and Restart GooeyPi?',
-    body: 'GooeyPi will download the update, close, and restart when it is ready.',
+    title: 'Download and Restart Apex?',
+    body: 'Apex will download the update, close, and restart when it is ready.',
   }
 }
 

@@ -10,7 +10,7 @@ Use Supabase's official hosted MCP server from the Prime Agent Python kernel.
 ## Setup
 
 Configure the `supabase` MCP server and complete `/mcp login supabase` directly
-in Prime Agent outside GooeyPi. GooeyPi intentionally does not forward MCP
+in Prime Agent outside Apex. Apex intentionally does not forward MCP
 authentication commands or inspect shared MCP credentials. Prefer a
 project-scoped, read-only server URL for routine work.
 

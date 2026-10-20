@@ -26,17 +26,17 @@ export function supportsFastMode(model: PiFastModeContext['model']): boolean {
 
 /**
  * Base Pi exposes provider-payload interception but no service-tier RPC
- * command. GooeyPi drives this private slash command over Pi's normal prompt
+ * command. Apex drives this private slash command over Pi's normal prompt
  * RPC, then the hook applies the selected tier only to models that support it.
  */
 export default function piWorkFastMode(pi: PiFastModeExtensionApi): void {
   let priority = false
 
   pi.registerCommand('gooeypi-fast-mode', {
-    description: 'Set GooeyPi fast mode for this Pi runtime.',
+    description: 'Set Apex fast mode for this Pi runtime.',
     handler: (args) => {
       const tier = args.trim()
-      if (tier !== 'default' && tier !== 'priority') throw new Error('Invalid GooeyPi fast-mode tier')
+      if (tier !== 'default' && tier !== 'priority') throw new Error('Invalid Apex fast-mode tier')
       priority = tier === 'priority'
     },
   })

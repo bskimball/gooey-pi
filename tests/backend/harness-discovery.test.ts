@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import * as processes from '../../electron/main/process-utils'
+import * as filesystem from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +10,9 @@ import { defaultSettings, type DesktopState } from '../../electron/main/store'
 import { HARNESSES, type HarnessDescriptor } from '../../electron/main/harness'
 import { findHarnessExecutable } from '../../electron/main/process-utils'
 
+vi.mock('../../electron/main/process-utils', async (importOriginal) => ({ ...await importOriginal<typeof import('../../electron/main/process-utils')>() }))
+vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => { resolve = done })
@@ -14,6 +20,23 @@ function deferred<T>() {
 }
 
 describe('HarnessDiscoveryService', () => {
+  it('preserves bounded sanitized preparation errors and OS error classifications', async () => {
+    vi.spyOn(processes, 'runProcess').mockRejectedValueOnce(new Error('Missing official Pi installation\n' + 'x'.repeat(300)))
+    const result = await probeHarnessExecutable('C:\\Tools\\pi.cmd')
+    expect(result.failure?.detail).toHaveLength(200)
+    expect(result.failure?.detail).toContain('Missing official Pi installation')
+    expect(result.failure?.detail).not.toContain('\n')
+    for (const [code, detail] of [['ENOENT', 'path does not exist'], ['EACCES', 'permission denied'], ['EPERM', 'permission denied'], ['EINVAL', 'spawn error EINVAL']]) {
+      vi.spyOn(processes, 'runProcess').mockRejectedValueOnce(Object.assign(new Error('private detail'), { code }))
+      expect((await probeHarnessExecutable('C:\\Tools\\pi.cmd')).failure?.detail).toBe(detail)
+    }
+  })
+  beforeEach(() => {
+    vi.stubEnv('PRIME_WORK_E2E_HIDE_WINDOWS', '1')
+    vi.stubEnv('PI_BINARY', '')
+    vi.stubEnv('PATH', '')
+  })
+  afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
   it('reconciles against the settings state inside the serialized transaction', async () => {
     const state = { settings: defaultSettings() } as DesktopState
     state.settings.activeHarness = 'pi'
@@ -142,6 +165,11 @@ describe('HarnessDiscoveryService', () => {
     const nonExecutable = join(dir, 'pi')
     writeFileSync(nonExecutable, '#!/bin/sh\nexit 0\n')
     chmodSync(nonExecutable, 0o644)
+    const originalAccess = filesystem.access
+    vi.spyOn(filesystem, 'access').mockImplementation(async (path, mode) => {
+      if (path === nonExecutable && mode === constants.X_OK) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return originalAccess(path, mode)
+    })
     try {
       const missingFailures: Array<{ path: string; reason: string }> = []
       await findHarnessExecutable(HARNESSES.pi, missing, async () => false, (failure) => missingFailures.push(failure))
@@ -207,9 +235,11 @@ describe('HarnessDiscoveryService', () => {
 
   it('keeps the meaningful last stderr line in a probe failure', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'gooeypi-probe-'))
-    const executable = join(dir, 'pi')
-    writeFileSync(executable, '#!/bin/sh\nprintf "warning noise\\n(node:123) ExperimentalWarning: noisy\\nTypeError: webidl.util.markAsUncloneable is not a function\\n" >&2\nexit 1\n')
-    chmodSync(executable, 0o755)
+    const executable = process.execPath
+    const script = join(dir, 'probe.cjs')
+    writeFileSync(script, 'process.stderr.write("warning noise\\n(node:123) ExperimentalWarning: noisy\\nTypeError: webidl.util.markAsUncloneable is not a function\\n"); process.exit(1)')
+    const originalRunProcess = processes.runProcess
+    vi.spyOn(processes, 'runProcess').mockImplementation((file, _args, options) => originalRunProcess(file, [script], options))
     try {
       await expect(probeHarnessExecutable(executable)).resolves.toMatchObject({
         runnable: false,

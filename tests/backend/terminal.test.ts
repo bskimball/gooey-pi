@@ -1,4 +1,4 @@
-import { accessSync, constants, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { accessSync, constants, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
@@ -6,9 +6,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalService } from '../../electron/main/terminal'
 
 const dirs: string[] = []
-const testShell = ['/bin/zsh', '/bin/bash', '/bin/sh'].find((shell) => {
+const windows = process.platform === 'win32'
+const testShell = (windows
+  ? [process.env.ComSpec, process.env.SystemRoot && join(process.env.SystemRoot, 'System32', 'cmd.exe')].filter((shell): shell is string => Boolean(shell))
+  : ['/bin/zsh', '/bin/bash', '/bin/sh']).find((shell) => {
   try { accessSync(shell, constants.X_OK); return true } catch { return false }
-}) ?? '/bin/sh'
+}) ?? (() => { throw new Error('No approved test shell available') })()
+const nodeCommand = (cwd: string, source: string): string => {
+  const script = join(cwd, 'terminal-child.cjs')
+  writeFileSync(script, source)
+  const quote = (value: string) => windows ? `"${value}"` : `'${value.replaceAll("'", "'\\''")}'`
+  return `${windows ? 'call ' : ''}${quote(process.execPath)} ${quote(script)}`
+}
+const backgroundCommand = (cwd: string, pidFile: string): string => nodeCommand(cwd,
+  `require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); process.on('SIGHUP', () => {}); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)`)
+
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 const waitFor = async (predicate: () => boolean, timeout = 4_000) => {
   const started = Date.now()
@@ -61,7 +73,9 @@ describe('TerminalService', () => {
     for (const key of prefixKeys) process.env[key] = '/usr/local'
     try {
       const service = new TerminalService(async () => cwd, () => testShell)
-      const command = 'if [ -z "${npm_config_prefix}${NPM_CONFIG_PREFIX}" ] && [ "$PREFIX" = /usr/local ]; then printf runner-ok; else printf env-mismatch; exit 2; fi'
+      const command = windows
+        ? 'if defined npm_config_prefix (echo env-mismatch & exit /b 2) else if not %PREFIX%==/usr/local (echo env-mismatch & exit /b 2) else (echo runner-ok & exit /b 0)'
+        : nodeCommand(cwd, `const ok = !process.env.npm_config_prefix && !process.env.NPM_CONFIG_PREFIX && process.env.PREFIX === '/usr/local'; console.log(ok ? 'runner-ok' : 'env-mismatch'); process.exit(ok ? 0 : 2)`)
       const created = await service.create(owner, { cwd, shell: testShell, command, cols: 80, rows: 24 })
 
       await waitFor(() => events.some((event) => event.channel === 'terminal:exit' && event.payload.terminalId === created.terminalId))
@@ -85,7 +99,7 @@ describe('TerminalService', () => {
     const owner = { id: 41, isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
     const service = new TerminalService(async () => cwd, () => testShell)
     const created = await service.create(owner, { cwd, shell: testShell, cols: 80, rows: 24 })
-    service.input(owner, created.terminalId, `/bin/sh -c ${JSON.stringify(`echo "$$" > ${JSON.stringify(pidFile)}; while true; do /bin/sleep 1; done`)}\r`)
+    service.input(owner, created.terminalId, `${backgroundCommand(cwd, pidFile)}\r`)
     await waitFor(() => { try { return Number(readFileSync(pidFile, 'utf8').trim()) > 0 } catch { return false } })
     const childPid = Number(readFileSync(pidFile, 'utf8').trim())
     try {
@@ -101,7 +115,7 @@ describe('TerminalService', () => {
     const service = new TerminalService(async () => cwd, () => testShell, async (path) => path)
     const archived = await service.create(owner, { cwd, sessionPath: '/sessions/archived.jsonl', shell: testShell, cols: 80, rows: 24 })
     const retained = await service.create(owner, { cwd, sessionPath: '/sessions/retained.jsonl', shell: testShell, cols: 80, rows: 24 })
-    service.input(owner, archived.terminalId, `/bin/sh -c ${JSON.stringify(`echo "$$" > ${JSON.stringify(pidFile)}; while true; do /bin/sleep 1; done`)}\r`)
+    service.input(owner, archived.terminalId, `${backgroundCommand(cwd, pidFile)}\r`)
     await waitFor(() => { try { return Number(readFileSync(pidFile, 'utf8').trim()) > 0 } catch { return false } })
     const childPid = Number(readFileSync(pidFile, 'utf8').trim())
     try {
@@ -118,7 +132,9 @@ describe('TerminalService', () => {
     const owner = { id: 42, isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
     const service = new TerminalService(async () => cwd, () => testShell)
     const created = await service.create(owner, { cwd, shell: testShell, cols: 80, rows: 24 })
-    service.input(owner, created.terminalId, `trap '' HUP TERM; echo $$ > ${JSON.stringify(pidFile)}; while true; do sleep 1; done\r`)
+    service.input(owner, created.terminalId, windows
+      ? `${backgroundCommand(cwd, pidFile)}\r`
+      : `trap '' HUP TERM; echo $$ > ${JSON.stringify(pidFile)}; while true; do sleep 1; done\r`)
     await waitFor(() => { try { return Number(readFileSync(pidFile, 'utf8').trim()) > 0 } catch { return false } })
     const leaderPid = Number(readFileSync(pidFile, 'utf8').trim())
     try {

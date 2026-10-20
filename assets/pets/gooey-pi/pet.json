@@ -1,6 +1,6 @@
 {
   "id": "gooey-pi",
-  "displayName": "GooeyPi",
+  "displayName": "Apex",
   "description": "A friendly purple jelly pet shaped like the mathematical pi symbol.",
   "spritesheetPath": "spritesheet.webp"
 }

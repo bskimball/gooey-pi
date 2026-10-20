@@ -26,7 +26,7 @@ describe('PetService', () => {
     const root = makeRoot()
     const builtInRoot = join(root, 'built-in')
     const codexRoot = join(root, 'codex')
-    writePet(builtInRoot, 'gooey-pi', 'gooey-pi', 'GooeyPi')
+    writePet(builtInRoot, 'gooey-pi', 'gooey-pi', 'Apex')
     writePet(codexRoot, 'gooey-pi', 'gooey-pi', 'Duplicate Gooey')
     writePet(codexRoot, 'rocky', 'rocky', 'Rocky')
     const service = new PetService({ builtInRoot, codexRoot })
@@ -34,7 +34,7 @@ describe('PetService', () => {
     const pets = await service.list()
     expect(pets.map((pet) => [pet.id, pet.displayName, pet.source])).toEqual([
       ['orb', 'Orb', 'built-in'],
-      ['gooey-pi', 'GooeyPi', 'built-in'],
+      ['gooey-pi', 'Apex', 'built-in'],
       ['codex/rocky', 'Rocky', 'codex'],
     ])
     await expect(service.sprite('gooey-pi')).resolves.toMatch(/^data:image\/webp;base64,/)
@@ -47,10 +47,10 @@ describe('PetService', () => {
     const root = makeRoot()
     const builtInRoot = join(root, 'built-in')
     const codexRoot = join(root, 'codex')
-    writePet(builtInRoot, 'gooey-pi', 'gooey-pi', 'GooeyPi')
+    writePet(builtInRoot, 'gooey-pi', 'gooey-pi', 'Apex')
     writePet(codexRoot, 'bad-manifest', 'bad id', 'Bad')
     const target = writePet(codexRoot, 'target', 'target', 'Target')
-    symlinkSync(target, join(codexRoot, 'linked'))
+    symlinkSync(target, join(codexRoot, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
     const oversized = writePet(codexRoot, 'oversized', 'oversized', 'Oversized')
     writeFileSync(join(oversized, 'pet.json'), 'x'.repeat(16 * 1024 + 1))
 

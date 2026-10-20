@@ -1,8 +1,9 @@
 import { appendFileSync, createReadStream, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import * as filesystem from 'node:fs/promises'
 import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionService } from '../../electron/main/sessions'
 import { METADATA_VERIFY_TAIL_BYTES } from '../../electron/main/sessions/metadata'
 import {
@@ -13,6 +14,8 @@ import {
   piTimestampFromSessionName,
 } from '../../electron/main/sessions/pi'
 import { JsonStateStore } from '../../electron/main/store'
+
+vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 5 }) })
@@ -225,13 +228,28 @@ describe('pi session path authorization', () => {
     writeFileSync(join(root, BUCKET, 'notes.txt'), 'not a session')
     const outside = join(dirs.at(-1)!, 'outside.jsonl')
     writePiSession(outside, { cwd: project })
-    symlinkSync(outside, join(root, BUCKET, 'escape.jsonl'))
+    const escapePath = join(root, BUCKET, 'escape.jsonl')
+    const originalRealpath = filesystem.realpath
+    let realpathSpy: ReturnType<typeof vi.spyOn> | undefined
+    if (process.platform === 'win32') {
+      writeFileSync(escapePath, '')
+      realpathSpy = vi.spyOn(filesystem, 'realpath').mockImplementation(((...args: Parameters<typeof filesystem.realpath>) => {
+        if (args[0] === escapePath) return originalRealpath(outside)
+        return originalRealpath(...args)
+      }) as typeof filesystem.realpath)
+    } else {
+      symlinkSync(outside, escapePath)
+    }
+    try {
 
     await expect(service.requireSessionPath(valid)).resolves.toBe(realpathSync(valid))
     await expect(service.requireSessionPath(join(root, NAME_B))).rejects.toThrow('outside the')
     await expect(service.requireSessionPath(join(root, BUCKET, 'nested', NAME_C))).rejects.toThrow('outside the')
     await expect(service.requireSessionPath(join(root, BUCKET, 'notes.txt'))).rejects.toThrow('outside the')
-    await expect(service.requireSessionPath(join(root, BUCKET, 'escape.jsonl'))).rejects.toThrow('outside the')
+    await expect(service.requireSessionPath(escapePath)).rejects.toThrow('outside the')
+    } finally {
+      realpathSpy?.mockRestore()
+    }
   })
 
   it('validates candidate shapes without touching the filesystem', () => {

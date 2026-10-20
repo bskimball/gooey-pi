@@ -1,4 +1,5 @@
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import * as filesystem from 'node:fs/promises'
 import { lstat, realpath } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -14,6 +15,8 @@ const electronMocks = vi.hoisted(() => ({
   dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() },
 }))
 vi.mock('electron', () => electronMocks)
+
+vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
 const dirs: string[] = []
 function identity(path: string): { dev: string; ino: string; birthtimeNs?: string } {
@@ -141,7 +144,7 @@ describe('ProjectService list enrichment', () => {
     const inferred = `${root}-inferred`
     const dismissed = `${root}-dismissed`
     const missing = `${root}-missing`
-    symlinkSync(root, projectAlias)
+    symlinkSync(root, projectAlias, process.platform === 'win32' ? 'junction' : 'dir')
     mkdirSync(additionalFolder)
     mkdirSync(inferred)
     mkdirSync(dismissed)
@@ -438,7 +441,9 @@ describe('ProjectService file listing', () => {
     writeFileSync(join(root, 'node_modules', 'dependency.js'), 'generated')
     writeFileSync(join(root, 'vendor', 'autoload.php'), 'generated vendor file')
     writeFileSync(join(root, 'release', 'Prime Work.dmg'), 'generated')
-    symlinkSync('/etc/hosts', join(root, 'hosts-link'))
+    const external = join(root, '..', 'external')
+    mkdirSync(external)
+    symlinkSync(external, join(root, 'hosts-link'), process.platform === 'win32' ? 'junction' : 'dir')
     await store.update((state) => { state.projects.push({ id: 'project', harness: 'pi', name: 'Project', path: root, folders: [root], primaryFolder: root, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(root) }) })
 
     await service.list()
@@ -458,7 +463,11 @@ describe('ProjectService file listing', () => {
     writeFileSync(join(root, 'readable', 'kept.txt'), 'kept')
     mkdirSync(join(root, 'unreadable'))
     writeFileSync(join(root, 'unreadable', 'hidden.txt'), 'hidden')
-    chmodSync(join(root, 'unreadable'), 0o000)
+    const originalReaddir = filesystem.readdir
+    const readdirSpy = vi.spyOn(filesystem, 'readdir').mockImplementation((async (...args: Parameters<typeof filesystem.readdir>) => {
+      if (args[0] === join(root, 'unreadable')) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return originalReaddir(...args)
+    }) as typeof filesystem.readdir)
     await store.update((state) => { state.projects.push({ id: 'project', harness: 'pi', name: 'Project', path: root, folders: [root], primaryFolder: root, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(root) }) })
     await service.list()
     try {
@@ -467,7 +476,7 @@ describe('ProjectService file listing', () => {
       expect(listing.entries.some((entry) => entry.path === 'unreadable/hidden.txt')).toBe(false)
       expect(listing.skipped).toBe(1)
     } finally {
-      chmodSync(join(root, 'unreadable'), 0o700)
+      readdirSpy.mockRestore()
     }
   })
 
@@ -545,7 +554,7 @@ describe('ProjectService file listing', () => {
   it('revokes read-only authorization when a symlinked dismissal names the project', async () => {
     const { root, service, store } = setup()
     const alias = `${root}-alias`
-    symlinkSync(root, alias)
+    symlinkSync(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
     service.bindProviders({
       sessions: async () => [session('session-1', root, '2026-03-01T00:00:00.000Z', '2026-03-02T00:00:00.000Z')],
       branch: async () => undefined,
@@ -609,7 +618,7 @@ describe('ProjectService file listing', () => {
   it('canonicalizes symlinked session roots and deduplicates aliases', async () => {
     const { root, service } = setup()
     const symlinkAlias = `${root}-alias`
-    symlinkSync(root, symlinkAlias)
+    symlinkSync(root, symlinkAlias, process.platform === 'win32' ? 'junction' : 'dir')
     writeFileSync(join(root, 'index.ts'), 'export {}')
     service.bindProviders({
       sessions: async () => [
@@ -701,7 +710,7 @@ describe('ProjectService file listing', () => {
         if (!swapped) {
           swapped = true
           renameSync(root, original)
-          symlinkSync(replacement, root, 'dir')
+          symlinkSync(replacement, root, process.platform === 'win32' ? 'junction' : 'dir')
         }
         return realpath(path)
       },
@@ -754,7 +763,7 @@ describe('ProjectService file listing', () => {
     expect(await service.authorizeCwd(root)).toBe(realpathSync(root))
 
     renameSync(root, original)
-    symlinkSync(unrelated, root, 'dir')
+    symlinkSync(unrelated, root, process.platform === 'win32' ? 'junction' : 'dir')
     await expect(service.authorizeCwd(root)).rejects.toThrow(/identity changed/)
     await expect(service.listFiles(root)).rejects.toThrow(/identity changed/)
 

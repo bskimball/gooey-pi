@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,8 @@ import {
 	type ExtensionCommand,
 } from "../../electron/main/browser/extension-bridge";
 import { readPageScript } from "../../electron/main/browser/page-scripts";
+
+const sessionA = resolve("/sessions/a.jsonl");
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -166,10 +169,10 @@ describe("ExtensionBrowserBridge", () => {
 
 	it("routes external URLs, materializes lazy tabs without blank tabs and reuses user-shared tabs", async () => {
 		const { service, commands, post } = await fixture();
-		const pending = await service.openTab("/sessions/a.jsonl", {});
+		const pending = await service.openTab(sessionA, {});
 		expect(commands).toHaveLength(0);
 		expect(pending.backend).toBe("extension");
-		await service.navigate("/sessions/a.jsonl", {
+		await service.navigate(sessionA, {
 			tabId: pending.tabId,
 			url: "https://example.com/",
 		});
@@ -178,7 +181,7 @@ describe("ExtensionBrowserBridge", () => {
 				.filter((command) => command.method === "create_tab")
 				.map((command) => command.params.url),
 		).toEqual(["https://example.com/"]);
-		await service.setActiveSession("/sessions/a.jsonl");
+		await service.setActiveSession(sessionA);
 		expect(
 			(
 				await post("event", {
@@ -189,12 +192,12 @@ describe("ExtensionBrowserBridge", () => {
 				})
 			).status,
 		).toBe(200);
-		const shared = await service.openTab("/sessions/a.jsonl", {});
+		const shared = await service.openTab(sessionA, {});
 		expect(shared).toMatchObject({ chromeTabId: 99, pairedByUser: true });
 		expect(
 			commands.filter((command) => command.method === "create_tab"),
 		).toHaveLength(1);
-		await service.focusExtensionTab("/sessions/a.jsonl", String(shared.tabId));
+		await service.focusExtensionTab(sessionA, String(shared.tabId));
 		expect(commands.at(-1)).toMatchObject({
 			method: "focus_tab",
 			params: { chromeTabId: 99 },
@@ -206,11 +209,11 @@ describe("ExtensionBrowserBridge", () => {
 		await post("event", {
 			type: "tab_paired",
 			chromeTabId: 99,
-			sessionKey: "/sessions/a.jsonl",
+			sessionKey: sessionA,
 			url: "https://example.com/",
 		});
 		const tab = service.state().tabs[0];
-		await service.navigate("/sessions/a.jsonl", {
+		await service.navigate(sessionA, {
 			tabId: tab.tabId,
 			url: "http://localhost:3000/",
 		});
@@ -230,7 +233,7 @@ describe("ExtensionBrowserBridge", () => {
 
 	it("revokes queued extension mutations on user pause and permits explicit resume", async () => {
 		const { service, post, commands } = await fixture();
-		const tab = await service.openTab("/sessions/a.jsonl", {
+		const tab = await service.openTab(sessionA, {
 			url: "https://example.com/",
 		});
 		await post("event", {
@@ -248,7 +251,7 @@ describe("ExtensionBrowserBridge", () => {
 			service.evaluate,
 		]) {
 			await expect(
-				action.call(service, "/sessions/a.jsonl", {
+				action.call(service, sessionA, {
 					tabId: tab.tabId,
 					url: "https://example.com/",
 					code: "1",
@@ -263,8 +266,8 @@ describe("ExtensionBrowserBridge", () => {
 			);
 		}
 		expect(commands).toHaveLength(1);
-		await service.setTabPaused("/sessions/a.jsonl", String(tab.tabId), false);
-		await service.evaluate("/sessions/a.jsonl", {
+		await service.setTabPaused(sessionA, String(tab.tabId), false);
+		await service.evaluate(sessionA, {
 			tabId: tab.tabId,
 			code: "1",
 		});
@@ -273,7 +276,7 @@ describe("ExtensionBrowserBridge", () => {
 
 	it("rejects work queued before a takeover instead of dispatching it after the current action", async () => {
 		const { service, post, setResponder, commands } = await fixture();
-		const tab = await service.openTab("/sessions/a.jsonl", {
+		const tab = await service.openTab(sessionA, {
 			url: "https://example.com/",
 		});
 		let release!: (value: string) => void;
@@ -288,9 +291,9 @@ describe("ExtensionBrowserBridge", () => {
 			started();
 			return held;
 		});
-		const first = service.readPage("/sessions/a.jsonl", { tabId: tab.tabId });
+		const first = service.readPage(sessionA, { tabId: tab.tabId });
 		await ready;
-		const queued = service.type("/sessions/a.jsonl", {
+		const queued = service.type(sessionA, {
 			tabId: tab.tabId,
 			text: "must not type",
 		});
@@ -312,7 +315,7 @@ describe("ExtensionBrowserBridge", () => {
 
 	it("sends the same read_page script as the webview backend", async () => {
 		const { service, commands, setResponder } = await fixture();
-		const tab = await service.openTab("/sessions/a.jsonl", {
+		const tab = await service.openTab(sessionA, {
 			url: "https://example.com/",
 		});
 		const payload = {
@@ -322,7 +325,7 @@ describe("ExtensionBrowserBridge", () => {
 		};
 		setResponder(() => JSON.stringify(payload));
 		expect(
-			await service.readPage("/sessions/a.jsonl", { tabId: tab.tabId }),
+			await service.readPage(sessionA, { tabId: tab.tabId }),
 		).toEqual(payload);
 		expect(commands.at(-1)?.params.script).toBe(
 			readPageScript("interactive", 40_000, 300),
@@ -331,8 +334,8 @@ describe("ExtensionBrowserBridge", () => {
 
 	it("retains a pending tab locally when its first navigation is a preview URL", async () => {
 		const { service, commands } = await fixture();
-		const tab = await service.openTab("/sessions/a.jsonl", {});
-		const navigation = service.navigate("/sessions/a.jsonl", {
+		const tab = await service.openTab(sessionA, {});
+		const navigation = service.navigate(sessionA, {
 			tabId: tab.tabId,
 			url: "http://localhost:3000/",
 		});

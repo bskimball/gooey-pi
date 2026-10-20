@@ -232,7 +232,7 @@ export interface PrimeModelDescriptor {
   availableThinkingLevels: PrimeThinkingLevel[]
   fastModeSupported: boolean
   available: boolean
-  /** GooeyPi visibility policy for this harness; absent catalogs predate per-model controls. */
+  /** Apex visibility policy for this harness; absent catalogs predate per-model controls. */
   enabled?: boolean
 }
 
@@ -471,7 +471,7 @@ export interface AppSettings {
   checkoutStrategy: CheckoutStrategy
   /** Keep the desktop process available for scheduled work after its window closes. */
   keepRunningInBackground: boolean
-  /** Ask the operating system to launch GooeyPi when the user signs in. */
+  /** Ask the operating system to launch Apex when the user signs in. */
   launchAtLogin: boolean
   terminalOpen: boolean
   defaultInspectorTab: InspectorTab
@@ -491,9 +491,9 @@ export interface AppSettings {
    * The Privacy UI deliberately ignores this field; any reporting use needs separate review.
    */
   telemetry: boolean
-  /** GooeyPi-managed ask_user tool, shared by every interactive harness. */
+  /** Apex-managed ask_user tool, shared by every interactive harness. */
   askUserEnabled: boolean
-  /** Expose GooeyPi's thread-scoped in-app browser controls to new sessions. */
+  /** Expose Apex's thread-scoped in-app browser controls to new sessions. */
   browserEnabled: boolean
   /** Expose the separately installed TryCUA driver to new sessions through its official CLI. */
   computerUseEnabled: boolean

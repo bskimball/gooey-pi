@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 
 import type { HarnessId } from '../../src/types/api'
 
@@ -20,7 +20,7 @@ export interface HarnessDescriptor {
   /** Harness-specific locations beyond the shared package-manager and system directories. */
   candidateDirs: (platform: NodeJS.Platform, home: string, env: NodeJS.ProcessEnv) => string[]
   /** Official npm `.cmd` shim on Windows and the package entrypoint below `<shim dir>\node_modules`. */
-  windowsNpmShim?: { shim: string; entrypoint: readonly string[] }
+  windowsNpmShim?: { shim: string; entrypoints: readonly (readonly string[])[] }
   agentDir: (home: string) => string
   sessionRoot: (home: string) => string
 }
@@ -34,9 +34,9 @@ export const HARNESSES = {
     binaryEnvVar: 'PI_BINARY',
     bundledResourceDirs: [],
     candidateDirs: (platform, home, env) => platform === 'win32' ? [] : [
-      join(env.XDG_DATA_HOME ?? join(home, '.local', 'share'), 'pi-node', 'current', 'bin'),
+      posix.join(env.XDG_DATA_HOME ?? posix.join(home, '.local', 'share'), 'pi-node', 'current', 'bin'),
     ],
-    windowsNpmShim: { shim: 'pi.cmd', entrypoint: ['@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'] },
+    windowsNpmShim: { shim: 'pi.cmd', entrypoints: [['@earendil-works', 'pi-coding-agent', 'dist', 'bundle', 'cli.js'], ['@earendil-works', 'pi-coding-agent', 'dist', 'cli.js'], ['@mariozechner', 'pi-coding-agent', 'dist', 'cli.js']] },
     agentDir: (home) => join(home, '.pi', 'agent'),
     sessionRoot: (home) => join(home, '.pi', 'agent', 'sessions'),
   },

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import {
   bootstrapNpm,
@@ -15,7 +15,7 @@ import {
   resolveNpmGlobalLayout,
   verifyPinnedNpmArtifact,
 } from '../scripts/release/bootstrap-npm.mjs'
-import { installAppDependencies } from '../scripts/release/install-app-deps.mjs'
+import { installAppDependencies, qualifyWinptyBatchPaths } from '../scripts/release/install-app-deps.mjs'
 import {
   artifactArchitectures,
   assertArchitectureCoverage,
@@ -67,6 +67,16 @@ import {
 // js-yaml ships no type declarations, so it is required rather than imported.
 const load = createRequire(import.meta.url)('js-yaml').load as (source: string) => unknown
 
+function fixtureEnvironment(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const values = { GITHUB_ENV: '', GITHUB_PATH: '', ...overrides }
+  const names = new Set(Object.keys(values).map((name) => name.toLowerCase()))
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !names.has(name.toLowerCase()))), ...values }
+}
+
+function readWorkflow(path: string): string {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n')
+}
+
 const baseEnvironment = {
   RELEASE_SIGNING_TEAM_ID: 'TEAM123',
   CSC_LINK: 'base64-certificate',
@@ -113,7 +123,7 @@ function writeMacReleaseFixture(directory: string, { omit }: { omit?: string } =
     const artifactDirectory = join(inputDirectory, `artifact-${index}`)
     mkdirSync(artifactDirectory, { recursive: true })
     const content = name.endsWith('.yml')
-      ? 'version: 0.2.0\nfiles:\n  - url: GooeyPi-0.2.0-x64.zip\n    sha512: x64-digest\n    size: 42\npath: GooeyPi-0.2.0-x64.zip\nsha512: x64-digest\n'
+      ? 'version: 0.2.0\nfiles:\n  - url: Apex-0.2.0-x64.zip\n    sha512: x64-digest\n    size: 42\npath: Apex-0.2.0-x64.zip\nsha512: x64-digest\n'
       : `asset ${index}`
     writeFileSync(join(artifactDirectory, name), content)
   }
@@ -208,14 +218,16 @@ describe('release preflight', () => {
   })
 
   test('enforces the repository Node and npm boundaries from checked-in metadata', () => {
-    expect(readRepositoryToolchain()).toEqual({ node: '26.8.2', npm: '12.0.2' })
-    expect(() => assertSupportedNode('v26.8.1')).toThrow(/Node\.js >=26\.8\.2 is required/)
+    expect(readRepositoryToolchain()).toEqual({ node: '24.21.0', npm: '12.0.2' })
+    expect(() => assertSupportedNode('v24.20.9')).toThrow(/Node\.js >=24\.21\.0 is required/)
+    expect(() => assertSupportedNode('v24.21.0')).not.toThrow()
+    expect(() => assertSupportedNode('v24.21.1')).not.toThrow()
     expect(() => assertSupportedNode('v26.8.2')).not.toThrow()
     expect(() => assertSupportedNode('v27.0.0')).not.toThrow()
     expect(() => assertSupportedNpm('12.0.1')).toThrow(/npm >=12\.0\.2 is required/)
     expect(() => assertSupportedNpm('12.0.2')).not.toThrow()
     expect(() => assertSupportedNpm('13.0.0')).not.toThrow()
-    expect(() => assertSupportedToolchain({ nodeVersion: 'v26.8.2', npmVersion: '12.0.2' })).not.toThrow()
+    expect(() => assertSupportedToolchain({ nodeVersion: 'v24.21.0', npmVersion: '12.0.2' })).not.toThrow()
   })
 
   test('rejects malformed and prerelease tool versions', () => {
@@ -243,7 +255,7 @@ describe('release preflight', () => {
 
     for (const path of ['scripts/release/lib.mjs', 'scripts/release/bootstrap-npm.mjs', 'scripts/release/package.mjs', 'scripts/release/preflight.mjs']) {
       const source = readFileSync(path, 'utf8')
-      expect(source).not.toContain('26.8.2')
+      expect(source).not.toContain('24.21.0')
       expect(source).not.toContain('12.0.2')
     }
   })
@@ -291,6 +303,7 @@ describe('release preflight', () => {
       expect(() =>
         bootstrapNpm({
           artifact: fixture.artifact,
+          env: { GITHUB_ENV: '', GITHUB_PATH: '' },
           nodeVersion: 'v24.15.0',
           toolchain: { node: '24.15.0', npm: '12.0.2' },
           readOutput: () => {
@@ -326,7 +339,7 @@ describe('release preflight', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-npm-version-'))
     const npmCli = join(directory, 'npm-cli.mjs')
     writeFileSync(npmCli, "process.stdout.write('12.0.1\\n')\n")
-    const env = { ...process.env, npm_execpath: npmCli }
+    const env = fixtureEnvironment({ npm_execpath: npmCli })
     try {
       expect(readNpmVersion({ env })).toBe('12.0.1')
       const preflight = spawnSync(process.execPath, ['scripts/release/preflight.mjs', '--toolchain-only'], { encoding: 'utf8', env })
@@ -372,7 +385,7 @@ describe('release preflight', () => {
     const installedCli = join(directory, 'installed-npm-cli.mjs')
     writeFileSync(staleCli, "process.stdout.write('11.12.1\\n')\n")
     writeFileSync(installedCli, "process.stdout.write('12.0.2\\n')\n")
-    const env = { ...process.env, npm_execpath: staleCli }
+    const env = fixtureEnvironment({ npm_execpath: staleCli })
     try {
       expect(readNpmOutput(['--version'], { env })).toBe('11.12.1')
       expect(readNpmOutput(['--version'], { env, npmCliPath: installedCli })).toBe('12.0.2')
@@ -392,7 +405,7 @@ describe('release preflight', () => {
     try {
       const result = bootstrapNpm({
         artifact: fixture.artifact,
-        env: { npm_execpath: staleCli, GITHUB_PATH: githubPath },
+        env: { npm_execpath: staleCli, GITHUB_PATH: githubPath, GITHUB_ENV: '' },
         nodeVersion: 'v24.15.0',
         platform: 'linux',
         toolchain: { node: '24.15.0', npm: '12.0.2' },
@@ -428,7 +441,7 @@ describe('release preflight', () => {
         npmCliPath: '/runner/npm-global/lib/node_modules/npm/bin/npm-cli.js',
       })
       expect(persisted).toEqual([{ shimDirectory: '/runner/npm-global/bin', destination: githubPath }])
-      expect(result).toMatchObject({ current: '12.0.2', installed: '12.0.2', shimDirectory: '/runner/npm-global/bin', githubPathUpdated: true })
+      expect(result).toMatchObject({ current: '12.0.2', installed: '12.0.2', shimDirectory: '/runner/npm-global/bin', githubPathUpdated: true, githubEnvUpdated: false })
     } finally {
       rmSync(fixture.temporaryDirectory, { recursive: true, force: true })
     }
@@ -465,7 +478,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     )
 
     try {
-      const result = bootstrapNpm({ artifact: fixture.artifact, env: { ...process.env, GITHUB_PATH: githubPath, npm_execpath: staleCli } })
+      const result = bootstrapNpm({ artifact: fixture.artifact, env: fixtureEnvironment({ GITHUB_PATH: githubPath, npm_execpath: staleCli }) })
       expect(result).toMatchObject({ current: '11.12.1', installed: '12.0.2', ...layout, githubPathUpdated: true })
       expect(readFileSync(githubPath, 'utf8')).toBe(`${layout.shimDirectory}\n`)
     } finally {
@@ -474,42 +487,55 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     }
   })
 
-  test('installs the checked-in npm archive into a fresh prefix without network access', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'gooeypi real npm bootstrap & '))
-    const prefix = join(directory, 'fresh global prefix')
-    const githubPath = join(directory, 'github-path')
-    const cache = join(directory, 'npm cache')
-    writeFileSync(githubPath, '')
-    try {
-      const result = bootstrapNpm({
-        env: {
-          ...process.env,
-          GITHUB_PATH: githubPath,
-          npm_config_cache: cache,
-          npm_config_prefix: prefix,
-        },
-      })
-      expect(result).toMatchObject({ installed: '12.0.2', prefix, githubPathUpdated: true })
-      expect(readFileSync(githubPath, 'utf8')).toBe(`${result.shimDirectory}\n`)
-      expect(readNpmOutput(['--version'], { npmCliPath: result.cliPath })).toBe('12.0.2')
-    } finally {
-      rmSync(directory, { recursive: true, force: true })
-    }
-  }, 30_000)
+  test(
+    'installs the checked-in npm archive into a fresh prefix without network access',
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), 'gooeypi real npm bootstrap & '))
+      const prefix = join(directory, 'fresh global prefix')
+      const githubPath = join(directory, 'github-path')
+      const cache = join(directory, 'npm cache')
+      writeFileSync(githubPath, '')
+      try {
+        const env = fixtureEnvironment({ GITHUB_PATH: githubPath, npm_config_cache: cache, npm_config_prefix: prefix })
+        const root = process.platform === 'win32' ? join(prefix, 'node_modules') : join(prefix, 'lib', 'node_modules')
+        expect(readNpmOutput(['prefix', '--global'], { env })).toBe(prefix)
+        expect(readNpmOutput(['root', '--global'], { env })).toBe(root)
+        const result = bootstrapNpm({
+          env,
+          run: (command: string, args: string[], options: { env: NodeJS.ProcessEnv; platform: NodeJS.Platform }) => {
+            expect(command).toBe('npm')
+            expect(args.slice(0, 4)).toEqual(['install', '--global', '--prefix', prefix])
+            expect(resolveNpmGlobalLayout(prefix, root).prefix).toBe(prefix)
+            const invocation = resolveCommandInvocation(command, args, options.platform, options.env)
+            const installed = spawnSync(invocation.file, invocation.args, { env: options.env, shell: invocation.shell, stdio: 'inherit' })
+            if (installed.error) throw installed.error
+            expect(installed.status).toBe(0)
+          },
+        })
+        expect(result).toMatchObject({ installed: '12.0.2', prefix, githubPathUpdated: true })
+        expect(readFileSync(githubPath, 'utf8')).toBe(`${result.shimDirectory}\n`)
+        expect(readNpmOutput(['--version'], { npmCliPath: result.cliPath })).toBe('12.0.2')
+      } finally {
+        rmSync(directory, { recursive: true, force: true })
+      }
+    },
+    process.platform === 'win32' ? 120_000 : 30_000,
+  )
 
   test('persists only a validated npm shim directory for the next GitHub Actions step', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-github-path-'))
     const githubPath = join(directory, 'github-path')
     writeFileSync(githubPath, '/existing/tool\n')
     try {
-      expect(persistNpmShimDirectory('/opt/repository-npm/bin', githubPath, 'linux')).toBe(true)
+      const shimDirectory = join(directory, 'repository-npm', 'bin')
+      expect(persistNpmShimDirectory(shimDirectory, githubPath)).toBe(true)
       const entries = readFileSync(githubPath, 'utf8').trimEnd().split('\n')
-      expect(entries).toEqual(['/existing/tool', '/opt/repository-npm/bin'])
+      expect(entries).toEqual(['/existing/tool', shimDirectory])
       // GitHub prepends GITHUB_PATH entries to PATH for subsequent steps, so
       // the persisted entry becomes the npm selected by the next npm command.
-      expect(entries.at(-1)).toBe('/opt/repository-npm/bin')
-      expect(() => persistNpmShimDirectory('/opt/npm\n/injected', githubPath, 'linux')).toThrow(/absolute single-line path/)
-      expect(() => persistNpmShimDirectory('/opt/npm/bin', 'relative/github-path', 'linux')).toThrow(/absolute single-line path/)
+      expect(entries.at(-1)).toBe(shimDirectory)
+      expect(() => persistNpmShimDirectory(`${shimDirectory}\n/injected`, githubPath)).toThrow(/absolute single-line path/)
+      expect(() => persistNpmShimDirectory(shimDirectory, 'relative/github-path')).toThrow(/absolute single-line path/)
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -520,10 +546,11 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     const githubEnv = join(directory, 'github-env')
     writeFileSync(githubEnv, '')
     try {
-      expect(persistNpmCliPath('/opt/repository-npm/lib/node_modules/npm/bin/npm-cli.js', githubEnv, 'linux')).toBe(true)
-      expect(readFileSync(githubEnv, 'utf8')).toBe('npm_execpath=/opt/repository-npm/lib/node_modules/npm/bin/npm-cli.js\n')
-      expect(() => persistNpmCliPath('/opt/npm\n/injected', githubEnv, 'linux')).toThrow(/absolute single-line path/)
-      expect(() => persistNpmCliPath('/opt/npm/bin/npm-cli.js', 'relative/github-env', 'linux')).toThrow(/absolute single-line path/)
+      const cliPath = join(directory, 'repository-npm', 'npm-cli.js')
+      expect(persistNpmCliPath(cliPath, githubEnv)).toBe(true)
+      expect(readFileSync(githubEnv, 'utf8')).toBe(`npm_execpath=${cliPath}\n`)
+      expect(() => persistNpmCliPath(`${cliPath}\n/injected`, githubEnv)).toThrow(/absolute single-line path/)
+      expect(() => persistNpmCliPath(cliPath, 'relative/github-env')).toThrow(/absolute single-line path/)
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -602,7 +629,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     let job = ''
     let inJobs = false
     let current: WorkflowStep | undefined
-    for (const line of source.split('\n')) {
+    for (const line of source.replace(/\r\n/g, '\n').split('\n')) {
       if (/^jobs:\s*$/.test(line)) {
         inJobs = true
         continue
@@ -631,7 +658,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
 
   test('pins every workflow action, including third-party owners, to a full commit SHA', () => {
     for (const path of ['.github/workflows/release.yml', '.github/workflows/ci.yml']) {
-      const steps = parseWorkflowSteps(readFileSync(path, 'utf8'))
+      const steps = parseWorkflowSteps(readWorkflow(path))
       expect(steps.length).toBeGreaterThan(0)
       for (const step of steps) {
         if (step.uses === undefined) continue
@@ -644,7 +671,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('confines workflow secrets to the signing and notarization release steps', () => {
-    const releaseSteps = parseWorkflowSteps(readFileSync('.github/workflows/release.yml', 'utf8'))
+    const releaseSteps = parseWorkflowSteps(readWorkflow('.github/workflows/release.yml'))
     const secretSteps = releaseSteps.filter((step) => step.secretLines.length > 0)
     expect(secretSteps.map((step) => `${step.job}: ${step.name}`).sort()).toEqual([
       'package-windows: Build, Authenticode-sign, and verify Windows packages',
@@ -661,12 +688,12 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
       expect(step.lines.join('\n')).not.toMatch(/run:.*secrets\./)
     }
 
-    const ciSteps = parseWorkflowSteps(readFileSync('.github/workflows/ci.yml', 'utf8'))
+    const ciSteps = parseWorkflowSteps(readWorkflow('.github/workflows/ci.yml'))
     expect(ciSteps.filter((step) => step.secretLines.length > 0)).toEqual([])
   })
 
   test('cancels superseded PR runs without cancelling validation for pushed SHAs', () => {
-    const workflow = load(readFileSync('.github/workflows/ci.yml', 'utf8')) as {
+    const workflow = load(readWorkflow('.github/workflows/ci.yml')) as {
       concurrency: { group: string; 'cancel-in-progress': string }
     }
     expect(workflow.concurrency.group).toBe(
@@ -676,7 +703,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('gates packaging regressions on every pull request', () => {
-    const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8')
+    const ciWorkflow = readWorkflow('.github/workflows/ci.yml')
     expect(ciWorkflow).toMatch(/on:\n {2}push:\n {4}branches:\n {6}- main/)
     expect(ciWorkflow).toMatch(/packaging-smoke:\n {4}if: github\.event_name == 'pull_request'/)
     for (const runner of ['macos-14', 'ubuntu-22.04', 'windows-2022']) expect(ciWorkflow).toContain(`runner: ${runner}`)
@@ -694,8 +721,8 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
       steps?: Array<{ name?: string; uses?: string; run?: string; if?: string; with?: Record<string, unknown> }>
     }
     type Workflow = { on: Record<string, unknown>; jobs: Record<string, WorkflowJob> }
-    const ci = load(readFileSync('.github/workflows/ci.yml', 'utf8')) as Workflow
-    const release = load(readFileSync('.github/workflows/release.yml', 'utf8')) as Workflow
+    const ci = load(readWorkflow('.github/workflows/ci.yml')) as Workflow
+    const release = load(readWorkflow('.github/workflows/release.yml')) as Workflow
 
     expect(ci.on).toHaveProperty('pull_request')
     const ciAudit = ci.jobs['production-audit']
@@ -726,7 +753,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
       on: { schedule?: Array<{ cron?: string }>; workflow_dispatch?: unknown }
       jobs: Record<string, { steps?: Array<{ run?: string }> }>
     }
-    const audit = load(readFileSync('.github/workflows/audit.yml', 'utf8')) as Workflow
+    const audit = load(readWorkflow('.github/workflows/audit.yml')) as Workflow
 
     expect(audit.on.schedule).toEqual([{ cron: '17 6 * * 1' }])
     expect(audit.on).toHaveProperty('workflow_dispatch')
@@ -734,9 +761,9 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('reads the Node version from .nvmrc and hard-fails empty artifact uploads', () => {
-    const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8')
-    const ciWorkflow = readFileSync('.github/workflows/ci.yml', 'utf8')
-    const auditWorkflow = readFileSync('.github/workflows/audit.yml', 'utf8')
+    const releaseWorkflow = readWorkflow('.github/workflows/release.yml')
+    const ciWorkflow = readWorkflow('.github/workflows/ci.yml')
+    const auditWorkflow = readWorkflow('.github/workflows/audit.yml')
     const workflows = [
       { path: '.github/workflows/release.yml', source: releaseWorkflow },
       { path: '.github/workflows/ci.yml', source: ciWorkflow },
@@ -789,7 +816,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('publishes one verified GitHub Release from an existing version tag', () => {
-    const workflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const workflow = readWorkflow('.github/workflows/release.yml')
     expect(workflow).toMatch(/push:\n {4}tags:\n {6}- 'v\*\.\*\.\*'/)
     expect(workflow).toContain('node scripts/release/validate-release-tag.mjs --tag "$RELEASE_TAG"')
     expect(workflow).toContain('git merge-base --is-ancestor HEAD refs/remotes/origin/main')
@@ -816,7 +843,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('pins every release job to one commit SHA resolved by validate', () => {
-    const workflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const workflow = readWorkflow('.github/workflows/release.yml')
     const parsed = load(workflow) as { jobs: Record<string, { outputs?: Record<string, string>; steps?: Array<{ id?: string; run?: string; with?: Record<string, unknown> }> }> }
     expect(parsed.jobs.validate.outputs).toEqual({ sha: '${{ steps.resolve.outputs.sha }}' })
     expect(parsed.jobs.validate.steps?.find((step) => step.id === 'resolve')?.run).toContain('git rev-parse HEAD^{commit}')
@@ -833,7 +860,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('deletes stale draft assets before publishing a resumed release', () => {
-    const workflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const workflow = readWorkflow('.github/workflows/release.yml')
     expect(workflow).toContain('gh release view "$RELEASE_TAG" --json assets > draft-release.json')
     expect(workflow).toContain('node scripts/release/prune-draft-release-assets.mjs --assets draft-release.json --expected release-assets')
     expect(workflow).toContain('gh release delete-asset "$RELEASE_TAG" "$stale" --yes')
@@ -841,7 +868,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('passes the expected Authenticode signer to Windows packaging', () => {
-    const workflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const workflow = readWorkflow('.github/workflows/release.yml')
     expect(workflow).toContain('GOOEYPI_WINDOWS_CERT_SUBJECT: ${{ vars.GOOEYPI_WINDOWS_CERT_SUBJECT }}')
     expect(workflow).toContain('GOOEYPI_WINDOWS_CERT_THUMBPRINT: ${{ vars.GOOEYPI_WINDOWS_CERT_THUMBPRINT }}')
     const security = readFileSync('docs/security.md', 'utf8')
@@ -851,7 +878,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('ships both mac architectures as separate builds from native-arch runners', () => {
-    const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const releaseWorkflow = readWorkflow('.github/workflows/release.yml')
     // Two matrix legs, each on a runner whose native architecture matches the
     // target (arm64 on macos-15, x64 on macos-15-intel) so node-pty/zeromq never
     // cross-compile, and one leg's failure never cancels the other's build.
@@ -871,7 +898,7 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
   })
 
   test('ships both Linux architectures as separately labeled native builds', () => {
-    const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8')
+    const releaseWorkflow = readWorkflow('.github/workflows/release.yml')
     expect(releaseWorkflow).toMatch(/package-linux:\n {4}needs: \[validate, production-audit, quality, hermetic-e2e\]\n {4}strategy:/)
     expect(releaseWorkflow).toMatch(/- arch: arm64\n {12}runner: ubuntu-24\.04-arm/)
     expect(releaseWorkflow).toMatch(/- arch: x64\n {12}runner: ubuntu-22\.04/)
@@ -887,18 +914,18 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
 describe('GitHub Release publication', () => {
   test('selects an exact enabled platform set', () => {
     expect(parseReleasePlatforms('mac,linux')).toEqual(['mac', 'linux'])
-    expect(expectedGitHubReleaseAssets('0.2.0', ['mac', 'linux'])).not.toContain('GooeyPi-0.2.0-win-x64.exe')
-    expect(expectedGitHubReleaseAssets('0.2.0', ['mac'])).toEqual(['GooeyPi-0.2.0-arm64.zip', 'GooeyPi-0.2.0-intel-chip.dmg', 'GooeyPi-0.2.0-m-chip.dmg', 'GooeyPi-0.2.0-x64.zip', 'latest-mac.yml'])
-    expect(expectedDownloadedReleaseAssets('0.2.0', ['mac'])).toEqual(['GooeyPi-0.2.0-arm64.zip', 'GooeyPi-0.2.0-x64.dmg', 'GooeyPi-0.2.0-arm64.dmg', 'GooeyPi-0.2.0-x64.zip', 'latest-mac.yml'])
+    expect(expectedGitHubReleaseAssets('0.2.0', ['mac', 'linux'])).not.toContain('Apex-0.2.0-win-x64.exe')
+    expect(expectedGitHubReleaseAssets('0.2.0', ['mac'])).toEqual(['Apex-0.2.0-arm64.zip', 'Apex-0.2.0-intel-chip.dmg', 'Apex-0.2.0-m-chip.dmg', 'Apex-0.2.0-x64.zip', 'latest-mac.yml'])
+    expect(expectedDownloadedReleaseAssets('0.2.0', ['mac'])).toEqual(['Apex-0.2.0-arm64.zip', 'Apex-0.2.0-x64.dmg', 'Apex-0.2.0-arm64.dmg', 'Apex-0.2.0-x64.zip', 'latest-mac.yml'])
     expect(expectedGitHubReleaseAssets('0.2.0', ['linux'])).toEqual([
-      'GooeyPi-0.2.0-linux-aarch64.pacman',
-      'GooeyPi-0.2.0-linux-aarch64.rpm',
-      'GooeyPi-0.2.0-linux-amd64.deb',
-      'GooeyPi-0.2.0-linux-arm64.AppImage',
-      'GooeyPi-0.2.0-linux-arm64.deb',
-      'GooeyPi-0.2.0-linux-x64.pacman',
-      'GooeyPi-0.2.0-linux-x86_64.AppImage',
-      'GooeyPi-0.2.0-linux-x86_64.rpm',
+      'Apex-0.2.0-linux-aarch64.pacman',
+      'Apex-0.2.0-linux-aarch64.rpm',
+      'Apex-0.2.0-linux-amd64.deb',
+      'Apex-0.2.0-linux-arm64.AppImage',
+      'Apex-0.2.0-linux-arm64.deb',
+      'Apex-0.2.0-linux-x64.pacman',
+      'Apex-0.2.0-linux-x86_64.AppImage',
+      'Apex-0.2.0-linux-x86_64.rpm',
       'latest-linux-arm64.yml',
       'latest-linux.yml',
     ])
@@ -922,9 +949,9 @@ describe('GitHub Release publication', () => {
     expect(produced).toHaveLength(targetCount)
     // Only the two macOS DMGs are renamed for the public download page.
     expect([...names].filter(([published, downloaded]) => published !== downloaded)).toEqual([
-      ['GooeyPi-0.2.0-intel-chip.dmg', 'GooeyPi-0.2.0-x64.dmg'],
-      ['GooeyPi-0.2.0-m-chip.dmg', 'GooeyPi-0.2.0-arm64.dmg'],
-      ['GooeyPi-0.2.0-win-x64.msix', 'GooeyPi-0.2.0-win-x64.appx'],
+      ['Apex-0.2.0-intel-chip.dmg', 'Apex-0.2.0-x64.dmg'],
+      ['Apex-0.2.0-m-chip.dmg', 'Apex-0.2.0-arm64.dmg'],
+      ['Apex-0.2.0-win-x64.msix', 'Apex-0.2.0-win-x64.appx'],
     ])
   })
 
@@ -943,11 +970,11 @@ describe('GitHub Release publication', () => {
   test('reports the published name of a missing artifact through the rename map', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-github-release-missing-'))
     try {
-      const { projectDirectory, inputDirectory } = writeMacReleaseFixture(directory, { omit: 'GooeyPi-0.2.0-arm64.dmg' })
+      const { projectDirectory, inputDirectory } = writeMacReleaseFixture(directory, { omit: 'Apex-0.2.0-arm64.dmg' })
       // The arm64 DMG publishes as m-chip.dmg: the report must name the missing
       // published asset, not whichever entry happens to share its sort index.
       await expect(prepareGitHubRelease({ inputDirectory, outputDirectory: join(directory, 'out'), projectDirectory, platforms: ['mac'], tag: 'v0.2.0' })).rejects.toThrow(
-        /incomplete; missing GooeyPi-0\.2\.0-m-chip\.dmg$/,
+        /incomplete; missing Apex-0\.2\.0-m-chip\.dmg$/,
       )
     } finally {
       rmSync(directory, { recursive: true, force: true })
@@ -957,17 +984,17 @@ describe('GitHub Release publication', () => {
   test('takes legacy updater fields from the primary architecture manifest, not the first sorted path', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-update-metadata-'))
     try {
-      const arm64 = writeUpdateManifest(directory, 'a-arm64', 'GooeyPi-0.2.0-arm64.zip', 'arm64-digest', '2026-01-01T00:00:00.000Z')
-      const x64 = writeUpdateManifest(directory, 'z-x64', 'GooeyPi-0.2.0-x64.zip', 'x64-digest', '2026-02-02T00:00:00.000Z')
+      const arm64 = writeUpdateManifest(directory, 'a-arm64', 'Apex-0.2.0-arm64.zip', 'arm64-digest', '2026-01-01T00:00:00.000Z')
+      const x64 = writeUpdateManifest(directory, 'z-x64', 'Apex-0.2.0-x64.zip', 'x64-digest', '2026-02-02T00:00:00.000Z')
       const merged = mergeUpdateMetadata([arm64, x64], '0.2.0')
-      expect(merged.path).toBe('GooeyPi-0.2.0-x64.zip')
+      expect(merged.path).toBe('Apex-0.2.0-x64.zip')
       expect(merged.sha512).toBe('x64-digest')
       expect(merged.releaseDate).toBe('2026-02-02T00:00:00.000Z')
-      expect(merged.files.map((file: { url: string }) => file.url)).toEqual(['GooeyPi-0.2.0-arm64.zip', 'GooeyPi-0.2.0-x64.zip'])
+      expect(merged.files.map((file: { url: string }) => file.url)).toEqual(['Apex-0.2.0-arm64.zip', 'Apex-0.2.0-x64.zip'])
       // Renaming the artifact directories reverses the path sort order without
       // changing which manifest supplies the legacy fields.
-      const swappedArm64 = writeUpdateManifest(directory, 'z-arm', 'GooeyPi-0.2.0-arm64.zip', 'arm64-digest', '2026-01-01T00:00:00.000Z')
-      const swappedX64 = writeUpdateManifest(directory, 'a-intel', 'GooeyPi-0.2.0-x64.zip', 'x64-digest', '2026-02-02T00:00:00.000Z')
+      const swappedArm64 = writeUpdateManifest(directory, 'z-arm', 'Apex-0.2.0-arm64.zip', 'arm64-digest', '2026-01-01T00:00:00.000Z')
+      const swappedX64 = writeUpdateManifest(directory, 'a-intel', 'Apex-0.2.0-x64.zip', 'x64-digest', '2026-02-02T00:00:00.000Z')
       expect(mergeUpdateMetadata([swappedArm64, swappedX64], '0.2.0')).toEqual(merged)
       expect(mergeUpdateMetadata([swappedX64, swappedArm64], '0.2.0')).toEqual(merged)
     } finally {
@@ -983,12 +1010,12 @@ describe('GitHub Release publication', () => {
         writeFileSync(path, `version: 0.2.0\nfiles:\n${file}`)
         return path
       }
-      const sized = (size: string) => `  - url: GooeyPi-0.2.0-x64.zip\n    sha512: digest\n    size: ${size}\n`
-      expect(() => mergeUpdateMetadata([write('missing-size.yml', '  - url: GooeyPi-0.2.0-x64.zip\n    sha512: digest\n')], '0.2.0')).toThrow(/invalid size/)
+      const sized = (size: string) => `  - url: Apex-0.2.0-x64.zip\n    sha512: digest\n    size: ${size}\n`
+      expect(() => mergeUpdateMetadata([write('missing-size.yml', '  - url: Apex-0.2.0-x64.zip\n    sha512: digest\n')], '0.2.0')).toThrow(/invalid size/)
       expect(() => mergeUpdateMetadata([write('zero-size.yml', sized('0'))], '0.2.0')).toThrow(/invalid size/)
       expect(() => mergeUpdateMetadata([write('negative-size.yml', sized('-1'))], '0.2.0')).toThrow(/invalid size/)
       expect(() => mergeUpdateMetadata([write('text-size.yml', sized("'42'"))], '0.2.0')).toThrow(/invalid size/)
-      expect(() => mergeUpdateMetadata([write('empty-digest.yml', "  - url: GooeyPi-0.2.0-x64.zip\n    sha512: ''\n    size: 42\n")], '0.2.0')).toThrow(/no sha512/)
+      expect(() => mergeUpdateMetadata([write('empty-digest.yml', "  - url: Apex-0.2.0-x64.zip\n    sha512: ''\n    size: 42\n")], '0.2.0')).toThrow(/no sha512/)
       expect(() => mergeUpdateMetadata([write('valid.yml', sized('42'))], '0.2.0')).not.toThrow()
       expect(() => mergeUpdateMetadata([write('a.yml', sized('42')), write('b.yml', sized('43'))], '0.2.0')).toThrow(/disagrees/)
       expect(() => mergeUpdateMetadata([], '0.2.0')).toThrow(/missing/)
@@ -998,9 +1025,9 @@ describe('GitHub Release publication', () => {
   })
 
   test('deletes only unexpected assets from a resumed draft release', () => {
-    const assets = ['GooeyPi-0.2.0-m-chip.dmg', 'GooeyPi-0.1.9-arm64.dmg', 'latest-mac.yml', 'SHA256SUMS.txt']
-    const expected = ['GooeyPi-0.2.0-m-chip.dmg', 'latest-mac.yml', 'SHA256SUMS.txt']
-    expect(staleDraftReleaseAssets(assets, expected)).toEqual(['GooeyPi-0.1.9-arm64.dmg'])
+    const assets = ['Apex-0.2.0-m-chip.dmg', 'Apex-0.1.9-arm64.dmg', 'latest-mac.yml', 'SHA256SUMS.txt']
+    const expected = ['Apex-0.2.0-m-chip.dmg', 'latest-mac.yml', 'SHA256SUMS.txt']
+    expect(staleDraftReleaseAssets(assets, expected)).toEqual(['Apex-0.1.9-arm64.dmg'])
     expect(staleDraftReleaseAssets(expected, expected)).toEqual([])
     // An empty expected set would delete the whole draft, so it fails instead.
     expect(() => staleDraftReleaseAssets(assets, [])).toThrow(/expected release asset set is empty/)
@@ -1013,12 +1040,12 @@ describe('GitHub Release publication', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-draft-prune-'))
     try {
       mkdirSync(join(directory, 'release-assets'))
-      for (const name of ['GooeyPi-0.2.0-m-chip.dmg', 'SHA256SUMS.txt']) writeFileSync(join(directory, 'release-assets', name), 'asset')
-      writeFileSync(join(directory, 'draft.json'), JSON.stringify({ assets: [{ name: 'GooeyPi-0.2.0-m-chip.dmg' }, { name: 'GooeyPi-0.1.9-arm64.dmg' }] }))
+      for (const name of ['Apex-0.2.0-m-chip.dmg', 'SHA256SUMS.txt']) writeFileSync(join(directory, 'release-assets', name), 'asset')
+      writeFileSync(join(directory, 'draft.json'), JSON.stringify({ assets: [{ name: 'Apex-0.2.0-m-chip.dmg' }, { name: 'Apex-0.1.9-arm64.dmg' }] }))
       const args = ['scripts/release/prune-draft-release-assets.mjs', '--assets', join(directory, 'draft.json'), '--expected', join(directory, 'release-assets')]
       const result = spawnSync(process.execPath, args, { encoding: 'utf8' })
       expect(result.status).toBe(0)
-      expect(result.stdout.trim().split('\n')).toEqual(['GooeyPi-0.1.9-arm64.dmg'])
+      expect(result.stdout.trim().split('\n')).toEqual(['Apex-0.1.9-arm64.dmg'])
       const failed = spawnSync(process.execPath, args.slice(0, 3), { encoding: 'utf8' })
       expect(failed.status).toBe(1)
       expect(failed.stderr).toMatch(/Draft release asset pruning failed/)
@@ -1052,20 +1079,20 @@ describe('GitHub Release publication', () => {
       mkdirSync(artifactDirectory)
       const updateTarget =
         name === 'latest-mac.yml'
-          ? 'GooeyPi-0.2.0-arm64.zip'
+          ? 'Apex-0.2.0-arm64.zip'
           : name === 'latest-linux.yml'
-            ? 'GooeyPi-0.2.0-linux-x86_64.AppImage'
+            ? 'Apex-0.2.0-linux-x86_64.AppImage'
             : name === 'latest-linux-arm64.yml'
-              ? 'GooeyPi-0.2.0-linux-arm64.AppImage'
-              : 'GooeyPi-0.2.0-win-x64.exe'
+              ? 'Apex-0.2.0-linux-arm64.AppImage'
+              : 'Apex-0.2.0-win-x64.exe'
       const content = name.startsWith('latest')
-        ? `version: 0.2.0\nfiles:\n  - url: ${updateTarget}\n    sha512: checksum-${index}\n    size: ${index + 1}\n${name === 'latest-mac.yml' ? '  - url: GooeyPi-0.2.0-arm64.dmg\n    sha512: checksum-arm64-dmg\n    size: 44\n' : ''}path: ${updateTarget}\nsha512: checksum-${index}\n`
+        ? `version: 0.2.0\nfiles:\n  - url: ${updateTarget}\n    sha512: checksum-${index}\n    size: ${index + 1}\n${name === 'latest-mac.yml' ? '  - url: Apex-0.2.0-arm64.dmg\n    sha512: checksum-arm64-dmg\n    size: 44\n' : ''}path: ${updateTarget}\nsha512: checksum-${index}\n`
         : `asset ${index}`
       writeFileSync(join(artifactDirectory, name), content)
     }
     const secondMacManifest = join(inputDirectory, 'macos-x64')
     mkdirSync(secondMacManifest)
-    writeFileSync(join(secondMacManifest, 'latest-mac.yml'), 'version: 0.2.0\nfiles:\n  - url: GooeyPi-0.2.0-x64.zip\n    sha512: checksum-x64\n    size: 42\n')
+    writeFileSync(join(secondMacManifest, 'latest-mac.yml'), 'version: 0.2.0\nfiles:\n  - url: Apex-0.2.0-x64.zip\n    sha512: checksum-x64\n    size: 42\n')
     try {
       const result = await prepareGitHubRelease({ inputDirectory, outputDirectory, projectDirectory, tag: 'v0.2.0' })
       expect(result.assets).toEqual(expected)
@@ -1079,16 +1106,16 @@ describe('GitHub Release publication', () => {
         expect(checksums).toContain(`${digest}  ${name}`)
       }
       const macFeed = readFileSync(join(outputDirectory, 'latest-mac.yml'), 'utf8')
-      expect(macFeed).toContain('GooeyPi-0.2.0-arm64.zip')
-      expect(macFeed).toContain('GooeyPi-0.2.0-x64.zip')
-      expect(macFeed).toContain('GooeyPi-0.2.0-m-chip.dmg')
-      expect(macFeed).not.toContain('GooeyPi-0.2.0-arm64.dmg')
+      expect(macFeed).toContain('Apex-0.2.0-arm64.zip')
+      expect(macFeed).toContain('Apex-0.2.0-x64.zip')
+      expect(macFeed).toContain('Apex-0.2.0-m-chip.dmg')
+      expect(macFeed).not.toContain('Apex-0.2.0-arm64.dmg')
       const linuxFeed = readFileSync(join(outputDirectory, 'latest-linux.yml'), 'utf8')
-      expect(linuxFeed).toContain('GooeyPi-0.2.0-linux-x86_64.AppImage')
-      expect(linuxFeed).not.toContain('GooeyPi-0.2.0-linux-arm64.AppImage')
+      expect(linuxFeed).toContain('Apex-0.2.0-linux-x86_64.AppImage')
+      expect(linuxFeed).not.toContain('Apex-0.2.0-linux-arm64.AppImage')
       const linuxArmFeed = readFileSync(join(outputDirectory, 'latest-linux-arm64.yml'), 'utf8')
-      expect(linuxArmFeed).toContain('GooeyPi-0.2.0-linux-arm64.AppImage')
-      expect(linuxArmFeed).not.toContain('GooeyPi-0.2.0-linux-x86_64.AppImage')
+      expect(linuxArmFeed).toContain('Apex-0.2.0-linux-arm64.AppImage')
+      expect(linuxArmFeed).not.toContain('Apex-0.2.0-linux-x86_64.AppImage')
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -1111,12 +1138,12 @@ describe('GitHub Release publication', () => {
         mkdirSync(artifactDirectory)
         const updateTarget =
           name === 'latest-mac.yml'
-            ? 'GooeyPi-0.2.0-arm64.zip'
+            ? 'Apex-0.2.0-arm64.zip'
             : name === 'latest-linux.yml'
-              ? 'GooeyPi-0.2.0-linux-x86_64.AppImage'
+              ? 'Apex-0.2.0-linux-x86_64.AppImage'
               : name === 'latest-linux-arm64.yml'
-                ? 'GooeyPi-0.2.0-linux-arm64.AppImage'
-                : 'GooeyPi-0.2.0-win-x64.exe'
+                ? 'Apex-0.2.0-linux-arm64.AppImage'
+                : 'Apex-0.2.0-win-x64.exe'
         writeFileSync(join(artifactDirectory, name), name.startsWith('latest') ? `version: 0.2.0\nfiles:\n  - url: ${updateTarget}\n    sha512: checksum-${index}\n` : `asset ${index}`)
       }
       const duplicateDirectory = join(inputDirectory, 'duplicate')
@@ -1185,7 +1212,7 @@ describe('post-package verification helpers', () => {
     expect(packageJson.author).toEqual({ name: 'GooeyPi contributors', email: '42459108+am-will@users.noreply.github.com' })
     expect(packageJson.description).toBe('A desktop workspace for Pi')
     expect(packageJson.homepage).toBe('https://github.com/am-will/gooey-pi')
-    expect(packageJson.build.productName).toBe('GooeyPi')
+    expect(packageJson.build.productName).toBe('Apex')
     expect(packageJson.build.appId).toBe('app.gooeypi.desktop')
     expect(packageJson.desktopName).toBe('gooeypi.desktop')
     expect(packageJson.build.linux.synopsis).toBe(packageJson.description)
@@ -1206,7 +1233,7 @@ describe('post-package verification helpers', () => {
       offset += size
     }
     // The previous checked-in ICNS silently contained Prime artwork. Anchor
-    // its full-size layer to GooeyPi's canonical PNG and retain small layers.
+    // its full-size layer to Apex's canonical PNG and retain small layers.
     expect(macIconChunks.get('ic10')?.equals(readFileSync('assets/icon.png'))).toBe(true)
     // App-bundle rendering only reads ARGB, not PNG, in the 16px and 32px 1x slots.
     expect(macIconChunks.get('ic04')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
@@ -1246,16 +1273,16 @@ describe('post-package verification helpers', () => {
       return { status: 0, stdout: '', stderr: '' }
     }
     const spawn = validSpawn as unknown as Parameters<typeof assertValidAuthenticode>[1]
-    expect(() => assertValidAuthenticode('C:\\release\\GooeyPi.exe', spawn, signerEnvironment)).not.toThrow()
+    expect(() => assertValidAuthenticode('C:\\release\\Apex.exe', spawn, signerEnvironment)).not.toThrow()
     expect(calls).toEqual([
       {
         file: 'powershell.exe',
         args: expect.arrayContaining(['-NoProfile', '-NonInteractive', '-Command']),
-        path: 'C:\\release\\GooeyPi.exe',
+        path: 'C:\\release\\Apex.exe',
       },
     ])
     const invalidSpawn = () => ({ status: 1, stdout: '', stderr: 'NotSigned' })
-    expect(() => assertValidAuthenticode('C:\\release\\GooeyPi.exe', invalidSpawn as unknown as Parameters<typeof assertValidAuthenticode>[1], signerEnvironment)).toThrow(/NotSigned/)
+    expect(() => assertValidAuthenticode('C:\\release\\Apex.exe', invalidSpawn as unknown as Parameters<typeof assertValidAuthenticode>[1], signerEnvironment)).toThrow(/NotSigned/)
   })
 
   test('asserts the expected Authenticode signer instead of any trusted certificate', () => {
@@ -1273,19 +1300,19 @@ describe('post-package verification helpers', () => {
       calls.push({ args, env: options.env })
       return { status: 0, stdout: '', stderr: '' }
     }
-    assertValidAuthenticode('C:\\release\\GooeyPi.exe', spawn as unknown as Parameters<typeof assertValidAuthenticode>[1], {
+    assertValidAuthenticode('C:\\release\\Apex.exe', spawn as unknown as Parameters<typeof assertValidAuthenticode>[1], {
       GOOEYPI_WINDOWS_CERT_SUBJECT: 'CN=Example Ltd',
       GOOEYPI_WINDOWS_CERT_THUMBPRINT: 'a1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d',
     })
     // The file path and expected signer are passed as environment variables, never
     // interpolated into the script, and a terminating error exits non-zero.
     expect(calls[0].env).toMatchObject({
-      GOOEYPI_SIGNED_FILE: 'C:\\release\\GooeyPi.exe',
+      GOOEYPI_SIGNED_FILE: 'C:\\release\\Apex.exe',
       GOOEYPI_WINDOWS_CERT_SUBJECT: 'CN=Example Ltd',
       GOOEYPI_WINDOWS_CERT_THUMBPRINT: 'A1B2C3D4E5F60718293A4B5C6D7E8F901A2B3C4D',
     })
     const script = calls[0].args.at(-1) as string
-    expect(script).not.toContain('C:\\release\\GooeyPi.exe')
+    expect(script).not.toContain('C:\\release\\Apex.exe')
     expect(script).toContain("$ErrorActionPreference = 'Stop'")
     expect(script).toContain('try {')
     expect(script).toContain('} catch {')
@@ -1415,7 +1442,7 @@ describe('cross-platform packaging repair', () => {
 
   test('every asarUnpack glob matches at least one real file for platforms present in node_modules', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-    const root = new URL('..', import.meta.url).pathname
+    const root = fileURLToPath(new URL('..', import.meta.url))
     const localArchitecture = process.arch === 'arm64' ? 'arm64' : 'x64'
     const localTarget = process.platform === 'darwin' ? 'mac' : process.platform
     const architecturesFor = (glob: string) => (glob.includes('node-pty/build/Release') ? [localArchitecture] : ['arm64', 'x64'])
@@ -1490,8 +1517,26 @@ describe('cross-platform packaging repair', () => {
     expect(packageScript).not.toContain("['exec', '--', 'electron-builder'")
     const npmViaLifecycle = resolveCommandInvocation('npm', ['run', 'release:verify'], 'win32', { npm_execpath: 'C:/npm/npm-cli.js' })
     expect(npmViaLifecycle).toEqual({ file: process.execPath, args: ['C:/npm/npm-cli.js', 'run', 'release:verify'], shell: false })
+    expect(resolveCommandInvocation('npm', ['ci'], 'win32', { NPM_EXECPATH: 'C:/npm/npm-cli.js' })).toEqual({ file: process.execPath, args: ['C:/npm/npm-cli.js', 'ci'], shell: false })
+    expect(() => resolveCommandInvocation('npm', ['ci'], 'win32', { NPM_EXECPATH: 'C:/npm/npm.cmd' })).toThrow(/JavaScript npm CLI/)
     expect(() => resolveCommandInvocation('npm', ['ci'], 'win32', { npm_execpath: 'C:/npm/npm.cmd' })).toThrow(/JavaScript npm CLI/)
     expect(resolveCommandInvocation('npm', ['ci'], 'darwin', {})).toEqual({ file: 'npm', args: ['ci'], shell: false })
+  })
+
+  test('qualifies both winpty batch commands without changing them on repeated installs', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'winpty-paths-'))
+    const path = pathToFileURL(join(directory, 'winpty.gyp'))
+    try {
+      writeFileSync(path, 'cmd /c "cd shared && GetCommitHash.bat"\ncmd /c "cd shared && UpdateGenVersion.bat <(WINPTY_COMMIT_HASH)"')
+      qualifyWinptyBatchPaths(path)
+      const qualified = readFileSync(path, 'utf8')
+      expect(qualified).toContain('&& .\\\\GetCommitHash.bat')
+      expect(qualified).toContain('&& .\\\\UpdateGenVersion.bat <(WINPTY_COMMIT_HASH)')
+      qualifyWinptyBatchPaths(path)
+      expect(readFileSync(path, 'utf8')).toBe(qualified)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   test('installs Electron before rebuilding native app dependencies', () => {

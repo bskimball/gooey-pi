@@ -69,7 +69,7 @@ async function markdownMetadata(path: string): Promise<{ name?: string; descript
 }
 
 function normalizedPackageSlug(source: string): string {
-  let value = source.trim().replace(/^(?:npm:|git:)/i, '').replace(/[?#].*$/, '').replace(/\.git$/i, '')
+  let value = source.trim().replace(/\\/g, '/').replace(/^(?:npm:|git:)/i, '').replace(/[?#].*$/, '').replace(/\.git$/i, '')
   value = value.replace(/\/+$/, '').slice(value.lastIndexOf('/') + 1).replace(/@[^@/]+$/, '')
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120) || 'package'
 }
@@ -325,7 +325,7 @@ function addMcpSettingsMetadata(
       const transport = definition.type === 'sse' ? 'SSE' : 'HTTP'
       output.push({
         id: idFor('mcp', location, name), name: displayName,
-        description: `${transport} MCP server at ${origin}. Managed outside GooeyPi.`,
+        description: `${transport} MCP server at ${origin}. Managed outside Apex.`,
         kind: 'mcp', location, enabled, source: origin, ...definitionIdentity,
         availability: { available: false, detail: NETWORK_MCP_UNAVAILABLE_DETAIL },
       })

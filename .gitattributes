@@ -1,0 +1,5 @@
+/scripts/release/** text eol=lf
+/electron.vite.config.ts text eol=lf
+/vitest.config.ts text eol=lf
+/playwright.config.ts text eol=lf
+/tests/release-scripts.test.ts text eol=lf

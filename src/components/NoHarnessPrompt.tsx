@@ -7,7 +7,7 @@ export function NoHarnessPrompt({ onClose, onOpenHarnessSettings }: { onClose():
       onClose={onClose}
       footer={<button type="button" className="button button--primary" onClick={onOpenHarnessSettings}>Take me there</button>}
     >
-      <p>GooeyPi couldn’t find Pi. Install Pi to get started.</p>
+      <p>Apex couldn’t find Pi. Install Pi to get started.</p>
       <p>If Pi is already installed, configure its executable path in Pi settings. You can also refresh detection there after installing Pi.</p>
     </Modal>
   )

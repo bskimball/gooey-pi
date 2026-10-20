@@ -23,8 +23,9 @@ describe('validateExtensionInstallInput', () => {
   it('resolves the source through its real path for both scopes', () => {
     const root = makeRoot()
     const source = writeExtension(root)
-    const link = join(root, 'linked.ts')
-    symlinkSync(source, link)
+    const alias = join(root, 'alias')
+    symlinkSync(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const link = join(alias, 'clock.ts')
     expect(validateExtensionInstallInput({ source: ` ${link} `, scope: 'user' })).toEqual({ source, scope: 'user', projectPath: undefined })
     expect(validateExtensionInstallInput({ source, scope: 'project', projectPath: root })).toEqual({ source, scope: 'project', projectPath: root })
   })

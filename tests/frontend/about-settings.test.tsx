@@ -68,7 +68,7 @@ describe('About settings updates', () => {
 
   it('describes progress and failure states', () => {
     expect(updateStatusCopy({ phase: 'downloading', version: '1.2.0', percent: 42 }, '1.1.11')).toContain('42%')
-    expect(updateStatusCopy({ phase: 'downloading', version: '1.2.0' }, '1.1.11')).toContain('Downloading GooeyPi 1.2.0')
+    expect(updateStatusCopy({ phase: 'downloading', version: '1.2.0' }, '1.1.11')).toContain('Downloading Apex 1.2.0')
     expect(updateStatusCopy({ phase: 'downloaded', version: '1.2.0' }, '1.1.11')).toContain('ready to install')
     expect(updateStatusCopy({ phase: 'error', message: 'Network unavailable' }, '1.1.11')).toBe('Network unavailable')
     expect(updateStatusCopy({ phase: 'error' }, '1.1.11')).toBe('The update check failed.')
@@ -76,7 +76,7 @@ describe('About settings updates', () => {
   })
 
   it('describes available and current versions', () => {
-    expect(updateStatusCopy({ phase: 'available', version: '1.2.0' }, '1.1.11')).toBe('GooeyPi 1.2.0 is available.')
-    expect(updateStatusCopy({ phase: 'not-available' }, '1.1.11')).toBe('GooeyPi 1.1.11 is up to date.')
+    expect(updateStatusCopy({ phase: 'available', version: '1.2.0' }, '1.1.11')).toBe('Apex 1.2.0 is available.')
+    expect(updateStatusCopy({ phase: 'not-available' }, '1.1.11')).toBe('Apex 1.1.11 is up to date.')
   })
 })

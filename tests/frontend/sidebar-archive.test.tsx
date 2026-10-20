@@ -134,7 +134,7 @@ describe('sidebar project context menu', () => {
     expect(update?.querySelector('.ph-download-simple')).not.toBeNull()
     await press(update!)
     expect(onUpdateAction).not.toHaveBeenCalled()
-    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Download and Restart GooeyPi?')
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Download and Restart Apex?')
 
     const yes = [...document.body.querySelectorAll<HTMLButtonElement>('.modal__footer button')].find((button) => button.textContent === 'Yes')
     expect(yes).toBeDefined()

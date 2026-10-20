@@ -44,7 +44,9 @@ function spawnFailure(error: unknown): HarnessProbeFailure {
     ? 'path does not exist'
     : code === 'EACCES' || code === 'EPERM'
       ? 'permission denied'
-      : `spawn error ${code}`
+      : code === 'UNKNOWN' && error instanceof Error
+        ? sanitizedDetail(error.message)
+        : `spawn error ${code}`
   return { kind: 'spawn', detail }
 }
 

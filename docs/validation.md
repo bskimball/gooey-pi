@@ -1,6 +1,6 @@
 # Validation guide
 
-This page explains how to reproduce and interpret GooeyPi's validation gates. It is not a status report. A passing command or workflow is evidence only for the exact commit, runner, inputs, and credentials that produced it; do not infer that the current branch is green from this document.
+This page explains how to reproduce and interpret Apex's validation gates. It is not a status report. A passing command or workflow is evidence only for the exact commit, runner, inputs, and credentials that produced it; do not infer that the current branch is green from this document.
 
 ## Protected `main` validation contract
 

@@ -11,7 +11,7 @@ export async function routeExtensionNavigation(
 ): Promise<void> {
 	if (!isAllowedTabUrl(url))
 		throw new Error(
-			"Only credential-free http(s) URLs can be opened in the GooeyPi browser",
+			"Only credential-free http(s) URLs can be opened in the Apex browser",
 		);
 	if (isLocalPreviewUrl(url) && !tab.pairedByUser) {
 		const chromeTabId = tab.chromeTabId;

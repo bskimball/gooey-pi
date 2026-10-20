@@ -132,5 +132,5 @@ export function parseScriptJson(
 export function logNavigationFailure(url: string, error: unknown): void {
 	const message = error instanceof Error ? error.message : String(error);
 	if (message.includes("ERR_ABORTED")) return;
-	console.warn(`GooeyPi browser could not load ${url}: ${message}`);
+	console.warn(`Apex browser could not load ${url}: ${message}`);
 }

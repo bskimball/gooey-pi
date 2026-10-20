@@ -206,7 +206,7 @@ export class AgentBrowserService {
 		if (event.type === "tab_paired") {
 			const session = event.sessionKey ?? this.activeSessionKey;
 			if (typeof session !== "string")
-				throw new Error("Select a thread in GooeyPi before sharing this tab");
+				throw new Error("Select a thread in Apex before sharing this tab");
 			const serial = tab?.serial;
 			if (tab) {
 				tab.pairedByUser = true;
@@ -372,7 +372,7 @@ export class AgentBrowserService {
 			});
 			if (!isAllowedTabUrl(url))
 				throw new Error(
-					"Only credential-free http(s) URLs can be opened in the GooeyPi browser",
+					"Only credential-free http(s) URLs can be opened in the Apex browser",
 				);
 			guest
 				.loadURL(url)
@@ -557,7 +557,7 @@ export class AgentBrowserService {
 				: requireString(params.url, "url", { min: 1, max: 2048, trim: true });
 		if (!isAllowedTabUrl(url))
 			throw new Error(
-				"Only credential-free http(s) URLs can be opened in the GooeyPi browser",
+				"Only credential-free http(s) URLs can be opened in the Apex browser",
 			);
 		const sessionTabs = [...this.tabs.values()].filter(
 			(tab) => tab.sessionKey === sessionKey,
@@ -607,7 +607,7 @@ export class AgentBrowserService {
 			);
 		if (this.tabs.size >= MAX_TABS_TOTAL)
 			throw new Error(
-				"GooeyPi has too many open agent browser tabs. Close unused tabs first.",
+				"Apex has too many open agent browser tabs. Close unused tabs first.",
 			);
 		const tab = this.newTab(sessionKey, url, "webview");
 		this.emitActivity(tab);
@@ -700,7 +700,7 @@ export class AgentBrowserService {
 							});
 				if (url !== undefined && !isAllowedTabUrl(url))
 					throw new Error(
-						"Only credential-free http(s) URLs can be opened in the GooeyPi browser",
+						"Only credential-free http(s) URLs can be opened in the Apex browser",
 					);
 				const action =
 					url === undefined
@@ -726,7 +726,7 @@ export class AgentBrowserService {
 				});
 				if (!isAllowedTabUrl(url))
 					throw new Error(
-						"Only credential-free http(s) URLs can be opened in the GooeyPi browser",
+						"Only credential-free http(s) URLs can be opened in the Apex browser",
 					);
 				await this.loadAndSettle(guest, url);
 			} else {
@@ -1042,7 +1042,7 @@ export class AgentBrowserService {
 	// ---- internals -----------------------------------------------------------
 
 	private requireOpen(): void {
-		if (this.closed) throw new Error("GooeyPi is shutting down");
+		if (this.closed) throw new Error("Apex is shutting down");
 	}
 
 	private requireTab(tabIdValue: unknown): TabState {
@@ -1226,7 +1226,7 @@ export class AgentBrowserService {
 					);
 					reject(
 						new Error(
-							"The GooeyPi browser pane did not attach this tab. Make sure the GooeyPi window is open.",
+							"The Apex browser pane did not attach this tab. Make sure the Apex window is open.",
 						),
 					);
 				}, this.attachTimeoutMs),

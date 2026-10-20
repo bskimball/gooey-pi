@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -43,6 +43,15 @@ ${body}
 }
 `)
   chmodSync(executable, 0o755)
+  if (process.platform === 'win32') {
+    const root = `${executable}.npm`
+    const dist = join(root, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+    mkdirSync(dist, { recursive: true })
+    writeFileSync(join(dist, 'cli.js'), readFileSync(executable))
+    const shim = join(root, 'pi.cmd')
+    writeFileSync(shim, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+    return shim
+  }
   return executable
 }
 
@@ -251,7 +260,7 @@ setTimeout(() => {
     const pid = Number(readFileSync(pidFile, 'utf8'))
     expect(Number.isInteger(pid) && pid > 0).toBe(true)
     await waitUntil(() => !processExists(pid))
-  })
+  }, 10_000)
 
   it('caches within the TTL and single-flights concurrent refreshes', async () => {
     const counterFile = join(tempDir(), 'runs')

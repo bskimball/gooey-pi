@@ -2,16 +2,37 @@ import { spawn } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PluginService, beginPluginDiscoveryShutdown } from '../../electron/main/plugins'
 import { removeMcpDefinition, updateMcpSettings, updateMcpState } from '../../electron/main/plugins/mcp'
 import { executePiPluginInstall, executePiPluginRemove } from '../../electron/main/plugins/package-execution'
 import { ProjectService } from '../../electron/main/projects'
 import { JsonStateStore } from '../../electron/main/store'
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: vi.fn(actual.homedir) }
+})
+
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 const temp = () => { const dir = mkdtempSync(join(tmpdir(), 'pi-work-mcp-')); dirs.push(dir); return dir }
+beforeEach(async () => {
+  const { homedir } = await import('node:os')
+  vi.mocked(homedir).mockReturnValue(temp())
+})
+
+function fixtureExecutable(script: string): string {
+  if (process.platform !== 'win32') return script
+  const root = `${script}.npm`
+  const dist = join(root, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+  mkdirSync(dist, { recursive: true })
+  writeFileSync(join(dist, 'cli.js'), readFileSync(script))
+  const shim = join(root, 'pi.cmd')
+  writeFileSync(shim, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+  return shim
+}
+
 const enablePiMcp = (agentDir: string) => {
   mkdirSync(agentDir, { recursive: true })
   writeFileSync(join(agentDir, 'settings.json'), JSON.stringify({ packages: ['npm:pi-mcp-adapter'] }))
@@ -84,7 +105,7 @@ describe('PluginService discovery', () => {
       ['legacy-scalar', 'user'], ['future-shape', 'project'], ['null-shape', 'project'],
     ] as const) {
       expect(records).toContainEqual(expect.objectContaining({
-        name, location, availability: { available: false, detail: expect.stringContaining('managed outside GooeyPi') },
+        name, location, availability: { available: false, detail: expect.stringContaining('managed outside Apex') },
       }))
     }
     expect(records.find((item) => item.name === 'legacy-scalar')?.description).not.toContain('legacy-owned-value')
@@ -258,7 +279,7 @@ describe('PluginService discovery', () => {
     const agentDir = join(root, 'agent')
     const project = join(root, 'project')
     const alias = join(root, 'project-alias')
-    mkdirSync(agentDir); mkdirSync(project); symlinkSync(project, alias)
+    mkdirSync(agentDir); mkdirSync(project); symlinkSync(project, alias, process.platform === 'win32' ? 'junction' : 'dir')
     let discoveries = 0
     const service = new PluginService(null, async (path) => realpathSync(path), {
       agentDir,
@@ -549,7 +570,14 @@ describe('PluginService discovery', () => {
     const inside = join(notes, 'inside.md')
     writeFileSync(inside, '# Inside\ncontained discovery')
     writeFileSync(outside, '# Outside\nshould not be disclosed')
-    symlinkSync(outside, join(notes, 'linked-outside.md'))
+    if (process.platform === 'win32') {
+      const outsideDirectory = join(root, 'outside-prompts')
+      mkdirSync(outsideDirectory)
+      writeFileSync(join(outsideDirectory, 'outside.md'), '# Outside\nshould not be disclosed')
+      symlinkSync(outsideDirectory, join(notes, 'linked-outside.md'), 'junction')
+    } else {
+      symlinkSync(outside, join(notes, 'linked-outside.md'))
+    }
     writeFileSync(join(projectAgentDir, 'settings.json'), JSON.stringify({
       prompts: [inside, outside, join(notes, 'linked-outside.md')],
     }))
@@ -558,7 +586,7 @@ describe('PluginService discovery', () => {
     const { skills: records } = await service.list(project)
 
     expect(records).toContainEqual(expect.objectContaining({ kind: 'prompt', location: 'project', path: realpathSync(inside) }))
-    expect(records.some((record) => record.path === outside || record.path === join(notes, 'linked-outside.md'))).toBe(false)
+    expect(records.filter((record) => record.kind === 'prompt' && record.location === 'project').map((record) => record.path)).toEqual([realpathSync(inside)])
   })
 })
 
@@ -572,7 +600,7 @@ describe('PluginService MCP connections', () => {
       { name: 'remote', scope: 'user', type: 'sse', url: 'https://mcp.example/sse' } as never,
       undefined,
       { harness: 'pi', agentName: 'Pi' },
-    )).rejects.toThrow(/managed outside GooeyPi/)
+    )).rejects.toThrow(/managed outside Apex/)
     expect(existsSync(settingsPath)).toBe(false)
   })
 
@@ -583,7 +611,7 @@ describe('PluginService MCP connections', () => {
     writeFileSync(settingsPath, original)
 
     await expect(updateMcpState(settingsPath, { name: 'local', scope: 'user', enabled: false }))
-      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside GooeyPi') })
+      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside Apex') })
     expect(readFileSync(settingsPath, 'utf8')).toBe(original)
   })
 
@@ -604,7 +632,7 @@ describe('PluginService MCP connections', () => {
       { type: 'stdio', command: 'mcp-local', url: 42 },
     ] as const) {
       await expect(service.connectMcp({ name: 'remote', scope: 'user', ...input } as never))
-        .rejects.toThrow('Network MCP servers are managed outside GooeyPi')
+        .rejects.toThrow('Network MCP servers are managed outside Apex')
       expect(existsSync(settingsPath)).toBe(false)
     }
   })
@@ -830,17 +858,17 @@ describe('PluginService MCP connections', () => {
       enabled: true,
       availability: {
         available: false,
-        detail: expect.stringContaining('managed outside GooeyPi'),
+        detail: expect.stringContaining('managed outside Apex'),
       },
     })
 
     const original = readFileSync(settingsPath, 'utf8')
     await expect(service.setMcpEnabled({ name: 'remote', scope: 'user', enabled: false }))
-      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside GooeyPi') })
+      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside Apex') })
     await expect(service.mutateCapability({ kind: 'mcp', action: 'enable', name: 'remote', scope: 'user' }))
-      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside GooeyPi') })
+      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside Apex') })
     await expect(service.mutateCapability({ kind: 'mcp', action: 'disable', name: 'remote', scope: 'user' }))
-      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside GooeyPi') })
+      .resolves.toMatchObject({ ok: false, reason: 'blocked', output: expect.stringContaining('managed outside Apex') })
     expect(readFileSync(settingsPath, 'utf8')).toBe(original)
   })
 
@@ -905,7 +933,7 @@ describe('PluginService MCP connections', () => {
     } }))
     writeFileSync(executable, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2))); process.stdout.write('removed\\n')\n`)
     chmodSync(executable, 0o755)
-    const service = new PluginService(executable, async (path) => resolve(path), { agentDir })
+    const service = new PluginService(fixtureExecutable(executable), async (path) => resolve(path), { agentDir })
 
     await expect(service.mutateCapability({
       kind: 'mcp', action: 'remove', name: 'docs', source: 'npm:prime-docs', scope: 'user',
@@ -966,7 +994,7 @@ describe('PluginService MCP connections', () => {
     const project = join(root, 'project')
     const outside = join(root, 'outside')
     mkdirSync(project); mkdirSync(outside)
-    symlinkSync(outside, join(project, '.pi'))
+    symlinkSync(outside, join(project, '.pi'), process.platform === 'win32' ? 'junction' : 'dir')
     enablePiMcp(agentDir)
     const service = new PluginService(null, async (path) => resolve(path), { agentDir, harness: 'pi' })
 
@@ -1000,7 +1028,7 @@ describe('PluginService MCP connections', () => {
         expect(temporaryName).toBeTypeOf('string')
         const stagedSettings = readFileSync(join(projectAgentDir, temporaryName!), 'utf8')
         renameSync(projectAgentDir, displacedAgentDir)
-        symlinkSync(outside, projectAgentDir, 'dir')
+        symlinkSync(outside, projectAgentDir, process.platform === 'win32' ? 'junction' : 'dir')
         // Recreate the observed random staging name so the vulnerable lexical
         // rename would overwrite settings in the substituted directory.
         writeFileSync(join(outside, temporaryName!), stagedSettings)
@@ -1037,7 +1065,7 @@ describe('PluginService MCP connections', () => {
       // post-read checks are required to catch the change before early return.
       if (verifyCalls === 4) {
         renameSync(projectAgentDir, displacedAgentDir)
-        symlinkSync(outside, projectAgentDir, 'dir')
+        symlinkSync(outside, projectAgentDir, process.platform === 'win32' ? 'junction' : 'dir')
         substituted = true
       }
     }
@@ -1059,7 +1087,7 @@ describe('PluginService MCP connections', () => {
     enablePiMcp(agentDir)
     const service = new PluginService(null, async (path) => resolve(path), { agentDir, harness: 'pi' })
 
-    await expect(service.connectMcp({ name: 'secret', scope: 'user', type: 'http', url: 'https://token@example.test/mcp' })).rejects.toThrow(/managed outside GooeyPi/)
+    await expect(service.connectMcp({ name: 'secret', scope: 'user', type: 'http', url: 'https://token@example.test/mcp' })).rejects.toThrow(/managed outside Apex/)
     const duplicate = await service.connectMcp({ name: 'existing', scope: 'user', type: 'stdio', command: 'other' })
     expect(duplicate.ok).toBe(false)
     expect(JSON.parse(readFileSync(join(agentDir, 'mcp.json'), 'utf8')).mcpServers.existing.command).toBe('safe')
@@ -1235,7 +1263,7 @@ describe('PluginService Pi parity', () => {
     expect(catalog.skills).toContainEqual(expect.objectContaining({ id: 'gooeypi-pi-mcp', name: 'Pi MCP Adapter', enabled: false }))
     expect(catalog.skills).toContainEqual(expect.objectContaining({
       name: 'docs', kind: 'mcp', location: 'user',
-      availability: { available: false, detail: expect.stringContaining('managed outside GooeyPi') },
+      availability: { available: false, detail: expect.stringContaining('managed outside Apex') },
     }))
     expect(catalog.skills).toContainEqual(expect.objectContaining({ name: 'files', kind: 'mcp', location: 'project' }))
     // settings.json is not an MCP source for pi; only mcp.json entries surface.
@@ -1265,9 +1293,9 @@ describe('PluginService Pi parity', () => {
     const service = new PluginService(null, async (path) => realpathSync(path), { agentDir, harness: 'pi' })
 
     await expect(service.connectMcp({ name: 'docs:remote', scope: 'user', type: 'http', url: 'https://docs.example/mcp', auth: 'oauth' }))
-      .rejects.toThrow(/managed outside GooeyPi/)
+      .rejects.toThrow(/managed outside Apex/)
     await expect(service.connectMcp({ name: 'stream', scope: 'user', type: 'sse', url: 'https://docs.example/sse' } as never))
-      .rejects.toThrow(/managed outside GooeyPi/)
+      .rejects.toThrow(/managed outside Apex/)
     const user = await service.connectMcp({ name: 'local', scope: 'user', type: 'stdio', command: 'mcp-local' })
     const projectResult = await service.connectMcp({ name: 'files', scope: 'project', projectPath: project, type: 'stdio', command: 'npx', args: ['-y', 'server'] })
     await expect(service.connectMcp({ name: 'invalid name', scope: 'user', type: 'stdio', command: 'npx' })).rejects.toThrow(/unsupported characters/)
@@ -1304,7 +1332,7 @@ describe('PluginService Pi parity', () => {
     writeFileSync(join(agentDir, 'settings.json'), JSON.stringify({ packages: ['npm:pi-mcp-adapter'] }))
     mkdirSync(project)
     mkdirSync(outside)
-    symlinkSync(outside, join(project, '.pi'))
+    symlinkSync(outside, join(project, '.pi'), process.platform === 'win32' ? 'junction' : 'dir')
     const service = new PluginService(null, async (path) => realpathSync(path), { agentDir, harness: 'pi' })
 
     await expect(service.connectMcp({
@@ -1321,7 +1349,7 @@ describe('PluginService Pi parity', () => {
     mkdirSync(agentDir, { recursive: true })
     writeFileSync(executable, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2))); process.stdout.write('installed\\n')\n`)
     chmodSync(executable, 0o755)
-    const service = new PluginService(executable, async (path) => resolve(path), { agentDir, harness: 'pi' })
+    const service = new PluginService(fixtureExecutable(executable), async (path) => resolve(path), { agentDir, harness: 'pi' })
 
     const result = await service.install('npm:@scope/example-plugin')
 
@@ -1345,7 +1373,7 @@ describe('PluginService Pi parity', () => {
     writeFileSync(extension, 'export default () => undefined\n')
     writeFileSync(executable, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }))\n`)
     chmodSync(executable, 0o755)
-    const service = new PluginService(executable, async (path) => realpathSync(path), { agentDir, harness: 'pi' })
+    const service = new PluginService(fixtureExecutable(executable), async (path) => realpathSync(path), { agentDir, harness: 'pi' })
 
     expect((await service.installExtension({ source: extension, scope: 'project', projectPath: project })).ok).toBe(true)
     expect(JSON.parse(readFileSync(capture, 'utf8'))).toEqual({ args: ['install', '-l', realpathSync(extension)], cwd: realpathSync(project) })
@@ -1362,7 +1390,7 @@ describe('PluginService Pi parity', () => {
     writeFileSync(join(agentDir, 'mcp.json'), JSON.stringify({ mcpServers: { docs: { url: 'https://docs.example/mcp' } } }))
     writeFileSync(executable, `#!/usr/bin/env node\nconst fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args: process.argv.slice(2), nativeLock: fs.existsSync(${JSON.stringify(`${settingsPath}.lock`)}), gooeypiLock: fs.existsSync(${JSON.stringify(`${settingsPath}.gooeypi.lock`)}) })); process.stdout.write('ok\\n')\n`)
     chmodSync(executable, 0o755)
-    const service = new PluginService(executable, async (path) => resolve(path), { agentDir, harness: 'pi' })
+    const service = new PluginService(fixtureExecutable(executable), async (path) => resolve(path), { agentDir, harness: 'pi' })
 
     expect((await service.list()).skills).toContainEqual(expect.objectContaining({ id: 'gooeypi-pi-mcp', enabled: true, source: 'npm:pi-mcp-adapter' }))
     expect((await service.setMcpSupport(false)).ok).toBe(true)
@@ -1388,7 +1416,7 @@ describe('PluginService Pi parity', () => {
     writeFileSync(executable, `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2))); process.stdout.write('removed\\n')\n`)
     chmodSync(executable, 0o755)
 
-    expect((await executePiPluginRemove(executable, 'npm:pi-mcp-adapter')).ok).toBe(true)
+    expect((await executePiPluginRemove(fixtureExecutable(executable), 'npm:pi-mcp-adapter')).ok).toBe(true)
     expect(JSON.parse(readFileSync(capture, 'utf8'))).toEqual(['remove', 'npm:pi-mcp-adapter'])
   })
 
@@ -1401,8 +1429,8 @@ describe('PluginService Pi parity', () => {
     writeFileSync(flooding, '#!/usr/bin/env node\nprocess.stdout.write(Buffer.alloc(9 * 1024 * 1024, 97))\n')
     chmodSync(flooding, 0o755)
 
-    const sanitized = await executePiPluginInstall(noisy, 'npm:example-plugin')
-    const flooded = await executePiPluginInstall(flooding, 'npm:example-plugin')
+    const sanitized = await executePiPluginInstall(fixtureExecutable(noisy), 'npm:example-plugin')
+    const flooded = await executePiPluginInstall(fixtureExecutable(flooding), 'npm:example-plugin')
 
     expect(sanitized.ok).toBe(true)
     expect(sanitized.output).toContain('installed pi plugin')
@@ -1423,7 +1451,7 @@ describe('PluginService Pi parity', () => {
     mkdirSync(outside)
     writeFileSync(localSkill, '---\nname: local\n---\nLocal skill')
     writeFileSync(outsideSkill, '---\nname: outside\n---\nShould not be disclosed')
-    symlinkSync(outside, join(project, '.pi', 'skills', 'linked-outside'))
+    symlinkSync(outside, join(project, '.pi', 'skills', 'linked-outside'), process.platform === 'win32' ? 'junction' : 'dir')
     const service = new PluginService(null, async (path) => realpathSync(path), { agentDir, harness: 'pi' })
 
     const { skills: records } = await service.list(project)

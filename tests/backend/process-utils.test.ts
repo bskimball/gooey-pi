@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join, posix } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { probeHarnessExecutable } from '../../electron/main/harness-discovery'
@@ -28,24 +28,40 @@ describe('runProcess resource bounds', () => {
     const shimDirectory = join(home, 'Library', 'pnpm', 'bin')
     const runtimeDirectory = join(home, '.nvm', 'versions', 'node', 'v25.2.1', 'bin')
     mkdirSync(shimDirectory, { recursive: true })
-    mkdirSync(runtimeDirectory, { recursive: true })
-    const executable = join(shimDirectory, 'pi')
-    symlinkSync(process.execPath, join(runtimeDirectory, 'node'))
-    writeFileSync(executable, '#!/usr/bin/env node\nprocess.stdout.write("0.84.1\\n")\n')
+    mkdirSync(dirname(runtimeDirectory), { recursive: true })
+    symlinkSync(dirname(process.execPath), runtimeDirectory, process.platform === 'win32' ? 'junction' : 'dir')
+    const executable = join(shimDirectory, process.platform === 'win32' ? 'pi.cmd' : 'pi')
+    const script = '#!/usr/bin/env node\nprocess.stdout.write("0.84.1\\n")\n'
+    writeFileSync(executable, process.platform === 'win32' ? '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n' : script)
+    if (process.platform === 'win32') {
+      const entrypoint = join(shimDirectory, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+      mkdirSync(entrypoint, { recursive: true })
+      writeFileSync(join(entrypoint, 'cli.js'), script)
+    }
+    const env = process.platform === 'win32'
+      ? { USERPROFILE: home, NVM_SYMLINK: runtimeDirectory, PATH: process.env.PATH ?? '' }
+      : { HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' }
     chmodSync(executable, 0o755)
 
     const result = await runProcess(executable, ['--version'], {
-      env: { HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+      env,
     })
 
     expect(result.code).toBe(0)
     expect(result.stdout).toBe('0.84.1\n')
-    expect(executableChildEnvironment(executable, { HOME: home, PATH: '/usr/bin' }).PATH?.split(':').slice(0, 2)).toEqual([
+    expect(executableChildEnvironment(executable, env).PATH?.split(delimiter).slice(0, 2)).toEqual([
       shimDirectory,
       runtimeDirectory,
     ])
 
-    await expect(probeHarnessExecutable(executable)).resolves.toEqual({ runnable: true, version: '0.84.1' })
+    const previousRuntime = process.env.NVM_SYMLINK
+    process.env.NVM_SYMLINK = runtimeDirectory
+    try {
+      await expect(probeHarnessExecutable(executable)).resolves.toEqual({ runnable: true, version: '0.84.1' })
+    } finally {
+      if (previousRuntime === undefined) delete process.env.NVM_SYMLINK
+      else process.env.NVM_SYMLINK = previousRuntime
+    }
   })
 
   it('uses a combined output budget and explicitly reports truncation with independent kill escalation', async () => {
@@ -114,7 +130,7 @@ setInterval(() => {}, 1000)
     await cleanup
     const completed = await Promise.all(active)
 
-    expect(completed.every((result) => result.signal === 'SIGKILL' || result.signal === 'SIGTERM')).toBe(true)
+    expect(completed.every((result) => process.platform === 'win32' ? result.code !== null && result.code !== 0 : result.signal === 'SIGKILL' || result.signal === 'SIGTERM')).toBe(true)
     expect(readdirSync(dir)).not.toContain('queued-ran')
   }, 15_000)
 })
@@ -217,7 +233,8 @@ describe('killProcessTree', () => {
     })
 
     expect(result).toBe(true)
-    expect(child.signalCode).toBe('SIGKILL')
+    if (process.platform === 'win32') expect(child.exitCode).not.toBe(0)
+    else expect(child.signalCode).toBe('SIGKILL')
   }, 10_000)
 })
 
@@ -285,9 +302,11 @@ describe('Pi discovery candidates', () => {
     expect(candidates.some((candidate) => candidate.endsWith('omp.cmd') || candidate.endsWith('prime-agent.cmd'))).toBe(false)
   })
 
-  it('resolves the official Windows Pi npm shim to Node without invoking a shell', () => {
+  it.each(['@earendil-works', '@mariozechner', '@earendil-works/bundle'])('resolves %s from the shim even when both packages exist, without a shell', (variant) => {
+    const scope = variant.replace('/bundle', '')
+    const cli = variant.endsWith('/bundle') ? 'bundle\\cli.js' : 'cli.js'
     const shim = 'C:\\Users\\Ada\\AppData\\Roaming\\npm\\pi.cmd'
-    const entrypoint = 'C:\\Users\\Ada\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js'
+    const entrypoint = `C:\\Users\\Ada\\AppData\\Roaming\\npm\\node_modules\\${scope}\\pi-coding-agent\\dist\\${cli}`
     const node = 'C:\\Program Files\\nodejs\\node.exe'
     const accessible = new Set([entrypoint.toLowerCase(), node.toLowerCase()])
     const invocation = prepareExecutableSpawn(shim, ['--version'], {
@@ -297,7 +316,8 @@ describe('Pi discovery candidates', () => {
     }, {
       platform: 'win32',
       home: 'C:\\Users\\Ada',
-      canAccess: (candidate) => accessible.has(candidate.toLowerCase()),
+      canAccess: (candidate) => accessible.has(candidate.toLowerCase()) || candidate.includes('pi-coding-agent'),
+      readShim: () => `@ECHO off\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & "%_prog%"  "%dp0%\\node_modules\\${scope}\\pi-coding-agent\\dist\\${cli}" %*\r\n`,
     })
 
     expect(invocation.file).toBe(node)
@@ -313,6 +333,13 @@ describe('Pi discovery candidates', () => {
       platform: 'win32',
       home: 'C:\\Users\\Ada',
       canAccess: () => false,
+      readShim: () => '"%_prog%" "%dp0%\\node_modules\\@mariozechner\\pi-coding-agent\\dist\\cli.js" %*',
+    })).toThrow(/official Pi installation/)
+  })
+
+  it.each(['@echo off', '"%_prog%" "%dp0%\\node_modules\\evil\\cli.js" %*', '"%_prog%" "%dp0%\\node_modules\\@mariozechner\\pi-coding-agent\\dist\\cli.js" %* & evil'])('rejects unrecognized shim targets: %s', (shim) => {
+    expect(() => prepareExecutableSpawn('C:\\Tools\\pi.cmd', [], {}, {
+      platform: 'win32', canAccess: () => true, readShim: () => shim,
     })).toThrow(/official Pi installation/)
   })
 
@@ -335,9 +362,9 @@ describe('Pi discovery candidates', () => {
       mkdirSync(join(versions, version), { recursive: true })
     }
     await expect(nvmHarnessExecutableCandidates(HARNESSES.pi, {}, 'linux', home)).resolves.toEqual([
-      join(versions, 'v23.0.0', 'bin', 'pi'),
-      join(versions, 'v22.12.0', 'bin', 'pi'),
-      join(versions, 'v20.1.0', 'bin', 'pi'),
+      posix.join(home, '.nvm', 'versions', 'node', 'v23.0.0', 'bin', 'pi'),
+      posix.join(home, '.nvm', 'versions', 'node', 'v22.12.0', 'bin', 'pi'),
+      posix.join(home, '.nvm', 'versions', 'node', 'v20.1.0', 'bin', 'pi'),
     ])
   })
 })

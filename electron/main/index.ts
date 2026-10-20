@@ -389,13 +389,13 @@ export function shutdownPrompt(
 		);
 	}
 	if (work.activeSchedules)
-		details.push("Scheduled automations will not run while GooeyPi is closed.");
+		details.push("Scheduled automations will not run while Apex is closed.");
 	if (details.length === 0) return null;
 	return {
 		message:
 			work.runningAgents > 0
-				? "Close GooeyPi while an agent is running?"
-				: "Close GooeyPi?",
+				? "Close Apex while an agent is running?"
+				: "Close Apex?",
 		detail: details.join(" "),
 	};
 }
@@ -406,11 +406,11 @@ export async function confirmAppClose(
 ): Promise<boolean> {
 	const options = {
 		type: "warning" as const,
-		buttons: ["Cancel", "Close GooeyPi"],
+		buttons: ["Cancel", "Close Apex"],
 		defaultId: 0,
 		cancelId: 0,
 		noLink: true,
-		title: "GooeyPi",
+		title: "Apex",
 		...prompt,
 	};
 	const { response } =
@@ -447,7 +447,7 @@ function requestShutdown(
 		})
 		.catch((error: unknown) => {
 			console.error(
-				`GooeyPi close confirmation failed: ${boundedErrorMessage(error)}`,
+				`Apex close confirmation failed: ${boundedErrorMessage(error)}`,
 			);
 		})
 		.finally(() => {
@@ -503,7 +503,7 @@ export function mainWindowChromeOptions(
 		};
 	if (platform === "win32")
 		return {
-			// The native caption controls share a dedicated menu row. GooeyPi's own
+			// The native caption controls share a dedicated menu row. Apex's own
 			// 52px toolbar remains a separate application surface below it.
 			titleBarStyle: "hidden",
 			titleBarOverlay: windowsTitleBarOverlay(theme),
@@ -699,13 +699,13 @@ export function startupFailureDialog(
 ): StartupFailureDialog | null {
 	if (error instanceof StateMigrationError) {
 		return {
-			title: "GooeyPi state migration failed",
+			title: "Apex state migration failed",
 			detail: boundedErrorMessage(error, 2_048),
 		};
 	}
 	if (error instanceof StateCompatibilityError) {
 		return {
-			title: "GooeyPi update required",
+			title: "Apex update required",
 			detail: boundedErrorMessage(error, 2_048),
 		};
 	}
@@ -764,7 +764,7 @@ export async function settleShutdown(
 		for (const result of results) {
 			if (result.status === "rejected")
 				log(
-					`GooeyPi shutdown step failed: ${boundedErrorMessage(result.reason)}`,
+					`Apex shutdown step failed: ${boundedErrorMessage(result.reason)}`,
 				);
 		}
 	});
@@ -772,7 +772,7 @@ export async function settleShutdown(
 	const watchdog = new Promise<void>((resolve) => {
 		timer = setTimeout(() => {
 			log(
-				`GooeyPi shutdown did not finish within ${watchdogMs} ms; quitting anyway`,
+				`Apex shutdown did not finish within ${watchdogMs} ms; quitting anyway`,
 			);
 			resolve();
 		}, watchdogMs);
@@ -802,7 +802,7 @@ function requestWindow(
 		.catch((error: unknown) => {
 			if (!shutdownStarted)
 				console.error(
-					`GooeyPi failed to open a window after ${reason}: ${boundedErrorMessage(error)}`,
+					`Apex failed to open a window after ${reason}: ${boundedErrorMessage(error)}`,
 				);
 		});
 }
@@ -1024,7 +1024,7 @@ async function bootstrap(): Promise<void> {
 					id: "omp-work-schedules",
 					name: "Scheduled tasks",
 					description:
-						"Pi extension for durable project and thread schedules managed by GooeyPi.",
+						"Pi extension for durable project and thread schedules managed by Apex.",
 					kind: "extension",
 					location: "system",
 					path: ompScheduleExtensionPath,
@@ -1043,7 +1043,7 @@ async function bootstrap(): Promise<void> {
 					id: "gooeypi-ask-user",
 					name: "Ask user",
 					description:
-						"Pi extension for asking focused multiple-choice questions in the GooeyPi app.",
+						"Pi extension for asking focused multiple-choice questions in the Apex app.",
 					kind: "extension",
 					location: "system",
 					path: ompAskUserExtensionPath,
@@ -1177,7 +1177,7 @@ async function bootstrap(): Promise<void> {
 				bridge.revoke(token);
 			} catch (error) {
 				console.error(
-					`GooeyPi failed to revoke ${name} runtime capability: ${boundedErrorMessage(error)}`,
+					`Apex failed to revoke ${name} runtime capability: ${boundedErrorMessage(error)}`,
 				);
 			}
 		}
@@ -1291,7 +1291,7 @@ async function bootstrap(): Promise<void> {
 		}
 	});
 	installApplicationMenu({
-		appName: "GooeyPi",
+		appName: "Apex",
 		updatesEnabled: updates.isEnabled(),
 		closeWindow: () => {
 			const window = mainWindow;
@@ -1303,7 +1303,7 @@ async function bootstrap(): Promise<void> {
 			async (notification) => {
 				await dialog.showMessageBox({
 					type: notification.type,
-					title: "GooeyPi",
+					title: "Apex",
 					message: notification.message,
 					detail: notification.detail,
 				});
@@ -1445,7 +1445,7 @@ else
 			if (failureDialog)
 				dialog.showErrorBox(failureDialog.title, failureDialog.detail);
 			if (!shutdownStarted)
-				console.error(`GooeyPi failed to start: ${boundedErrorMessage(error)}`);
+				console.error(`Apex failed to start: ${boundedErrorMessage(error)}`);
 			app.quit();
 		});
 
@@ -1498,7 +1498,7 @@ app.on("before-quit", (event) => {
 				await store?.beginShutdown();
 			} catch (error) {
 				console.error(
-					`GooeyPi store shutdown failed: ${boundedErrorMessage(error)}`,
+					`Apex store shutdown failed: ${boundedErrorMessage(error)}`,
 				);
 			}
 		})

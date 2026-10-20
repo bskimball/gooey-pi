@@ -133,7 +133,7 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
             if (active) setTaskOpened(true)
           }).catch((failure) => {
             if (!active) return
-            setError(`The task started, but GooeyPi could not open it: ${failure instanceof Error ? failure.message : 'Unknown error'}`)
+            setError(`The task started, but Apex could not open it: ${failure instanceof Error ? failure.message : 'Unknown error'}`)
           })
         }
       } catch (failure) {

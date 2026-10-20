@@ -79,7 +79,7 @@ describe('VoiceService', () => {
   it('rejects Linux basic-text storage with actionable setup guidance', () => {
     expect(voiceSecretStorageStatus('linux', true, 'basic_text')).toEqual({
       available: false,
-      message: 'GooeyPi will not save voice API keys because this Linux desktop is using unprotected basic-text storage. Install and unlock GNOME Keyring (libsecret) or KWallet, then restart GooeyPi.',
+      message: 'Apex will not save voice API keys because this Linux desktop is using unprotected basic-text storage. Install and unlock GNOME Keyring (libsecret) or KWallet, then restart Apex.',
     })
     expect(voiceSecretStorageStatus('linux', true, 'gnome_libsecret')).toEqual({ available: true })
     expect(voiceSecretStorageStatus('win32', true)).toEqual({ available: true })
@@ -103,7 +103,7 @@ describe('VoiceService', () => {
   it('does not decrypt or use a saved key while secure storage is unavailable', async () => {
     let storageAvailable = true
     const decrypt = vi.fn((value: Buffer) => value.toString().replace(/^encrypted:/, ''))
-    const message = 'Install and unlock GNOME Keyring (libsecret) or KWallet, then restart GooeyPi.'
+    const message = 'Install and unlock GNOME Keyring (libsecret) or KWallet, then restart Apex.'
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(init?.headers).toEqual({ Authorization: 'Bearer sk-session-value' })
       return new Response('v=0\r\no=answer')
@@ -138,7 +138,7 @@ describe('VoiceService', () => {
   })
 
   it('keeps a fallback key only in memory when secure storage is unavailable', async () => {
-    const message = 'Install and unlock GNOME Keyring (libsecret) or KWallet, then restart GooeyPi.'
+    const message = 'Install and unlock GNOME Keyring (libsecret) or KWallet, then restart Apex.'
     const encrypt = vi.fn((value: string) => Buffer.from(`encrypted:${value}`))
     const { service, options } = makeService({
       secretCodec: {
@@ -272,7 +272,7 @@ describe('VoiceService', () => {
 
     await expect(service.executeTool({
       name: 'start_task', arguments: { project_id: `${harness}-project`, prompt },
-    }, harness)).rejects.toThrow('Network MCP authentication is managed outside GooeyPi')
+    }, harness)).rejects.toThrow('Network MCP authentication is managed outside Apex')
     expect(options.projects[harness].list).not.toHaveBeenCalled()
     expect(agent.start).not.toHaveBeenCalled()
   })

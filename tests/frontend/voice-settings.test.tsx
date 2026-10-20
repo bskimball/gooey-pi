@@ -118,7 +118,7 @@ describe('Voice settings setup flow', () => {
   })
 
   it('allows a session key and warns that it will not persist without secure Linux storage', async () => {
-    const message = 'GooeyPi will not save voice API keys because this Linux desktop is using unprotected basic-text storage. Install and unlock GNOME Keyring (libsecret) or KWallet, then restart GooeyPi.'
+    const message = 'Apex will not save voice API keys because this Linux desktop is using unprotected basic-text storage. Install and unlock GNOME Keyring (libsecret) or KWallet, then restart Apex.'
     const saveApiKey = vi.fn().mockResolvedValue({
       configured: { openai: true, groq: false, deepgram: false, 'self-hosted': false },
       source: { openai: 'session' },
@@ -133,7 +133,7 @@ describe('Voice settings setup flow', () => {
       saveApiKey,
     })} />)
 
-    expect(container.textContent).toContain('Keys will work only until GooeyPi quits')
+    expect(container.textContent).toContain('Keys will work only until Apex quits')
     expect(container.textContent).toContain('GNOME Keyring (libsecret) or KWallet')
     expect(container.textContent).toContain('will not save it to disk')
     expect(container.textContent).toContain('Storage locked')
@@ -153,13 +153,13 @@ describe('Voice settings setup flow', () => {
     expect(saveApiKey).toHaveBeenCalledWith('openai', 'sk-session-key')
     expect(container.querySelector('[role="dialog"]')).toBeNull()
     expect(openAiCard.textContent).toContain('Session only')
-    expect(container.textContent).toContain('Keys will work only until GooeyPi quits')
+    expect(container.textContent).toContain('Keys will work only until Apex quits')
   })
 
   it('explains how to recover an older desktop process instead of showing disabled key buttons', async () => {
     await render(<Harness voice={null} />)
 
-    expect(container.textContent).toContain('Restart GooeyPi to finish enabling Voice')
+    expect(container.textContent).toContain('Restart Apex to finish enabling Voice')
     expect(container.textContent).toContain('⌘Q')
     expect([...container.querySelectorAll('button')].some((button) => button.disabled && button.textContent?.includes('Add key'))).toBe(false)
   })
@@ -195,14 +195,14 @@ describe('Voice settings setup flow', () => {
 
     await click([...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Connect & test'))!)
     expect(testSelfHosted).toHaveBeenCalledWith({ url: 'http://127.0.0.1:9000', model: 'nvidia/parakeet-tdt-0.6b-v3' })
-    expect(container.textContent).toContain('Connected. GooeyPi successfully transcribed a test audio clip.')
+    expect(container.textContent).toContain('Connected. Apex successfully transcribed a test audio clip.')
   })
 
   it('turns a missing Voice IPC handler into a restart state instead of checking forever', async () => {
     const credentialStatus = vi.fn().mockRejectedValue(new Error("No handler registered for 'voice:credential-status'"))
     await render(<Harness voice={voiceBridge({ credentialStatus })} />)
 
-    expect(container.textContent).toContain('Restart GooeyPi to finish enabling Voice')
+    expect(container.textContent).toContain('Restart Apex to finish enabling Voice')
     expect(container.textContent).toContain('Restart required')
     expect(container.textContent).not.toContain('Checking…')
     expect([...container.querySelectorAll('button')].some((button) => button.textContent?.includes('Add key'))).toBe(false)

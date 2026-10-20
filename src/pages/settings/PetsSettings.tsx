@@ -6,8 +6,8 @@ import type { SettingsSectionProps } from './contracts'
 import { SettingsToggle } from './SettingsToggle'
 
 const BUILT_INS: PetDefinition[] = [
-  { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'A fluid voice orb that shifts with GooeyPi activity.', source: 'built-in', kind: 'orb' },
-  { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'GooeyPi', description: 'A friendly purple jelly pet shaped like the mathematical pi symbol.', source: 'built-in', kind: 'spritesheet' },
+  { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'A fluid voice orb that shifts with Apex activity.', source: 'built-in', kind: 'orb' },
+  { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'Apex', description: 'A friendly purple jelly pet shaped like the mathematical pi symbol.', source: 'built-in', kind: 'spritesheet' },
 ]
 
 export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps & { pets: PrimeWorkApi['pets'] | null }) {
@@ -60,14 +60,14 @@ export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps 
               <span className="pet-choice__art">
                 {pet.id === 'gooey-pi' ? <img src="/gooeypi-mascot.png" alt="" /> : pet.kind === 'orb' ? <PetAvatar pet={pet} pets={pets} size={48} reduceMotion={settings.reduceMotion} /> : <PawPrint size={24} />}
               </span>
-              <span><strong>{pet.displayName}</strong><small>{pet.source === 'built-in' ? 'Built into GooeyPi' : 'Codex pet'}</small></span>
+              <span><strong>{pet.displayName}</strong><small>{pet.source === 'built-in' ? 'Built into Apex' : 'Codex pet'}</small></span>
             </button>
           ))}
         </div>
       </section>
       <section className="settings-group">
         <div className="settings-group__heading"><h2>Codex Pets</h2><button type="button" className="button button--compact" disabled={!pets || loading} onClick={() => { void refresh() }}><ArrowsClockwise size={12} className={loading ? 'spin' : ''} /> Refresh</button></div>
-        <p className="settings-group__description">GooeyPi safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and GooeyPi are always bundled.</p>
+        <p className="settings-group__description">Apex safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and Apex are always bundled.</p>
         <div className="settings-row"><span><strong>{codexCount ? `${codexCount} Codex ${codexCount === 1 ? 'pet' : 'pets'} found` : 'No additional Codex pets found'}</strong><small>{codexCount ? 'They are available in the companion picker above.' : 'Install or hatch pets later, then refresh this list.'}</small></span></div>
         {loadError ? <p className="settings-error" role="alert">{loadError}</p> : null}
       </section>

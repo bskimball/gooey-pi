@@ -13,13 +13,13 @@ export function updateStatusCopy(state: AppUpdateState, currentVersion: string):
   const version = state.version ? ` ${state.version}` : ''
   switch (state.phase) {
     case 'checking': return 'Checking GitHub Releases…'
-    case 'available': return `GooeyPi${version} is available.`
-    case 'downloading': return state.percent === undefined ? `Downloading GooeyPi${version}…` : `Downloading GooeyPi${version} · ${state.percent}%`
-    case 'downloaded': return `GooeyPi${version} is ready to install.`
-    case 'not-available': return `GooeyPi ${currentVersion} is up to date.`
+    case 'available': return `Apex${version} is available.`
+    case 'downloading': return state.percent === undefined ? `Downloading Apex${version}…` : `Downloading Apex${version} · ${state.percent}%`
+    case 'downloaded': return `Apex${version} is ready to install.`
+    case 'not-available': return `Apex ${currentVersion} is up to date.`
     case 'error': return state.message ?? 'The update check failed.'
     case 'unsupported': return state.message ?? 'Update checks are available in installed builds.'
-    case 'idle': return 'Check GitHub Releases for a newer GooeyPi version.'
+    case 'idle': return 'Check GitHub Releases for a newer Apex version.'
   }
 }
 
@@ -28,8 +28,8 @@ export function AboutSettings({ meta, updateState, onCheckForUpdates, onOpenDocs
   const checking = updateState.phase === 'checking'
   return (
     <>
-      <header><h1>About GooeyPi</h1><p>A desktop workspace for Pi.</p></header>
-      <section className="about-card"><GooeyPiMark size={48} /><div><h2>GooeyPi</h2><p>Pi workspace · Version {version}</p></div></section>
+      <header><h1>About Apex</h1><p>A desktop workspace for Pi.</p></header>
+      <section className="about-card"><GooeyPiMark size={48} /><div><h2>Apex</h2><p>Pi workspace · Version {version}</p></div></section>
       <section className="settings-group">
         <div className="settings-row"><span><strong>Software updates</strong><small role="status">{updateStatusCopy(updateState, version)}</small></span><button className="button" type="button" disabled={checking || updateState.phase === 'downloading' || updateState.phase === 'unsupported'} onClick={() => { void onCheckForUpdates() }}><ArrowClockwise className={checking ? 'spin' : undefined} size={13} /> {checking ? 'Checking…' : 'Check for updates'}</button></div>
         <div className="settings-row"><span><strong>Platform</strong><small>{meta?.platform ?? 'macOS'}</small></span></div>

@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -39,7 +39,7 @@ ${body}
   it('includes a sanitized stderr tail when the agent exits before any frame', async () => {
     const fake = writeExitingAgent(`process.stderr.write('Error: Tool "session_list" from extension "pi-session-search" conflicts with extension "omp-work-collaboration"')
 process.exit(1)`)
-    const runtime = new RpcRuntime(fake.executable, [], fake.cwd, () => undefined, () => undefined)
+    const runtime = new RpcRuntime(process.execPath, [fake.executable], fake.cwd, () => undefined, () => undefined)
     try {
       await expect(runtime.handshake()).rejects.toThrow(/RPC exited \(1\): Error: Tool "session_list"/)
     } finally {
@@ -50,7 +50,7 @@ process.exit(1)`)
   it('redacts secrets and bounds the early exit message', async () => {
     const fake = writeExitingAgent(`process.stderr.write('\\u001b[31mtoken ghp_' + 'a'.repeat(40) + ' leaked\\u001b[0m\\n' + 'x'.repeat(5000) + '\\n' + 'final line ' + 'B'.repeat(300))
 process.exit(1)`)
-    const runtime = new RpcRuntime(fake.executable, [], fake.cwd, () => undefined, () => undefined)
+    const runtime = new RpcRuntime(process.execPath, [fake.executable], fake.cwd, () => undefined, () => undefined)
     try {
       await expect(runtime.handshake()).rejects.toSatisfy((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
@@ -72,7 +72,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     process.exit(1)
   }
 })`)
-    const runtime = new RpcRuntime(fake.executable, [], fake.cwd, () => undefined, () => undefined)
+    const runtime = new RpcRuntime(process.execPath, [fake.executable], fake.cwd, () => undefined, () => undefined)
     try {
       await runtime.handshake()
       const request = (runtime as unknown as { request(command: RpcObject, timeoutMs: number): Promise<RpcObject> }).request.bind(runtime)
@@ -121,8 +121,19 @@ input.on('close', () => {
   return { cwd, executable }
 }
 
+function fixtureExecutable(script: string): string {
+  if (process.platform !== 'win32') return script
+  const root = `${script}.npm`
+  const dist = join(root, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+  mkdirSync(dist, { recursive: true })
+  writeFileSync(join(dist, 'cli.js'), readFileSync(script))
+  const shim = join(root, 'pi.cmd')
+  writeFileSync(shim, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+  return shim
+}
+
 function managerFor(executable: string): AgentRpcManager {
-  const manager = new AgentRpcManager(executable, async (cwd) => cwd, async (path) => path)
+  const manager = new AgentRpcManager(fixtureExecutable(executable), async (cwd) => cwd, async (path) => path)
   managers.push(manager)
   return manager
 }
@@ -256,7 +267,7 @@ describe('agent RPC command frame bounds', () => {
         { type: 'steer', message },
         { type: 'follow_up', message },
       ]) {
-        await expect(manager.command('runtime-auth-policy', command)).rejects.toThrow('Network MCP authentication is managed outside GooeyPi')
+        await expect(manager.command('runtime-auth-policy', command)).rejects.toThrow('Network MCP authentication is managed outside Apex')
       }
       expect(wireCommand).not.toHaveBeenCalled()
     } finally {
@@ -293,7 +304,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `)
     chmodSync(executable, 0o755)
-    const manager = new AgentRpcManager(executable, async (path) => path, async (path) => path, undefined, () => new Set(), adapter)
+    const manager = new AgentRpcManager(fixtureExecutable(executable), async (path) => path, async (path) => path, undefined, () => new Set(), adapter)
     managers.push(manager)
     const runtime = await manager.start({ cwd })
     await manager.command(runtime.runtimeId, {
@@ -319,7 +330,7 @@ describe('agent RPC responses', () => {
   it('uses a newly discovered executable for future runtime starts', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
     let executable: string | null = null
-    const manager = new AgentRpcManager(() => executable, async (cwd) => cwd, async (path) => path)
+    const manager = new AgentRpcManager(() => executable && fixtureExecutable(executable), async (cwd) => cwd, async (path) => path)
     managers.push(manager)
 
     await expect(manager.start({ cwd: fake.cwd })).rejects.toThrow('Pi executable was not found')
@@ -676,12 +687,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   it('releases the runtime slot on a failed start even when the child cannot be stopped', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-stuck-'))
     dirs.push(cwd)
-    const manager = managerFor('/bin/cat')
+    const manager = managerFor(fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }").executable)
     const environment = { PRIME_WORK_SCHEDULE_TOKEN: 'unreapable-start-token' }
     const ended = vi.fn()
     manager.setRuntimeEnvironmentProvider(() => environment)
     manager.setRuntimeEndListener(ended)
-    const handshake = vi.spyOn(RpcRuntime.prototype, 'handshake').mockRejectedValue(new Error('handshake unavailable'))
+    let failedRuntime: RpcRuntime | undefined
+    const handshake = vi.spyOn(RpcRuntime.prototype, 'handshake').mockImplementation(async function (this: RpcRuntime) {
+      failedRuntime = this
+      throw new Error('handshake unavailable')
+    })
     // Simulate a child that survives the stop escalation: stop resolves false
     // and the close-event cleanup never runs.
     const stop = vi.spyOn(RpcRuntime.prototype, 'stop').mockResolvedValue(false)
@@ -693,6 +708,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     } finally {
       handshake.mockRestore()
       stop.mockRestore()
+      await failedRuntime?.stop()
     }
   })
 
@@ -776,7 +792,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       }),
       requireAvailableModel: async () => undefined,
     } as unknown as ProviderCatalog
-    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, async (path) => path, providers)
+    const manager = new AgentRpcManager(fixtureExecutable(fake.executable), async (cwd) => cwd, async (path) => path, providers)
     managers.push(manager)
 
     const runtime = await manager.start({ cwd: fake.cwd, fast: true })
@@ -797,7 +813,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       }),
       requireAvailableModel: async () => { throw new Error('not used') },
     } as unknown as ProviderCatalog
-    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, async (path) => path, providers)
+    const manager = new AgentRpcManager(fixtureExecutable(fake.executable), async (cwd) => cwd, async (path) => path, providers)
     managers.push(manager)
     const runtime = await manager.start({ cwd: fake.cwd })
 
@@ -907,7 +923,7 @@ setInterval(() => {}, 1000)
 `)
     chmodSync(executable, 0o755)
     const events: Array<{ event: { type?: unknown } }> = []
-    const runtime = new RpcRuntime(executable, [], cwd, (envelope) => events.push(envelope as unknown as { event: { type?: unknown } }), () => undefined)
+    const runtime = new RpcRuntime(process.execPath, [executable], cwd, (envelope) => events.push(envelope as unknown as { event: { type?: unknown } }), () => undefined)
     try {
       const request = (runtime as unknown as { request(command: RpcObject, timeoutMs: number): Promise<RpcObject> }).request.bind(runtime)
       await expect(request({ type: 'sleepy' }, 100)).rejects.toThrow(/timed out after delivery.*do not retry automatically/)
@@ -989,7 +1005,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   }
 
   const startWatchdogRuntime = async (fake: { cwd: string; executable: string }, events: Record<string, unknown>[]): Promise<RpcRuntime> => {
-    const runtime = new RpcRuntime(fake.executable, [], fake.cwd, ({ event }) => events.push(event), () => undefined, {}, { pollIntervalMs: 80, endGraceMs: 150 })
+    const runtime = new RpcRuntime(process.execPath, [fake.executable], fake.cwd, ({ event }) => events.push(event), () => undefined, {}, { pollIntervalMs: 80, endGraceMs: 150 })
     await runtime.handshake()
     return runtime
   }
@@ -1166,7 +1182,7 @@ setInterval(() => {}, 1000)
     writeFileSync(executable, DIALOG_AGENT)
     chmodSync(executable, 0o755)
     const events: string[] = []
-    const runtime = new RpcRuntime(executable, [], cwd, (envelope) => {
+    const runtime = new RpcRuntime(process.execPath, [executable], cwd, (envelope) => {
       const event = (envelope as unknown as { event: { type?: unknown; id?: unknown } }).event
       if (event.type === 'extension_ui_request') events.push(String(event.id))
     }, () => undefined, {}, { pollIntervalMs: 60_000 })

@@ -71,7 +71,7 @@ describe('legacy telemetry compatibility contract', () => {
       .flatMap(sourceFiles)
       .flatMap((file) => readFileSync(file, 'utf8').split('\n').flatMap((line) => (
         /\btelemetry\b/i.test(line)
-          ? [{ file: relative(process.cwd(), file), source: line.trim() }]
+          ? [{ file: relative(process.cwd(), file).replaceAll('\\', '/'), source: line.trim() }]
           : []
       )))
       .sort((left, right) => left.file.localeCompare(right.file) || left.source.localeCompare(right.source))

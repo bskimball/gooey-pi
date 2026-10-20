@@ -1,7 +1,7 @@
-import { appendFileSync, chmodSync, createReadStream, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, type Stats } from 'node:fs'
+import { appendFileSync, chmodSync, createReadStream, readFileSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, type Stats } from 'node:fs'
 import { lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentRpcManager } from '../../electron/main/agent-rpc'
 import { ProjectService } from '../../electron/main/projects'
@@ -103,7 +103,7 @@ describe('SessionService catalog scaling', () => {
   it('returns canonical ownership for sessions created through a project alias', async () => {
     const { root, project, service, store } = setup()
     const alias = join(project, '..', 'project-alias')
-    symlinkSync(project, alias, 'dir')
+    symlinkSync(project, alias, process.platform === 'win32' ? 'junction' : 'dir')
     const file = join(root, 'aliased.jsonl')
     writeSession(file, `${alias}/.`, 'aliased')
 
@@ -144,7 +144,7 @@ describe('SessionService catalog scaling', () => {
   })
 
   it('bounds canonicalize and stat work before scanning a huge directory', async () => {
-    const root = '/sessions'
+    const root = resolve('/sessions')
     const maxSessionFiles = 3
     const sessionName = (timestamp: number): string => {
       const prefix = timestamp.toString(16).padStart(12, '0')
@@ -156,7 +156,7 @@ describe('SessionService catalog scaling', () => {
       if (path === root) {
         return { isFile: () => false, isDirectory: () => true, mtimeMs: 1, size: 0, dev: 1, ino: 1 } as Stats
       }
-      const name = path.slice(path.lastIndexOf('/') + 1)
+      const name = basename(path)
       const timestamp = Number.parseInt(name.slice(0, 8) + name.slice(9, 13), 16)
       return { isFile: () => true, isDirectory: () => false, mtimeMs: timestamp, size: 100, dev: 1, ino: timestamp + 2 } as Stats
     })
@@ -166,7 +166,7 @@ describe('SessionService catalog scaling', () => {
       inspect,
     }
     const readMetadata = vi.fn(async (filePath: string) => ({
-      id: filePath.slice(filePath.lastIndexOf('/') + 1, -'.jsonl'.length),
+      id: basename(filePath, '.jsonl'),
       filePath,
       projectPath: '/project',
       title: 'Session',
@@ -191,7 +191,7 @@ describe('SessionService catalog scaling', () => {
   })
 
   it('re-canonicalizes only entries whose file identity changed between scans', async () => {
-    const root = '/sessions'
+    const root = resolve('/sessions')
     const identities = new Map<string, { dev: number; ino: number }>([
       ['a.jsonl', { dev: 1, ino: 10 }],
       ['b.jsonl', { dev: 1, ino: 11 }],
@@ -204,7 +204,7 @@ describe('SessionService catalog scaling', () => {
         if (path === root) {
           return { isFile: () => false, isDirectory: () => true, mtimeMs: 1, size: 0, dev: 1, ino: 1 } as Stats
         }
-        const name = path.slice(path.lastIndexOf('/') + 1)
+        const name = basename(path)
         const identity = identities.get(name) ?? { dev: 1, ino: 99 }
         return { isFile: () => true, isDirectory: () => false, mtimeMs: 1, size: 100, dev: identity.dev, ino: identity.ino } as Stats
       }),
@@ -213,7 +213,7 @@ describe('SessionService catalog scaling', () => {
       () => root,
       null,
       20,
-      async (filePath) => metadata(filePath, '/project', filePath.slice(filePath.lastIndexOf('/') + 1)),
+      async (filePath) => metadata(filePath, '/project', basename(filePath)),
       io,
     )
 
@@ -229,7 +229,7 @@ describe('SessionService catalog scaling', () => {
     identities.set('b.jsonl', { dev: 1, ino: 12 })
     await catalog.all()
     expect(canonicalize).toHaveBeenCalledTimes(6)
-    expect(canonicalize.mock.calls.slice(4).flat().sort()).toEqual([root, `${root}/b.jsonl`])
+    expect(canonicalize.mock.calls.slice(4).flat().sort()).toEqual([root, join(root, 'b.jsonl')])
   })
 })
 
@@ -536,7 +536,7 @@ describe('SessionService live changes', () => {
     }, 25)
 
     try {
-      await new Promise((resolveWait) => setTimeout(resolveWait, 350))
+      await waitUntil(() => events.some((event) => event.filePath === realpathSync(file)), 4_000)
       expect(events.some((event) => event.filePath === realpathSync(file))).toBe(true)
     } finally {
       clearInterval(writes)
@@ -545,7 +545,8 @@ describe('SessionService live changes', () => {
   })
 
   it('debounces canonical JSONL changes, rejects outside aliases, and stops after unsubscribe', async () => {
-    const { root, project, service } = setup()
+    const { root, project, service } = setup(undefined, { recursiveWatch: true })
+    const authorize = vi.spyOn(service, 'requireSessionPath')
     const file = join(root, 'watched.jsonl')
     writeSession(file, project, 'watched')
     const events: Array<{ filePath?: string }> = []
@@ -561,10 +562,12 @@ describe('SessionService live changes', () => {
     await waitUntil(() => events.some((event) => event.filePath === realpathSync(file)), 4_000)
     expect(events.filter((event) => event.filePath === realpathSync(file))).toHaveLength(1)
 
-    const outside = join(root, '..', 'outside.jsonl')
+    const outsideDir = join(root, '..', 'outside'); mkdirSync(outsideDir)
+    const outside = join(outsideDir, 'outside.jsonl')
     writeSession(outside, project, 'outside')
-    symlinkSync(outside, join(root, 'outside-alias.jsonl'))
-    watcherHarness.queueSessionChange('outside-alias.jsonl')
+    symlinkSync(outsideDir, join(root, 'outside-alias'), process.platform === 'win32' ? 'junction' : 'dir')
+    watcherHarness.queueSessionChange(join('outside-alias', 'outside.jsonl'))
+    await waitUntil(() => authorize.mock.calls.some(([path]) => path === join(root, 'outside-alias', 'outside.jsonl')), 4_000)
     await waitUntil(() => events.some((event) => event.filePath === undefined), 4_000)
     expect(events.some((event) => event.filePath === realpathSync(outside))).toBe(false)
 
@@ -596,8 +599,9 @@ describe('SessionService transcript read admission', () => {
     })
     const files = Array.from({ length: 5 }, (_, index) => join(root, `${index}.jsonl`))
     for (const [index, file] of files.entries()) writeSession(file, project, String(index))
-    const alias = join(root, 'alias.jsonl')
-    symlinkSync(files[0], alias)
+    const aliasRoot = join(root, '..', 'sessions-alias')
+    symlinkSync(root, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir')
+    const alias = join(aliasRoot, '0.jsonl')
     const authorize = vi.spyOn(service, 'requireSessionPath')
 
     const first = service.read(files[0])
@@ -863,7 +867,7 @@ describe('SessionService orchestration', () => {
   it('marks a session running and stops its runtime when the agent reports the file via a symlinked root', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'prime-work-sessions-symlink-')); dirs.push(dir)
     const realRoot = join(dir, 'real-sessions'); mkdirSync(realRoot)
-    const aliasRoot = join(dir, 'alias-sessions'); symlinkSync(realRoot, aliasRoot)
+    const aliasRoot = join(dir, 'alias-sessions'); symlinkSync(realRoot, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir')
     const project = join(dir, 'project'); mkdirSync(project)
     const file = join(realRoot, 'runtime.jsonl')
     writeSession(file, project, 'runtime')
@@ -883,7 +887,15 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `)
     chmodSync(executable, 0o755)
-    const manager = new AgentRpcManager(executable, async (cwd) => cwd, async (path) => path)
+    let agentPath = executable
+    if (process.platform === 'win32') {
+      const dist = join(dir, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+      mkdirSync(dist, { recursive: true })
+      writeFileSync(join(dist, 'cli.js'), readFileSync(executable))
+      agentPath = join(dir, 'pi.cmd')
+      writeFileSync(agentPath, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+    }
+    const manager = new AgentRpcManager(agentPath, async (cwd) => cwd, async (path) => path)
     try {
       const runtime = await manager.start({ cwd: project })
       expect(runtime.sessionFile).toBe(realpathSync(file))

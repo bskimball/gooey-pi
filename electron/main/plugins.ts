@@ -80,7 +80,7 @@ const createDiscoveryQueue = () => createAdmissionQueue({
   maxConcurrent: MAX_CONCURRENT_PLUGIN_DISCOVERIES,
   maxPending: MAX_QUEUED_PLUGIN_DISCOVERIES,
   pendingLimitError: () => new TypeError('Too many plugin discoveries are pending'),
-  closedError: () => new TypeError('GooeyPi is shutting down'),
+  closedError: () => new TypeError('Apex is shutting down'),
 })
 let discoveryQueue = createDiscoveryQueue()
 
@@ -143,7 +143,7 @@ export class PluginService {
       name: 'Pi MCP Adapter',
       description: piMcpState
         ? `MCP support is installed through Pi’s pi-mcp-adapter extension package${piMcpState.enabled ? '.' : ' and is currently disabled.'}`
-        : 'Install Pi’s supported MCP adapter extension to manage local stdio servers. Network setup and authentication stay outside GooeyPi.',
+        : 'Install Pi’s supported MCP adapter extension to manage local stdio servers. Network setup and authentication stay outside Apex.',
       kind: 'extension',
       location: 'system',
       enabled: piMcpState?.enabled ?? false,

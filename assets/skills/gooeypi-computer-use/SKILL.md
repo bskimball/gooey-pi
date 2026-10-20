@@ -6,7 +6,7 @@ license: MIT
 
 # Computer Use | TryCUA
 
-Use the executable in `GOOEYPI_CUA_DRIVER_PATH` for native GUI work. GooeyPi does not bundle TryCUA and this capability does not require an MCP server.
+Use the executable in `GOOEYPI_CUA_DRIVER_PATH` for native GUI work. Apex does not bundle TryCUA and this capability does not require an MCP server.
 
 Invoke tools with an argv-safe shell call shaped as:
 

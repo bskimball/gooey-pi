@@ -222,7 +222,7 @@ describe('/compact dispatch', () => {
 
     expect(fixtureState.followUp).not.toHaveBeenCalled()
     expect(fixtureState.start).not.toHaveBeenCalled()
-    expect(fixtureState.setToast).toHaveBeenCalledWith('Compaction is unavailable while this session is running outside GooeyPi.')
+    expect(fixtureState.setToast).toHaveBeenCalledWith('Compaction is unavailable while this session is running outside Apex.')
   })
 
   it('rejects image attachments', async () => {

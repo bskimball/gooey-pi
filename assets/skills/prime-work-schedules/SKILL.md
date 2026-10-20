@@ -1,11 +1,11 @@
 ---
 name: prime-work-schedules
-description: Create, inspect, edit, pause, resume, run, and delete durable GooeyPi scheduled tasks. Use when the user asks to schedule recurring or one-time work in the current project or thread. Use rlm-heartbeat instead for temporary internal polling while actively working.
+description: Create, inspect, edit, pause, resume, run, and delete durable Apex scheduled tasks. Use when the user asks to schedule recurring or one-time work in the current project or thread. Use rlm-heartbeat instead for temporary internal polling while actively working.
 ---
 
-# GooeyPi Schedules
+# Apex Schedules
 
-Use this capability for durable, user-visible tasks. GooeyPi must be running.
+Use this capability for durable, user-visible tasks. Apex must be running.
 
 - `current_project`: each run creates a fresh top-level session in this project.
 - `current_session`: each run returns to this thread and keeps its context.

@@ -96,7 +96,7 @@ const LEGACY_UNPREFIXED_TOOLS = [
 async function loadExtension(injection: ExtensionInjection, configured: boolean) {
   vi.resetModules()
   vi.unstubAllEnvs()
-  // A shell launched from inside GooeyPi inherits live broker variables; clear them so the
+  // A shell launched from inside Apex inherits live broker variables; clear them so the
   // unconfigured case really runs without a broker.
   for (const [url, token] of Object.values(brokerVariables)) {
     vi.stubEnv(url, undefined)

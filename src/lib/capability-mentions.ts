@@ -132,17 +132,17 @@ export function findCapabilityMentions(value: string, skills: readonly SkillReco
 function routingInstruction(mention: CapabilityMention): string {
   const token = mention.text
   if (mention.skill.id === 'prime-work-browser' || mention.skill.id === 'omp-work-browser') {
-    return `${token}: use GooeyPi's in-app Browser capability and its own browser tools. Do not substitute Chrome, an external browser, or another connected browser tool.`
+    return `${token}: use Apex's in-app Browser capability and its own browser tools. Do not substitute Chrome, an external browser, or another connected browser tool.`
   }
   if (mention.skill.id === 'prime-work-schedules' || mention.skill.id === 'omp-work-schedules') {
-    return `${token}: use GooeyPi's Scheduled tasks capability and its own schedule tools.`
+    return `${token}: use Apex's Scheduled tasks capability and its own schedule tools.`
   }
   // Skills and prompts are Markdown files; agents have no tool that resolves catalog ids.
   if ((mention.skill.kind === 'skill' || mention.skill.kind === 'prompt') && mention.skill.path) {
     const kind = mention.skill.kind
     return `${token}: Read the ${kind} file at ${JSON.stringify(mention.skill.path)} and follow its instructions for this request. This is the exact ${kind} file selected by the user, not a substitute. No catalog lookup or catalog-ID verification is required, including for any catalog ID mentioned earlier in this conversation. Resolve its relative paths from the directory containing that ${kind} file. This is an explicit user invocation, even if the ${kind} is omitted from the automatic ${kind} list.`
   }
-  return `${token}: use the enabled GooeyPi ${mention.skill.kind} with the exact catalog id ${JSON.stringify(mention.skill.id)}. Do not substitute a similarly named capability.`
+  return `${token}: use the enabled Apex ${mention.skill.kind} with the exact catalog id ${JSON.stringify(mention.skill.id)}. Do not substitute a similarly named capability.`
 }
 
 /** Adds explicit routing semantics while keeping the user's visible prompt unchanged. */

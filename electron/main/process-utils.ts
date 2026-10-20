@@ -1,4 +1,4 @@
-import { accessSync, constants as fsConstants, readdirSync } from 'node:fs'
+import { accessSync, closeSync, constants as fsConstants, openSync, readSync, readdirSync } from 'node:fs'
 import { access, readdir } from 'node:fs/promises'
 import { delimiter, posix, win32 } from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -260,6 +260,17 @@ interface PrepareExecutableSpawnOptions {
   platform?: NodeJS.Platform
   home?: string
   canAccess?: (candidate: string, mode: number) => boolean
+  readShim?: (file: string) => string
+}
+
+function readNpmShim(file: string): string {
+  const fd = openSync(file, 'r')
+  try {
+    const buffer = Buffer.alloc(16 * 1024 + 1)
+    const length = readSync(fd, buffer, 0, buffer.length, 0)
+    if (length > 16 * 1024) throw new Error('npm command shim exceeds the 16 KiB limit')
+    return buffer.toString('utf8', 0, length)
+  } finally { closeSync(fd) }
 }
 
 function canAccessPath(candidate: string, mode: number): boolean {
@@ -269,7 +280,7 @@ function canAccessPath(candidate: string, mode: number): boolean {
 /**
  * Resolves official Windows npm shims declared on harness descriptors without
  * running cmd.exe. npm puts the package entry point below the shim directory,
- * so GooeyPi can invoke that fixed JavaScript file with a validated Node
+ * so Apex can invoke that fixed JavaScript file with a validated Node
  * executable and keep shell=false.
  */
 export function prepareExecutableSpawn(
@@ -288,7 +299,15 @@ export function prepareExecutableSpawn(
   }
 
   const canAccess = options.canAccess ?? canAccessPath
-  const entrypoint = win32.join(win32.dirname(file), 'node_modules', ...descriptor.windowsNpmShim.entrypoint)
+  const shim = (options.readShim ?? readNpmShim)(file)
+  // Match only npm's quoted Node invocation and its fixed package target.
+  // Never interpret any of the surrounding batch commands.
+  const targets = [...shim.matchAll(/"%_prog%"[ \t]+"%dp0%\\node_modules\\([^"\r\n]+)"[ \t]+%\*[ \t]*(?:\r?$)/gmu)]
+  const segments = targets.length === 1
+    ? descriptor.windowsNpmShim.entrypoints.find((entry) => entry.join('\\') === targets[0]?.[1])
+    : undefined
+  if (!segments) throw new Error(`The ${descriptor.agentName} npm command shim does not point to an official ${descriptor.agentName} installation`)
+  const entrypoint = win32.join(win32.dirname(file), 'node_modules', ...segments)
   if (!canAccess(entrypoint, fsConstants.F_OK)) throw new Error(`The ${descriptor.agentName} npm command shim does not point to an official ${descriptor.agentName} installation`)
   const homeValue = options.home ?? childEnvironment.USERPROFILE
   const home = homeValue && win32.isAbsolute(homeValue) ? homeValue : homedir()

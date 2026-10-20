@@ -40,24 +40,19 @@ export function parseReleasePlatforms(value = RELEASE_PLATFORMS.join(',')) {
  */
 export function releaseAssetNames(version, platforms = RELEASE_PLATFORMS) {
   const assets = {
-    mac: [
-      [`GooeyPi-${version}-m-chip.dmg`, `GooeyPi-${version}-arm64.dmg`],
-      [`GooeyPi-${version}-intel-chip.dmg`, `GooeyPi-${version}-x64.dmg`],
-      [`GooeyPi-${version}-arm64.zip`],
-      [`GooeyPi-${version}-x64.zip`],
-    ],
+    mac: [[`Apex-${version}-m-chip.dmg`, `Apex-${version}-arm64.dmg`], [`Apex-${version}-intel-chip.dmg`, `Apex-${version}-x64.dmg`], [`Apex-${version}-arm64.zip`], [`Apex-${version}-x64.zip`]],
     linux: [
-      [`GooeyPi-${version}-linux-arm64.AppImage`],
-      [`GooeyPi-${version}-linux-arm64.deb`],
-      [`GooeyPi-${version}-linux-aarch64.pacman`],
-      [`GooeyPi-${version}-linux-aarch64.rpm`],
-      [`GooeyPi-${version}-linux-x86_64.AppImage`],
-      [`GooeyPi-${version}-linux-amd64.deb`],
-      [`GooeyPi-${version}-linux-x64.pacman`],
-      [`GooeyPi-${version}-linux-x86_64.rpm`],
+      [`Apex-${version}-linux-arm64.AppImage`],
+      [`Apex-${version}-linux-arm64.deb`],
+      [`Apex-${version}-linux-aarch64.pacman`],
+      [`Apex-${version}-linux-aarch64.rpm`],
+      [`Apex-${version}-linux-x86_64.AppImage`],
+      [`Apex-${version}-linux-amd64.deb`],
+      [`Apex-${version}-linux-x64.pacman`],
+      [`Apex-${version}-linux-x86_64.rpm`],
     ],
     // electron-builder emits the MSIX-compatible package as .appx; publish the same bytes with the modern .msix extension.
-    win: [[`GooeyPi-${version}-win-x64.exe`], [`GooeyPi-${version}-win-x64.zip`], [`GooeyPi-${version}-win-x64.msix`, `GooeyPi-${version}-win-x64.appx`]],
+    win: [[`Apex-${version}-win-x64.exe`], [`Apex-${version}-win-x64.zip`], [`Apex-${version}-win-x64.msix`, `Apex-${version}-win-x64.appx`]],
   }
   const entries = platforms
     .flatMap((platform) => [...assets[platform], ...UPDATE_METADATA_BY_PLATFORM[platform].map((name) => [name])])

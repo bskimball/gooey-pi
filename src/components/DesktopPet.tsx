@@ -8,8 +8,8 @@ interface Position { x: number; y: number }
 interface DragState { pointerId: number; dx: number; dy: number; lastX: number; lastY: number; moved: boolean }
 
 const BUILT_INS: PetDefinition[] = [
-  { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'A fluid voice orb that shifts with GooeyPi activity.', source: 'built-in', kind: 'orb' },
-  { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'GooeyPi', description: 'A friendly purple jelly pet shaped like the mathematical pi symbol.', source: 'built-in', kind: 'spritesheet' },
+  { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'A fluid voice orb that shifts with Apex activity.', source: 'built-in', kind: 'orb' },
+  { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'Apex', description: 'A friendly purple jelly pet shaped like the mathematical pi symbol.', source: 'built-in', kind: 'spritesheet' },
 ]
 
 function initialPosition(): Position {
@@ -201,7 +201,7 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
         className="desktop-pet__drag-target"
         role="button"
         tabIndex={0}
-        aria-label={`${pet.displayName}, draggable GooeyPi pet`}
+        aria-label={`${pet.displayName}, draggable Apex pet`}
         aria-keyshortcuts={onDismiss ? 'Delete Backspace' : undefined}
         onPointerDown={startDrag}
         onPointerMove={moveDrag}

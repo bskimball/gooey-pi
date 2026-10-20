@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -73,6 +73,14 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `)
   chmodSync(executable, 0o755)
+  if (process.platform === 'win32') {
+    const dist = join(cwd, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+    mkdirSync(dist, { recursive: true })
+    writeFileSync(join(dist, 'cli.js'), readFileSync(executable))
+    const shim = join(cwd, 'pi.cmd')
+    writeFileSync(shim, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+    return { cwd, executable: shim }
+  }
   return { cwd, executable }
 }
 

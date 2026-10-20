@@ -1,4 +1,4 @@
-/** Shared GooeyPi session-collaboration tools for Prime Agent, OMP, and pi. */
+/** Shared Apex session-collaboration tools for Prime Agent, OMP, and pi. */
 
 interface SchemaOptions { description?: string; minLength?: number; maxLength?: number; minimum?: number; maximum?: number }
 interface HostTypebox {
@@ -46,7 +46,7 @@ const BRIDGE_URL = process.env.GOOEYPI_COLLABORATION_URL
 const BRIDGE_TOKEN = process.env.GOOEYPI_COLLABORATION_TOKEN
 
 async function call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-  if (!BRIDGE_URL || !BRIDGE_TOKEN) throw new Error('GooeyPi session collaboration is not available in this runtime')
+  if (!BRIDGE_URL || !BRIDGE_TOKEN) throw new Error('Apex session collaboration is not available in this runtime')
   let response: Response
   try {
     response = await fetch(BRIDGE_URL, {
@@ -55,7 +55,7 @@ async function call(method: string, params: Record<string, unknown> = {}): Promi
       body: JSON.stringify({ method, params }),
     })
   } catch (error) {
-    throw new Error(`GooeyPi's session collaboration broker is not reachable: ${String(error)}`)
+    throw new Error(`Apex's session collaboration broker is not reachable: ${String(error)}`)
   }
   const body = (await response.json()) as BridgeResult
   if (!body.ok) throw new Error(body.error || `Session collaboration call failed with status ${response.status}`)
@@ -74,19 +74,19 @@ export default function (pi: ExtensionApi): void | Promise<void> {
 }
 
 function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
-  const target = Type.String({ description: 'Exact session UUID from an @session reference, Copy session UUID, gooeypi_session_list, or from_session_id in an incoming GooeyPi agent message' })
+  const target = Type.String({ description: 'Exact session UUID from an @session reference, Copy session UUID, gooeypi_session_list, or from_session_id in an incoming Apex agent message' })
 
   pi.registerTool({
     name: 'gooeypi_session_list',
     label: 'List sessions',
-    description: 'List other GooeyPi sessions in this working directory. Results include title, UUID, harness, status, and whether the session is live. Use an exact UUID with the other session tools.',
+    description: 'List other Apex sessions in this working directory. Results include title, UUID, harness, status, and whether the session is live. Use an exact UUID with the other session tools.',
     parameters: Type.Object({}),
     async execute() { return result(await call('list')) },
   })
   pi.registerTool<{ query?: string }>({
     name: 'gooeypi_session_models',
     label: 'List session models',
-    description: 'List models available for new GooeyPi sessions in this harness from providers currently active in the GUI. Results include exact model keys and supported reasoning levels. Use an approximate query when a model was requested by name.',
+    description: 'List models available for new Apex sessions in this harness from providers currently active in the GUI. Results include exact model keys and supported reasoning levels. Use an approximate query when a model was requested by name.',
     parameters: Type.Object({
       query: Type.Optional(Type.String({ maxLength: 256, description: 'Optional approximate model name, provider, family, or spoken model wording' })),
     }),
@@ -95,7 +95,7 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
   pi.registerTool<{ prompt: string; title?: string; model?: string; reasoning?: string; fast?: boolean }>({
     name: 'gooeypi_session_create',
     label: 'Create session',
-    description: 'Create and immediately start a new readable top-level GooeyPi session in this same harness and working directory. Use gooeypi_session_models when selecting a model. Model and reasoning wording may be approximate; GooeyPi resolves and revalidates them against active GUI providers before launch. Set fast true to request fast/priority mode when the selected model and harness support it. The result includes the exact session UUID for gooeypi_session_read, gooeypi_session_send, and gooeypi_session_wait.',
+    description: 'Create and immediately start a new readable top-level Apex session in this same harness and working directory. Use gooeypi_session_models when selecting a model. Model and reasoning wording may be approximate; Apex resolves and revalidates them against active GUI providers before launch. Set fast true to request fast/priority mode when the selected model and harness support it. The result includes the exact session UUID for gooeypi_session_read, gooeypi_session_send, and gooeypi_session_wait.',
     parameters: Type.Object({
       prompt: Type.String({ minLength: 1, maxLength: 1_000_000, description: 'The self-contained initial task for the new session' }),
       title: Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: 'Optional concise session title' })),
@@ -108,14 +108,14 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
   pi.registerTool<{ target_session_id: string }>({
     name: 'gooeypi_session_read',
     label: 'Read session',
-    description: 'Read bounded recent conversational context from another GooeyPi session in this working directory without modifying its transcript. Includes user, assistant, agent, and thinking text; omits tool calls, tool results, and internal compaction data. Results are capped at 30,000 estimated tokens and report whether truncation occurred.',
+    description: 'Read bounded recent conversational context from another Apex session in this working directory without modifying its transcript. Includes user, assistant, agent, and thinking text; omits tool calls, tool results, and internal compaction data. Results are capped at 30,000 estimated tokens and report whether truncation occurred.',
     parameters: Type.Object({ target_session_id: target }),
     async execute(_id, params) { return result(await call('read', params)) },
   })
   pi.registerTool<{ target_session_id: string; message: string }>({
     name: 'gooeypi_session_send',
     label: 'Message session',
-    description: 'Send an attributed background message to another GooeyPi session in this working directory. For an incoming agent message, reply directly to its from_session_id; its signed reply_with field names this tool, so no session listing is needed. GooeyPi safely wakes an idle saved session when needed. This returns after delivery; call gooeypi_session_wait with cursor_before to wait for its response. Never busy-wait or create mutual waits.',
+    description: 'Send an attributed background message to another Apex session in this working directory. For an incoming agent message, reply directly to its from_session_id; its signed reply_with field names this tool, so no session listing is needed. Apex safely wakes an idle saved session when needed. This returns after delivery; call gooeypi_session_wait with cursor_before to wait for its response. Never busy-wait or create mutual waits.',
     parameters: Type.Object({
       target_session_id: target,
       message: Type.String({ minLength: 1, maxLength: 64 * 1024, description: 'The concise message or coordination request to send' }),
@@ -125,7 +125,7 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
   pi.registerTool<{ target_session_id: string; after_cursor?: string; timeout_ms?: number }>({
     name: 'gooeypi_session_wait',
     label: 'Wait for session',
-    description: 'Wait briefly for another GooeyPi session to become idle and produce context after a cursor. Returns a bounded snapshot and timed_out; call again only when continued waiting is useful.',
+    description: 'Wait briefly for another Apex session to become idle and produce context after a cursor. Returns a bounded snapshot and timed_out; call again only when continued waiting is useful.',
     parameters: Type.Object({
       target_session_id: target,
       after_cursor: Type.Optional(Type.String({ description: 'cursor_before returned by gooeypi_session_send, or cursor returned by gooeypi_session_read/gooeypi_session_wait' })),

@@ -12,20 +12,20 @@ This threshold does not apply to tests, generated files, vendored code, lockfile
 
 Cloud Agents provision this repo with [`.cursor/environment.json`](.cursor/environment.json),
 whose `install` step runs [`.cursor/install.sh`](.cursor/install.sh) on Cursor's
-default Ubuntu image. That script pins Node via `.nvmrc` (26.8.2) with `nvm`,
+default Ubuntu image. That script pins Node via `.nvmrc` (24.21.0) with `nvm`,
 installs the Electron/xvfb system libraries, bootstraps the repo-pinned npm, and
 runs `npm ci`. Canonical toolchain and check commands live in
 [`docs/validation.md`](docs/validation.md); do not restate versions here.
 
 `node`/`npm` come from `nvm`. A harness shell can be shadowed by another `node`
 on `PATH`, so select the pinned toolchain before running `node`/`npm` if `node
--v` is not `v26.8.2`:
+-v` is not `v24.21.0`:
 
 ```
 export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use >/dev/null
 ```
 
-GooeyPi is a GUI Electron app with no background services, so there is nothing to
+Apex is a GUI Electron app with no background services, so there is nothing to
 auto-start. To run the app or the Playwright Electron e2e suite headlessly, wrap
 the command with a virtual display:
 

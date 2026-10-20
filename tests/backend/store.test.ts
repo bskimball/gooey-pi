@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { open, rename, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -15,6 +16,11 @@ import {
 } from '../../electron/main/store'
 import type { JsonStateStoreFileHandle, JsonStateStoreFileSystem } from '../../electron/main/store'
 import { SessionService } from '../../electron/main/sessions'
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return { ...actual, mkdirSync: vi.fn(actual.mkdirSync) }
+})
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -39,6 +45,30 @@ const realFileSystem: JsonStateStoreFileSystem = {
   open: (path, flags, mode) => open(path, flags, mode),
   rename,
   unlink,
+}
+
+// Simulate POSIX directory handles on hosts that cannot open them.
+const posixFileSystem: JsonStateStoreFileSystem = {
+  ...realFileSystem,
+  open: async (path, flags, mode) => flags === 'r'
+    ? {
+      writeFile: async () => { throw new Error('unexpected directory write') },
+      sync: async () => undefined,
+      close: async () => undefined,
+    }
+    : open(path, flags, mode),
+}
+
+function expectLegacyRetired(path: string): void {
+  if (process.platform === 'win32') {
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      version: 3, projects: [], schedules: [],
+      gooeyPiV4Migration: { status: 'complete' },
+    })
+    expect(new JsonStateStore(path).snapshot().projects).toEqual([])
+  } else {
+    expect(existsSync(path)).toBe(false)
+  }
 }
 
 describe('JsonStateStore', () => {
@@ -201,7 +231,7 @@ describe('JsonStateStore', () => {
       rename: async () => { events.push('rename') },
       unlink: async () => { events.push('unlink') },
     }
-    const store = new JsonStateStore(path, fileSystem)
+    const store = new JsonStateStore(path, fileSystem, undefined, 'linux')
 
     const operation = store.update((state) => {
       state.archivedSessions.push('durable')
@@ -313,11 +343,21 @@ describe('JsonStateStore', () => {
     const dir = makeDirectory()
     const stateDirectory = join(dir, 'nested')
     const path = join(stateDirectory, 'state.json')
-    const store = new JsonStateStore(path)
-    await store.update((state) => { state.archivedSessions.push('saved') })
-
-    expect(statSync(stateDirectory).mode & 0o777).toBe(0o700)
-    expect(statSync(path).mode & 0o777).toBe(0o600)
+    const mkdir = vi.mocked(fs.mkdirSync)
+    mkdir.mockClear()
+    const openFile = vi.fn(realFileSystem.open)
+    try {
+      const store = new JsonStateStore(path, { ...realFileSystem, open: openFile })
+      await store.update((state) => { state.archivedSessions.push('saved') })
+      expect(mkdir).toHaveBeenCalledWith(stateDirectory, { recursive: true, mode: 0o700 })
+      expect(openFile).toHaveBeenCalledWith(expect.stringContaining(`${path}.`), 'w', 0o600)
+      if (process.platform !== 'win32') {
+        expect(statSync(stateDirectory).mode & 0o777).toBe(0o700)
+        expect(statSync(path).mode & 0o777).toBe(0o600)
+      }
+    } finally {
+      mkdir.mockClear()
+    }
   })
 
   it('caps archived sessions and dismissed project paths on load and write', async () => {
@@ -505,7 +545,7 @@ describe('JsonStateStore', () => {
     const legacyRaw = JSON.stringify({ version: 2, projects: [], settings: defaultSettings(), archivedSessions: [], dismissedProjectPaths: [], schedules: [] })
     writeFileSync(path, raw)
     writeFileSync(legacyPath, legacyRaw)
-    const store = new JsonStateStore(path, realFileSystem, legacyPath, 'linux')
+    const store = new JsonStateStore(path, posixFileSystem, legacyPath, 'linux')
     const mutator = vi.fn()
 
     expect(() => store.snapshot()).toThrow(UnsupportedStateVersionError)
@@ -513,7 +553,7 @@ describe('JsonStateStore', () => {
     expect(() => store.getProjects()).toThrow(UnsupportedStateVersionError)
     expect(() => store.getArchivedSessions()).toThrow(UnsupportedStateVersionError)
     await expect(store.ready()).rejects.toBeInstanceOf(UnsupportedStateVersionError)
-    await expect(store.ready()).rejects.toThrow(/version 99.*newer.*version 4.*upgrade GooeyPi/i)
+    await expect(store.ready()).rejects.toThrow(/version 99.*newer.*version 4.*upgrade Apex/i)
     await expect(store.update(mutator)).rejects.toBeInstanceOf(UnsupportedStateVersionError)
     expect(mutator).not.toHaveBeenCalled()
     await store.beginShutdown()
@@ -583,7 +623,7 @@ describe('JsonStateStore', () => {
     expect(migrated.snapshot().projects.map(({ id, harness }) => ({ id, harness }))).toEqual([{ id: 'omp-project', harness: 'omp' }])
     await migrated.beginShutdown()
     expect(JSON.parse(readFileSync(currentPath, 'utf8'))).toMatchObject({ version: 4, projects: [{ id: 'omp-project', harness: 'omp' }] })
-    expect(existsSync(legacyPath)).toBe(false)
+    expectLegacyRetired(legacyPath)
     const firstBackup = readdirSync(dir).find((name) => name.startsWith(`${LEGACY_DESKTOP_STATE_FILENAME}.migrated-v4-`))
     expect(firstBackup).toBeDefined()
     expect(readFileSync(join(dir, firstBackup!), 'utf8')).toBe(legacyRaw)
@@ -602,14 +642,14 @@ describe('JsonStateStore', () => {
     const reopened = await openDesktopStateStore(dir)
     expect(reopened.snapshot().projects.map(({ id, harness }) => ({ id, harness }))).toEqual([{ id: 'omp-project', harness: 'omp' }])
     expect(readFileSync(currentPath, 'utf8')).toBe(currentRaw)
-    expect(existsSync(legacyPath)).toBe(false)
+    expectLegacyRetired(legacyPath)
     const backups = readdirSync(dir).filter((name) => name.startsWith(`${LEGACY_DESKTOP_STATE_FILENAME}.migrated-v4-`))
     expect(backups).toHaveLength(2)
     expect(backups.map((name) => readFileSync(join(dir, name), 'utf8'))).toContain(downgradedRaw)
     await reopened.update((state) => { state.archivedSessions.push('/sessions/new.jsonl') })
     await reopened.beginShutdown()
     expect(JSON.parse(readFileSync(currentPath, 'utf8')).archivedSessions).toEqual(['/sessions/new.jsonl'])
-    expect(existsSync(legacyPath)).toBe(false)
+    expectLegacyRetired(legacyPath)
   })
 
   it('fails readiness and updates when a recreated legacy authority cannot be retired', async () => {
@@ -627,7 +667,7 @@ describe('JsonStateStore', () => {
         if (oldPath === legacyPath) throw retirementError
         await rename(oldPath, newPath)
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     const readiness = store.ready()
     await expect(readiness).rejects.toBeInstanceOf(StateMigrationError)
@@ -664,7 +704,7 @@ describe('JsonStateStore', () => {
         await rename(oldPath, newPath)
       },
       unlink,
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     await store.ready()
     expect(events).toEqual(['legacy-rename', 'directory-open', 'directory-sync', 'directory-close'])
@@ -684,7 +724,7 @@ describe('JsonStateStore', () => {
           close: async () => undefined,
         }
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     await store.ready()
     expect(JSON.parse(readFileSync(currentPath, 'utf8'))).toMatchObject({ version: 4, projects: [] })
@@ -708,7 +748,7 @@ describe('JsonStateStore', () => {
           close: async () => undefined,
         }
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     await expect(store.ready()).rejects.toThrow(/directory could not be synchronized.*I\/O failure/i)
     await expect(store.update((state) => { state.archivedSessions.push('/must-not-write') })).rejects.toThrow(/directory could not be synchronized/i)
@@ -738,7 +778,7 @@ describe('JsonStateStore', () => {
           close: async () => undefined,
         }
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     await expect(store.ready()).rejects.toThrow(/retirement was not durable.*legacy filename was restored/i)
     await expect(store.update((state) => { state.archivedSessions.push('/must-not-write') })).rejects.toThrow(/retirement was not durable/i)
@@ -747,7 +787,7 @@ describe('JsonStateStore', () => {
     expect(readdirSync(dir).filter((name) => name.startsWith(`${LEGACY_DESKTOP_STATE_FILENAME}.migrated-v4-`))).toEqual([])
 
     const retried = await openDesktopStateStore(dir)
-    expect(existsSync(legacyPath)).toBe(false)
+    expectLegacyRetired(legacyPath)
     await retried.beginShutdown()
   })
 
@@ -778,7 +818,7 @@ describe('JsonStateStore', () => {
         }
         throw Object.assign(new Error('injected rollback rename failure'), { code: 'EACCES' })
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     const readiness = store.ready()
     await expect(readiness).rejects.toBeInstanceOf(StateMigrationError)
@@ -810,7 +850,7 @@ describe('JsonStateStore', () => {
           close: async () => undefined,
         }
       },
-    }, legacyPath)
+    }, legacyPath, 'linux')
 
     const readiness = store.ready()
     await expect(readiness).rejects.toBeInstanceOf(StateMigrationError)
@@ -848,7 +888,7 @@ describe('JsonStateStore', () => {
     const legacyRaw = JSON.stringify({ version: 2, projects: [], settings: defaultSettings(), archivedSessions: [], dismissedProjectPaths: [], schedules: [] })
     writeFileSync(path, raw)
     writeFileSync(legacyPath, legacyRaw)
-    const store = new JsonStateStore(path, realFileSystem, legacyPath, 'linux')
+    const store = new JsonStateStore(path, posixFileSystem, legacyPath, 'linux')
     const mutator = vi.fn()
 
     expect(() => store.snapshot()).toThrow(StateCompatibilityError)

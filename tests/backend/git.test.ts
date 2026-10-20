@@ -1,13 +1,13 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAndSwitchGitBranch, createGitWorktree, GIT_DIFF_LINE_LIMIT, GIT_STATUS_ENTRY_LIMIT, GitService, inspectGitWorktreeClean, listGitWorktrees, listLocalGitBranches, switchGitBranch } from '../../electron/main/git'
 import { restrictedGitEnvironment } from '../../electron/main/process-utils'
 
 const dirs: string[] = []
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
+afterEach(() => { vi.unstubAllEnvs(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 const git = (cwd: string, ...args: string[]) => {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' })
   if (result.status !== 0) throw new Error(result.stderr)
@@ -207,6 +207,7 @@ describe('GitService', () => {
     dirs.push(home)
     writeFileSync(join(home, '.gitignore_global'), '.idea/\n')
     writeFileSync(join(home, '.gitconfig'), '[core]\n\texcludesFile = ~/.gitignore_global\n')
+    vi.stubEnv('USERPROFILE', home)
     mkdirSync(join(cwd, '.idea'))
     writeFileSync(join(cwd, '.idea', 'misc.xml'), '<misc/>\n')
     const oldHome = process.env.HOME
@@ -460,10 +461,10 @@ printf 'mutated by filter\n'
     const diff = await service.diff(cwd, 'file.txt', false)
     expect(diff.truncated).toBe(true)
     expect(diff.error).toMatch(/lines.*truncated/i)
-    expect(diff.text).toContain('[GooeyPi: diff truncated')
+    expect(diff.text).toContain('[Apex: diff truncated')
     const outputLines = diff.text.split('\n')
     expect(outputLines).toHaveLength(GIT_DIFF_LINE_LIMIT + 1)
-    expect(outputLines[outputLines.length - 1]).toContain('[GooeyPi: diff truncated')
+    expect(outputLines[outputLines.length - 1]).toContain('[Apex: diff truncated')
   }, 30_000)
 
   it('lists and creates linked worktrees with bounded porcelain parsing', async () => {
@@ -475,7 +476,7 @@ printf 'mutated by filter\n'
 
     expect(worktrees).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: realpathSync(cwd), current: true, detached: false }),
-      expect.objectContaining({ path: realpathSync(target), name: target.split('/').at(-1), branch: 'feature/test', current: false, detached: false }),
+      expect.objectContaining({ path: realpathSync(target), name: basename(target), branch: 'feature/test', current: false, detached: false }),
     ]))
     await expect(createGitWorktree(cwd, `${cwd}-invalid`, '../unsafe')).rejects.toThrow(/branch validation/i)
   })

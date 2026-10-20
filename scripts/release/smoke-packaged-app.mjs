@@ -104,10 +104,20 @@ function readMarker(markerPath) {
   return parseReadinessMarker(readFileSync(markerPath, 'utf8'))
 }
 
-function runPackagedApp(executable, args, { cwd, timeoutMs, platform = process.platform }) {
+/**
+ * @typedef {(command: string, args: string[], options: import('node:child_process').SpawnOptions) => import('node:child_process').ChildProcess} SpawnProcess
+ */
+
+/**
+ * @param {string} executable
+ * @param {string[]} args
+ * @param {{ cwd: string, timeoutMs: number, platform?: NodeJS.Platform, spawnProcess?: SpawnProcess }} options
+ */
+function runPackagedApp(executable, args, options) {
+  const { cwd, timeoutMs, platform = process.platform, spawnProcess = spawn } = options
   const { command, args: launchArgs } = launchCommand(executable, args, { platform })
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(command, launchArgs, {
+    const child = spawnProcess(command, launchArgs, {
       cwd,
       detached: platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -140,7 +150,13 @@ function runPackagedApp(executable, args, { cwd, timeoutMs, platform = process.p
   })
 }
 
-export async function smokePackagedApp(target, architecture, { timeoutMs = SMOKE_TIMEOUT_MS, diagnosticsPath = '' } = {}) {
+/**
+ * @param {string} target
+ * @param {string} architecture
+ * @param {{ timeoutMs?: number, diagnosticsPath?: string, spawnProcess?: SpawnProcess }} options
+ */
+export async function smokePackagedApp(target, architecture, options = {}) {
+  const { timeoutMs = SMOKE_TIMEOUT_MS, diagnosticsPath = '', spawnProcess = spawn } = options
   const outputDirectory = resolve('release', target, architecture)
   const report = diagnosticsPath || join(outputDirectory, 'packaged-smoke-diagnostics.log')
   let workspace = ''
@@ -150,7 +166,7 @@ export async function smokePackagedApp(target, architecture, { timeoutMs = SMOKE
     const executable = packagedExecutablePath(unpacked, target)
     workspace = mkdtempSync(join(tmpdir(), 'gooeypi-packaged-smoke-'))
     const markerPath = join(workspace, 'ready.json')
-    launch = await runPackagedApp(executable, smokeArguments(markerPath, join(workspace, 'user-data')), { cwd: unpacked, timeoutMs })
+    launch = await runPackagedApp(executable, smokeArguments(markerPath, join(workspace, 'user-data')), { cwd: unpacked, timeoutMs, spawnProcess })
     if (launch.timedOut) throw new Error(`Packaged application did not report renderer readiness within ${timeoutMs}ms`)
     if (launch.code !== 0) throw new Error(`Packaged application exited with code ${launch.code ?? 'null'} (signal ${launch.signal ?? 'none'})`)
     const marker = readMarker(markerPath)

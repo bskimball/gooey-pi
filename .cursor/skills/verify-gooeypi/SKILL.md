@@ -20,8 +20,8 @@ its index before driving, then use the matching feature file as the recipe.
 - **Build once.** The driver launches the built bundle (`package.json` `main` →
   `out/main/index.js`). If it is missing, build it: `npm run build`. The driver
   aborts with a clear message when the bundle is absent.
-- **Toolchain.** `node`/`npm` come from `nvm` (pinned `26.8.2` / `12.0.2`). If
-  `node -v` is not `v26.8.2`, select it first:
+- **Toolchain.** `node`/`npm` come from `nvm` (pinned `24.21.0` / `12.0.2`). If
+  `node -v` is not `v24.21.0`, select it first:
   `export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use >/dev/null`.
 - **Display.** The app needs an X display. On a headless machine prefix every
   command with `xvfb-run -a` (e.g. `xvfb-run -a --server-args="-screen 0 1600x1000x24" ...`).

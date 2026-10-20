@@ -13,6 +13,16 @@ import { waitUntil } from '../helpers/wait'
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 const temp = (prefix: string) => { const dir = mkdtempSync(join(tmpdir(), prefix)); dirs.push(dir); return dir }
+function fixtureExecutable(script: string): string {
+  if (process.platform !== 'win32') return script
+  const root = `${script}.npm`
+  const dist = join(root, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+  mkdirSync(dist, { recursive: true })
+  writeFileSync(join(dist, 'cli.js'), readFileSync(script))
+  const shim = join(root, 'pi.cmd')
+  writeFileSync(shim, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+  return shim
+}
 const identities = (...paths: string[]) => Object.fromEntries(paths.map((path) => { const info = lstatSync(path, { bigint: true }); return [realpathSync(path), { dev: info.dev.toString(), ino: info.ino.toString() }] }))
 describe('security boundaries', () => {
   it('does not expose project-configured files outside the project root', async () => {
@@ -74,17 +84,24 @@ describe('security boundaries', () => {
     const dir = temp('prime-work-agent-stop-')
     const executable = join(dir, 'fake-agent.cjs')
     const pidFile = join(dir, 'pid')
+    const descendantPidFile = join(dir, 'descendant-pid')
     writeFileSync(executable, `#!/usr/bin/env node
+const descendant = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
+require('node:fs').writeFileSync(${JSON.stringify(descendantPidFile)}, String(descendant.pid));
 const readline=require('node:readline');const fs=require('node:fs');fs.writeFileSync(process.env.PRIME_WORK_TEST_PID_FILE,String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);readline.createInterface({input:process.stdin}).on('line',(line)=>{const v=JSON.parse(line);if(v.type==='get_state')process.stdout.write(JSON.stringify({type:'response',id:v.id,command:v.type,success:true,data:{isStreaming:false}})+'\\n')});process.stdin.resume();`)
     chmodSync(executable, 0o755)
     process.env.PRIME_WORK_TEST_PID_FILE = pidFile
-    const manager = new AgentRpcManager(executable, async (cwd) => cwd, async (path) => path)
+    const manager = new AgentRpcManager(fixtureExecutable(executable), async (cwd) => cwd, async (path) => path)
     const runtime = await manager.start({ cwd: dir })
     const pid = Number(readFileSync(pidFile, 'utf8'))
+    const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'))
     const started = Date.now()
     expect(await manager.stop(runtime.runtimeId)).toBe(true)
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2_500)
+    if (process.platform !== 'win32') expect(Date.now() - started).toBeGreaterThanOrEqual(2_500)
     expect(() => process.kill(pid, 0)).toThrow()
+    await waitUntil(() => {
+      try { process.kill(descendantPid, 0); return false } catch { return true }
+    })
     delete process.env.PRIME_WORK_TEST_PID_FILE
   }, 10_000)
 
@@ -146,7 +163,7 @@ setInterval(()=>{},1000)
     let markAuthorizationStarted!: () => void
     const authorizationStarted = new Promise<void>((resolveStarted) => { markAuthorizationStarted = resolveStarted })
     let authorizationCalls = 0
-    const manager = new AgentRpcManager(executable, async (cwd) => {
+    const manager = new AgentRpcManager(fixtureExecutable(executable), async (cwd) => {
       authorizationCalls += 1
       markAuthorizationStarted()
       await new Promise<void>((resolveAuthorization) => { releaseAuthorization = resolveAuthorization })

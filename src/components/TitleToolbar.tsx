@@ -59,11 +59,12 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
   const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
   return (
-    <header className="title-toolbar drag-region">
-      {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
+    <>
       {platform === 'win32' ? <nav className="windows-app-menu" aria-label="Application menu">
         {windowsMenus.map(({ name, label }) => <button key={name} type="button" className="windows-app-menu__button" onClick={(event) => openApplicationMenu(name, event)}>{label}</button>)}
       </nav> : null}
+    <header className="title-toolbar drag-region">
+      {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
       <div className="title-toolbar__nav no-drag">
         {!sidebarOpen ? <IconButton label={`Show sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
       </div>
@@ -83,5 +84,6 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {view !== 'session' && sidebarOpen ? <IconButton label={`Hide sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
       </div>
     </header>
+    </>
   )
 }

@@ -450,7 +450,7 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
 
 export function GooeyPiMark({ size = 24 }: { size?: number }) {
   return (
-    <span className="gooeypi-mark" style={{ width: size, height: size }} role="img" aria-label="GooeyPi">
+    <span className="gooeypi-mark" style={{ width: size, height: size }} role="img" aria-label="Apex">
       <img src="/gooeypi-mascot.png" alt="" aria-hidden="true" />
     </span>
   )

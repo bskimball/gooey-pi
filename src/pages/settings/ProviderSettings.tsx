@@ -5,7 +5,7 @@ import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, } from '@/type
 import { HARNESS_AGENT_NAMES } from '@/lib/harness'
 
 interface ProviderSettingsProps {
-  /** Pi credentials stay CLI-owned; visibility toggles only affect GooeyPi. */
+  /** Pi credentials stay CLI-owned; visibility toggles only affect Apex. */
   harness?: HarnessId
   catalog: PrimeModelCatalog | null
   onRefresh(): Promise<void>
@@ -84,7 +84,7 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
   return (
     <section className="settings-group provider-settings">
       <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></button></div></div>
-      <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in GooeyPi; ${agentName} checks credentials when you launch one`}</small> : null}</div>
+      <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in Apex; ${agentName} checks credentials when you launch one`}</small> : null}</div>
       {catalog?.warning ? <p className="provider-catalog-warning" role="status">{catalog.warning}</p> : null}
       <div className="provider-catalog-tabs" role="tablist" aria-label="Provider catalogue view">
         <button type="button" role="tab" aria-selected={view === 'providers'} className={view === 'providers' ? 'is-active' : ''} onClick={() => { setView('providers'); setQuery('') }}>Providers <span>{providerCount.toLocaleString()}</span></button>
@@ -125,7 +125,7 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
 }
 
 const PROVIDERS_PAGE_INTROS: Record<HarnessId, string> = {
-  pi: 'Choose which Pi providers and models appear in GooeyPi. These visibility settings do not change Pi itself; Pi provider authentication is managed by the pi CLI. You may need to log in to or out of providers in the Pi CLI before they appear on this screen.',
+  pi: 'Choose which Pi providers and models appear in Apex. These visibility settings do not change Pi itself; Pi provider authentication is managed by the pi CLI. You may need to log in to or out of providers in the Pi CLI before they appear on this screen.',
 }
 
 /** The Providers settings page: heading plus the provider/model catalog section. */
