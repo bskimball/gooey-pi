@@ -95,10 +95,8 @@ export function usePanelLayout({
 
   useEffect(() => {
     if (!compactLayout || !visibleInspectorOpen) return
-    const selectors = window.innerWidth <= SMALLEST_LAYOUT_BREAKPOINT
-      ? '.conversation-pane, .terminal-drawer, .session-workspace > .resize-handle'
-      : '.title-toolbar, .conversation-pane, .terminal-drawer, .session-workspace > .resize-handle'
-    const targets = [...document.querySelectorAll<HTMLElement>(selectors)]
+    // The title toolbar stays live so the toggle that opened the drawer can also close it.
+    const targets = [...document.querySelectorAll<HTMLElement>('.conversation-pane, .terminal-drawer, .session-workspace > .resize-handle')]
     for (const target of targets) target.inert = true
     return () => { for (const target of targets) target.inert = false }
   }, [compactLayout, terminalOpen, visibleInspectorOpen])

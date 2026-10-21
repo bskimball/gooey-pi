@@ -601,16 +601,17 @@ test.describe('Prime Work desktop smoke', () => {
     await page.screenshot({ path: test.info().outputPath('sidebar-ready.png') })
   })
 
-  test('left aligns the Pi brand for Linux and Windows chrome', async () => {
+  test('left aligns the sidebar toggle with the toolbar for Linux and Windows chrome', async () => {
     const shell = page.locator('.app-shell')
     const sidebar = page.locator('.sidebar')
     const clearance = page.locator('.sidebar__titlebar .traffic-light-clearance')
-    const trigger = page.locator('.sidebar__brand')
+    const trigger = page.locator('.sidebar__toggle')
     for (const platform of ['linux', 'win32']) {
       await shell.evaluate((node, value) => { node.setAttribute('data-platform', value) }, platform)
       await expect(clearance).toHaveCSS('display', 'none')
       const offset = await trigger.evaluate((node) => node.getBoundingClientRect().left - node.closest('.sidebar')!.getBoundingClientRect().left)
-      expect(offset).toBeCloseTo(12, 1)
+      // Matches .title-toolbar's 14px left padding, where Show sidebar sits.
+      expect(offset).toBeCloseTo(14, 1)
     }
     await expect(sidebar).toBeVisible()
   })
@@ -1637,6 +1638,26 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => page.locator('.inspector').evaluate((node) => getComputedStyle(node).position)).toBe('fixed')
     await expect(page.locator('.sidebar')).toHaveCount(0)
     await expect(page.locator('.panel-scrim--inspector')).toBeVisible()
+    await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
+    await inspectorToggle.click()
+    await expect(page.locator('.inspector')).toHaveCount(0)
+    await inspectorToggle.click()
+    await expect(page.locator('.inspector')).toBeVisible()
+
+    const showSidebar = page.getByRole('button', { name: /Show sidebar/ })
+    const showBox = await showSidebar.boundingBox()
+    await showSidebar.click()
+    const hideSidebar = page.locator('.sidebar').getByRole('button', { name: /Hide sidebar/ })
+    // Poll past the sidebar-in slide so the settled position is compared.
+    await expect.poll(async () => {
+      const hideBox = await hideSidebar.boundingBox()
+      return Math.max(Math.abs((hideBox?.x ?? 0) - (showBox?.x ?? 0)), Math.abs((hideBox?.y ?? 0) - (showBox?.y ?? 0)))
+    }).toBeLessThanOrEqual(1)
+    const sidebarBottom = await page.locator('.sidebar').evaluate((node) => node.getBoundingClientRect().bottom)
+    expect(sidebarBottom).toBeLessThanOrEqual(await page.evaluate(() => window.innerHeight) + 1)
+    await page.mouse.click((showBox?.x ?? 0) + (showBox?.width ?? 0) / 2, (showBox?.y ?? 0) + (showBox?.height ?? 0) / 2)
+    await expect(page.locator('.sidebar')).toHaveCount(0)
+
     await page.setViewportSize({ width: 1440, height: 920 })
     await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeGreaterThan(980)
     await page.getByRole('button', { name: /Show sidebar/ }).click()

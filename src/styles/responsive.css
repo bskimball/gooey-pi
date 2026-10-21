@@ -37,10 +37,11 @@
 }
 
 @media (max-width: 980px) {
-  .sidebar { position: fixed; inset: 0 auto 0 0; width: 268px; flex-basis: 268px; box-shadow: 12px 0 30px rgba(0,0,0,.13); animation: sidebar-in 160ms ease-out; }
-  .panel-scrim { position: fixed; z-index: 20; inset: 52px 0 0; display: block; padding: 0; background: rgba(10,10,9,.18); }
-  .panel-scrim--sidebar { inset: 0; z-index: 19; }
-  .inspector { position: fixed; z-index: 80; top: 52px; right: 0; bottom: 0; width: min(620px, 88vw); min-width: 0; flex-basis: auto; box-shadow: -12px 0 30px rgba(0,0,0,.14); }
+  /* Fixed drawers sit below the Windows app menu bar (0px elsewhere). */
+  .sidebar { position: fixed; inset: var(--windows-titlebar-height, 0px) auto 0 0; height: auto; width: 268px; flex-basis: 268px; box-shadow: 12px 0 30px rgba(0,0,0,.13); animation: sidebar-in 160ms ease-out; }
+  .panel-scrim { position: fixed; z-index: 20; inset: calc(var(--windows-titlebar-height, 0px) + 52px) 0 0; display: block; padding: 0; background: rgba(10,10,9,.18); }
+  .panel-scrim--sidebar { inset: var(--windows-titlebar-height, 0px) 0 0; z-index: 19; }
+  .inspector { position: fixed; z-index: 80; top: calc(var(--windows-titlebar-height, 0px) + 52px); right: 0; bottom: 0; width: min(620px, 88vw); min-width: 0; flex-basis: auto; box-shadow: -12px 0 30px rgba(0,0,0,.14); }
   .panel-scrim--inspector { z-index: 70; }
   .session-workspace > .resize-handle--vertical { display: none; }
   .conversation-pane { min-width: 0; }
@@ -58,7 +59,11 @@
   .branch-pill, .title-toolbar__actions .button, .toolbar-divider { display: none; }
   .icon-button { width: 36px; height: 36px; }
   .sidebar .icon-button { width: 32px; height: 32px; }
-  .inspector { top: 52px; left: 0; width: 100vw; max-width: none; }
+  /* Keep the Hide sidebar button aligned with the toolbar's Show sidebar button. */
+  .sidebar .sidebar__toggle { width: 36px; height: 36px; }
+  .sidebar__titlebar .traffic-light-clearance { width: 72px; flex-basis: 72px; }
+  .app-shell[data-platform='linux'] .sidebar__titlebar, .app-shell[data-platform='win32'] .sidebar__titlebar { padding-left: 6px; }
+  .inspector { left: 0; width: 100vw; max-width: none; }
   .inspector__tabs { height: 45px; padding-left: 6px; overflow-x: auto; }
   .inspector__tabs > button:not(.icon-button) { min-width: 44px; min-height: 44px; }
   .transcript { padding-top: 20px; padding-bottom: 184px; }

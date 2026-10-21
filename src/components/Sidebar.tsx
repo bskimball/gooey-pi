@@ -285,12 +285,13 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
     <aside ref={sidebarRef} className="sidebar" aria-label="Project and session navigation" tabIndex={overlay ? -1 : undefined}>
       <div className="sidebar__titlebar drag-region">
         <div className="traffic-light-clearance" aria-hidden="true" />
+        {/* Same screen position as the toolbar's Show sidebar button, so one spot toggles both ways. */}
+        <IconButton className="sidebar__toggle no-drag" label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton>
         <div className="sidebar__brand no-drag" aria-label={HARNESS_PRODUCT_NAMES.pi}>
           <PiMark size={24} />
         </div>
         <div className="sidebar__title-actions no-drag">
           <IconButton label={`New session (${newSessionShortcut})`} onClick={() => onNewSession()}><NotePencil size={16} /></IconButton>
-          <IconButton label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton>
         </div>
       </div>
 

@@ -81,7 +81,6 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {view === 'session' ? <IconButton className={terminalOpen ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
         {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
-        {view !== 'session' && sidebarOpen ? <IconButton label={`Hide sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
       </div>
     </header>
     </>
