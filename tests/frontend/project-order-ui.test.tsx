@@ -5,7 +5,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../src/App'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import type { AppMeta, PrimeWorkApi, ProjectRecord } from '../../src/types/api'
+import { composerDraftStorageKey } from '../../src/lib/composer-draft'
+import type { AppMeta, PrimeWorkApi, ProjectRecord, SessionRecord } from '../../src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -44,6 +45,8 @@ let container: HTMLDivElement
 let root: Root
 
 beforeEach(() => {
+  window.sessionStorage.clear()
+  window.localStorage.clear()
   settings = { ...DEFAULT_SETTINGS, activeHarness: 'pi' }
   bridge = {
     app: {
@@ -175,7 +178,80 @@ async function press(element: Element): Promise<void> {
   })
 }
 
+describe('session creation in App', () => {
+  it.each([false, true])('preserves an attachment and restores a failed first prompt across adoption (submit while creating: %s)', async (submitWhileCreating) => {
+    vi.mocked(bridge.providers.catalog).mockResolvedValue({
+      primeVersion: 'test', refreshedAt: new Date().toISOString(),
+      models: [{ key: 'provider/vision', provider: 'provider', id: 'vision', name: 'Vision', reasoning: true, input: ['text', 'image'], contextWindow: 100_000, maxTokens: 8_000, availableThinkingLevels: ['medium'], fastModeSupported: false, available: true }],
+      providers: [{ id: 'provider', name: 'Provider', authMethod: 'api_key', configured: true, modelCount: 1, availableModelCount: 1, enabled: true }],
+    })
+    let finish!: (session: SessionRecord) => void
+    bridge.sessions.create = vi.fn(() => new Promise<SessionRecord>((resolve) => { finish = resolve }))
+    vi.mocked(bridge.agent.start).mockRejectedValue(new Error('Pi unavailable'))
+    const created: SessionRecord = {
+      id: 'created', harness: 'pi', filePath: '/sessions/created.jsonl', projectPath: projects[0].path,
+      title: 'Untitled session', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), status: 'idle', depth: 0,
+    }
+    await act(async () => root.render(<App />))
+    await waitFor(() => container.querySelector('.sidebar__section-heading'))
+    await press(container.querySelector('.sidebar__title-actions [aria-label^="New session"]')!)
+    await waitFor(() => vi.mocked(bridge.sessions.create).mock.calls.length || null)
+    const textarea = container.querySelector<HTMLTextAreaElement>('.composer textarea')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Keep my image and prompt')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      const bytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])
+      const file = new File([bytes], 'draft.png', { type: 'image/png' })
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => bytes.buffer })
+      const input = container.querySelector<HTMLInputElement>('.composer input[type="file"]')!
+      Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await waitFor(() => container.querySelector('.composer-attachment'))
+    const send = await waitFor(() => {
+      const button = container.querySelector<HTMLButtonElement>('[aria-label="Send message"]')
+      return button && !button.disabled ? button : null
+    })
+    if (submitWhileCreating) await press(send)
+    await act(async () => finish(created))
+    if (!submitWhileCreating) {
+      expect(container.querySelector('.composer-attachment')?.textContent).toContain('draft.png')
+      expect(container.querySelector<HTMLTextAreaElement>('.composer textarea')?.value).toBe('Keep my image and prompt')
+      await press(container.querySelector('[aria-label="Send message"]')!)
+    }
+    await waitFor(() => vi.mocked(bridge.agent.start).mock.calls.length || null)
+    expect(container.querySelector<HTMLTextAreaElement>('.composer textarea')?.value).toBe('Keep my image and prompt')
+    expect(container.querySelector('.composer-attachment')?.textContent).toContain('draft.png')
+    expect(JSON.parse(window.sessionStorage.getItem(composerDraftStorageKey('zeta:created')) ?? '{}').text).toBe('Keep my image and prompt')
+    expect(window.sessionStorage.getItem(composerDraftStorageKey('zeta:new'))).toBeNull()
+  })
+})
+
 describe('project ordering controls in App', () => {
+  it.each(['project', 'session'])('keeps an older project in Recent after opening its %s and switching away', async (target) => {
+    const library = Array.from({ length: 8 }, (_, index) => project(`project-${index}`, `Project ${index}`, `2026-01-0${index + 1}T00:00:00.000Z`))
+    const sessions: SessionRecord[] = [7, 1].map((index) => ({
+      id: `session-${index}`, harness: 'pi', filePath: `/sessions/${index}.jsonl`, projectPath: `/project-${index}`,
+      title: `Conversation ${index}`, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
+    }))
+    vi.mocked(bridge.projects.list).mockResolvedValue(library)
+    vi.mocked(bridge.sessions.list).mockResolvedValue(sessions)
+    await act(async () => root.render(<App />))
+    await waitFor(() => container.querySelector('.sidebar__section-heading'))
+    const rowNames = () => [...container.querySelectorAll('.project-row__main')].map((button) => button.textContent)
+    expect(rowNames()).not.toContain('Project 1')
+    const input = container.querySelector<HTMLInputElement>('#session-search')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, target === 'project' ? 'Project 1' : 'Conversation 1')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await press(container.querySelector(target === 'project' ? '.project-row__main' : '.session-row')!)
+    await press([...container.querySelectorAll('.project-row__main')].find((button) => button.textContent === 'Project 7')!)
+    expect(rowNames()).toContain('Project 1')
+    expect(rowNames()).toHaveLength(5)
+    expect(bridge.projects.touch).toHaveBeenCalledWith('project-1', 'pi')
+  })
+
   it('switches sidebar sorting persistently and pins projects while excluding inferred records', async () => {
     await act(async () => root.render(<App />))
     await waitFor(() => container.querySelector('.sidebar__section-heading'))

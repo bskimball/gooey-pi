@@ -8,6 +8,7 @@ import type { ExecutableSource } from './process-utils'
 import { SessionMetadataCatalog, type SessionCatalogIo, type SessionNameTimestamp } from './sessions/catalog'
 import { createSessionMetadataReader, type SessionMetadata, type SessionMetadataReader } from './sessions/metadata'
 import { readTranscript } from './sessions/transcript'
+import { createPiSessionFile } from './sessions/pi'
 import type { JsonStateStore } from './store'
 import { isPathWithin, requireBoolean, requireExistingDirectory, requireString } from './validation'
 
@@ -155,6 +156,14 @@ export class SessionService {
       this.changeListeners.delete(listener)
       if (!this.changeListeners.size) this.stopWatcher()
     }
+  }
+
+  async create(projectPath: string): Promise<SessionRecord> {
+    const cwd = await requireExistingDirectory(projectPath, 'projectPath')
+    const filePath = await createPiSessionFile(this.sessionRoot, cwd)
+    const { sessionName: _sessionName, ...record } = await this.readMetadata(filePath)
+    this.catalog.invalidateLiveCatalog()
+    return { ...record, harness: this.harness, archived: false }
   }
 
   async list(projectPath?: unknown, includeArchivedValue: unknown = false, forceValue: unknown = false): Promise<SessionRecord[]> {

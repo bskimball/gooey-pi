@@ -102,6 +102,7 @@ const api: PrimeWorkApi = {
 			invoke("projects:finish-setup", id, setup, exitCode, harness),
 	},
 	sessions: {
+		create: (projectPath, harness) => invoke("sessions:create", projectPath, harness),
 		list: (projectPath, includeArchived, harness, force) =>
 			invoke("sessions:list", projectPath, includeArchived, harness, force),
 		read: (filePath) => invoke("sessions:read", filePath),

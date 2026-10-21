@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { appendFileSync, readFileSync } from 'node:fs'
-import { readdir, realpath } from 'node:fs/promises'
+import { mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
 import { isPathWithin, isRecord } from '../validation'
@@ -37,6 +37,19 @@ import type { TranscriptFileReader } from './transcript'
  */
 export function piSessionRoot(): string {
   return join(homedir(), '.pi', 'agent', 'sessions')
+}
+
+export async function createPiSessionFile(sessionRoot: string, cwd: string): Promise<string> {
+  const id = randomUUID()
+  const timestamp = new Date().toISOString()
+  const bucket = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
+  await mkdir(join(sessionRoot, bucket), { recursive: true })
+  const root = await realpath(sessionRoot)
+  const directory = await realpath(join(root, bucket))
+  if (!isPathWithin(root, directory)) throw new Error('Session directory is outside the session root')
+  const filePath = join(directory, `${timestamp.replace(/[:.]/g, '-')}_${id}.jsonl`)
+  await writeFile(filePath, `${JSON.stringify({ type: 'session', version: 3, id, timestamp, cwd })}\n`, { encoding: 'utf8', flag: 'wx' })
+  return filePath
 }
 
 export const piTimestampFromSessionName = timestampFromBucketedSessionName

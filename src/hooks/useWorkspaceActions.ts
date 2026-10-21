@@ -97,6 +97,8 @@ export function parseMcpCommand(prompt: string, harness: HarnessId): McpCommand 
  * dependencies, mirroring useStableCallback/useSidebarActions semantics.
  */
 export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
+  let pendingCreation: { generation: number; promise: Promise<SessionRecord> } | undefined
+  const createdSessionFiles = new Set<string>()
   const grantProject = async (project: ProjectRecord): Promise<ProjectRecord> => {
     const { bridge, workspace, setProjects, gitRequestRef, setGitSnapshot } = getDeps()
     if (!bridge || !project.inferred) return project
@@ -111,6 +113,13 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const nextGit = await bridge.git.status(cwd)
     if (gitRequestRef.current === requestId && workspace.workspaceRef.current.generation === selected.generation && workspace.workspaceRef.current.cwd === cwd) setGitSnapshot({ cwd, status: nextGit })
     return granted
+  }
+  const touchProject = async (project: ProjectRecord) => {
+    const { bridge, setProjects } = getDeps()
+    const lastOpenedAt = new Date().toISOString()
+    setProjects((items) => items.map((item) => item.id === project.id ? { ...item, lastOpenedAt } : item))
+    // Inferred projects stay display-only until an action needs a filesystem grant.
+    if (bridge && !project.inferred) await bridge.projects.touch(project.id, project.harness)
   }
   const persistPanel = (patch: Partial<typeof DEFAULT_SETTINGS>) => { void getDeps().settingsState.updateSettings(patch) }
   const toggleSidebar = () => {
@@ -143,7 +152,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     persistPanel({ terminalOpen: !settingsState.terminalOpen })
   }
   const selectProject = async (project: ProjectRecord) => {
-    const { bridge, layout, settingsState, sessions, workspace, setSessions, setView, clearSessionAttention, reportError } = getDeps()
+    const { layout, settingsState, sessions, workspace, setSessions, setView, clearSessionAttention, reportError } = getDeps()
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
     if (workspace.workspaceRef.current.project?.id === project.id) {
       setView('session')
@@ -157,10 +166,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const generation = workspace.activateWorkspace(project, session)
     setView('session')
     try {
-      // Inferred projects come from the harness's global session history and
-      // remain display-only until the user performs an action that needs a
-      // filesystem grant (starting work or opening a terminal).
-      if (bridge && !project.inferred) await bridge.projects.touch(project.id, project.harness)
+      await touchProject(project)
       await workspace.reconcileRuntime(generation)
     } catch (error) { if (workspace.workspaceRef.current.generation === generation) reportError(error) }
   }
@@ -173,19 +179,33 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     if (!project) { reportError('This session is not contained by an available project.'); return }
     const generation = workspace.activateWorkspace(project, session)
     setView('session')
-    try { await workspace.reconcileRuntime(generation) }
+    try { await touchProject(project); await workspace.reconcileRuntime(generation) }
     catch (error) { if (workspace.workspaceRef.current.generation === generation) reportError(error) }
   }
   const newSession = (requestedProject?: ProjectRecord) => {
-    const { bridge, initialized, layout, settingsState, activeProject, workspace, setView, setPaletteOpen } = getDeps()
+    const { bridge, initialized, layout, settingsState, activeProject, workspace, setSessions, setView, setPaletteOpen, reportError } = getDeps()
     if (!initialized) return
     const project = newSessionProject(requestedProject, workspace.workspaceRef.current.project, activeProject)
     if (!project) return
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
     clearComposerDraft(`${project.id}:new`)
-    workspace.activateWorkspace(project)
+    const generation = workspace.activateWorkspace(project)
     if (!bridge) workspace.setMessages([])
     setView('session'); setPaletteOpen(false)
+    void touchProject(project).catch(reportError)
+    if (!bridge) return
+    const promise = (async () => {
+      const granted = await grantProject(project)
+      const session = await bridge.sessions.create(granted.primaryFolder, granted.harness)
+      createdSessionFiles.add(session.filePath)
+      setSessions((items) => items.some((item) => item.filePath === session.filePath) ? items : [...items, session])
+      workspace.adoptCreatedSession(session, generation)
+      return session
+    })()
+    pendingCreation = { generation, promise }
+    void promise.catch(reportError).finally(() => {
+      if (pendingCreation?.promise === promise) pendingCreation = undefined
+    })
   }
   const navigate = (nextView: WorkspaceView) => {
     const { layout, settingsState, setView, setPaletteOpen } = getDeps()
@@ -257,6 +277,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     intent: PromptDeliveryIntent = 'queue',
     queuedFlushPromptId?: string,
   ) => {
+    const creation = pendingCreation
     const { bridge, sessions, workspace, provider, settingsState, submissionAdmissionRef, demoTimerRef, setSessions, setSubmitting, setToast, reportError } = getDeps()
     const commandHarness = workspace.workspaceRef?.current?.project?.harness ?? settingsState.settings.activeHarness
     const compactCommand = parseCompactCommand(prompt)
@@ -333,7 +354,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     }
     const admittedSubmission = await submissionAdmissionRef.current.run(async () => {
       setSubmitting(true)
-      const admitted = workspace.workspaceRef.current
+      let admitted = workspace.workspaceRef.current
       const generation = admitted.generation
       let startedPrompt = false
       let queuedPromptId: string | undefined
@@ -353,12 +374,17 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         // settings: a prompt landing between a harness switch and the
         // bootstrap effect's workspace reset would otherwise start the new
         // harness against the old workspace's cwd and session.
-        const activeHarness = admitted.project.harness
+        const project = admitted.project
+        const activeHarness = project.harness
         if (images.length > 0 && !provider.selectedModel?.input.includes('image')) {
           reportError('This model does not accept images. Remove the attachment or choose a vision model.')
           return
         }
         if (!workspace.prepareForPrompt(generation)) return
+        if (creation?.generation === generation) {
+          const session = await creation.promise
+          admitted = { ...admitted, session, sessionFile: session.filePath }
+        }
         const appendUserMessage = () => {
           if (userMessageAppended) return
           // The workspace may have switched while a command was in flight;
@@ -382,12 +408,12 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           demoTimerRef.current.push(window.setTimeout(() => workspace.setMessages((items) => items.map((item) => item.id === assistantId ? { ...item, streaming: false, completedAt: Date.now(), parts: [...item.parts, { type: 'toolResult', name: 'Inspect project', text: 'Project context loaded' }, { type: 'text', text: 'I’ve reviewed the project context and prepared the workspace. Connect the desktop bridge to run this request with Pi.' }] } : item)), 1_250))
           return
         }
-        const continueInBackground = !admitted.sessionFile && !compactCommand && !modeCommand
+        const continueInBackground = (!admitted.sessionFile || createdSessionFiles.has(admitted.sessionFile)) && !compactCommand && !modeCommand
         const submissionIsCurrent = () => workspace.workspaceRef.current.generation === generation
         const model = provider.model
         const thinking = provider.effort
         const fast = provider.fast
-        await grantProject(admitted.project)
+        await grantProject(project)
         if (!submissionIsCurrent() && !continueInBackground) return
         if (submissionIsCurrent()) await provider.flushPendingMutations?.()
         if (!submissionIsCurrent() && !continueInBackground) return
@@ -525,6 +551,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             streamingBehavior: streamingBehaviorForIntent(intent),
             ...(images.length ? { images } : {}),
           })
+          if (selected.sessionFile) createdSessionFiles.delete(selected.sessionFile)
           const disposition = (response.data as { disposition?: unknown } | undefined)?.disposition
           if (disposition === 'handled' && submissionIsCurrent()) {
             workspace.setRuntime((current) => current?.runtimeId === activeRuntime.runtimeId ? { ...current, isStreaming: false } : current)

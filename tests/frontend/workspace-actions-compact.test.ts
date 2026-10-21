@@ -53,7 +53,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
   let currentRuntime = configuredRuntime
   let messages: TranscriptMessage[] = []
   const currentSession = withSession ? { ...session(sessionStatus), harness } : undefined
-  const workspaceRef = {
+  const workspaceRef: { current: { generation: number; project: typeof project; session: SessionRecord | undefined; cwd: string; sessionFile: string | undefined } } = {
     current: {
       generation: 1,
       project,
@@ -83,6 +83,14 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     runtimeIdRef,
     runtimeOwnerRef,
     prepareForPrompt: () => true,
+    activateWorkspace: (nextProject: typeof project) => {
+      workspaceRef.current = { generation: workspaceRef.current.generation + 1, project: nextProject, cwd: nextProject.primaryFolder, session: undefined, sessionFile: undefined }
+      messages = []
+      return workspaceRef.current.generation
+    },
+    adoptCreatedSession: (created: SessionRecord, generation: number) => {
+      if (workspaceRef.current.generation === generation) workspaceRef.current = { ...workspaceRef.current, session: created, sessionFile: created.filePath }
+    },
     attachRuntime: (next: RuntimeInfo | undefined, generation = workspaceRef.current.generation) => {
       if (workspaceRef.current.generation !== generation) return
       currentRuntime = next ?? null
@@ -101,10 +109,11 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
   }
   const agentList = vi.fn(async () => configuredRuntime ? [configuredRuntime] : [])
   const bridge = {
+    projects: { touch: vi.fn(async () => true) },
     agent: { list: agentList, command, start, stop: vi.fn(async () => false) },
-    sessions: { followUp, list: vi.fn(async () => []) },
+    sessions: { create: vi.fn(async () => session()), followUp, list: vi.fn(async () => []) },
   } as unknown as PrimeWorkApi
-  const workspaceSessions = currentSession ? [currentSession] : []
+  let workspaceSessions = currentSession ? [currentSession] : []
   const actions = createWorkspaceActions(() => ({
     bridge,
     projects: [project],
@@ -120,7 +129,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     gitRequestRef: { current: 0 },
     demoTimerRef: { current: [] },
     setProjects: vi.fn(),
-    setSessions: vi.fn(),
+    setSessions: (update: React.SetStateAction<SessionRecord[]>) => { workspaceSessions = typeof update === 'function' ? update(workspaceSessions) : update },
     setGitSnapshot: vi.fn(),
     setView: vi.fn(),
     setPaletteOpen: vi.fn(),
@@ -133,8 +142,68 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     reportError,
   } as unknown as WorkspaceActionsDeps))
 
-  return { actions, bridge, command, agentList, workspace, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
+  return { actions, bridge, command, agentList, workspace, sessions: () => workspaceSessions, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
 }
+
+describe('optimistic session creation', () => {
+  it('publishes a selectable session without starting Pi and sends the first prompt to its file', async () => {
+    const state = fixture({ withSession: false })
+    state.actions.newSession()
+    await vi.waitFor(() => expect(state.sessions()).toHaveLength(1))
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.workspace.workspaceRef.current.sessionFile).toBe(session().filePath)
+    await state.actions.sendPrompt('First prompt')
+    expect(state.start).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: session().filePath }))
+    expect(state.command).toHaveBeenCalledWith('started-runtime', expect.objectContaining({ type: 'prompt', message: 'First prompt' }))
+  })
+
+  it('waits for file creation before sending and retains the session after startup failure', async () => {
+    const state = fixture({ withSession: false, startError: new Error('Pi unavailable') })
+    state.followUp.mockResolvedValue(false)
+    let finish!: (created: SessionRecord) => void
+    vi.mocked(state.bridge.sessions.create).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    state.actions.newSession()
+    const sending = state.actions.sendPrompt('Keep this prompt')
+    await vi.waitFor(() => expect(state.bridge.sessions.create).toHaveBeenCalled())
+    expect(state.start).not.toHaveBeenCalled()
+    finish(session())
+    await expect(sending).rejects.toThrow('Pi unavailable')
+    expect(state.sessions()).toHaveLength(1)
+    expect(state.workspace.workspaceRef.current.sessionFile).toBe(session().filePath)
+  })
+
+  it('delivers an already-submitted first prompt after navigation during file creation', async () => {
+    const state = fixture({ withSession: false })
+    let finish!: (created: SessionRecord) => void
+    vi.mocked(state.bridge.sessions.create).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    state.actions.newSession()
+    const sending = state.actions.sendPrompt('Deliver to the original project')
+    await vi.waitFor(() => expect(state.bridge.sessions.create).toHaveBeenCalled())
+    state.workspace.activateWorkspace({ ...baseProject, id: 'other', path: '/other', primaryFolder: '/other', folders: ['/other'] })
+    finish(session())
+    await sending
+    expect(state.start).toHaveBeenCalledWith(expect.objectContaining({ cwd: baseProject.path, sessionPath: session().filePath }))
+    expect(state.command).toHaveBeenCalledOnce()
+    expect(state.command).toHaveBeenCalledWith('started-runtime', expect.objectContaining({ type: 'prompt', message: 'Deliver to the original project' }))
+    expect(state.workspace.workspaceRef.current.project.id).toBe('other')
+    expect(state.workspace.workspaceRef.current.sessionFile).toBeUndefined()
+    expect(state.currentRuntime()).toBeNull()
+    expect(state.messages()).toEqual([])
+  })
+
+  it('does not steal navigation when creation finishes in the background', async () => {
+    const state = fixture({ withSession: false })
+    let finish!: (created: SessionRecord) => void
+    vi.mocked(state.bridge.sessions.create).mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    state.actions.newSession()
+    await vi.waitFor(() => expect(state.bridge.sessions.create).toHaveBeenCalled())
+    state.workspace.activateWorkspace(baseProject)
+    finish(session())
+    await vi.waitFor(() => expect(state.sessions()).toHaveLength(1))
+    expect(state.workspace.workspaceRef.current.sessionFile).toBeUndefined()
+    expect(state.start).not.toHaveBeenCalled()
+  })
+})
 
 describe('first prompt navigation', () => {
   it('delivers from an unsaved existing runtime after navigation during its model flush', async () => {

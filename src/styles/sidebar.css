@@ -66,7 +66,19 @@
 .project-row__menu button.is-danger:not(:first-child), .project-row__menu button:last-child:not(:first-child) { margin-top: 3px; box-shadow: 0 -2px 0 -1px var(--border-subtle); }
 .project-row__menu button.is-danger:hover, .project-row__menu button.is-danger:focus-visible, .project-row__menu button:last-child:hover, .project-row__menu button:last-child:focus-visible { color: var(--danger); background: var(--danger-soft); }
 .sidebar__empty { margin: 12px 8px; color: var(--text-tertiary); font-size: 12px; }
-.project-group { margin-bottom: 7px; }
+.sidebar__project-section + .sidebar__project-section { margin-top: 12px; }
+.sidebar__group-heading { margin: 6px 8px 4px; color: var(--text-tertiary); font-size: 10.5px; font-weight: 550; }
+.sidebar__library { flex: 0 0 auto; padding: 4px 10px 8px; }
+.sidebar__library > button { width: 100%; min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 8px; color: var(--text-secondary); background: transparent; text-align: left; font-size: 12px; }
+.sidebar__library > button:hover, .sidebar__library > button:focus-visible { color: var(--text); background: var(--surface-hover); }
+.sidebar__library > button.is-active { color: var(--text); background: var(--surface-selected); }
+.sidebar__library > button > svg { flex: 0 0 auto; }
+.sidebar__library > button > span:first-of-type { flex: 1; }
+.sidebar__project-count { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.sidebar__library > .sidebar__other-activity { min-height: 30px; color: var(--text-tertiary); font-size: 10.5px; }
+.project-group { margin-bottom: 2px; }
+.project-group:has(> .session-list) { margin-bottom: 7px; }
+.project-row.project-row--search { padding-left: 26px; }
 .project-row { position: relative; height: 34px; display: flex; align-items: center; gap: 1px; padding: 0 4px 0 3px; border-radius: 8px; color: var(--text); transition: color 120ms ease-out, background 120ms ease-out; }
 .project-row:hover, .project-row.is-menu-open { background: var(--surface-hover); }
 .project-row.is-selected { color: var(--text); background: var(--surface-selected); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--prime) 20%, transparent); }
@@ -112,6 +124,7 @@
 @keyframes sidebar-menu-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } }
 .project-working, .session-status-mark { width: 16px; height: 16px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; }
 .project-working, .session-status-mark--running { color: var(--prime); }
+.project-attention { flex: 0 0 auto; min-width: 17px; height: 17px; display: inline-grid; place-items: center; padding: 0 4px; border-radius: 8px; color: var(--prime); background: var(--prime-soft); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .session-status-mark--waiting, .session-status-mark--complete { color: var(--text-tertiary); }
 .session-status-mark--idle > span, .session-status-mark--unknown > span, .session-status-mark--failed > span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
 .session-row-wrap.has-attention .session-status-mark--failed > span { background: var(--danger); }

@@ -130,7 +130,7 @@ function bucketedMetadataFromAccumulator(state: BucketedMetadataAccumulator, fil
     createdAt: state.createdAt,
     updatedAt: state.sawRecordTimestamp ? state.updatedAt : fallbackUpdated,
     lastUserMessageAt: state.lastUserMessageAt ?? state.createdAt,
-    status: statusFrom(undefined, undefined, state.lastRole, state.stopReason),
+    status: state.lastRole ? statusFrom(undefined, undefined, state.lastRole, state.stopReason) : 'idle',
     model: state.model,
     provider: state.provider,
     thinkingLevel: state.thinkingLevel,

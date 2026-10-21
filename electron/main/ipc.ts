@@ -363,6 +363,11 @@ export function registerIpc(
 				force,
 			),
 	);
+	handle("sessions:create", async (_event, projectPath, harness) => {
+		const selectedHarness = requireHarness(harness);
+		const cwd = await projectsFor(selectedHarness).authorizePath(requireString(projectPath, "projectPath", { min: 1, max: 4096 }));
+		return sessionsFor(selectedHarness).create(cwd);
+	});
 	handle("sessions:read", async (_event, filePath) =>
 		(await sessionsForPath(filePath)).service.read(filePath),
 	);

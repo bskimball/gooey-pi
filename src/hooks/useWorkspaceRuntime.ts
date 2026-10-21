@@ -164,6 +164,14 @@ export function useWorkspaceRuntime({
     setRuntime(next)
   }, [])
 
+  const adoptCreatedSession = useCallback((session: SessionRecord, generation: number) => {
+    if (workspaceRef.current.generation !== generation) return
+    workspaceRef.current = { ...workspaceRef.current, session, sessionFile: session.filePath }
+    lastTranscriptReadWorkspaceRef.current = { generation, sessionFile: session.filePath }
+    setActiveSessionId(session.id)
+    attachRuntime(undefined, generation)
+  }, [attachRuntime])
+
   const promoteStartedSession = useCallback((session: SessionRecord, runtimeId: string) => {
     if (runtimeIdRef.current !== runtimeId || workspaceRef.current.sessionFile) return
     workspaceRef.current = { ...workspaceRef.current, session, sessionFile: session.filePath }
@@ -610,6 +618,7 @@ export function useWorkspaceRuntime({
     activeProjectId,
     activeSessionId,
     promoteStartedSession,
+    adoptCreatedSession,
     runtime,
     setRuntime,
     workspaceGeneration,

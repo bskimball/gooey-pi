@@ -53,6 +53,7 @@ describe('selectProject workspace resume', () => {
   it('still activates a different project', async () => {
     const activateWorkspace = vi.fn(() => 2)
     const reconcileRuntime = vi.fn()
+    const setProjects = vi.fn()
     const actions = createWorkspaceActions(() => ({
       layout: { compactLayout: false, setSmallestSidebarAllowed: vi.fn() },
       settingsState: { setSidebarOpen: vi.fn() },
@@ -63,6 +64,7 @@ describe('selectProject workspace resume', () => {
         reconcileRuntime,
       },
       setView: vi.fn(),
+      setProjects,
       setSessions: vi.fn(),
       clearSessionAttention: vi.fn(),
       reportError: vi.fn(),
@@ -73,11 +75,13 @@ describe('selectProject workspace resume', () => {
 
     expect(activateWorkspace).toHaveBeenCalledWith(other, undefined)
     expect(reconcileRuntime).toHaveBeenCalledWith(2)
+    expect(setProjects).toHaveBeenCalledOnce()
   })
 
   it('clears an unsent project draft when explicitly starting a new session', () => {
     saveComposerDraft('project:new', { text: '/plan ' })
     const activateWorkspace = vi.fn()
+    let catalog = [project]
     const actions = createWorkspaceActions(() => ({
       bridge: null,
       initialized: true,
@@ -91,11 +95,14 @@ describe('selectProject workspace resume', () => {
       },
       setView: vi.fn(),
       setPaletteOpen: vi.fn(),
+      setProjects: (update: React.SetStateAction<ProjectRecord[]>) => { catalog = typeof update === 'function' ? update(catalog) : update },
+      reportError: vi.fn(),
     } as unknown as WorkspaceActionsDeps))
 
     actions.newSession(project)
 
     expect(readComposerDraft('project:new')).toBeNull()
     expect(activateWorkspace).toHaveBeenCalledWith(project)
+    expect(Date.parse(catalog[0].lastOpenedAt)).toBeGreaterThan(Date.parse(project.lastOpenedAt))
   })
 })

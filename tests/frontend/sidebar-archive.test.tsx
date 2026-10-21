@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Sidebar } from '../../src/components/Sidebar'
+import { Sidebar, type SidebarProps } from '../../src/components/Sidebar'
 import { sessionAttentionSignature } from '../../src/app/session-attention'
 import type { ProjectRecord, SessionRecord } from '../../src/types/api'
 
@@ -47,6 +47,139 @@ async function rightClick(element: Element) {
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
   })
 }
+
+async function renderSidebar(overrides: Partial<SidebarProps> = {}) {
+  await act(async () => root.render(<Sidebar
+    projects={[project]} sessions={[session]} activeView="session"
+    onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop}
+    onAddProject={noop} onRemoveProject={noop} onClose={noop} onOpenPalette={noop}
+    onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+    {...overrides}
+  />))
+}
+
+async function search(value: string) {
+  const input = container.querySelector<HTMLInputElement>('[aria-label="Search projects and sessions"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+const library = Array.from({ length: 8 }, (_, index): ProjectRecord => ({
+  ...project, id: `project-${index}`, name: `Project ${index}`, path: `/project-${index}`,
+  folders: [`/project-${index}`], primaryFolder: `/project-${index}`,
+  lastOpenedAt: `2026-01-0${index + 1}T00:00:00.000Z`,
+}))
+
+const projectNames = (selector = '.project-row__main') => [...container.querySelectorAll(selector)].map((button) => button.textContent)
+
+describe('sidebar project working set', () => {
+  it('keeps all pinned projects and five recent projects, including the current project', async () => {
+    const projects = [...library, { ...project, pinned: true, name: 'Pinned' }]
+    await renderSidebar({ projects, activeProjectId: 'project-0' })
+    expect(projectNames('[aria-label="Pinned"] .project-row__main')).toEqual(['Pinned'])
+    expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 7', 'Project 6', 'Project 5', 'Project 4', 'Project 0'])
+    expect(container.querySelector('[aria-label="Collapse Project 0"]')?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('[aria-expanded="false"].project-row__collapse')).toHaveLength(5)
+    expect(container.querySelector('.sidebar__project-count')?.textContent).toBe('9')
+
+    await renderSidebar({ projects, activeProjectId: 'project-0', projectSortMode: 'alphabetical' })
+    expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 0', 'Project 4', 'Project 5', 'Project 6', 'Project 7'])
+  })
+
+  it('remembers explicit expansion and collapse across remounts, including collapse all', async () => {
+    const second = { ...project, id: 'second', name: 'Second' }
+    const props = { projects: [project, second], activeProjectId: project.id }
+    await renderSidebar(props)
+    await press(container.querySelector('[aria-label="Collapse Project"]')!)
+    await press(container.querySelector('[aria-label="Expand Second"]')!)
+    await act(async () => root.render(null))
+    await renderSidebar(props)
+    expect(container.querySelector('[aria-label="Expand Project"]')?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('[aria-label="Collapse Second"]')?.getAttribute('aria-expanded')).toBe('true')
+
+    await press(container.querySelector('[aria-label="Collapse all projects"]')!)
+    await act(async () => root.render(null))
+    await renderSidebar(props)
+    expect(container.querySelectorAll('.session-list')).toHaveLength(0)
+    expect(container.querySelectorAll('.project-row__collapse[aria-expanded="false"]')).toHaveLength(2)
+  })
+
+  it('searches the entire library without expanding sessions for a project name or folder match', async () => {
+    const onSelectProject = vi.fn()
+    await renderSidebar({ projects: library, sessions: [{ ...session, projectPath: '/project-0' }], onSelectProject })
+    expect(projectNames()).not.toContain('Project 0')
+    await search('Project 0')
+    expect(projectNames()).toEqual(['Project 0'])
+    expect(container.querySelector('.session-list')).toBeNull()
+    expect(container.querySelector('[aria-label="Project matches"]')).not.toBeNull()
+    await search('/project-0')
+    expect(projectNames()).toEqual(['Project 0'])
+    await press(container.querySelector('.project-row__main')!)
+    expect(onSelectProject).toHaveBeenCalledWith(library[0])
+    expect(container.querySelector<HTMLInputElement>('#session-search')?.value).toBe('')
+  })
+
+  it('reveals matching sessions without changing saved collapse state and pages through all matches', async () => {
+    const matches = Array.from({ length: 9 }, (_, index) => ({ ...session, id: `match-${index}`, title: `Needle ${index}` }))
+    const onSelectSession = vi.fn()
+    await renderSidebar({ sessions: [...matches, { ...session, id: 'unrelated', title: 'Unrelated' }, { ...session, id: 'archived', title: 'Needle archived', archived: true }], onSelectSession })
+    await press(container.querySelector('[aria-label="Collapse all projects"]')!)
+    await search('needle')
+    expect(container.querySelector('[aria-label="Project matches"]')).toBeNull()
+    expect(container.querySelector('[aria-label="Session matches"]')).not.toBeNull()
+    expect(container.querySelectorAll('.session-row-wrap')).toHaveLength(7)
+    expect(container.textContent).not.toContain('Unrelated')
+    expect(container.textContent).not.toContain('Needle archived')
+    await press(container.querySelector('.session-row--empty')!)
+    expect(container.querySelectorAll('.session-row-wrap')).toHaveLength(9)
+    await press(container.querySelector('[title="Needle 0"]')!)
+    expect(onSelectSession).toHaveBeenCalledWith(matches[0])
+    expect(container.querySelector('.session-list')).toBeNull()
+    await search('unmatched')
+    expect(container.textContent).toContain('No matching projects or sessions')
+    await press(container.querySelector('[aria-label="Clear search"]')!)
+    expect(container.querySelector('[aria-label="Expand Project"]')).not.toBeNull()
+  })
+
+  it('keeps activity indicators visible while collapsed and links to work outside the recent list', async () => {
+    const sessions: SessionRecord[] = [
+      { ...session, id: 'running', projectPath: '/project-7', status: 'running' },
+      { ...session, id: 'waiting', projectPath: '/project-7', status: 'waiting' },
+      { ...session, id: 'other-running', projectPath: '/project-0', status: 'running' },
+      { ...session, id: 'other-failed', projectPath: '/project-0', status: 'failed' },
+    ]
+    const onNavigate = vi.fn()
+    await renderSidebar({ projects: library, sessions, onNavigate })
+    const before = projectNames()
+    expect(container.querySelector('.session-list')).toBeNull()
+    expect(container.querySelector('.project-working')).not.toBeNull()
+    expect(container.querySelector('.project-attention')?.textContent).toBe('1')
+    expect(container.querySelector('.sidebar__other-activity')?.textContent).toBe('Elsewhere: 1 working · 1 to review')
+    await press(container.querySelector('.sidebar__other-activity')!)
+    expect(onNavigate).toHaveBeenCalledWith('activity')
+    await press(container.querySelector('.sidebar__library > button')!)
+    expect(onNavigate).toHaveBeenCalledWith('projects')
+
+    await renderSidebar({ projects: library, sessions, clearedAttention: { waiting: sessionAttentionSignature(sessions[1])! } })
+    expect(container.querySelector('.project-attention')).toBeNull()
+    expect(projectNames()).toEqual(before)
+    expect(container.querySelector('.session-list')).toBeNull()
+  })
+
+  it('ignores invalid stored collapse data and stays usable when storage is unavailable', async () => {
+    window.localStorage.setItem('prime-work.sidebar-collapsed-projects', '{broken')
+    await renderSidebar({ activeProjectId: project.id })
+    expect(container.querySelector('[aria-label="Collapse Project"]')).not.toBeNull()
+    await act(async () => root.render(null))
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage unavailable') })
+    await renderSidebar()
+    await press(container.querySelector('[aria-label="Expand Project"]')!)
+    expect(container.querySelector('.session-list')).not.toBeNull()
+  })
+})
 
 describe('sidebar project context menu', () => {
   it('sorts projects from the section menu and toggles pinning from project options', async () => {
@@ -170,6 +303,7 @@ describe('sidebar project context menu', () => {
       )
     })
 
+    await press(container.querySelector('[aria-label="Expand Project"]')!)
     await rightClick(container.querySelector('.session-row')!)
     const copy = [...container.querySelectorAll('[aria-label="Session options"] button')].find((button) => button.textContent?.includes('Copy session UUID'))
     expect(copy).toBeDefined()
@@ -293,6 +427,7 @@ describe('sidebar archive confirmation', () => {
       )
     })
 
+    await press(container.querySelector('[aria-label="Expand Project"]')!)
     const archive = container.querySelector('[aria-label="Archive Session"]')
     expect(archive).not.toBeNull()
     expect(archive?.getAttribute('title')).toBe('Archive Session')
@@ -319,6 +454,7 @@ describe('sidebar session notifications', () => {
     const props = {
       projects: [project],
       sessions: [failedSession],
+      activeProjectId: project.id,
       activeView: 'session' as const,
       onSelectProject: noop,
       onSelectSession: noop,

@@ -744,6 +744,7 @@ export interface PrimeWorkApi {
     finishSetup(id: string, setup: string, exitCode: number, harness?: HarnessId): Promise<ProjectScripts | undefined>
   }
   sessions: {
+    create(projectPath: string, harness?: HarnessId): Promise<SessionRecord>
     list(projectPath?: string, includeArchived?: boolean, harness?: HarnessId, force?: boolean): Promise<SessionRecord[]>
     read(filePath: string): Promise<TranscriptMessage[]>
     followUp(filePath: string, message: string, intent?: PromptDeliveryIntent): Promise<boolean>

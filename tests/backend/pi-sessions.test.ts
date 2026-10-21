@@ -63,6 +63,21 @@ describe('pi session file names', () => {
 })
 
 describe('pi metadata reader', () => {
+  it('creates distinct durable empty sessions without a runtime and preserves identity on the first message', async () => {
+    const { project, service } = setup()
+    const created = await service.create(project)
+    const second = await service.create(project)
+    expect(second.id).not.toBe(created.id)
+    expect(created).toMatchObject({ projectPath: realpathSync(project), title: 'Untitled session', harness: 'pi', status: 'idle' })
+    expect(JSON.parse(readFileSync(created.filePath, 'utf8'))).toMatchObject({ type: 'session', version: 3, id: created.id, cwd: realpathSync(project) })
+    expect(await service.read(created.filePath)).toEqual([])
+    expect((await service.list(undefined, true, true)).map((item) => item.id)).toEqual(expect.arrayContaining([created.id, second.id]))
+    appendFileSync(created.filePath, `${piEntry('message', 'first', null, { message: { role: 'user', content: 'First optimistic prompt' } })}\n`)
+    const resumed = (await service.list(undefined, true, true)).find((item) => item.id === created.id)
+    expect(resumed).toMatchObject({ id: created.id, filePath: created.filePath, title: 'First optimistic prompt' })
+    expect(await service.read(created.filePath)).toHaveLength(1)
+  })
+
   it('parses the header, split model_change, thinking level, session_info, and user activity into a SessionRecord', async () => {
     const { root, project, service } = setup()
     mkdirSync(join(root, BUCKET))

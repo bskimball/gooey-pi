@@ -287,6 +287,7 @@ export const Composer = memo(function Composer({
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
 	const mountedRef = useRef(true);
+	const draftKeyRef = useRef(draftKey);
 	const restoredDraftRef = useRef(false);
 	const enabledSkills = useMemo(
 		() => skills.filter((skill) => skill.enabled),
@@ -314,6 +315,9 @@ export const Composer = memo(function Composer({
 	]);
 
 	useEffect(() => {
+		if (draftKeyRef.current && draftKeyRef.current !== draftKey)
+			clearComposerDraft(draftKeyRef.current);
+		draftKeyRef.current = draftKey;
 		if (draftKey)
 			saveComposerDraft(draftKey, { text: value, model, effort, fast });
 	}, [draftKey, effort, fast, model, value]);
@@ -512,12 +516,12 @@ export const Composer = memo(function Composer({
 		setMenu(null);
 		try {
 			await onSend(promptWithContext, submittedImages, intent);
-			if (draftKey && mountedRef.current) clearComposerDraft(draftKey);
+			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (currentAnnotations.length > 0) onClearAnnotations();
 		} catch {
-			if (!mountedRef.current && draftKey) {
-				restoreComposerDraft(draftKey, { text: submittedValue, model, effort, fast });
+			if (!mountedRef.current && draftKeyRef.current) {
+				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
 			}
 			if (mountedRef.current) {
 				setValue((current) => current || submittedValue);
