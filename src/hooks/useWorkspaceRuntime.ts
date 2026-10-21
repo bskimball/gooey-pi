@@ -98,6 +98,7 @@ export function useWorkspaceRuntime({
   const deferredReconciliationRef = useRef<TranscriptReconciliationMarker | null>(null)
   const pendingAgentEventsRef = useRef<PendingAgentEvent[]>([])
   const lastTranscriptReadWorkspaceRef = useRef<{ generation: number; sessionFile: string } | null>(null)
+  const lastObservedCatalogRef = useRef<{ generation: number; filePath: string; updatedAt: string; syncRevision?: number } | null>(null)
   const agentEventFrameRef = useRef<number | null>(null)
   const chunkedFlushTimerRef = useRef<number | null>(null)
   const reconcileOnVisibleRef = useRef(false)
@@ -539,10 +540,11 @@ export function useWorkspaceRuntime({
 
   const activeSession = sessions.find((session) => session.id === activeSessionId)
   const locallyOwnedActiveSession = Boolean(
-    activeSession?.filePath && runtime?.sessionFile === activeSession.filePath,
+    activeSession?.filePath && runtime?.sessionFile === activeSession.filePath
+    && (runtime.isStreaming || runtime.isCompacting || promptAdmissionRevisionRef.current > 0),
   )
-  const externalSessionUpdatedAt = locallyOwnedActiveSession ? undefined : activeSession?.updatedAt
-  const externalSessionSyncRevision = locallyOwnedActiveSession ? undefined : activeSession?.syncRevision
+  const externalSessionUpdatedAt = activeSession?.updatedAt
+  const externalSessionSyncRevision = activeSession?.syncRevision
 
   useEffect(() => {
     if (!bridge || !activeSession?.filePath) {
@@ -575,7 +577,14 @@ export function useWorkspaceRuntime({
     const workspaceChanged = previousReadWorkspace?.generation !== selected.generation
       || previousReadWorkspace.sessionFile !== activeSession.filePath
     lastTranscriptReadWorkspaceRef.current = { generation: selected.generation, sessionFile: activeSession.filePath }
-    if (!workspaceChanged && locallyOwnedActiveSession) return
+    const previousCatalog = lastObservedCatalogRef.current
+    const catalogChanged = previousCatalog?.generation !== selected.generation
+      || previousCatalog.filePath !== activeSession.filePath || previousCatalog.updatedAt !== activeSession.updatedAt
+      || previousCatalog.syncRevision !== activeSession.syncRevision
+    lastObservedCatalogRef.current = { generation: selected.generation, filePath: activeSession.filePath,
+      updatedAt: activeSession.updatedAt, syncRevision: activeSession.syncRevision }
+    // A warm attachment or busy/idle transition alone is not a disk change.
+    if (!workspaceChanged && (locallyOwnedActiveSession || !catalogChanged)) return
     const admittedLoad = transcriptLoadRef.current
     if (admittedLoad?.generation === workspaceGeneration && admittedLoad.sessionFile === activeSession.filePath) {
       if (!admittedLoad.reconciliation) startTranscriptRead(selected, false, undefined, admittedLoad)

@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { requestFailureMessage } from '@/app/workspace'
 import { clearComposerDraft } from '@/lib/composer-draft'
 import { errorMessage } from '@/lib/errors'
+import { startWorkspaceRuntime } from '@/lib/runtime-start'
 import { HARNESS_AGENT_NAMES, hasPiExtensionCommand, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
 import { parseMcpAuthenticationCommand } from '@/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/session-actions'
@@ -466,7 +467,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           try {
             if (!model) throw new Error(`No model is available for ${HARNESS_AGENT_NAMES[activeHarness]}. Enable or connect a provider, then try again.`)
             if (!compactCommand && !modeCommand) beginOptimisticPrompt()
-            activeRuntime = await bridge.agent.start({ cwd: selected.cwd, sessionPath: selected.sessionFile, model, thinking, fast, harness: activeHarness })
+            activeRuntime = await startWorkspaceRuntime(bridge, { cwd: selected.cwd, sessionPath: selected.sessionFile, model, thinking, fast, harness: activeHarness }, generation)
           } catch (startError) {
             // A mode command must reach the modes extension; as a follow-up it would be chat text.
             if (!modeCommand && images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
@@ -488,7 +489,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           throw new Error(`${HARNESS_AGENT_NAMES[activeHarness]} returned a runtime for a different workspace or session.`)
         }
         workspace.attachRuntime(activeRuntime, generation)
-        if (!startedRuntime && !activeRuntime.isStreaming && !modeCommand) {
+        if (!activeRuntime.isStreaming && !modeCommand) {
           await provider.flushPendingMutations?.(activeRuntime)
           if (!submissionIsCurrent() && !continueInBackground) return
         }

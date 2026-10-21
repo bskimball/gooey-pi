@@ -27,6 +27,11 @@ const attachDiagnostics = (target: Page) => {
 
 async function closeHermeticApp(target: ElectronApplication | undefined): Promise<void> {
   if (!target) return
+  // Fixture agents may deliberately stay busy; release their cwd before
+  // deleting the fixture on Windows, rather than leaving a quit dialog open.
+  await target.windows()[0]?.evaluate(async () => {
+    if (window.prime) await Promise.all((await window.prime.agent.list()).map((runtime) => window.prime.agent.stop(runtime.runtimeId)))
+  }).catch(() => undefined)
   const child = target.process()
   const closeEvent = target.waitForEvent('close', { timeout: 15_000 }).then(() => undefined, () => undefined)
   const gracefulClose = target.close().then(() => true, () => false)
@@ -172,8 +177,8 @@ function createHermeticFixture(): { userData: string; home: string; project: str
       birthtimeNs: info.birthtimeNs > 0n ? info.birthtimeNs.toString() : undefined,
     }
   }
-  writeFileSync(join(userData, LEGACY_DESKTOP_STATE_FILENAME), JSON.stringify({
-    version: 1,
+  writeFileSync(join(userData, process.platform === 'win32' ? CURRENT_DESKTOP_STATE_FILENAME : LEGACY_DESKTOP_STATE_FILENAME), JSON.stringify({
+    version: process.platform === 'win32' ? 4 : 1,
     projects: [{
       id: 'multi-folder-project', harness: 'pi', name: 'Multi-folder fixture', path: canonicalProject,
       folders: [canonicalProject, canonicalSecondary], primaryFolder: canonicalProject,
@@ -185,7 +190,7 @@ function createHermeticFixture(): { userData: string; home: string; project: str
     dismissedProjectPaths: [],
   }))
 
-  const piExecutable = join(fixtureRoot, 'pi-fixture.cjs')
+  let piExecutable = join(fixtureRoot, 'pi-fixture.cjs')
   writeFileSync(piExecutable, `#!/usr/bin/env node
 const fs = require('node:fs')
 const readline = require('node:readline')
@@ -325,6 +330,13 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `)
   chmodSync(piExecutable, 0o755)
+  if (process.platform === 'win32') {
+    const dist = join(fixtureRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist')
+    mkdirSync(dist, { recursive: true })
+    writeFileSync(join(dist, 'cli.js'), readFileSync(piExecutable))
+    piExecutable = join(fixtureRoot, 'pi.cmd')
+    writeFileSync(piExecutable, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
+  }
   const cuaExecutable = join(fixtureRoot, 'cua-driver-fixture.cjs')
   writeFileSync(cuaExecutable, `#!/usr/bin/env node
 if (process.argv.includes('--version')) { process.stdout.write('cua-driver 0.19.0\\n'); process.exit(0) }
@@ -344,8 +356,13 @@ function hermeticEnvironment(home: string, piExecutable: string, cuaExecutable: 
   }
   const env: NodeJS.ProcessEnv = {
     HOME: home,
+    USERPROFILE: home,
+    APPDATA: join(home, 'AppData', 'Roaming'),
+    LOCALAPPDATA: join(home, 'AppData', 'Local'),
     PATH: path,
     TMPDIR: fixtureRoot,
+    TEMP: fixtureRoot,
+    TMP: fixtureRoot,
     SHELL: '/bin/sh',
     LANG: 'C',
     LC_ALL: 'C',
@@ -354,7 +371,7 @@ function hermeticEnvironment(home: string, piExecutable: string, cuaExecutable: 
     PI_BINARY: piExecutable,
     CUA_DRIVER_PATH: cuaExecutable,
   }
-  for (const key of ['USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING', 'DISPLAY', 'XAUTHORITY']) if (process.env[key]) env[key] = process.env[key]
+  for (const key of ['USER', 'LOGNAME', '__CF_USER_TEXT_ENCODING', 'DISPLAY', 'XAUTHORITY', 'SystemRoot', 'ComSpec']) if (process.env[key]) env[key] = process.env[key]
   return env
 }
 
@@ -577,6 +594,11 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.sidebar__brand .pi-mark')).toBeVisible()
     await expect(page.locator('.sidebar__footer .sidebar-update')).toHaveCount(0)
     await expect(page.locator('.sidebar__footer button[title="Settings"]')).toBeVisible()
+    await page.locator('.session-row-wrap', { hasText: 'Hermetic desktop fixture' }).click()
+    await expect.poll(async () => (await page.evaluate(() => window.prime.agent.list()))
+      .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
+    expect(existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(false)
+    await page.screenshot({ path: test.info().outputPath('sidebar-ready.png') })
   })
 
   test('left aligns the Pi brand for Linux and Windows chrome', async () => {
@@ -1053,6 +1075,10 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('reflects an external JSONL append without reselecting the live session', async () => {
     await expect(page.locator('.transcript').getByText('Hermetic desktop fixture', { exact: true })).toBeVisible()
+    await expect.poll(async () => (await page.evaluate(() => window.prime.agent.list()))
+      .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
+    await expect(page.locator('.context-usage-dial')).toHaveText('12')
+    expect(existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(false)
     const selectedSession = page.locator('.session-row-wrap.is-selected')
     await expect(selectedSession).toHaveCount(1)
 

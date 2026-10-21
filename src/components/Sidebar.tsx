@@ -38,6 +38,7 @@ const PROJECT_SORT_LABEL_KEYS = { recent: 'projects.sort.recent', alphabetical: 
 export interface SidebarProps {
   projects: ProjectRecord[]
   sessions: SessionRecord[]
+  loading?: boolean
   activeProjectId?: string
   activeSessionId?: string
   activeView: WorkspaceView
@@ -185,7 +186,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, updateState = { phase: 'unsupported' }, onUpdateAction, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, updateState = { phase: 'unsupported' }, onUpdateAction, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -309,7 +310,8 @@ function SidebarView({ projects, sessions, activeProjectId, activeSessionId, act
 
       <div className="sidebar__scroll scroll-area">
         <div className="sidebar__section-heading"><span>{normalized ? 'Search results' : 'Projects'}</span><span className="sidebar__section-heading-actions">{!normalized ? <IconButton size="small" label="Collapse all projects" onClick={() => { setProjectMenu(null); setCollapsed(Object.fromEntries(projects.map((project) => [project.id, true]))) }}><CaretRight size={13} /></IconButton> : null}<IconButton size="small" className={`sidebar__sort-toggle ${projectSortMode !== 'recent' ? 'is-sorted' : ''}`} aria-haspopup="menu" aria-expanded={projectSortMenuOpen} label={t('projects.sort')} onClick={() => setProjectSortMenuOpen((open) => !open)}><FunnelSimple size={13} /></IconButton><IconButton size="small" label="Add project" onClick={onAddProject}><FolderPlus size={13} /></IconButton>{projectSortMenuOpen ? <div className="sidebar__sort-menu" role="menu" aria-label={t('projects.sort.menu')}><div className="sidebar-menu__label" aria-hidden="true">{t('projects.sort.menu')}</div>{PROJECT_SORT_MODES.map((mode) => <button key={mode} type="button" role="menuitemradio" aria-checked={projectSortMode === mode} className={projectSortMode === mode ? 'is-active' : ''} onClick={() => { setProjectSortMenuOpen(false); onSetProjectSortMode(mode) }}>{t(PROJECT_SORT_LABEL_KEYS[mode])}{projectSortMode === mode ? <Check size={12} aria-hidden="true" /> : null}</button>)}</div> : null}</span></div>
-        {visibleProjects.length === 0 ? <p className="sidebar__empty">{normalized ? 'No matching projects or sessions' : 'No projects yet'}</p> : null}
+        {loading ? <p className="sidebar__empty" role="status">Loading sessions…</p> : null}
+      {!loading && visibleProjects.length === 0 ? <p className="sidebar__empty">{normalized ? 'No matching projects or sessions' : 'No projects yet'}</p> : null}
         {projectSections.filter((section) => section.projects.length > 0).map((section) => (
           <section key={section.id} className="sidebar__project-section" aria-label={section.label}>
             <h2 className="sidebar__group-heading">{section.label}</h2>

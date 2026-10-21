@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { QueryClient } from '@tanstack/react-query'
+import { createCatalogQueryClient, projectCatalogKey, sessionCatalogKey } from './useSidebarCatalog'
 import { errorMessage } from '@/lib/errors'
 import { findRuntimeForWorkspace, selectStartupWorkspace } from '@/lib/workspace'
 import type { WorkspaceSnapshot } from '@/app/workspace'
@@ -14,6 +16,7 @@ import type {
 
 interface UseBootstrapOptions {
   bridge: PrimeWorkApi | null
+  queryClient?: QueryClient
   /** Wait until persisted settings select the authoritative startup harness. */
   ready?: boolean
   /** Harness whose projects, sessions, and runtimes populate the workspace. */
@@ -118,6 +121,7 @@ export function mergeSessionCatalog(
 
 export function useBootstrap({
   bridge,
+  queryClient: suppliedQueryClient,
   ready = true,
   harness = 'pi',
   setProjects,
@@ -132,6 +136,9 @@ export function useBootstrap({
   onHarnessSwitch,
   reportError,
 }: UseBootstrapOptions) {
+  const [localQueryClient] = useState(createCatalogQueryClient)
+  const queryClient = suppliedQueryClient ?? localQueryClient
+  const [catalogLoading, setCatalogLoading] = useState(Boolean(bridge))
   const [meta, setMeta] = useState<AppMeta | null>(null)
   const [initialized, setInitialized] = useState(!bridge)
   const previousHarnessRef = useRef(harness)
@@ -162,8 +169,27 @@ export function useBootstrap({
     }
     let cancelled = false
     const startupGeneration = workspaceRef.current.generation
-    const projectsRequest = bridge.projects.list(harness)
-    const sessionsRequest = bridge.sessions.list(undefined, true, harness)
+    const startedAt = performance.now()
+    setCatalogLoading(true)
+    const projectsRequest = queryClient.fetchQuery({
+      queryKey: projectCatalogKey(harness), staleTime: 0,
+      queryFn: () => bridge.projects.list(harness),
+    })
+    const sessionsRequest = queryClient.fetchQuery({
+      queryKey: sessionCatalogKey(harness), staleTime: 0,
+      queryFn: async () => {
+        const records = await bridge.sessions.list(undefined, true, harness)
+        return mergeSessionCatalog(queryClient.getQueryData<SessionRecord[]>(sessionCatalogKey(harness)) ?? [],
+          records.map((record) => record.status === 'waiting' ? { ...record, unread: true } : record),
+          workspaceRef.current.sessionFile, new Map(), 0, sessionHasOpenExtensionUi)
+      },
+    })
+    void projectsRequest.then((nextProjects) => {
+      if (cancelled) return
+      setProjects(nextProjects)
+      setInitialized(true)
+      performance.measure('apex:projects-ready', { start: startedAt })
+    }, () => { if (!cancelled) setInitialized(true) })
     const runtimesRequest = bridge.agent.list().then((value) => {
       if (!cancelled) {
         // Merge instead of replacing: entries learned from live events while the
@@ -199,12 +225,12 @@ export function useBootstrap({
       const [projectResult, sessionResult] = results
       if (projectResult.status === 'rejected') reportError(projectResult.reason)
       if (sessionResult.status === 'rejected') reportError(sessionResult.reason)
-      const nextProjects = projectResult.status === 'fulfilled' ? projectResult.value : []
-      const nextSessions = (sessionResult.status === 'fulfilled' ? sessionResult.value : []).map((session) => session.status === 'waiting'
-        ? { ...session, unread: true }
-        : session)
-      setProjects(nextProjects)
-      setSessions(nextSessions)
+      const nextProjects = queryClient.getQueryData<ProjectRecord[]>(projectCatalogKey(harness)) ?? []
+      const nextSessions = queryClient.getQueryData<SessionRecord[]>(sessionCatalogKey(harness)) ?? []
+      setSessions((current) => mergeSessionCatalog(current, nextSessions, workspaceRef.current.sessionFile,
+        new Map(), 0, sessionHasOpenExtensionUi))
+      setCatalogLoading(false)
+      performance.measure('apex:catalog-ready', { start: startedAt })
 
       let selectedGeneration: number | undefined
       if (projectResult.status === 'fulfilled' && workspaceRef.current.generation === startupGeneration) {
@@ -232,6 +258,8 @@ export function useBootstrap({
     onHarnessSwitch,
     reportError,
     ready,
+    queryClient,
+    sessionHasOpenExtensionUi,
     runtimeSessionsRef,
     setProjects,
     setScheduleError,
@@ -259,7 +287,17 @@ export function useBootstrap({
         const currentRequest = ++requestId
         const changedFiles = new Map(pendingChangedFiles)
         const catalogRevision = pendingCatalogRevision
-        void bridge.sessions.list(undefined, true, harness).then((nextSessions) => {
+        // A filesystem event during a fetch must cause a subsequent read,
+        // not merely join the older snapshot and consume the event.
+        const outstanding = queryClient.getQueryCache().find({ queryKey: sessionCatalogKey(harness) })?.promise
+        void Promise.resolve(outstanding).catch(() => undefined).then(() => queryClient.fetchQuery({
+          queryKey: sessionCatalogKey(harness), staleTime: 0,
+          queryFn: async () => {
+            const records = await bridge.sessions.list(undefined, true, harness)
+            return mergeSessionCatalog(queryClient.getQueryData<SessionRecord[]>(sessionCatalogKey(harness)) ?? [],
+              records, workspaceRef.current.sessionFile, changedFiles, catalogRevision, sessionHasOpenExtensionUi)
+          },
+        })).then((nextSessions) => {
           if (disposed || currentRequest !== requestId) return
           setSessions((current) => mergeSessionCatalog(
             current,
@@ -284,7 +322,7 @@ export function useBootstrap({
       unsubscribe()
       if (refreshTimer !== null) window.clearTimeout(refreshTimer)
     }
-  }, [bridge, harness, initialized, ready, reportError, sessionHasOpenExtensionUi, setSessions, workspaceRef])
+  }, [bridge, harness, initialized, queryClient, ready, reportError, sessionHasOpenExtensionUi, setSessions, workspaceRef])
 
-  return { meta, initialized, refreshHarnesses }
+  return { meta, initialized, catalogLoading, refreshHarnesses }
 }

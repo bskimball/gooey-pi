@@ -19,11 +19,17 @@ export interface ProviderCatalog {
   capabilities(provider: string | undefined, modelId: string | undefined): Promise<PrimeModelDescriptor | undefined>
 }
 
+const MAX_IDLE_RUNTIMES = 3
+const IDLE_RUNTIME_TTL_MS = 5 * 60_000
+
 export class AgentRpcManager {
   private readonly runtimes = new Map<string, RpcRuntime>()
   private readonly startingRuntimes = new Set<string>()
   private readonly retiringRuntimes = new Set<string>()
   private readonly runtimeEnvironmentRevisions = new Map<string, number>()
+  private readonly lastUsedAt = new Map<string, number>()
+  private readonly activeCommands = new Map<string, number>()
+  private readonly idleSweep: NodeJS.Timeout
   private runtimeEnvironmentRevision = 0
   private disabledModels: () => ReadonlySet<string> = () => new Set()
   private eventSink: (envelope: PrimeEventEnvelope) => void = () => undefined
@@ -45,7 +51,12 @@ export class AgentRpcManager {
     private readonly providers?: ProviderCatalog,
     private readonly disabledProviders: () => ReadonlySet<string> = () => new Set(),
     private readonly adapter: HarnessRpcAdapter = PI_RPC_ADAPTER,
-  ) {}
+  ) {
+    this.idleSweep = setInterval(() => {
+      if (!this.closed) void this.withRuntimeAdmission(() => this.pruneIdleRuntimes(MAX_IDLE_RUNTIMES)).catch(() => undefined)
+    }, 30_000)
+    this.idleSweep.unref()
+  }
 
   setEventSink(sink: (envelope: PrimeEventEnvelope) => void): void { this.eventSink = sink }
 
@@ -73,7 +84,7 @@ export class AgentRpcManager {
     this.runtimeEndListener = listener
   }
 
-  beginShutdown(): void { this.closed = true }
+  beginShutdown(): void { this.closed = true; clearInterval(this.idleSweep) }
 
   async start(raw: unknown): Promise<RuntimeInfo> {
     return this.startWithMode(raw, true)
@@ -146,12 +157,16 @@ export class AgentRpcManager {
           executable,
           args,
           cwd,
-          (event) => this.eventSink(event),
+          (event) => {
+            this.lastUsedAt.set(event.runtimeId, Date.now())
+            this.eventSink(event)
+          },
           (closed) => {
             this.startingRuntimes.delete(closed.runtimeId)
             this.runtimes.delete(closed.runtimeId)
             this.retiringRuntimes.delete(closed.runtimeId)
             this.runtimeEnvironmentRevisions.delete(closed.runtimeId)
+            this.lastUsedAt.delete(closed.runtimeId)
             notifyRuntimeEnd(closed.snapshot())
           },
           runtimeEnvironment,
@@ -187,6 +202,7 @@ export class AgentRpcManager {
       if (runtime.snapshot().fastModeSupported && options.fast === true) await runtime.setServiceTier('priority', true)
       try { this.runtimeStartListener(runtimeEnvironment, runtime.snapshot()) } catch { /* capability binding must never fail a start */ }
       this.startingRuntimes.delete(runtime.runtimeId)
+      this.lastUsedAt.set(runtime.runtimeId, Date.now())
       return runtime.snapshot()
     } catch (error) {
       if (runtime) {
@@ -196,6 +212,7 @@ export class AgentRpcManager {
         this.startingRuntimes.delete(runtime.runtimeId)
         this.runtimes.delete(runtime.runtimeId)
         this.runtimeEnvironmentRevisions.delete(runtime.runtimeId)
+        this.lastUsedAt.delete(runtime.runtimeId)
         await runtime.stop().catch(() => false)
       }
       // Admission/constructor failures have no close event; failed handshakes
@@ -215,6 +232,8 @@ export class AgentRpcManager {
   }
 
   async command(runtimeId: unknown, rawCommand: unknown): Promise<RpcObject> {
+    const id = requireId(runtimeId, 'runtimeId')
+    this.activeCommands.set(id, (this.activeCommands.get(id) ?? 0) + 1)
     try {
       return await this.dispatchCommand(runtimeId, rawCommand)
     } catch (error) {
@@ -224,6 +243,10 @@ export class AgentRpcManager {
       const type = isRecord(rawCommand) && typeof rawCommand.type === 'string' ? rawCommand.type : 'invalid'
       console.error(`[agent-rpc] ${new Date().toISOString()} command ${type} failed:`, error instanceof Error ? error.message : error)
       throw error
+    } finally {
+      const remaining = (this.activeCommands.get(id) ?? 1) - 1
+      if (remaining) this.activeCommands.set(id, remaining)
+      else this.activeCommands.delete(id)
     }
   }
 
@@ -233,6 +256,8 @@ export class AgentRpcManager {
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired for a branch checkout')
     const command = await validateRpcCommand(rawCommand, this.validateSessionPath)
     this.requireOpen()
+    if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired')
+    this.lastUsedAt.set(runtime.runtimeId, Date.now())
     const policyPrompt = command.type === 'prompt' || command.type === 'steer' || command.type === 'follow_up'
       ? command.message
       : undefined
@@ -306,7 +331,11 @@ export class AgentRpcManager {
     return runtime.stop()
   }
 
-  list(): RuntimeInfo[] { return [...this.runtimes.values()].map((runtime) => runtime.snapshot()) }
+  list(): RuntimeInfo[] {
+    return [...this.runtimes.values()]
+      .filter((runtime) => !this.startingRuntimes.has(runtime.runtimeId) && !this.retiringRuntimes.has(runtime.runtimeId))
+      .map((runtime) => runtime.snapshot())
+  }
 
   /** Cheap ownership probe for IPC routing; requireRuntime keeps the authoritative not-found error. */
   has(runtimeId: string): boolean { return this.runtimes.has(runtimeId) }
@@ -379,6 +408,7 @@ export class AgentRpcManager {
   }
 
   private isIdle(runtime: RpcRuntime): boolean {
+    if (this.activeCommands.has(runtime.runtimeId)) return false
     if (this.startingRuntimes.has(runtime.runtimeId)) return false
     if (this.retiringRuntimes.has(runtime.runtimeId)) return false
     const snapshot = runtime.snapshot()
@@ -394,20 +424,30 @@ export class AgentRpcManager {
   private async admitRuntime(createRuntime: () => RpcRuntime): Promise<RpcRuntime> {
     return this.withRuntimeAdmission(async () => {
       this.requireOpen()
-      // A new session replaces the oldest safely idle child instead of
-      // accumulating resident processes. Busy, queued, compacting, and
-      // still-starting runtimes remain alive, with no numeric concurrency cap.
-      const idle = [...this.runtimes.values()].find((runtime) => this.isIdle(runtime))
-      if (idle) {
-        const stopped = await idle.stop()
-        if (stopped && this.runtimes.get(idle.runtimeId) === idle) this.runtimes.delete(idle.runtimeId)
-      }
+      await this.pruneIdleRuntimes(MAX_IDLE_RUNTIMES - 1)
       this.requireOpen()
       const runtime = createRuntime()
       this.runtimes.set(runtime.runtimeId, runtime)
       this.startingRuntimes.add(runtime.runtimeId)
       return runtime
     })
+  }
+
+  private async pruneIdleRuntimes(limit: number): Promise<void> {
+    const now = Date.now()
+    const idle = [...this.runtimes.values()].filter((runtime) => this.isIdle(runtime))
+      .sort((left, right) => (this.lastUsedAt.get(left.runtimeId) ?? now) - (this.lastUsedAt.get(right.runtimeId) ?? now))
+    for (const [index, runtime] of idle.entries()) {
+      if (!this.isIdle(runtime)) continue
+      if (index >= idle.length - limit && now - (this.lastUsedAt.get(runtime.runtimeId) ?? now) < IDLE_RUNTIME_TTL_MS) continue
+      this.retiringRuntimes.add(runtime.runtimeId)
+      try {
+        const stopped = await runtime.stop()
+        if (stopped && this.runtimes.get(runtime.runtimeId) === runtime) this.runtimes.delete(runtime.runtimeId)
+      } finally {
+        this.retiringRuntimes.delete(runtime.runtimeId)
+      }
+    }
   }
 
   private async withRuntimeAdmission<T>(action: () => Promise<T>): Promise<T> {

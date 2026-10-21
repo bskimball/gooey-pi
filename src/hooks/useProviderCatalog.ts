@@ -15,7 +15,7 @@ function findSessionModel(catalog: PrimeModelCatalog, session: Pick<SessionRecor
     ?? catalog.models.find((candidate) => candidate.id === session.model && isUsable(candidate))
 }
 
-interface PendingSelection { model: string; effort: PrimeThinkingLevel }
+interface PendingSelection { model: string; effort: PrimeThinkingLevel; fast: boolean }
 
 export function groupModelsByProvider(models: readonly PrimeModelDescriptor[] | undefined): Map<string, PrimeModelDescriptor[]> {
   const grouped = new Map<string, PrimeModelDescriptor[]>()
@@ -201,8 +201,10 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const effortChanged = targetRuntime.thinkingLevel !== nextEffort
     if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
     if (effortRef.current !== nextEffort) updateEffort(nextEffort)
-    if (!pendingModel.fastModeSupported) updateFast(false)
-    if (!modelChanged && !effortChanged) return false
+    const nextFast = pendingModel.fastModeSupported && pending.fast
+    const fastChanged = (targetRuntime.serviceTier === 'priority') !== nextFast
+    updateFast(nextFast)
+    if (!modelChanged && !effortChanged && !fastChanged) return false
     const previousModel = runtimeModel?.key ?? modelRef.current
     const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as PrimeThinkingLevel)
       ? targetRuntime.thinkingLevel
@@ -216,6 +218,9 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
         }
         if (modelChanged || effortChanged) {
           await bridge.agent.command(targetRuntime.runtimeId, { type: 'set_thinking_level', level: nextEffort })
+        }
+        if (fastChanged || (modelChanged && nextFast)) {
+          await bridge.agent.command(targetRuntime.runtimeId, { type: 'set_service_tier', serviceTier: nextFast ? 'priority' : 'default' })
         }
         rememberSelectionRef.current(pendingModel.key)
       },
@@ -256,6 +261,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (pending && pendingModel) {
       if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
       if (pendingModel.availableThinkingLevels.includes(pending.effort) && effortRef.current !== pending.effort) updateEffort(pending.effort)
+      updateFast(pendingModel.fastModeSupported && pending.fast)
       return
     }
 
@@ -264,12 +270,12 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (activeSession?.thinkingLevel && sessionModel?.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)) {
       if (effortRef.current !== activeSession.thinkingLevel) updateEffort(activeSession.thinkingLevel as PrimeThinkingLevel)
     }
-  }, [activeSession, applyPendingSelectionToRuntime, catalog, runtime, sessionKey, updateEffort, updateModel])
+  }, [activeSession, applyPendingSelectionToRuntime, catalog, runtime, sessionKey, updateEffort, updateFast, updateModel])
 
   // Scoped to the runtime's reported tier so a catalog refresh cannot revert
   // an optimistic fast-mode toggle that the runtime has not confirmed yet.
   useEffect(() => {
-    if (!runtime) return
+    if (!runtime || pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
     updateFast(runtime.serviceTier === 'priority')
   }, [runtime?.runtimeId, runtime?.serviceTier, updateFast])
 
@@ -284,7 +290,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (!nextModel?.fastModeSupported) updateFast(false)
     if (!bridge || !runtime || !nextModel) {
       if (nextModel) {
-        pendingSelectionsRef.current.set(sessionKeyRef.current, { model: nextModelKey, effort: nextEffort })
+        pendingSelectionsRef.current.set(sessionKeyRef.current, { model: nextModelKey, effort: nextEffort, fast: fastRef.current })
         rememberSelection(nextModelKey)
       }
       return
@@ -304,7 +310,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const previous = effortRef.current
     updateEffort(nextEffort)
     if (!bridge || !runtime) {
-      pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: nextEffort })
+      pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: nextEffort, fast: fastRef.current })
       return
     }
     queueRuntimeMutation(
@@ -317,7 +323,10 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const changeFast = useCallback((enabled: boolean) => {
     const previous = fastRef.current
     updateFast(enabled)
-    if (!bridge || !runtime) return
+    if (!bridge || !runtime) {
+      pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: effortRef.current, fast: enabled })
+      return
+    }
     queueRuntimeMutation(
       runtime.runtimeId,
       async () => { await bridge.agent.command(runtime.runtimeId, { type: 'set_service_tier', serviceTier: enabled ? 'priority' : 'default' }) },

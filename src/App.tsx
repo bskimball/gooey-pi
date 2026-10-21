@@ -25,6 +25,8 @@ import { useAgentEvents } from '@/hooks/useAgentEvents'
 import { useAppSettings } from '@/hooks/useAppSettings'
 import { useAppUpdates } from '@/hooks/useAppUpdates'
 import { useBootstrap } from '@/hooks/useBootstrap'
+import { useSidebarCatalog } from '@/hooks/useSidebarCatalog'
+import { useRuntimePrewarm } from '@/hooks/useRuntimePrewarm'
 import { useBrowserAnnotations } from '@/hooks/useBrowserAnnotations'
 import { useExtensionUi } from '@/hooks/useExtensionUi'
 import { INSPECTOR_DEFAULT, INSPECTOR_MIN, TERMINAL_DEFAULT, TERMINAL_MIN, usePanelLayout } from '@/hooks/usePanelLayout'
@@ -87,8 +89,6 @@ export default function App() {
   const bridge = hasBridge() ? window.prime : null
   const initialProject = bridge ? undefined : SAMPLE_PROJECTS[0]
   const initialSession = bridge ? undefined : SAMPLE_SESSIONS[0]
-  const [projects, setProjects] = useState<ProjectRecord[]>(() => bridge ? [] : SAMPLE_PROJECTS)
-  const [sessions, setSessions] = useState<SessionRecord[]>(() => bridge ? [] : SAMPLE_SESSIONS)
   const [clearedAttention, setClearedAttention] = useState<Record<string, string>>(() => readClearedAttention())
   const [clearedActivity, setClearedActivity] = useState<Record<string, string>>(() => readClearedActivity())
   const [schedules, setSchedules] = useState<AutomationScheduleRecord[]>(() => bridge ? [] : SAMPLE_SCHEDULES)
@@ -123,6 +123,9 @@ export default function App() {
   const reportError = useCallback((error: unknown) => {
     setToast(errorMessage(error))
   }, [])
+  const settingsState = useAppSettings({ bridge, reportError })
+  const activeHarness = settingsState.settings.activeHarness
+  const { queryClient, projects, sessions, setProjects, setSessions } = useSidebarCatalog(activeHarness, bridge ? [] : SAMPLE_PROJECTS, bridge ? [] : SAMPLE_SESSIONS)
   // The shell handlers answer with false instead of rejecting, so the refusal
   // reaches the user as a toast rather than disappearing into a dropped result.
   const openExternal = useCallback((url: string) => {
@@ -165,9 +168,7 @@ export default function App() {
       return next
     })
     setSessions((items) => items.map((session) => ids.has(session.id) ? { ...session, unread: false } : session))
-  }, [])
-  const settingsState = useAppSettings({ bridge, reportError })
-  const activeHarness = settingsState.settings.activeHarness
+  }, [setSessions])
   const browserAnnotations = useBrowserAnnotations()
   const workspace = useWorkspaceRuntime({
     bridge, harness: activeHarness, initialProject, initialSession, sessions,
@@ -239,11 +240,17 @@ export default function App() {
   const onHarnessSwitch = useCallback(() => {
     setScheduleFocusId(null)
   }, [])
-  const { meta, initialized, refreshHarnesses } = useBootstrap({
-    bridge, ready: settingsState.initialized, harness: activeHarness, setProjects, setSessions, setSchedules, setScheduleError,
+  const { meta, initialized, catalogLoading, refreshHarnesses } = useBootstrap({
+    bridge, queryClient, ready: settingsState.initialized, harness: activeHarness, setProjects, setSessions, setSchedules, setScheduleError,
     runtimeSessionsRef: workspace.runtimeSessionsRef, workspaceRef: workspace.workspaceRef,
     activateWorkspace: workspace.activateWorkspace, attachRuntime: workspace.attachRuntime,
     sessionHasOpenExtensionUi: extension.hasOpenRequestForSession, onHarnessSwitch, reportError,
+  })
+  useRuntimePrewarm({
+    bridge, ready: initialized && !catalogLoading && view === 'session' && !submitting,
+    harness: activeHarness, generation: workspace.workspaceGeneration, workspaceRef: workspace.workspaceRef,
+    runtimeId: workspace.runtime?.runtimeId, sessionStatus: activeSession?.status, sessionFile: workspace.workspaceRef.current.sessionFile,
+    model: provider.model, thinking: provider.effort, fast: provider.fast, attachRuntime: workspace.attachRuntime,
   })
   const platform = meta?.platform ?? detectRendererPlatform()
   const detectedHarnesses = useMemo(
@@ -682,8 +689,8 @@ export default function App() {
       }} onOpenDocs={() => openExternal(HARNESS_PROVIDER_DOCS[activeHarness])} /> : null
 
   return <I18nProvider preference={settingsState.settings.locale}><div className="app-shell" aria-busy={!initialized} data-platform={platform} data-ready={initialized ? 'true' : 'false'}>
-    {sidebarVisible && initialized ? <Sidebar projects={projects} sessions={sessions} clearedAttention={clearedAttention} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} updateState={appUpdates.state} onUpdateAction={appUpdates.act} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} overlay={layout.compactLayout} platform={platform} /> : null}
-    {sidebarVisible && initialized ? <button type="button" className="panel-scrim panel-scrim--sidebar" aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
+    {sidebarVisible ? <Sidebar projects={projects} sessions={sessions} loading={catalogLoading} clearedAttention={clearedAttention} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} updateState={appUpdates.state} onUpdateAction={appUpdates.act} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} overlay={layout.compactLayout} platform={platform} /> : null}
+    {sidebarVisible ? <button type="button" className="panel-scrim panel-scrim--sidebar" aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
     <div className="workbench" inert={layout.compactLayout && sidebarVisible ? true : undefined}>
       <TitleToolbar project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} sidebarOpen={sidebarVisible} inspectorOpen={inspectorVisible} terminalOpen={terminalOpen} voiceOpen={voiceOrbOpen} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} onToggleSidebar={toggleSidebar} onToggleInspector={toggleInspector} onToggleTerminal={toggleTerminal} onToggleVoice={toggleVoice} onOpenBrowser={openBrowser} onOpenInVsCode={bridge ? (path) => void openInVsCode(bridge.app, path).then((failure) => { if (failure) setToast(failure) }) : undefined} platform={platform} />
       <div className="workbench__content">{view === 'session' ? <div ref={layout.workspaceRowRef} className="session-workspace" style={{ '--inspector-width': `${layout.inspectorWidth}px`, '--terminal-height': `${layout.terminalHeight}px` } as CSSProperties}>

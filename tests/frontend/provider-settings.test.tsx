@@ -145,6 +145,7 @@ describe('provider settings behavior and accessibility', () => {
 describe('provider runtime mutations', () => {
   function mountCatalogHook(options: {
     command: PrimeWorkApi['agent']['command']
+    runtime?: typeof runtime | null
     syncRuntime?: (runtimeId: string) => Promise<void>
     setEnabled?: PrimeWorkApi['providers']['setEnabled']
     setDisabled?: PrimeWorkApi['providers']['setDisabled']
@@ -164,7 +165,7 @@ describe('provider runtime mutations', () => {
     const syncRuntime = options.syncRuntime ?? vi.fn().mockResolvedValue(undefined)
     const reportError = options.reportError ?? vi.fn()
     function Harness() {
-      value = useProviderCatalog({ bridge, harness: options.harness ?? 'pi', runtime, syncRuntime, reportError })
+      value = useProviderCatalog({ bridge, harness: options.harness ?? 'pi', runtime: options.runtime === undefined ? runtime : options.runtime, syncRuntime, reportError })
       return null
     }
     return render(<Harness />).then(() => ({ get value() { return value! }, catalogMock, syncRuntime, setDisabled: bridge.providers.setDisabled, reportError }))
@@ -223,6 +224,16 @@ describe('provider runtime mutations', () => {
 
     await act(async () => { await hook.value.setAllEnabled() })
     expect(hook.setDisabled).toHaveBeenCalledWith([], 'pi')
+  })
+
+  it('applies fast mode chosen while a prewarmed runtime was still starting', async () => {
+    const command = vi.fn().mockResolvedValue({})
+    const hook = await mountCatalogHook({ command, runtime: null })
+    act(() => hook.value.changeFast(true))
+    expect(command).not.toHaveBeenCalled()
+    await act(async () => { await hook.value.flushPendingMutations(runtime) })
+    expect(command).toHaveBeenCalledWith(runtime.runtimeId, { type: 'set_service_tier', serviceTier: 'priority' })
+    expect(hook.value.fast).toBe(true)
   })
 
   it('keeps an optimistic fast-mode toggle across a catalog refresh', async () => {

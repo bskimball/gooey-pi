@@ -854,7 +854,7 @@ async function bootstrap(): Promise<void> {
 		stateStore,
 		null,
 		undefined,
-		piSessionServiceOptions(),
+		{ ...piSessionServiceOptions(), metadataCachePath: join(app.getPath("userData"), "pi-session-metadata-cache.json") },
 	);
 	const piProjects = new ProjectService(stateStore, () => mainWindow, "pi");
 	const repositoryUseGate = new RepositoryUseGate();

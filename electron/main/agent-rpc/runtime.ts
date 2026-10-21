@@ -203,11 +203,8 @@ export class RpcRuntime {
     }
     const response = await this.request({ type: 'get_state' }, 60_000)
     this.updateFromState(response.data)
-    const contextDeadline = new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 250)
-      timer.unref()
-    })
-    await Promise.race([this.refreshContextUsage(), contextDeadline])
+    // Context usage is display data, not a prerequisite for prompt admission.
+    void this.refreshContextUsage()
     return this.snapshot()
   }
 

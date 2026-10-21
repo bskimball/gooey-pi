@@ -195,8 +195,9 @@ describe('pi RPC handshake', () => {
     expect(runtime.fastModeAvailable).toBeUndefined()
     // Context usage flows through the shared get_session_stats path, not the
     // contextUsage field pi's get_state does not really carry.
-    expect(runtime.contextUsage).toEqual({ tokens: 12_000, contextWindow: 272_000, percent: 4 })
-    expect(runtime.sessionUsage).toEqual({ cost: 0.4321, tokens: { input: 10_000, output: 2_000, cacheRead: 500, cacheWrite: 100, total: 12_600 } })
+    await waitUntil(() => manager.list()[0]?.contextUsage !== undefined)
+    expect(manager.list()[0]?.contextUsage).toEqual({ tokens: 12_000, contextWindow: 272_000, percent: 4 })
+    expect(manager.list()[0]?.sessionUsage).toEqual({ cost: 0.4321, tokens: { input: 10_000, output: 2_000, cacheRead: 500, cacheWrite: 100, total: 12_600 } })
     // A negotiate_protocol frame would have been answered with a failure that
     // aborts the handshake; the fake also records every unknown command.
     expect(events.some((event) => event.type === 'fake_unknown_command')).toBe(false)

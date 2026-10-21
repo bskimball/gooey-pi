@@ -5,6 +5,7 @@ import { comparePaths, createSingleFlight, mapLimit } from '../lib/async'
 import type { ExecutableSource } from '../process-utils'
 import { isPathWithin } from '../validation'
 import type { SessionMetadata } from './metadata'
+import { PersistentMetadataCache } from './metadata-cache'
 
 interface SessionFileCandidate {
   name: string
@@ -93,6 +94,10 @@ function sameIdentity(left: SessionPathIdentity, right: SessionPathIdentity): bo
   return left.dev === right.dev && left.ino === right.ino
 }
 
+function metadataFingerprint(filePath: string, stat: Stats): string {
+  return `${filePath}\0${stat.dev}\0${stat.ino}\0${stat.ctimeMs}\0${stat.mtimeMs}\0${stat.size}`
+}
+
 function pathIdentity(stat: Stats): SessionPathIdentity {
   return { dev: stat.dev, ino: stat.ino }
 }
@@ -123,6 +128,8 @@ export function boundedSessionDiscoveryNames(names: readonly string[], maxSessio
 }
 
 export class SessionMetadataCatalog {
+  private readonly persistentCache: PersistentMetadataCache | undefined
+  private cacheLoaded: Promise<void> | undefined
   private catalogRevision = 0
   private readonly sessionScanRequests = createSingleFlight<string, SessionMetadata[]>()
   private readonly metadataCache = new Map<string, SessionMetadata>()
@@ -141,7 +148,10 @@ export class SessionMetadataCatalog {
     private readonly readMetadata: (filePath: string, knownStat?: Stats) => Promise<SessionMetadata>,
     private readonly io: SessionCatalogIo = nodeSessionCatalogIo,
     private readonly nameTimestamp: SessionNameTimestamp = timestampFromSessionName,
-  ) {}
+    metadataCachePath?: string,
+  ) {
+    this.persistentCache = metadataCachePath ? new PersistentMetadataCache(metadataCachePath, maxSessionFiles) : undefined
+  }
 
   /** Marks the catalog stale without discarding the last filesystem snapshot. */
   invalidateLiveCatalog(): void {
@@ -245,7 +255,7 @@ export class SessionMetadataCatalog {
         name,
         filePath: previous.filePath,
         fileStat,
-        fingerprint: `${previous.filePath}\0${fileStat.mtimeMs}\0${fileStat.size}`,
+        fingerprint: metadataFingerprint(previous.filePath, fileStat),
         symbolicLink: false,
         ancestorPaths: previous.ancestorPaths,
       }
@@ -311,10 +321,15 @@ export class SessionMetadataCatalog {
     // queued newer result, but only the newest revision is prepared for readers.
     this.snapshot = next
     if (this.catalogRevision === revision) this.preparedRevision = revision
+    await this.persistentCache?.save(this.metadataCache)
     return { kind: 'reconciled', paths: names.map((name) => candidatesByName.get(name)!.filePath) }
   }
 
   private async scan(revision: number): Promise<SessionMetadata[]> {
+    this.cacheLoaded ??= this.persistentCache?.load().then((entries) => {
+      for (const [fingerprint, metadata] of entries) this.metadataCache.set(fingerprint, metadata)
+    }) ?? Promise.resolve()
+    await this.cacheLoaded
     let entries: readonly SessionCatalogEntry[]
     let root: string
     let rootStat: Stats
@@ -381,7 +396,7 @@ export class SessionMetadataCatalog {
           name,
           filePath,
           fileStat,
-          fingerprint: `${filePath}\0${fileStat.mtimeMs}\0${fileStat.size}`,
+          fingerprint: metadataFingerprint(filePath, fileStat),
           symbolicLink,
           ancestorPaths,
         }
@@ -427,7 +442,10 @@ export class SessionMetadataCatalog {
       indexByPath: new Map(sessions.map((session, index) => [session.filePath, index])),
       sessions,
     }
-    if (this.catalogRevision === revision) this.snapshot = snapshot
+    if (this.catalogRevision === revision) {
+      this.snapshot = snapshot
+      await this.persistentCache?.save(this.metadataCache)
+    }
     return snapshot.sessions
   }
 
@@ -451,7 +469,7 @@ export class SessionMetadataCatalog {
       const read = await this.readMetadata(candidate.filePath, candidate.fileStat)
       const current = await this.io.inspect(candidate.filePath)
       if (this.catalogRevision === revision
-        && current.mtimeMs === candidate.fileStat.mtimeMs && current.size === candidate.fileStat.size) {
+        && sameLeafSnapshot(candidate.fileStat, current)) {
         this.metadataCache.set(candidate.fingerprint, read)
       }
       return read

@@ -49,6 +49,7 @@ export interface SessionServiceOptions {
   harness?: HarnessId
   /** Canonical-or-lexical session root; defaults to the Prime Agent session directory. */
   sessionRoot?: string
+  metadataCachePath?: string
   catalogIo?: SessionCatalogIo
   /** Pre-I/O discovery ordering for a harness's file-name scheme; defaults to Prime UUIDv7 names. */
   catalogNameTimestamp?: SessionNameTimestamp
@@ -133,6 +134,7 @@ export class SessionService {
       (filePath, knownStat) => this.readMetadata(filePath, knownStat),
       options.catalogIo,
       options.catalogNameTimestamp,
+      options.metadataCachePath,
     )
     this.renameFile = options.renameFile
   }

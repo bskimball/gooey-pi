@@ -364,8 +364,9 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     manager.setEventSink((event) => events.push(event))
 
     const runtime = await manager.start({ cwd })
-    expect(runtime.contextUsage).toEqual({ tokens: 25_000, contextWindow: 100_000, percent: 25 })
-    expect(runtime.sessionUsage).toEqual({ cost: 0.21, tokens: { input: 20_000, output: 5_000, cacheRead: 0, cacheWrite: 0, total: 25_000 } })
+    await waitUntil(() => manager.list()[0]?.contextUsage !== undefined)
+    expect(manager.list()[0]?.contextUsage).toEqual({ tokens: 25_000, contextWindow: 100_000, percent: 25 })
+    expect(manager.list()[0]?.sessionUsage).toEqual({ cost: 0.21, tokens: { input: 20_000, output: 5_000, cacheRead: 0, cacheWrite: 0, total: 25_000 } })
     await manager.command(runtime.runtimeId, { type: 'prompt', message: 'continue' })
     await waitUntil(() => events.some(({ event }) => event.type === 'context_usage'
       && typeof (event.contextUsage as { percent?: unknown } | undefined)?.percent === 'number'
@@ -379,9 +380,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   it('reports a null session cost when get_session_stats omits it', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
     const manager = managerFor(fake.executable)
-    const runtime = await manager.start({ cwd: fake.cwd })
-    expect(runtime.contextUsage).toEqual({ tokens: 25_000, contextWindow: 100_000, percent: 25 })
-    expect(runtime.sessionUsage).toBeUndefined()
+    await manager.start({ cwd: fake.cwd })
+    await waitUntil(() => manager.list()[0]?.contextUsage !== undefined)
+    expect(manager.list()[0]?.contextUsage).toEqual({ tokens: 25_000, contextWindow: 100_000, percent: 25 })
+    expect(manager.list()[0]?.sessionUsage).toBeUndefined()
   })
 
   it('projects context usage while a response streams and corrects it at message boundaries', async () => {
@@ -712,7 +714,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     }
   })
 
-  it('retires the previous idle runtime when a new session starts', async () => {
+  it('retains three idle runtimes and evicts the least recently used one', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
     const manager = managerFor(fake.executable)
     let claim = 0
@@ -723,10 +725,53 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 
     const second = await manager.start({ cwd: fake.cwd })
 
-    expect(manager.list()).toHaveLength(1)
-    expect(manager.list().some((runtime) => runtime.runtimeId === first.runtimeId)).toBe(false)
-    expect(manager.list().some((runtime) => runtime.runtimeId === second.runtimeId)).toBe(true)
-    expect(ended).toEqual([{ RUNTIME_CLAIM: '1' }])
+    expect(manager.list()).toHaveLength(2)
+    expect(ended).toEqual([])
+    await manager.start({ cwd: fake.cwd })
+    await manager.command(first.runtimeId, { type: 'get_state' })
+    await manager.start({ cwd: fake.cwd })
+    expect(manager.list()).toHaveLength(3)
+    expect(manager.list().some((runtime) => runtime.runtimeId === first.runtimeId)).toBe(true)
+    expect(manager.list().some((runtime) => runtime.runtimeId === second.runtimeId)).toBe(false)
+    expect(ended).toEqual([{ RUNTIME_CLAIM: '2' }])
+  })
+
+  it('expires idle runtimes without waiting for another start', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
+    const manager = managerFor(fake.executable)
+    try {
+      await manager.start({ cwd: fake.cwd })
+      await waitUntil(() => manager.list()[0]?.contextUsage !== undefined)
+      const now = Date.now()
+      vi.spyOn(Date, 'now').mockReturnValue(now + 6 * 60_000)
+      vi.advanceTimersByTime(30_000)
+      await waitUntil(() => manager.list().length === 0)
+    } finally {
+      await manager.stopAll()
+      vi.restoreAllMocks()
+      vi.useRealTimers()
+    }
+  })
+
+  it('admits prompts while the initial context-usage request is unanswered', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-ready-'))
+    dirs.push(cwd)
+    const executable = join(cwd, 'agent.cjs')
+    writeFileSync(executable, `#!/usr/bin/env node
+const input = require('node:readline').createInterface({ input: process.stdin })
+input.on('line', (line) => {
+  const command = JSON.parse(line)
+  if (command.type === 'get_session_stats') return
+  process.stdout.write(JSON.stringify({ id: command.id, type: 'response', command: command.type, success: true,
+    data: command.type === 'get_state' ? { isStreaming: false } : {} }) + '\\n')
+})
+`)
+    chmodSync(executable, 0o755)
+    const manager = managerFor(executable)
+    const runtime = await manager.start({ cwd })
+    expect(runtime.contextUsage).toBeUndefined()
+    await expect(manager.command(runtime.runtimeId, { type: 'prompt', message: 'ready' })).resolves.toMatchObject({ success: true })
   })
 
   it('distinguishes interactive and unattended runtime environments', async () => {

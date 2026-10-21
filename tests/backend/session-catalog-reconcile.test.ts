@@ -10,6 +10,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
   type Stats,
 } from 'node:fs'
@@ -140,6 +141,45 @@ afterEach(() => {
 })
 
 describe('SessionMetadataCatalog known-file reconciliation', () => {
+  it('reuses persisted metadata on restart but reparses replaced files and corrupt cache entries', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'session-metadata-cache-'))
+    realDirectories.push(directory)
+    const sessions = join(directory, 'sessions')
+    mkdirSync(sessions)
+    const filePath = join(sessions, 'session.jsonl')
+    const cachePath = join(directory, 'cache.json')
+    writeFileSync(filePath, 'one')
+    const reader = vi.fn(async (path: string) => metadataFor(path, readFileSync(path, 'utf8') === 'one' ? 0 : 1))
+    const restart = () => new SessionMetadataCatalog(() => sessions, null, 10, reader, undefined, undefined, cachePath)
+    const first = await restart().all()
+    expect(reader).toHaveBeenCalledTimes(1)
+    expect(await restart().all()).toEqual(first)
+    expect(reader).toHaveBeenCalledTimes(1)
+
+    // Replacement preserves size and mtime, but inode/ctime must invalidate the cache.
+    const before = statSync(filePath)
+    const replacement = join(sessions, 'replacement')
+    writeFileSync(replacement, 'two')
+    utimesSync(replacement, before.atime, before.mtime)
+    renameSync(replacement, filePath)
+    expect((await restart().all())[0]?.id).toBe('session-v1')
+    expect(reader).toHaveBeenCalledTimes(2)
+
+    const snapshot = JSON.parse(readFileSync(cachePath, 'utf8'))
+    snapshot.entries[0].metadata.depth = 'corrupt'
+    writeFileSync(cachePath, JSON.stringify(snapshot))
+    expect((await restart().all())[0]?.id).toBe('session-v1')
+    expect(reader).toHaveBeenCalledTimes(3)
+    writeFileSync(cachePath, '{broken')
+    await restart().all()
+    expect(reader).toHaveBeenCalledTimes(4)
+
+    // A valid cache never substitutes for filesystem discovery.
+    rmSync(filePath)
+    expect(await restart().all()).toEqual([])
+    expect(reader).toHaveBeenCalledTimes(4)
+  })
+
   it('updates one known file in a 5,000-file snapshot with no enumeration and constant candidate inspection', async () => {
     const { catalog, files, entries, canonicalize, inspect, inspectLink, readMetadata } = fixture(5_000)
     const changedName = sessionName(2_500)

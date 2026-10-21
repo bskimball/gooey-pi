@@ -7,6 +7,9 @@ import { AGENT_EVENT_FLUSH_CHUNK, AGENT_EVENT_QUEUE_LIMIT } from '../../src/app/
 import { useAgentEvents } from '../../src/hooks/useAgentEvents'
 import { useAppSettings } from '../../src/hooks/useAppSettings'
 import { useBootstrap } from '../../src/hooks/useBootstrap'
+import { useSidebarCatalog } from '../../src/hooks/useSidebarCatalog'
+import { useRuntimePrewarm } from '../../src/hooks/useRuntimePrewarm'
+import { startWorkspaceRuntime } from '../../src/lib/runtime-start'
 import { useExtensionUi } from '../../src/hooks/useExtensionUi'
 import { readSavedPiBehaviorMode } from '../../src/lib/harness'
 import { usePluginSkills } from '../../src/hooks/usePluginSkills'
@@ -538,9 +541,10 @@ describe('bootstrap critical path', () => {
       act(() => agentEvent({ runtimeId: runtime.runtimeId, event: { type: 'agent_end' } }))
       expect(renderedSessions[0]).toMatchObject({ status: 'complete', unread: false, eventRevision: 1, statusEventRevision: 1 })
 
-      act(() => {
+      await act(async () => {
         catalogChanged({ filePath: session.filePath, harness: 'pi' })
         vi.advanceTimersByTime(80)
+        await Promise.resolve()
       })
       expect(listSessions).toHaveBeenCalledTimes(2)
       await act(async () => {
@@ -553,6 +557,93 @@ describe('bootstrap critical path', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('publishes projects while sessions load and preserves a user selection', async () => {
+    const pendingSessions = deferred<SessionRecord[]>()
+    const bridge = {
+      projects: { list: async () => [project] },
+      sessions: { list: () => pendingSessions.promise, onChanged: () => () => undefined },
+      agent: { list: async () => [] },
+      app: { getMeta: async () => ({ version: '1' }) },
+      schedules: { list: async () => [] },
+    } as unknown as PrimeWorkApi
+    const workspaceRef = { current: { generation: 0 } }
+    const runtimeSessionsRef = { current: new Map<string, string>() }
+    const activateWorkspace = vi.fn(() => 1)
+    const noop = () => undefined
+    function BootstrapProbe() {
+      const catalog = useSidebarCatalog('pi', [], [])
+      const state = useBootstrap({ bridge, ...catalog, setSchedules: noop, setScheduleError: noop,
+        runtimeSessionsRef, workspaceRef, activateWorkspace, attachRuntime: noop, reportError: noop })
+      return <div>{catalog.projects.map((item) => item.name).join(',')}|{catalog.sessions.map((item) => item.title).join(',')}|{String(state.initialized)}|{String(state.catalogLoading)}</div>
+    }
+    await act(async () => { root.render(<BootstrapProbe />) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(container.textContent).toBe('Project||true|true')
+    expect(activateWorkspace).not.toHaveBeenCalled()
+    workspaceRef.current = { generation: 1 }
+    await act(async () => { pendingSessions.resolve([session]); await pendingSessions.promise })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(container.textContent).toBe('Project|Current|true|false')
+    expect(activateWorkspace).not.toHaveBeenCalled()
+  })
+
+  it.each(['generation', 'session'])('prewarming and Send share a start without attaching after %s ownership changes', async (change) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const starting = deferred<RuntimeInfo>()
+      const start = vi.fn(() => starting.promise)
+      const bridge = { agent: { list: async () => [], start } } as unknown as PrimeWorkApi
+      const initialFile = change === 'session' ? undefined : session.filePath
+      const workspaceRef = { current: { generation: 1, project, cwd: project.path, sessionFile: initialFile } }
+      const attachRuntime = vi.fn()
+      const options = { cwd: project.path, sessionPath: initialFile, model: 'fixture/model', thinking: 'medium', fast: false, harness: 'pi' } as const
+      function PrewarmProbe() {
+        useRuntimePrewarm({ bridge, ready: true, harness: 'pi', generation: 1, workspaceRef,
+          runtimeId: undefined, sessionStatus: 'idle', sessionFile: initialFile, model: options.model, thinking: options.thinking, fast: false, attachRuntime })
+        return null
+      }
+      await act(async () => { root.render(<PrewarmProbe />) })
+      await act(async () => { vi.advanceTimersByTime(300); await Promise.resolve() })
+      const send = startWorkspaceRuntime(bridge, options, 1)
+      expect(start).toHaveBeenCalledTimes(1)
+      workspaceRef.current = change === 'generation'
+        ? { ...workspaceRef.current, generation: 2 }
+        : { ...workspaceRef.current, sessionFile: session.filePath }
+      await act(async () => { starting.resolve(runtime); await send })
+      expect(await send).toEqual(runtime)
+      expect(attachRuntime).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps live query-cache updates when projects resolve after sessions', async () => {
+    const pendingProjects = deferred<ProjectRecord[]>()
+    const bridge = {
+      projects: { list: () => pendingProjects.promise },
+      sessions: { list: async () => [session], onChanged: () => () => undefined },
+      agent: { list: async () => [] }, app: { getMeta: async () => ({ version: '1' }) }, schedules: { list: async () => [] },
+    } as unknown as PrimeWorkApi
+    const workspaceRef = { current: { generation: 0 } }
+    const runtimeSessionsRef = { current: new Map<string, string>() }
+    const noop = () => undefined
+    const activateWorkspace = () => 1
+    let cache: ReturnType<typeof useSidebarCatalog> | undefined
+    function BootstrapProbe() {
+      cache = useSidebarCatalog('pi', [], [])
+      useBootstrap({ bridge, ...cache, setSchedules: noop, setScheduleError: noop,
+        workspaceRef, runtimeSessionsRef, activateWorkspace, attachRuntime: noop, reportError: noop })
+      return <div>{cache.sessions.map((item) => `${item.status}:${item.eventRevision}`).join(',')}</div>
+    }
+    await act(async () => { root.render(<BootstrapProbe />) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    await act(async () => {
+      cache!.setSessions((current) => current.map((item) => ({ ...item, status: 'complete', eventRevision: 1, statusEventRevision: 1 })))
+      pendingProjects.resolve([project])
+      await pendingProjects.promise
+    })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(container.textContent).toBe('complete:1')
   })
 
   it('selects projects and sessions before runtime discovery resolves', async () => {
