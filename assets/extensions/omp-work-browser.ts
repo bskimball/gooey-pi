@@ -265,10 +265,11 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
       y: Type.Optional(Type.Number()),
       button: Type.Optional(Type.Enum(['left', 'right', 'middle'])),
       double: Type.Optional(Type.Boolean()),
+      fast: Type.Optional(Type.Boolean({ description: 'Skip the visible pointer glide; use for scripted or repeated actions' })),
       tab_id: tabId,
     }),
-    async execute(_toolCallId, params: { ref?: number; x?: number; y?: number; button?: 'left' | 'right' | 'middle'; double?: boolean; tab_id?: string }) {
-      return text(fenced(await call('click', { ref: params.ref, x: params.x, y: params.y, button: params.button, double: params.double, tabId: params.tab_id })))
+    async execute(_toolCallId, params: { ref?: number; x?: number; y?: number; button?: 'left' | 'right' | 'middle'; double?: boolean; fast?: boolean; tab_id?: string }) {
+      return text(fenced(await call('click', { ref: params.ref, x: params.x, y: params.y, button: params.button, double: params.double, glide: params.fast === true ? false : undefined, tabId: params.tab_id })))
     },
   })
 
@@ -280,10 +281,11 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
       text: Type.String(),
       ref: Type.Optional(Type.Number({ description: 'Element ref to focus before typing' })),
       submit: Type.Optional(Type.Boolean({ description: 'Press Enter after typing' })),
+      fast: Type.Optional(Type.Boolean({ description: 'Skip the visible pointer glide; use for scripted or repeated actions' })),
       tab_id: tabId,
     }),
-    async execute(_toolCallId, params: { text: string; ref?: number; submit?: boolean; tab_id?: string }) {
-      return text(fenced(await call('type', { text: params.text, ref: params.ref, submit: params.submit, tabId: params.tab_id })))
+    async execute(_toolCallId, params: { text: string; ref?: number; submit?: boolean; fast?: boolean; tab_id?: string }) {
+      return text(fenced(await call('type', { text: params.text, ref: params.ref, submit: params.submit, glide: params.fast === true ? false : undefined, tabId: params.tab_id })))
     },
   })
 

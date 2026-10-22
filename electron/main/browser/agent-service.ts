@@ -819,6 +819,8 @@ export class AgentBrowserService {
 		params: Record<string, unknown>,
 	): Promise<Record<string, unknown>> {
 		return this.withTab(sessionKey, params, async (tab, guest) => {
+			if (params.glide !== undefined && typeof params.glide !== "boolean")
+				throw new TypeError("glide must be a boolean");
 			const point = await this.resolvePoint(guest, params, false);
 			const button =
 				params.button === undefined
@@ -828,11 +830,11 @@ export class AgentBrowserService {
 				throw new TypeError("button must be left, right, or middle");
 			const clickCount = params.double === true ? 2 : 1;
 			guest.focus();
-			await this.glidePointer(tab, guest, point, "click");
+			await this.glidePointer(tab, guest, point, "click", params.glide === false);
 			// Hovering along the glide can shift layout (menus, sticky headers);
 			// for ref clicks re-resolve the element position before pressing.
 			let target = point;
-			if (params.ref !== undefined) {
+			if (params.ref !== undefined && params.glide !== false) {
 				try {
 					target = await this.resolvePoint(guest, params, false);
 					tab.pointer = { ...target };
@@ -874,13 +876,15 @@ export class AgentBrowserService {
 		params: Record<string, unknown>,
 	): Promise<Record<string, unknown>> {
 		return this.withTab(sessionKey, params, async (tab, guest) => {
+			if (params.glide !== undefined && typeof params.glide !== "boolean")
+				throw new TypeError("glide must be a boolean");
 			const text = requireString(params.text, "text", {
 				min: 0,
 				max: MAX_TYPE_CHARS,
 			});
 			if (params.ref !== undefined) {
 				const point = await this.resolvePoint(guest, params, true);
-				await this.glidePointer(tab, guest, point, "move");
+				await this.glidePointer(tab, guest, point, "move", params.glide === false);
 			}
 			guest.focus();
 			try {
@@ -1452,11 +1456,12 @@ export class AgentBrowserService {
 		guest: WebContents,
 		to: { x: number; y: number },
 		action: AgentBrowserPointerEvent["action"],
+		instant = false,
 	): Promise<void> {
 		const from = tab.pointer;
 		const distance = from ? Math.hypot(to.x - from.x, to.y - from.y) : 0;
 		const durationMs =
-			from && distance > 2
+			!instant && from && distance > 2
 				? Math.min(
 						GLIDE_MAX_MS,
 						Math.max(GLIDE_MIN_MS, Math.round(distance * 0.9)),

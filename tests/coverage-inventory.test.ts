@@ -67,7 +67,7 @@ describe('safety-critical coverage inventory', () => {
       }
     }
 
-    expect(COVERAGE_FAMILIES.map(({ root }) => root)).toEqual(['electron/main', 'electron/preload', 'src/app', 'src/lib', 'src/hooks', 'scripts/release', 'assets/extensions'])
+    expect(COVERAGE_FAMILIES.map(({ root }) => root)).toEqual(['electron/main', 'electron/preload', 'src/app', 'src/lib', 'src/hooks', 'scripts/release', 'browser-agent', 'assets/extensions'])
     expect(COVERAGE_RUNTIME_EXTENSIONS).toEqual(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'])
     expect(COVERAGE_FAMILIES.every(({ runtimeExtensions }) => COVERAGE_RUNTIME_EXTENSIONS.every((extension) => runtimeExtensions.includes(extension)))).toBe(true)
     expect(config.test?.coverage?.include).toEqual(inventory.includePatterns)
@@ -100,12 +100,26 @@ describe('safety-critical coverage inventory', () => {
     const inventory = createCoverageInventory(PROJECT_ROOT)
     const shippedExtensions = inventory.includedFiles.filter((file) => file.startsWith('assets/extensions/'))
     expect(shippedExtensions).toEqual([
+      'assets/extensions/gooeypi-browser-agent.ts',
       'assets/extensions/omp-work-ask-user.ts',
       'assets/extensions/omp-work-browser.ts',
       'assets/extensions/omp-work-collaboration.ts',
       'assets/extensions/omp-work-schedules.ts',
       'assets/extensions/pi-work-fast-mode.ts',
     ])
+
+    expect(inventory.filesByFamily['browser-agent-runtime']).toEqual([
+      'browser-agent/agent.ts',
+      'browser-agent/classifier.ts',
+      'browser-agent/host-provider.ts',
+      'browser-agent/index.ts',
+      'browser-agent/runner.ts',
+      'browser-agent/schema.ts',
+      'browser-agent/targets.ts',
+      'browser-agent/types.ts',
+      'browser-agent/validation.ts',
+    ])
+    expect(inventory.includedFiles).toEqual(expect.arrayContaining([...inventory.filesByFamily['browser-agent-runtime']]))
 
     const projectRoot = mkdtempSync(join(tmpdir(), 'gooeypi-coverage-inventory-'))
     temporaryDirectories.push(projectRoot)

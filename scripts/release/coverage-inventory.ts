@@ -80,6 +80,13 @@ export const COVERAGE_FAMILIES: readonly CoverageFamily[] = Object.freeze([
     thresholds: { statements: 63, branches: 58, functions: 79, lines: 66 },
   },
   {
+    id: 'browser-agent-runtime',
+    root: 'browser-agent',
+    runtimeExtensions: COVERAGE_RUNTIME_EXTENSIONS,
+    responsibility: 'Delegated browser execution, host model transport, task recovery, page targeting, classification, and action validation.',
+    thresholds: { statements: 65, branches: 50, functions: 70, lines: 75 },
+  },
+  {
     id: 'shipped-extensions',
     root: 'assets/extensions',
     runtimeExtensions: COVERAGE_RUNTIME_EXTENSIONS,

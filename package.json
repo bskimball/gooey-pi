@@ -13,13 +13,13 @@
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"dev": "electron-vite dev",
-		"dev:inspect": "electron-vite dev --remoteDebuggingPort 9222",
+		"dev": "node scripts/build-browser-agent.mjs && electron-vite dev",
+		"dev:inspect": "node scripts/build-browser-agent.mjs && electron-vite dev --remoteDebuggingPort 9222",
 		"build": "npm run typecheck && npm run build:bundle",
-		"build:bundle": "electron-vite build",
+		"build:bundle": "electron-vite build && node scripts/build-browser-agent.mjs",
 		"preview": "electron-vite preview",
-		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json",
-		"lint": "biome lint --config-path=scripts/release/biome.json electron src tests scripts assets/extensions electron.vite.config.ts playwright.config.ts vitest.config.ts",
+		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json && tsc --noEmit -p tsconfig.browser-agent.json",
+		"lint": "biome lint --config-path=scripts/release/biome.json electron src tests scripts assets/extensions browser-agent electron.vite.config.ts playwright.config.ts vitest.config.ts",
 		"format:check": "biome format --config-path=scripts/release/biome.json scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",
 		"check": "npm run lint && npm run format:check",
 		"test": "vitest run",
@@ -55,6 +55,9 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.8",
+		"@earendil-works/chord": "1.4.0",
+		"@earendil-works/pi-ai": "1.4.0",
+		"@earendil-works/pi-durable": "1.4.0",
 		"@electron/asar": "^4.2.1",
 		"@electron/fuses": "^2.1.3",
 		"@phosphor-icons/react": "^2.1.10",
@@ -70,6 +73,7 @@
 		"electron": "^43.4.0",
 		"electron-builder": "^26.15.7",
 		"electron-vite": "^5.0.0",
+		"esbuild": "0.25.12",
 		"extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
 		"jsdom": "^30.0.1",
 		"react": "^19.2.8",
@@ -88,6 +92,7 @@
 		},
 		"files": [
 			"out/**/*",
+			"!out/browser-agent/**/*",
 			"package.json"
 		],
 		"mac": {
@@ -111,6 +116,7 @@
 			],
 			"files": [
 				"out/**/*",
+				"!out/browser-agent/**/*",
 				"package.json",
 				"!**/node_modules/extract-zip/index.linux-*.node",
 				"!**/node_modules/extract-zip/index.win32-*.node"
@@ -138,6 +144,7 @@
 			],
 			"files": [
 				"out/**/*",
+				"!out/browser-agent/**/*",
 				"package.json",
 				"!**/node_modules/extract-zip/index.darwin-*.node",
 				"!**/node_modules/extract-zip/index.win32-*.node"
@@ -162,6 +169,7 @@
 			],
 			"files": [
 				"out/**/*",
+				"!out/browser-agent/**/*",
 				"package.json",
 				"!**/node_modules/extract-zip/index.darwin-*.node",
 				"!**/node_modules/extract-zip/index.linux-*.node"
@@ -177,6 +185,10 @@
 		},
 		"afterPack": "scripts/release/after-pack.cjs",
 		"extraResources": [
+			{
+				"from": "out/browser-agent/runtime.mjs",
+				"to": "browser-agent/runtime.mjs"
+			},
 			{
 				"from": "resources/browser-extension",
 				"to": "browser-extension"

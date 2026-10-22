@@ -542,6 +542,67 @@ describe("AgentBrowserService", () => {
 		});
 	});
 
+	it("skips the glide and ref re-resolution for instant clicks", async () => {
+		const { service, pointerEvents, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA, "https://example.com/");
+		await service.click(sessionA, { x: 20, y: 30 });
+		guest.inputEvents.length = 0;
+		let refResolutions = 0;
+		guest.scriptResult = (code) => {
+			if (code.includes("__primeWorkAgentRefs")) {
+				refResolutions += 1;
+				return JSON.stringify({ x: 320, y: 230 });
+			}
+			return JSON.stringify({ readyState: "complete" });
+		};
+		await service.click(sessionA, { ref: 3, glide: false });
+		expect(refResolutions).toBe(1);
+		expect(guest.inputEvents.map((event) => event.type)).toEqual([
+			"mouseMoved",
+			"mousePressed",
+			"mouseReleased",
+		]);
+		expect(guest.inputEvents[0]).toMatchObject({ x: 320, y: 230 });
+		expect(pointerEvents.at(-1)).toMatchObject({
+			from: { x: 20, y: 30 },
+			to: { x: 320, y: 230 },
+			action: "click",
+			durationMs: 0,
+		});
+	});
+
+	it("skips the glide when focusing a ref for instant typing", async () => {
+		const { service, pointerEvents, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA, "https://example.com/");
+		await service.click(sessionA, { x: 20, y: 30 });
+		guest.inputEvents.length = 0;
+		guest.scriptResult = (code) => JSON.stringify(
+			code.includes("__primeWorkAgentRefs")
+				? { x: 320, y: 230 }
+				: { readyState: "complete" },
+		);
+		await service.type(sessionA, { ref: 3, text: "hi", glide: false });
+		expect(guest.inputEvents.filter((event) => event.type === "mouseMoved"))
+			.toEqual([expect.objectContaining({ x: 320, y: 230 })]);
+		expect(guest.insertedText).toEqual(["hi"]);
+		expect(pointerEvents.at(-1)).toMatchObject({
+			from: { x: 20, y: 30 },
+			to: { x: 320, y: 230 },
+			action: "move",
+			durationMs: 0,
+		});
+	});
+
+	it.each(["false", 0, null])("rejects non-boolean glide %j", async (glide) => {
+		const { service, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA, "https://example.com/");
+		await expect(service.click(sessionA, { x: 20, y: 30, glide }))
+			.rejects.toThrow(new TypeError("glide must be a boolean"));
+		await expect(service.type(sessionA, { text: "hi", glide }))
+			.rejects.toThrow(new TypeError("glide must be a boolean"));
+		expect(guest.inputEvents).toEqual([]);
+	});
+
 	it("types into the page and submits with Enter", async () => {
 		const { service, openAttached } = fixture();
 		const { guest } = await openAttached(

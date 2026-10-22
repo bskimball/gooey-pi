@@ -269,6 +269,10 @@ export function assertAsarLayout(entries) {
 }
 
 export function assertPackagedExtensions(resourcesDirectory) {
+  const runtimePath = join(resourcesDirectory, 'browser-agent', 'runtime.mjs')
+  if (!existsSync(runtimePath) || !lstatSync(runtimePath).isFile() || lstatSync(runtimePath).size === 0) {
+    throw new Error('Packaged application must contain a non-empty browser-agent/runtime.mjs file outside app.asar')
+  }
   const extensionsDirectory = join(resourcesDirectory, 'extensions')
   if (!existsSync(extensionsDirectory) || !lstatSync(extensionsDirectory).isDirectory()) {
     throw new Error(`Packaged application must contain a resources/extensions directory: ${extensionsDirectory}`)

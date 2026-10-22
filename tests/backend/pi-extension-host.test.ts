@@ -142,7 +142,8 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
     const { tools, pi } = piHost()
     await factory(pi as unknown as CollaborationExtensionApi)
     expect(tools.map((tool) => tool.name)).toEqual(['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_wait'])
-    expect(schemaOf(tools[1]).required).toEqual([])
+    // TypeBox omits required for all-optional fields; the plain fallback emits [].
+    expect(schemaOf(tools[1]).required ?? []).toEqual([])
     expect(schemaOf(tools[2]).required).toEqual(['prompt'])
     expect(schemaOf(tools[2]).properties).toHaveProperty('model')
     expect(schemaOf(tools[2]).properties).toHaveProperty('reasoning')

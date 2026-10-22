@@ -64,6 +64,7 @@ function piHost(): Fixture {
 const fixtureFactories = { pi: piHost }
 
 const expectedRegistrations: Record<string, Registration[]> = {
+  'gooeypi-browser-agent.ts': [{ kind: 'tool', name: 'gooeypi_browser_task' }, { kind: 'tool', name: 'gooeypi_browser_run' }],
   'omp-work-browser.ts': [
     ...['terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate'].map((name) => ({ kind: 'tool' as const, name })),
   ],
@@ -82,6 +83,7 @@ const expectedRegistrations: Record<string, Registration[]> = {
 
 const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly [string, string]>> = {
   browser: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
+  browserAgent: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
   schedule: ['PRIME_WORK_SCHEDULE_URL', 'PRIME_WORK_SCHEDULE_TOKEN'],
   collaboration: ['GOOEYPI_COLLABORATION_URL', 'GOOEYPI_COLLABORATION_TOKEN'],
 }

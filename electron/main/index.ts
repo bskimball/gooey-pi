@@ -712,10 +712,11 @@ export function startupFailureDialog(
 	return null;
 }
 
-/** Filesystem locations of the three shared capability extensions injected into extension-based harnesses. */
+/** Filesystem locations of shared capability extensions and their external runtimes. */
 export interface CapabilityExtensionPaths {
 	schedule: string;
 	browser: string;
+	browserAgent?: { extension: string; runtime: string; stateDir: string };
 	askUser: string;
 }
 
@@ -747,6 +748,9 @@ export function extensionRuntimeEnvironment(
 		PRIME_WORK_BROWSER_EXTENSION_PATH: browserEnabled
 			? extensionPaths.browser
 			: undefined,
+		GOOEYPI_BROWSER_AGENT_EXTENSION_PATH: browserEnabled ? extensionPaths.browserAgent?.extension : undefined,
+		GOOEYPI_BROWSER_AGENT_RUNTIME_PATH: browserEnabled ? extensionPaths.browserAgent?.runtime : undefined,
+		GOOEYPI_BROWSER_AGENT_STATE_DIR: browserEnabled ? extensionPaths.browserAgent?.stateDir : undefined,
 		PRIME_WORK_ASK_USER_EXTENSION_PATH: askUserEnabled
 			? extensionPaths.askUser
 			: undefined,
@@ -989,6 +993,7 @@ async function bootstrap(): Promise<void> {
 			extensionPathContext,
 		);
 	const piBrowserExtensionPath = extensionPathFor("pi", "browser");
+	const browserAgentExtensionPath = extensionPathFor("pi", "browserAgent");
 	const ompBrowserExtensionPath = extensionPathFor("pi", "browser");
 	const ompScheduleExtensionPath = extensionPathFor("pi", "schedule");
 	const ompAskUserExtensionPath = extensionPathFor("pi", "askUser");
@@ -1037,6 +1042,15 @@ async function bootstrap(): Promise<void> {
 					kind: "extension",
 					location: "system",
 					path: ompBrowserExtensionPath,
+					enabled: stateStore.getSettings().browserEnabled,
+				},
+				{
+					id: "gooeypi-browser-agent",
+					name: "Browser agent",
+					description: "Run ordered browser steps with expectations and page diffs.",
+					kind: "extension",
+					location: "system",
+					path: browserAgentExtensionPath,
 					enabled: stateStore.getSettings().browserEnabled,
 				},
 				{
@@ -1185,6 +1199,13 @@ async function bootstrap(): Promise<void> {
 	const capabilityExtensionPaths: CapabilityExtensionPaths = {
 		schedule: ompScheduleExtensionPath,
 		browser: ompBrowserExtensionPath,
+		browserAgent: {
+			extension: browserAgentExtensionPath,
+			runtime: app.isPackaged
+				? join(process.resourcesPath, "browser-agent", "runtime.mjs")
+				: join(app.getAppPath(), "out", "browser-agent", "runtime.mjs"),
+			stateDir: join(app.getPath("userData"), "browser-agent"),
+		},
 		askUser: ompAskUserExtensionPath,
 	};
 	// Pi runtimes receive the identical capability surface: pi's extension API

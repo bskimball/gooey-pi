@@ -1326,6 +1326,7 @@ describe('post-package verification helpers', () => {
     const optimizedAgentExclusions: string[] = []
     expect(packageJson.build.mac.files).toEqual([
       'out/**/*',
+      '!out/browser-agent/**/*',
       'package.json',
       ...optimizedAgentExclusions,
       '!**/node_modules/extract-zip/index.linux-*.node',
@@ -1333,6 +1334,7 @@ describe('post-package verification helpers', () => {
     ])
     expect(packageJson.build.linux.files).toEqual([
       'out/**/*',
+      '!out/browser-agent/**/*',
       'package.json',
       ...optimizedAgentExclusions,
       '!**/node_modules/extract-zip/index.darwin-*.node',
@@ -1340,6 +1342,7 @@ describe('post-package verification helpers', () => {
     ])
     expect(packageJson.build.win.files).toEqual([
       'out/**/*',
+      '!out/browser-agent/**/*',
       'package.json',
       ...optimizedAgentExclusions,
       '!**/node_modules/extract-zip/index.darwin-*.node',
@@ -1634,7 +1637,10 @@ describe('vendored supply-chain pins', () => {
       ([, entry]) => typeof entry.resolved === 'string' && entry.resolved.length > 0 && !entry.resolved.startsWith('https://registry.npmjs.org'),
     )
 
-    expect(Object.keys(lockfile.packages).filter((name) => /prime-agent|@earendil-works\/pi-(agent-core|ai|tui)/.test(name))).toEqual([])
+    expect(Object.keys(lockfile.packages).filter((name) => /prime-agent|@earendil-works\/pi-(agent-core|tui)/.test(name))).toEqual([])
+    for (const [name, entry] of Object.entries(lockfile.packages) as Array<[string, { dev?: boolean }]>) {
+      if (name.includes('@earendil-works/')) expect(entry.dev, `${name} must stay a build-only dependency`).toBe(true)
+    }
     expect(nonRegistry).toEqual([])
     for (const [name, entry] of nonRegistry) {
       const pin = pins[name]
@@ -1729,7 +1735,7 @@ describe('vendored supply-chain pins', () => {
     const packagedInputs = JSON.stringify({ files: build.files, extraResources: build.extraResources, mac: build.mac?.files, linux: build.linux?.files, win: build.win?.files })
     expect(packagedInputs).not.toContain('vendor/npm-')
     expect(packagedInputs).not.toContain('vendor/**')
-    expect(build.files).toEqual(['out/**/*', 'package.json'])
+    expect(build.files).toEqual(['out/**/*', '!out/browser-agent/**/*', 'package.json'])
   })
 })
 
@@ -1847,10 +1853,28 @@ describe('packaged extension resources', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-packaged-extensions-'))
     const resources = join(directory, 'resources')
     const extensions = join(resources, 'extensions')
+    mkdirSync(join(resources, 'browser-agent'), { recursive: true })
+    writeFileSync(join(resources, 'browser-agent', 'runtime.mjs'), 'export {}')
     mkdirSync(extensions, { recursive: true })
     for (const filename of SHIPPED_EXTENSION_FILENAMES) writeFileSync(join(extensions, filename), 'fixture')
     return { directory, resources, extensions }
   }
+
+  test('packages the browser runtime outside ASAR and rejects missing or empty runtime files', () => {
+    const build = JSON.parse(readFileSync('package.json', 'utf8')).build
+    expect(build.extraResources).toContainEqual({ from: 'out/browser-agent/runtime.mjs', to: 'browser-agent/runtime.mjs' })
+    for (const files of [build.files, build.mac.files, build.linux.files, build.win.files]) expect(files).toContain('!out/browser-agent/**/*')
+    const fixture = createFixture()
+    const runtime = join(fixture.resources, 'browser-agent', 'runtime.mjs')
+    try {
+      writeFileSync(runtime, '')
+      expect(() => assertPackagedExtensions(fixture.resources)).toThrow(/browser-agent\/runtime.mjs/)
+      rmSync(runtime)
+      expect(() => assertPackagedExtensions(fixture.resources)).toThrow(/browser-agent\/runtime.mjs/)
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true })
+    }
+  })
 
   test('accepts exactly the manifest extension files and rejects missing, extra, and non-file entries', () => {
     const exact = createFixture()
