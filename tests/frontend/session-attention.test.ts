@@ -254,6 +254,18 @@ describe('catalog merges over live session state', () => {
     expect(settled.status).toBe('running')
   })
 
+  it('keeps historical completions read but marks a new running-to-complete transition unread', () => {
+    const running: SessionRecord = { ...session(), status: 'running', unread: false }
+    const complete: SessionRecord = { ...running, status: 'complete', updatedAt: '2025-01-01T00:00:01.000Z' }
+
+    const [historical] = mergeSessionCatalog([], [complete], undefined, new Map(), 0)
+    const [transitioned] = mergeSessionCatalog([running], [complete], undefined, new Map(), 0)
+
+    expect(historical.unread).toBe(false)
+    expect(sessionAttentionSignature(historical)).toBeUndefined()
+    expect(transitioned.unread).toBe(true)
+  })
+
   it('does not mark a same-revision terminal transition unread', () => {
     const idle = session()
     const [sameRevision] = mergeSessionCatalog(
