@@ -338,10 +338,14 @@ export default function App() {
   // Every agent browser action in the active thread surfaces the Browser
   // panel: open the inspector, select the Browser tab, and show the tab being
   // driven (the user's Preview or an agent tab), whatever was showing before.
+  // Extension tabs live in the user's Chrome, so they never open the panel.
+  const agentTabsRef = useRef(agentBrowser.tabs)
+  agentTabsRef.current = agentBrowser.tabs
   useEffect(() => {
     const activity = agentBrowser.activityEvent
     if (!activity) return
     if (activity.sessionFile !== activeRuntimeSessionFile && activity.sessionFile !== activeSessionFilePath) return
+    if (agentTabsRef.current.find((tab) => tab.tabId === activity.tabId)?.backend === 'extension') return
     setAgentPreviewSelected(activity.tabId === 'preview')
     settingsState.setInspectorOpen(true)
     settingsState.selectInspectorTab('browser')
