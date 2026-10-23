@@ -1,19 +1,22 @@
-export type Target = { ref: number } | (({ role: string; name?: string } | { role?: string; name: string }) & { nth?: number; intent?: string })
+export type Point = { x: number; y: number }
+export type ElementTarget = { ref: number } | (({ role: string; name?: string } | { role?: string; name: string }) & { nth?: number; intent?: string })
+export type Target = Point | ElementTarget
 export interface Expectation {
   url_includes?: string
   title_includes?: string
   text_includes?: string
   text_absent?: string
-  element?: Target
+  element?: ElementTarget
   judge?: string
   timeout_ms?: number
 }
 type WithExpectation = { expect?: Expectation }
 export type Step = (
-  | { action: 'click'; target: Target }
-  | { action: 'type'; target: Target; text: string; submit?: boolean; clear?: boolean }
-  | { action: 'select'; target: Target; value: string }
-  | { action: 'press'; key: string; modifiers?: string[] }
+  | { action: 'click'; target: Target; double?: boolean; button?: 'left' | 'right' | 'middle' }
+  | { action: 'drag'; from: Target; to: Target; steps?: number }
+  | { action: 'type'; target: ElementTarget; text: string; submit?: boolean; clear?: boolean }
+  | { action: 'select'; target: ElementTarget; value: string }
+  | { action: 'press'; key: string; modifiers?: string[]; repeat?: number }
   | { action: 'navigate'; url: string }
   | { action: 'scroll'; direction: 'up' | 'down' | 'left' | 'right'; amount?: number; x?: number; y?: number }
   | { action: 'wait'; ms: number }

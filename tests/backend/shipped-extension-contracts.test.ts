@@ -64,7 +64,7 @@ function piHost(): Fixture {
 const fixtureFactories = { pi: piHost }
 
 const expectedRegistrations: Record<string, Registration[]> = {
-  'gooeypi-browser-agent.ts': [{ kind: 'tool', name: 'gooeypi_browser_task' }, { kind: 'tool', name: 'gooeypi_browser_run' }],
+  'apex-browser-agent.ts': [{ kind: 'tool', name: 'browser_task' }, { kind: 'tool', name: 'browser_run' }],
   'omp-work-browser.ts': [
     ...['terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate'].map((name) => ({ kind: 'tool' as const, name })),
   ],
@@ -88,7 +88,8 @@ const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly
   collaboration: ['GOOEYPI_COLLABORATION_URL', 'GOOEYPI_COLLABORATION_TOKEN'],
 }
 
-const LEGACY_UNPREFIXED_TOOLS = [
+const UNPREFIXED_TOOLS = [
+  'browser_run', 'browser_task',
   'ask_user', 'terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page',
   'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate',
   'scheduled_tasks_list', 'scheduled_task_create_once', 'scheduled_task_create_recurring',
@@ -147,11 +148,11 @@ describe('shipped extension contracts', () => {
   })
 
   it('keeps tool registrations namespaced', () => {
-    // The allow-list only shrinks as legacy tools are renamed. See #192.
+    // Browser tools use their public browser_* names; other tools retain their existing contracts.
     for (const registrations of Object.values(expectedRegistrations)) {
       for (const registration of registrations) {
         if (registration.kind !== 'tool') continue
-        expect(registration.name.startsWith('gooeypi_') || LEGACY_UNPREFIXED_TOOLS.includes(registration.name)).toBe(true)
+        expect(registration.name.startsWith('gooeypi_') || UNPREFIXED_TOOLS.includes(registration.name)).toBe(true)
       }
     }
   })

@@ -1,5 +1,5 @@
 /** Flat provider-facing schemas. validation.ts enforces the action-specific contract. */
-export const targetSchema = {
+export const elementTargetSchema = {
   type: 'object',
   properties: {
     ref: { type: 'integer', minimum: 0, maximum: 999 },
@@ -9,6 +9,14 @@ export const targetSchema = {
     intent: { type: 'string' },
   },
 }
+export const targetSchema = {
+  type: 'object',
+  properties: {
+    ...elementTargetSchema.properties,
+    x: { type: 'number', minimum: 0, maximum: 20000 },
+    y: { type: 'number', minimum: 0, maximum: 20000 },
+  },
+}
 export const expectSchema = {
   type: 'object',
   properties: {
@@ -16,7 +24,7 @@ export const expectSchema = {
     title_includes: { type: 'string' },
     text_includes: { type: 'string' },
     text_absent: { type: 'string' },
-    element: targetSchema,
+    element: elementTargetSchema,
     judge: { type: 'string' },
     timeout_ms: { type: 'integer', minimum: 0, maximum: 10000 },
   },
@@ -24,8 +32,14 @@ export const expectSchema = {
 export const stepSchema = {
   type: 'object',
   properties: {
-    action: { type: 'string', enum: ['click', 'type', 'select', 'press', 'navigate', 'scroll', 'wait', 'expect'] },
+    action: { type: 'string', enum: ['click', 'drag', 'type', 'select', 'press', 'navigate', 'scroll', 'wait', 'expect'] },
     target: targetSchema,
+    from: targetSchema,
+    to: targetSchema,
+    steps: { type: 'integer', minimum: 1, maximum: 50 },
+    double: { type: 'boolean' },
+    button: { type: 'string', enum: ['left', 'right', 'middle'] },
+    repeat: { type: 'integer', minimum: 1, maximum: 200 },
     text: { type: 'string' },
     submit: { type: 'boolean' },
     clear: { type: 'boolean' },

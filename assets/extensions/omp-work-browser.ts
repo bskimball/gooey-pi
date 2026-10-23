@@ -258,7 +258,7 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
   pi.registerTool({
     name: 'browser_click',
     label: 'Browser click',
-    description: 'Click in the OMP Work in-app browser tab, either on an element ref from browser_read_page or at x/y screenshot coordinates. Supports left/right/middle button and double-click. Prefer refs when possible; fall back to x/y from browser_screenshot for canvas-like UIs. The result includes "clicked": the element actually under the click point - always verify it is what you intended, and if not, take a fresh browser_read_page or browser_screenshot and correct your aim rather than repeating the same click.',
+    description: 'Click in the OMP Work in-app browser tab, either on an element ref from browser_read_page or at x/y screenshot coordinates. Supports left/right/middle button and double-click. Prefer refs when possible; fall back to x/y from browser_screenshot for canvas-like UIs. The result includes "clicked": the element actually under the click point - always verify it is what you intended, and if not, take a fresh browser_read_page or browser_screenshot and correct your aim rather than repeating the same click. For two or more actions use browser_run.',
     parameters: Type.Object({
       ref: Type.Optional(Type.Number({ description: 'Element ref from browser_read_page' })),
       x: Type.Optional(Type.Number()),
@@ -276,7 +276,7 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
   pi.registerTool({
     name: 'browser_type',
     label: 'Browser type',
-    description: 'Type text into the OMP Work in-app browser tab. Text is inserted into the focused field: pass ref (from browser_read_page) to focus an element first, or browser_click it beforehand; submit=true presses Enter afterwards. Never type credentials, payment details, or other secrets into pages unless the user explicitly provided them for that exact site in this conversation.',
+    description: 'Type text into the OMP Work in-app browser tab. Text is inserted into the focused field: pass ref (from browser_read_page) to focus an element first, or browser_click it beforehand; submit=true presses Enter afterwards. Never type credentials, payment details, or other secrets into pages unless the user explicitly provided them for that exact site in this conversation. For two or more actions use browser_run.',
     parameters: Type.Object({
       text: Type.String(),
       ref: Type.Optional(Type.Number({ description: 'Element ref to focus before typing' })),
@@ -292,7 +292,7 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
   pi.registerTool({
     name: 'browser_press_key',
     label: 'Browser press key',
-    description: 'Press a keyboard key in the OMP Work in-app browser tab (enter, tab, escape, backspace, delete, arrow keys, home, end, pageup, pagedown, space, or a single character), optionally with shift/control/alt/meta modifiers.',
+    description: 'Press a keyboard key in the OMP Work in-app browser tab (enter, tab, escape, backspace, delete, arrow keys, home, end, pageup, pagedown, space, or a single character), optionally with shift/control/alt/meta modifiers. For two or more actions use browser_run.',
     parameters: Type.Object({
       key: Type.String(),
       modifiers: Type.Optional(Type.Array(Type.Enum(['shift', 'control', 'alt', 'meta']))),
@@ -306,7 +306,7 @@ function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
   pi.registerTool({
     name: 'browser_scroll',
     label: 'Browser scroll',
-    description: 'Scroll the OMP Work in-app browser tab up/down/left/right by an amount in pixels (default 600). Pass x/y coordinates (matching browser_screenshot pixels) to scroll a nested scrollable region under that point.',
+    description: 'Scroll the OMP Work in-app browser tab up/down/left/right by an amount in pixels (default 600). Pass x/y coordinates (matching browser_screenshot pixels) to scroll a nested scrollable region under that point. For two or more actions use browser_run.',
     parameters: Type.Object({
       direction: Type.Enum(['up', 'down', 'left', 'right']),
       amount: Type.Optional(Type.Number({ description: 'Distance in pixels (1-20000)' })),

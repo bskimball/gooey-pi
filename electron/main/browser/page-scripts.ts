@@ -86,16 +86,17 @@ export function readPageScript(mode: 'interactive' | 'text', maxTextChars: numbe
  * Scrolls the referenced element into view and reports its viewport-relative
  * center so the caller can dispatch trusted input events at that point.
  */
-export function refPointScript(ref: number, focus: boolean): string {
+export function refPointScript(ref: number, focus: boolean, scroll = true): string {
   const index = boundedInt(ref, 0, 999, 'ref')
   return `(() => {
     const refs = window.__primeWorkAgentRefs
     if (!Array.isArray(refs) || window.__primeWorkAgentRefsUrl !== location.href) return JSON.stringify({ error: 'Element refs are stale. Call browser_read_page again to refresh them.' })
     const el = refs[${index}]
     if (!el || !el.isConnected) return JSON.stringify({ error: 'That element ref no longer exists on the page. Call browser_read_page again.' })
-    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
+    ${scroll ? "el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })" : ''}
     ${focus ? 'if (typeof el.focus === "function") el.focus()' : ''}
     const rect = el.getBoundingClientRect()
+    ${scroll ? '' : "if (rect.left + rect.width / 2 < 0 || rect.top + rect.height / 2 < 0 || rect.left + rect.width / 2 >= window.innerWidth || rect.top + rect.height / 2 >= window.innerHeight) return JSON.stringify({ error: 'Drag destination is outside the viewport. Scroll to show both endpoints or use coordinates.' })"}
     return JSON.stringify({ x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) })
   })()`
 }

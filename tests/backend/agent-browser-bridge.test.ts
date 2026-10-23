@@ -1,4 +1,5 @@
 import { request as httpRequest } from 'node:http'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentBrowserBridge } from '../../electron/main/browser/agent-bridge'
 import type { AgentBrowserService } from '../../electron/main/browser/agent-service'
@@ -27,6 +28,7 @@ function fakeService() {
     navigate: record('navigate'),
     screenshot: record('screenshot'),
     click: record('click'),
+    drag: record('drag'),
     type: record('type'),
     pressKey: record('press_key'),
     scroll: record('scroll'),
@@ -58,6 +60,12 @@ async function fixture(scope: { cwd: string; sessionPath?: string } = { cwd: '/p
 }
 
 describe('AgentBrowserBridge', () => {
+  it('dispatches drag through the authenticated session scope', async () => {
+    const { call, calls } = await fixture()
+    const params = { x: 1, y: 2, to_x: 3, to_y: 4, steps: 12 }
+    expect(await call('drag', params)).toMatchObject({ status: 200, body: { ok: true } })
+    expect(calls).toEqual([{ method: 'drag', sessionKey: resolve('/sessions/one.jsonl'), params }])
+  })
   it('rejects a revoked runtime token immediately without affecting active runtimes', async () => {
     const { bridge, call, environment } = await fixture()
     const active = bridge.environmentFor({ cwd: '/project', sessionPath: '/sessions/active.jsonl' })

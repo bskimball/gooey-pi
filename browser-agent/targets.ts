@@ -1,4 +1,4 @@
-import type { Classifier, Page, PageDiff, PageElement, Target } from './types'
+import type { Classifier, Page, PageDiff, PageElement, ElementTarget } from './types'
 
 export function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -47,7 +47,7 @@ export class TargetError extends Error {
   }
 }
 
-export function matches(target: Target, elements: PageElement[]): PageElement[] {
+export function matches(target: ElementTarget, elements: PageElement[]): PageElement[] {
   if ('ref' in target) return elements.filter((element) => element.ref === target.ref)
   const scored = elements
     .flatMap((element) => {
@@ -62,7 +62,7 @@ export function matches(target: Target, elements: PageElement[]): PageElement[] 
   return target.nth === undefined ? best : best.slice(target.nth, target.nth + 1)
 }
 
-export async function resolveTarget(target: Target, page: Page, intent: string, classifier?: Classifier): Promise<PageElement> {
+export async function resolveTarget(target: ElementTarget, page: Page, intent: string, classifier?: Classifier): Promise<PageElement> {
   const candidates = matches(target, page.elements)
   if (candidates.length === 1) return candidates[0]
   if (candidates.length > 1 && classifier) {

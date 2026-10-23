@@ -11,7 +11,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'apex-classifier-'))
   home.directory = root
   vi.stubEnv('PI_CODING_AGENT_DIR', root)
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_CLASSIFIER', undefined)
+  vi.stubEnv('APEX_BROWSER_AGENT_CLASSIFIER', undefined)
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -25,14 +25,14 @@ const candidates = [{ ref: 7, role: 'button', name: 'Save' }]
 describe('host classifier', () => {
   it('parses an env override at the first slash and bypasses config', async () => {
     writeFileSync(join(root, 'jev.json'), 'invalid')
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_CLASSIFIER', ' custom/family/model ')
+    vi.stubEnv('APEX_BROWSER_AGENT_CLASSIFIER', ' custom/family/model ')
     const host = registry({ type: 'choice', choice: 'ref_7', confidence: 0.8 })
     expect(await createClassifier(host)?.choose('save', candidates)).toEqual({ ref: 7, confidence: 0.8 })
     expect(host.getModelOfType).toHaveBeenCalledWith('classifier', 'custom', 'family/model')
     expect(host.classify).toHaveBeenCalledWith({ id: 'test-model' }, expect.objectContaining({ questions: { decision: expect.objectContaining({ type: 'choice', criteria: expect.objectContaining({ none: expect.any(String), ref_7: expect.any(String) }) }) } }), expect.objectContaining({ timeoutMs: 30000, maxRetries: 0 }))
   })
   it.each(['no-slash', '/model', 'provider/'])('rejects invalid override %s', (value) => {
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_CLASSIFIER', value)
+    vi.stubEnv('APEX_BROWSER_AGENT_CLASSIFIER', value)
     expect(() => createClassifier(registry())).toThrow('provider/model')
   })
   it.each(['$APEX_CLASSIFIER_TEST_KEY', '${APEX_CLASSIFIER_TEST_KEY}'])('resolves config key reference %s', async (apiKey) => {

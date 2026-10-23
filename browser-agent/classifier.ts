@@ -5,10 +5,10 @@ import { record } from './targets'
 import type { Classifier } from './types'
 
 function target(): { provider: string; model: string; apiKey?: string } {
-  const override = process.env.GOOEYPI_BROWSER_AGENT_CLASSIFIER?.trim()
+  const override = process.env.APEX_BROWSER_AGENT_CLASSIFIER?.trim()
   if (override) {
     const slash = override.indexOf('/')
-    if (slash <= 0 || slash === override.length - 1) throw new Error('GOOEYPI_BROWSER_AGENT_CLASSIFIER must be provider/model')
+    if (slash <= 0 || slash === override.length - 1) throw new Error('APEX_BROWSER_AGENT_CLASSIFIER must be provider/model')
     return { provider: override.slice(0, slash), model: override.slice(slash + 1) }
   }
   const root = process.env.PI_CODING_AGENT_DIR?.trim() || (process.env.XDG_CONFIG_HOME?.trim() ? join(process.env.XDG_CONFIG_HOME.trim(), 'pi') : join(homedir(), '.pi'))

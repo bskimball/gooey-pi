@@ -748,9 +748,9 @@ export function extensionRuntimeEnvironment(
 		PRIME_WORK_BROWSER_EXTENSION_PATH: browserEnabled
 			? extensionPaths.browser
 			: undefined,
-		GOOEYPI_BROWSER_AGENT_EXTENSION_PATH: browserEnabled ? extensionPaths.browserAgent?.extension : undefined,
-		GOOEYPI_BROWSER_AGENT_RUNTIME_PATH: browserEnabled ? extensionPaths.browserAgent?.runtime : undefined,
-		GOOEYPI_BROWSER_AGENT_STATE_DIR: browserEnabled ? extensionPaths.browserAgent?.stateDir : undefined,
+		APEX_BROWSER_AGENT_EXTENSION_PATH: browserEnabled ? extensionPaths.browserAgent?.extension : undefined,
+		APEX_BROWSER_AGENT_RUNTIME_PATH: browserEnabled ? extensionPaths.browserAgent?.runtime : undefined,
+		APEX_BROWSER_AGENT_STATE_DIR: browserEnabled ? extensionPaths.browserAgent?.stateDir : undefined,
 		PRIME_WORK_ASK_USER_EXTENSION_PATH: askUserEnabled
 			? extensionPaths.askUser
 			: undefined,
@@ -1045,7 +1045,7 @@ async function bootstrap(): Promise<void> {
 					enabled: stateStore.getSettings().browserEnabled,
 				},
 				{
-					id: "gooeypi-browser-agent",
+					id: "apex-browser-agent",
 					name: "Browser agent",
 					description: "Run ordered browser steps with expectations and page diffs.",
 					kind: "extension",

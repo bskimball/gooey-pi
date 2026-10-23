@@ -36,7 +36,7 @@ const options = () => ({ registry, broker, stateDir, sessionId: 'test' })
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), 'apex-browser-task-'))
   vi.stubEnv('PI_CODING_AGENT_DIR', stateDir)
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_CLASSIFIER', undefined)
+  vi.stubEnv('APEX_BROWSER_AGENT_CLASSIFIER', undefined)
   const seed = await Harness.open(await openNodeJsonlStorage(join(stateDir, 'test'), BACKGROUND_CONTEXT), { models: hostModels(registry, model), registry: createRegistry() }, BACKGROUND_CONTEXT)
   const conversation = await seed.createConversation({ ownership: { kind: 'ownerless' }, agent: { model: { provider: model.provider, modelId: model.id } } }, BACKGROUND_CONTEXT)
   unfinishedTask = await conversation.commit((tx) => tx.createTask(GenerationTask, {}, { ownership: { kind: 'conversation' } }), BACKGROUND_CONTEXT)

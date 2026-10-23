@@ -24,6 +24,7 @@ import {
 	CDP_BUTTON_MASKS,
 	type CdpKey,
 	delay,
+	dispatchDrag,
 	GLIDE_MAX_MS,
 	GLIDE_MIN_MS,
 	GLIDE_STEP_MS,
@@ -871,6 +872,23 @@ export class AgentBrowserService {
 		});
 	}
 
+	async drag(sessionKey: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+		return this.withTab(sessionKey, params, async (tab, guest) => {
+			const from = await this.resolvePoint(guest, params, false);
+			const to = await this.resolvePoint(guest, { ref: params.to_ref, x: params.to_x, y: params.to_y }, false, false);
+			const steps = params.steps ?? 12;
+			if (typeof steps !== "number" || !Number.isInteger(steps) || steps < 1 || steps > 50)
+				throw new TypeError("steps must be an integer from 1 to 50");
+			const button = params.button ?? "left";
+			if (typeof button !== "string" || !["left", "right", "middle"].includes(button))
+				throw new TypeError("button must be left, right, or middle");
+			guest.focus();
+			await dispatchDrag((event) => this.dispatchInput(guest, "Input.dispatchMouseEvent", event), from, to, steps, button);
+			tab.pointer = { ...to };
+			return this.describe(tab, guest);
+		});
+	}
+
 	async type(
 		sessionKey: string,
 		params: Record<string, unknown>,
@@ -942,10 +960,15 @@ export class AgentBrowserService {
 					modifiers.push(name);
 				}
 			}
+			const repeat = params.repeat ?? 1;
+			if (typeof repeat !== "number" || !Number.isInteger(repeat) || repeat < 1 || repeat > 200)
+				throw new TypeError("repeat must be an integer from 1 to 200");
 			guest.focus();
-			await this.sendKey(guest, key, modifiers);
-			await delay(SETTLE_MS);
-			await this.waitForLoad(guest, 2_000);
+			for (let n = 0; n < repeat; n += 1) await this.sendKey(guest, key, modifiers);
+			if (key.key === "Enter" || key.key === " " || modifiers.length > 0) {
+				await delay(SETTLE_MS);
+				await this.waitForLoad(guest, 2_000);
+			}
 			return this.describe(tab, guest);
 		});
 	}
@@ -1103,9 +1126,6 @@ export class AgentBrowserService {
 		}
 		if (tab.backend === "extension" && tab.paused)
 			throw new Error(PAUSED_MESSAGE);
-		// Every agent action announces itself so the UI can bring the Browser
-		// panel and the acting tab into view.
-		this.emitActivity(tab);
 		const generation = tab.generation;
 		// Serialize actions per tab so concurrent tool calls cannot interleave input events.
 		const run = tab.serial.tail.then(async () => {
@@ -1118,6 +1138,9 @@ export class AgentBrowserService {
 					() => this.push(),
 				);
 			this.assertActionAuthority(tab, sessionKey, generation);
+			// Routing may convert an extension tab to a webview. Announce its
+			// actual backend before waiting for the renderer to attach it.
+			this.emitActivity(tab);
 			const guest = await this.waitForGuest(tab);
 			this.assertActionAuthority(tab, sessionKey, generation);
 			if (
@@ -1309,8 +1332,9 @@ export class AgentBrowserService {
 	}
 
 	private async loadAndSettle(guest: WebContents, url: string): Promise<void> {
+		const loading = guest.loadURL(url);
 		const loaded = this.waitForLoad(guest);
-		await guest.loadURL(url).catch((error: unknown) => {
+		await loading.catch((error: unknown) => {
 			// ERR_ABORTED covers in-flight replacement navigations; anything else is real.
 			if (!String(error).includes("ERR_ABORTED"))
 				throw new Error(`Navigation failed: ${String(error).slice(0, 300)}`);
@@ -1322,6 +1346,7 @@ export class AgentBrowserService {
 		guest: WebContents,
 		timeoutMs = this.loadTimeoutMs,
 	): Promise<void> {
+		if (!guest.isLoading()) return Promise.resolve();
 		return new Promise((resolveLoad) => {
 			let settled = false;
 			const finish = () => {
@@ -1334,10 +1359,6 @@ export class AgentBrowserService {
 			const onStop = () => finish();
 			const timer = setTimeout(finish, timeoutMs);
 			timer.unref?.();
-			if (!guest.isLoading()) {
-				finish();
-				return;
-			}
 			guest.once("did-stop-loading", onStop);
 		});
 	}
@@ -1413,6 +1434,7 @@ export class AgentBrowserService {
 		guest: WebContents,
 		params: Record<string, unknown>,
 		focus: boolean,
+		scroll = true,
 	): Promise<{ x: number; y: number }> {
 		if (params.ref !== undefined) {
 			if (
@@ -1425,7 +1447,7 @@ export class AgentBrowserService {
 				);
 			const payload = await this.runPageScript(
 				guest,
-				refPointScript(params.ref as number, focus),
+				refPointScript(params.ref as number, focus, scroll),
 				"element ref",
 			);
 			if (typeof payload.error === "string")
@@ -1434,7 +1456,7 @@ export class AgentBrowserService {
 				throw new Error("The element position could not be determined");
 			return { x: payload.x as number, y: payload.y as number };
 		}
-		if (!Number.isSafeInteger(params.x) || !Number.isSafeInteger(params.y))
+		if (typeof params.x !== "number" || !Number.isFinite(params.x) || typeof params.y !== "number" || !Number.isFinite(params.y))
 			throw new TypeError(
 				"Provide either ref (from browser_read_page) or x and y coordinates",
 			);
@@ -1442,7 +1464,7 @@ export class AgentBrowserService {
 		const y = params.y as number;
 		if (x < 0 || y < 0 || x > 20_000 || y > 20_000)
 			throw new TypeError("x and y must be within the page viewport");
-		return { x, y };
+		return { x: Math.round(x), y: Math.round(y) };
 	}
 
 	/**

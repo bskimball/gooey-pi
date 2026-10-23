@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { EventEmitter } from "node:events";
+import { runInNewContext } from "node:vm";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import { AgentBrowserService } from "../../electron/main/browser/agent-service";
@@ -222,6 +223,69 @@ function fixture(options?: {
 }
 
 describe("AgentBrowserService", () => {
+	it("dispatches a held-button drag without settling", async () => {
+		const { service, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA);
+		const timers = vi.spyOn(globalThis, "setTimeout");
+		try {
+			await service.drag(sessionA, { x: 10.5, y: 20, to_x: 30.5, to_y: 40, steps: 2, button: "right" });
+			expect(guest.inputEvents.map(({ type, buttons }) => ({ type, buttons }))).toEqual([
+				{ type: "mouseMoved", buttons: undefined },
+				{ type: "mousePressed", buttons: 2 },
+				{ type: "mouseMoved", buttons: 2 },
+				{ type: "mouseMoved", buttons: 2 },
+				{ type: "mouseReleased", buttons: 0 },
+			]);
+			expect(guest.inputEvents[2]).toMatchObject({ x: 21, y: 30 });
+			expect(guest.inputEvents[4]).toMatchObject({ x: 31, y: 40 });
+			expect(timers.mock.calls.some(([, ms]) => ms === 150)).toBe(false);
+			await expect(service.screenshot(sessionA, {})).resolves.toMatchObject({ mimeType: "image/jpeg" });
+			await service.click(sessionA, { x: 12.5, y: 22.4, glide: false });
+			expect(guest.inputEvents.at(-1)).toMatchObject({ x: 13, y: 22 });
+			expect(guest.executedScripts.some((code) => code.includes("elementFromPoint(13, 22)"))).toBe(true);
+			await expect(service.screenshot(sessionA, {})).resolves.toMatchObject({ mimeType: "image/jpeg" });
+		} finally { timers.mockRestore(); guest.destroy(); }
+	});
+
+	it("measures a ref drag destination without scrolling the source out of position", async () => {
+		const { service, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA);
+		const original = guest.scriptResult;
+		let offset = 0;
+		let destinationLeft = 300;
+		const scrolls: number[] = [];
+		const refs = [0, 1].map((index) => ({
+			isConnected: true,
+			scrollIntoView: () => { scrolls.push(index); offset = index === 0 ? 100 : 200; },
+			getBoundingClientRect: () => ({ left: (index === 0 ? 120 : destinationLeft) - offset, top: 20, width: 10, height: 10 }),
+		}));
+		guest.scriptResult = (code) => code.includes("const refs = window.__primeWorkAgentRefs")
+			? runInNewContext(code, { window: { __primeWorkAgentRefs: refs, __primeWorkAgentRefsUrl: guest.url, innerWidth: 640, innerHeight: 480 }, location: { href: guest.url } })
+			: original(code);
+		try {
+			await service.drag(sessionA, { ref: 0, to_ref: 1, steps: 1 });
+			expect(scrolls).toEqual([0]);
+			expect(guest.inputEvents[1]).toMatchObject({ type: "mousePressed", x: 25, y: 25 });
+			expect(guest.inputEvents.at(-1)).toMatchObject({ type: "mouseReleased", x: 205, y: 25 });
+			destinationLeft = 900;
+			guest.inputEvents.length = 0;
+			await expect(service.drag(sessionA, { ref: 0, to_ref: 1 })).rejects.toThrow("Scroll to show both endpoints or use coordinates");
+			expect(guest.inputEvents).toEqual([]);
+		} finally { guest.destroy(); }
+	});
+
+	it("repeats arrow key CDP calls without settling and returns immediately for an idle load", async () => {
+		const { service, openAttached } = fixture();
+		const { guest } = await openAttached(sessionA);
+		const timers = vi.spyOn(globalThis, "setTimeout");
+		try {
+			await service.pressKey(sessionA, { key: "ArrowRight", repeat: 3 });
+			expect(guest.inputEvents.map(({ type }) => type)).toEqual(["rawKeyDown", "keyUp", "rawKeyDown", "keyUp", "rawKeyDown", "keyUp"]);
+			await service.navigate(sessionA, { url: "https://example.test" });
+			expect(timers.mock.calls.some(([, ms]) => ms === 150)).toBe(false);
+			await expect(service.pressKey(sessionA, { key: "ArrowRight", repeat: 201 })).rejects.toThrow("repeat");
+		} finally { timers.mockRestore(); guest.destroy(); }
+	});
 	it("preserves the physical tab queue when a running tab is paired to another session", async () => {
 		const bridge = new ExtensionBrowserBridge();
 		vi.spyOn(bridge, "isConnected").mockReturnValue(true);
@@ -1025,10 +1089,13 @@ describe("AgentBrowserService", () => {
 	});
 
 	it("announces every agent action so the UI can surface the Browser panel", async () => {
-		const { service, activityEvents, newGuest, openAttached } = fixture();
+		const bridge = new ExtensionBrowserBridge();
+		vi.spyOn(bridge, "isConnected").mockReturnValue(true);
+		vi.spyOn(bridge, "call").mockResolvedValue(42);
+		const { service, activityEvents, newGuest, openAttached } = fixture({ extensionBridge: bridge });
 		const { tabId } = await openAttached(
 			sessionA,
-			"https://example.com/",
+			"http://localhost:3000/",
 		);
 		expect(activityEvents).toEqual([
 			{ sessionFile: sessionA, tabId },
@@ -1038,6 +1105,19 @@ describe("AgentBrowserService", () => {
 			sessionFile: sessionA,
 			tabId,
 		});
+		// Conversion activity must expose the webview backend before attachment.
+		const chromeTab = await service.openTab(sessionA, { url: "https://remote.test/" });
+		const observed: Array<{ backend: string | undefined; attached: boolean }> = [];
+		service.onActivity((event) => {
+			if (event.tabId !== chromeTab.tabId) return;
+			const state = service.state().tabs.find((tab) => tab.tabId === event.tabId)!;
+			observed.push({ backend: state.backend, attached: state.attached });
+		});
+		const navigation = service.navigate(sessionA, { tabId: chromeTab.tabId, url: "http://localhost:3000/" });
+		await vi.waitFor(() => expect(observed).toEqual([{ backend: "webview", attached: false }]));
+		const converted = newGuest();
+		service.attachTab(String(chromeTab.tabId), converted.id);
+		await navigation;
 		// Actions on the adopted preview tab announce with the preview id.
 		const preview = newGuest();
 		service.setPreviewContext(preview.id, sessionB);

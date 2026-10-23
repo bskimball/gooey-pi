@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OmpExtensionApi } from '../../assets/extensions/gooeypi-browser-agent'
+import type { OmpExtensionApi } from '../../assets/extensions/apex-browser-agent'
 
 type Tool = Parameters<OmpExtensionApi['registerTool']>[0]
 let root: string
@@ -11,9 +11,9 @@ beforeEach(() => {
   vi.resetModules()
   vi.stubEnv('PRIME_WORK_BROWSER_URL', 'https://broker.test')
   vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'test-token')
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_RUNTIME_PATH', undefined)
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_STATE_DIR', root)
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_MODEL', undefined)
+  vi.stubEnv('APEX_BROWSER_AGENT_RUNTIME_PATH', undefined)
+  vi.stubEnv('APEX_BROWSER_AGENT_STATE_DIR', root)
+  vi.stubEnv('APEX_BROWSER_AGENT_MODEL', undefined)
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -22,10 +22,10 @@ afterEach(() => {
 })
 async function load() {
   const tools = new Map<string, Tool>()
-  const extension = await import('../../assets/extensions/gooeypi-browser-agent')
+  const extension = await import('../../assets/extensions/apex-browser-agent')
   await extension.default({ registerTool: (tool) => { tools.set(tool.name, tool) } })
   const get = (name: string) => {
-    const tool = tools.get(`gooeypi_browser_${name}`)
+    const tool = tools.get(`browser_${name}`)
     if (!tool) throw new Error(`Missing tool ${name}`)
     return tool
   }
@@ -41,7 +41,7 @@ export async function runBrowserTask(input, options) {
  return {input, stateDir: options.stateDir, sessionId: options.sessionId};
 }
 `)
-  vi.stubEnv('GOOEYPI_BROWSER_AGENT_RUNTIME_PATH', path)
+  vi.stubEnv('APEX_BROWSER_AGENT_RUNTIME_PATH', path)
 }
 const context = { model: { provider: 'ctx', id: 'model' }, modelRegistry: { find: (provider: string, id: string) => ({ provider, id }) }, sessionManager: { getSessionId: () => 'session' } }
 function text(result: Awaited<ReturnType<Tool['execute']>>) {
@@ -57,8 +57,8 @@ describe('browser agent extension', () => {
   })
   it('registers both namespaced tools and explains a missing runtime', async () => {
     const { tools, get } = await load()
-    expect([...tools.keys()]).toEqual(['gooeypi_browser_task', 'gooeypi_browser_run'])
-    await expect(get('run').execute('id', {})).rejects.toThrow('GOOEYPI_BROWSER_AGENT_RUNTIME_PATH is missing')
+    expect([...tools.keys()]).toEqual(['browser_task', 'browser_run'])
+    await expect(get('run').execute('id', {})).rejects.toThrow('APEX_BROWSER_AGENT_RUNTIME_PATH is missing')
   })
   it.each([
     [{ model: 'param/chosen' }, 'env/chosen', 'param'],
@@ -66,7 +66,7 @@ describe('browser agent extension', () => {
     [{}, undefined, 'ctx'],
   ])('chooses model with param > env > context precedence', async (params, env, provider) => {
     runtime()
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_MODEL', env)
+    vi.stubEnv('APEX_BROWSER_AGENT_MODEL', env)
     const { get } = await load()
     const onUpdate = vi.fn()
     const result = await get('task').execute('request', { goal: 'Save', timeout_s: 1.25, ...params }, undefined, onUpdate, context)
@@ -97,7 +97,7 @@ describe('browser agent extension', () => {
   it('rejects invalid runtime exports and retries after correcting the path', async () => {
     const invalid = join(root, 'invalid.mjs')
     writeFileSync(invalid, 'export const runSteps = 1')
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_RUNTIME_PATH', invalid)
+    vi.stubEnv('APEX_BROWSER_AGENT_RUNTIME_PATH', invalid)
     const { get } = await load()
     await expect(get('run').execute('id', {})).rejects.toThrow('exports are invalid')
     runtime()
@@ -107,9 +107,9 @@ describe('browser agent extension', () => {
   it('validates task prerequisites before loading runtime', async () => {
     const { get } = await load()
     const task = get('task')
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_STATE_DIR', undefined)
+    vi.stubEnv('APEX_BROWSER_AGENT_STATE_DIR', undefined)
     await expect(task.execute('id', {})).rejects.toThrow('STATE_DIR')
-    vi.stubEnv('GOOEYPI_BROWSER_AGENT_STATE_DIR', root)
+    vi.stubEnv('APEX_BROWSER_AGENT_STATE_DIR', root)
     await expect(task.execute('id', {})).rejects.toThrow('host model registry')
     for (const model of ['missing-slash', '/id', 'provider/']) await expect(task.execute('id', { model }, undefined, undefined, context)).rejects.toThrow('provider/id')
     await expect(task.execute('id', {}, undefined, undefined, { modelRegistry: context.modelRegistry })).rejects.toThrow('provider/id')

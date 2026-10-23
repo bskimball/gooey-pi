@@ -27,6 +27,7 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
   const started = Date.now()
   let page: Page = { url: '', title: '', elements: [] }
   let before = page
+  let stale = true
   const steps: StepResult[] = []
   const call = async (method: string, params: Record<string, unknown> = {}): Promise<unknown> => {
     signal?.throwIfAborted()
@@ -63,6 +64,7 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
       }
     }
     page = parsePage(raw)
+    stale = false
     return page
   }
   const check = async (expect: Expectation): Promise<void> => {
@@ -91,12 +93,21 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
     try {
       signal?.throwIfAborted()
       if (index === 0) before = await read()
-      const target = 'target' in step ? await resolveTarget(step.target, index === 0 ? page : await read(), intent || step.action, classifier) : undefined
+      const target = 'target' in step && !('x' in step.target) ? await resolveTarget(step.target, index === 0 ? page : await read(), intent || step.action, classifier) : undefined
+      stale = true
       if (target) result.target = { ref: target.ref, role: target.role, name: target.name }
       switch (step.action) {
         case 'click':
-          await call('click', { ref: target?.ref, glide: false })
+          await call('click', { ...('x' in step.target ? step.target : { ref: target?.ref }), double: step.double, button: step.button, glide: false })
           break
+        case 'drag': {
+          const current = (!('x' in step.from) || !('x' in step.to)) && index !== 0 ? await read() : page
+          const from = 'x' in step.from ? step.from : { ref: (await resolveTarget(step.from, current, intent || 'drag', classifier)).ref }
+          const to = 'x' in step.to ? { to_x: step.to.x, to_y: step.to.y } : { to_ref: (await resolveTarget(step.to, current, intent || 'drag', classifier)).ref }
+          stale = true
+          await call('drag', { ...from, ...to, steps: step.steps ?? 12 })
+          break
+        }
         case 'type':
           if (step.clear)
             await evaluate(
@@ -110,7 +121,7 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
           )
           break
         case 'press':
-          await call('press_key', { key: step.key, modifiers: step.modifiers })
+          await call('press_key', { key: step.key, modifiers: step.modifiers, repeat: step.repeat })
           break
         case 'navigate':
           await call('navigate', { url: step.url })
@@ -128,13 +139,21 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
           throw new Error(`Unknown step: ${exhaustive}`)
         }
       }
-      if (step.action !== 'expect') await read()
+      const coordinateOnly = (step.action === 'click' && 'x' in step.target) || (step.action === 'drag' && 'x' in step.from && 'x' in step.to) || step.action === 'press' || step.action === 'wait'
+      if (step.action !== 'expect' && !coordinateOnly && !step.expect) await read()
       if (step.expect) await check(step.expect)
       result.ok = true
     } catch (error) {
       result.error = signal?.aborted ? 'Browser batch aborted' : error instanceof Error ? error.message : String(error)
       if (error instanceof TargetError) result.candidates = error.candidates
       break
+    }
+  }
+  if (stale) {
+    try { await read() } catch (error) {
+      const last = steps[steps.length - 1]
+      last.ok = false
+      last.error ??= error instanceof Error ? error.message : String(error)
     }
   }
   return {

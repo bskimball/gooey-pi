@@ -37,6 +37,33 @@ function browser() {
 const classifier = (confidence: number, ref?: number): Classifier => ({ choose: async () => ({ confidence, ref }), holds: async () => confidence })
 
 describe('browser step execution', () => {
+  it('batches canvas clicks, drag and repeated keys without intermediate reads', async () => {
+    const call = vi.fn<Broker['call']>(async (method) => method === 'read_page' ? { url: 'https://canvas.test', title: 'Canvas', elements: [] } : { ok: true })
+    const result = await runSteps({ steps: [
+      { action: 'click', target: { x: 1.5, y: 2 }, double: true, button: 'right' },
+      { action: 'drag', from: { x: 1, y: 2 }, to: { x: 30, y: 40 } },
+      { action: 'press', key: 'ArrowRight', repeat: 20 },
+      { action: 'wait', ms: 0 },
+    ] }, { broker: { call } })
+    expect(result).toMatchObject({ ok: true, completed: 4, page: { title: 'Canvas' } })
+    expect(call.mock.calls.map(([method]) => method)).toEqual(['read_page', 'click', 'drag', 'press_key', 'read_page'])
+    expect(call.mock.calls[1][1]).toMatchObject({ x: 1.5, y: 2, double: true, button: 'right', glide: false })
+    expect(call.mock.calls[2][1]).toMatchObject({ x: 1, y: 2, to_x: 30, to_y: 40, steps: 12 })
+    expect(call.mock.calls[3][1]).toMatchObject({ repeat: 20 })
+  })
+  it.each([
+    { action: 'click', target: { x: -1, y: 1 } },
+    { action: 'click', target: { x: Infinity, y: 1 } },
+    { action: 'click', target: { x: 1, y: 20001 } },
+    { action: 'click', target: { x: 1 } },
+    { action: 'click', target: { ref: 1, x: 1, y: 2 } },
+    { action: 'press', key: 'ArrowRight', repeat: 0 },
+    { action: 'press', key: 'ArrowRight', repeat: 201 },
+    { action: 'press', key: 'ArrowRight', repeat: 1.5 },
+    { action: 'drag', from: { x: 1, y: 2 }, to: { x: 2, y: 3 }, steps: 51 },
+  ])('rejects invalid canvas input %j', (step) => {
+    expect(() => validateInput({ steps: [step] })).toThrow()
+  })
   it('uses exact names and fresh refs for select, clear, type and click, then verifies the saved page', async () => {
     const broker = browser()
     const result = await runSteps({ tab_id: 'tab', steps: [

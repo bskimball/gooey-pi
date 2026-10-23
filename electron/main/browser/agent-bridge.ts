@@ -57,6 +57,7 @@ export class AgentBrowserBridge extends CapabilityBridge {
     if (method === 'navigate') return service.navigate(sessionKey, params)
     if (method === 'screenshot') return service.screenshot(sessionKey, params)
     if (method === 'click') return service.click(sessionKey, params)
+  if (method === 'drag') return service.drag(sessionKey, params)
     if (method === 'type') return service.type(sessionKey, params)
     if (method === 'press_key') return service.pressKey(sessionKey, params)
     if (method === 'scroll') return service.scroll(sessionKey, params)

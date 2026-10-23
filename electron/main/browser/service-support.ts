@@ -113,6 +113,20 @@ export function delay(ms: number): Promise<void> {
 		timer.unref?.();
 	});
 }
+export async function dispatchDrag(
+	dispatch: (params: Record<string, unknown>) => Promise<unknown>,
+	from: { x: number; y: number },
+	to: { x: number; y: number },
+	steps: number,
+	button: string,
+): Promise<void> {
+	await dispatch({ type: "mouseMoved", ...from });
+	await dispatch({ type: "mousePressed", ...from, button, buttons: CDP_BUTTON_MASKS[button], clickCount: 1 });
+	for (let step = 1; step <= steps; step += 1) {
+		await dispatch({ type: "mouseMoved", x: Math.round(from.x + (to.x - from.x) * step / steps), y: Math.round(from.y + (to.y - from.y) * step / steps), button, buttons: CDP_BUTTON_MASKS[button] });
+	}
+	await dispatch({ type: "mouseReleased", ...to, button, buttons: 0, clickCount: 1 });
+}
 export function parseScriptJson(
 	payload: unknown,
 	label: string,
