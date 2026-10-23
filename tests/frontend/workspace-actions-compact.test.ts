@@ -2,6 +2,61 @@ import { describe, expect, it, vi } from 'vitest'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../src/types/api'
 
+import { runBashCommand, runExtensionCommandNow } from '../../src/lib/runtime-commands'
+import { parseRuntimeCommands } from '../../src/lib/composer-commands'
+
+describe('runtime command response contracts', () => {
+  it('validates runtime command listings at the bridge boundary', () => {
+    for (const value of [null, undefined, 1, {}, { data: null }, { data: { commands: {} } }]) expect(parseRuntimeCommands(value)).toEqual([])
+    expect(parseRuntimeCommands({ data: { commands: [null, 1, {}, { name: '' }, { name: 'two words', source: 'extension' }, { name: 'x', source: 1 }, { name: 'x', source: 'unknown' }, { name: 'deploy', source: 'extension', description: 'Deploy' }, { name: 'template', source: 'prompt', description: '' }, { name: 'skill:review', source: 'skill', description: 1 }] } })).toEqual([
+      { name: 'deploy', source: 'extension', description: 'Deploy' }, { name: 'template', source: 'prompt' }, { name: 'skill:review', source: 'skill' },
+    ])
+  })
+
+  it('dispatches only listed extension commands through immediate prompt RPC', async () => {
+    const command = vi.fn(async () => ({ data: { commands: [{ name: 'deploy', source: 'extension' }, { name: 'template', source: 'prompt' }] } }))
+    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    expect(await runExtensionCommandNow(bridge, 'r', 'plain text')).toBe(false)
+    expect(command).not.toHaveBeenCalled()
+    expect(await runExtensionCommandNow(bridge, 'r', '/template args')).toBe(false)
+    expect(await runExtensionCommandNow(bridge, 'r', '/deploy args')).toBe(true)
+    expect(command).toHaveBeenLastCalledWith('r', { type: 'prompt', message: '/deploy args', streamingBehavior: 'followUp' })
+  })
+
+  it.each([
+    { data: { output: 'hello', exitCode: 0 }, exclude: false, text: 'hello', error: false },
+    { data: { output: 'bad', exitCode: 1 }, exclude: false, text: 'bad', error: true },
+    { data: { output: 'partial', cancelled: true, truncated: true, fullOutputPath: '/tmp/full' }, exclude: true, text: 'partial\n\n[Output truncated. Full output: /tmp/full]\n\n[Cancelled] [Not sent to the model]', error: true },
+    { data: { truncated: true }, exclude: false, text: '', error: false },
+    { data: null, exclude: true, text: '[Not sent to the model]', error: false },
+  ])('renders bash results without losing response semantics: $text', async ({ data, exclude, text, error }) => {
+    let messages: TranscriptMessage[] = [{ id: 'other', role: 'user', parts: [] }]
+    const command = vi.fn(async () => ({ data }))
+    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    await runBashCommand({ bridge, runtimeId: 'r', bash: { command: 'echo hello', excludeFromContext: exclude }, isCurrent: () => true, setMessages: (update) => { messages = typeof update === 'function' ? update(messages) : update } })
+    expect(command).toHaveBeenCalledWith('r', { type: 'bash', command: 'echo hello', ...(exclude ? { excludeFromContext: true } : {}) })
+    expect(messages[0].id).toBe('other')
+    expect(messages[1]).toMatchObject({ streaming: false, parts: [{ type: 'toolCall', name: 'bash', args: { command: 'echo hello' } }, { type: 'toolResult', name: 'bash', text, isError: error }] })
+  })
+
+  it('removes only the failed bash row and leaves replacement sessions untouched', async () => {
+    let current = true
+    let messages: TranscriptMessage[] = [{ id: 'other', role: 'user', parts: [] }]
+    const setMessages: Parameters<typeof runBashCommand>[0]['setMessages'] = (update) => { messages = typeof update === 'function' ? update(messages) : update }
+    const command = vi.fn(async () => { throw new Error('failed') })
+    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    const args = { bridge, runtimeId: 'r', bash: { command: 'false', excludeFromContext: false }, isCurrent: () => current, setMessages }
+    await expect(runBashCommand(args)).rejects.toThrow('failed')
+    expect(messages.map((item) => item.id)).toEqual(['other'])
+    command.mockImplementationOnce(async () => { current = false; messages = [{ id: 'replacement', role: 'user', parts: [] }]; throw new Error('gone') })
+    await expect(runBashCommand(args)).rejects.toThrow('gone')
+    expect(messages.map((item) => item.id)).toEqual(['replacement'])
+    const idleBridge = { agent: { command: vi.fn(async () => ({ data: {} })) } } as unknown as PrimeWorkApi
+    await runBashCommand({ ...args, bridge: idleBridge })
+    expect(messages.map((item) => item.id)).toEqual(['replacement'])
+  })
+})
+
 const baseProject = {
   id: 'compact-project',
   harness: 'pi' as const,

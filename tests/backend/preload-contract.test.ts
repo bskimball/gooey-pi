@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronMocks = vi.hoisted(() => ({
   api: undefined as unknown,
+  webUtils: { getPathForFile: vi.fn(() => '/repo/file.ts') },
   contextBridge: {
     exposeInMainWorld: vi.fn((_name: string, api: unknown) => {
       electronMocks.api = api
@@ -16,6 +17,7 @@ const electronMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
+  webUtils: electronMocks.webUtils,
   contextBridge: electronMocks.contextBridge,
   ipcRenderer: electronMocks.ipcRenderer,
 }))
@@ -126,6 +128,15 @@ const SUBSCRIPTION_CASES: Array<[domain: string, method: string, channel: string
 ]
 
 describe('preload bridge contract', () => {
+  it('resolves native file paths and rejects non-File input', () => {
+    const api = electronMocks.api as BridgeApi
+    const file = new File(['content'], 'file.ts')
+    expect(api.app.pathForFile(file)).toBe('/repo/file.ts')
+    expect(electronMocks.webUtils.getPathForFile).toHaveBeenCalledWith(file)
+    expect(() => api.app.pathForFile({ name: 'fake.ts' })).toThrow('file must be a File')
+    expect(electronMocks.webUtils.getPathForFile).toHaveBeenCalledTimes(1)
+  })
+
   beforeEach(() => {
     electronMocks.ipcRenderer.invoke.mockReset()
     electronMocks.ipcRenderer.invoke.mockResolvedValue(undefined)
