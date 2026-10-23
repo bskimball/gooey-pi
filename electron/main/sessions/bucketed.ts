@@ -92,6 +92,7 @@ export interface BucketedMetadataAccumulator {
   model?: string
   provider?: string
   thinkingLevel?: string
+  behaviorMode?: string
   /** Harness-reported session title; falls back to the first user prompt. */
   displayName?: string
   firstUser: string
@@ -134,6 +135,7 @@ function bucketedMetadataFromAccumulator(state: BucketedMetadataAccumulator, fil
     model: state.model,
     provider: state.provider,
     thinkingLevel: state.thinkingLevel,
+    behaviorMode: state.behaviorMode,
     depth: 0,
     pinned: false,
     unread: false,

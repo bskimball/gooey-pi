@@ -260,7 +260,8 @@ export class RpcRuntime {
       }
       return { type: 'response', command: 'extension_ui_response', success: true }
     }
-    const timeout = command.type === 'compact' ? 10 * 60_000 : 60_000
+    // Compaction and user `!` commands legitimately outlast an ordinary RPC round trip.
+    const timeout = command.type === 'compact' || command.type === 'bash' ? 10 * 60_000 : 60_000
     const response = await this.request(command, timeout)
     if (command.type === 'get_state') this.updateFromState(response.data)
     if (response.success === true && ['set_model', 'cycle_model', 'set_thinking_level', 'cycle_thinking_level'].includes(String(command.type))) {

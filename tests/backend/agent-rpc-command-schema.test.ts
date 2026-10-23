@@ -26,6 +26,15 @@ describe('validateRpcCommand simple commands', () => {
     await expect(validate({ type: 'abort' })).resolves.toEqual({ type: 'abort' })
     await expect(validate({ type: 'get_commands' })).resolves.toEqual({ type: 'get_commands' })
     await expect(validate({ type: 'abort', force: true })).rejects.toThrow('command.force is not supported')
+    await expect(validate({ type: 'abort_bash' })).resolves.toEqual({ type: 'abort_bash' })
+  })
+
+  it('admits a user bash command with an optional context exclusion', async () => {
+    await expect(validate({ type: 'bash', command: 'git status' })).resolves.toEqual({ type: 'bash', command: 'git status' })
+    await expect(validate({ type: 'bash', command: 'ls', excludeFromContext: true })).resolves.toEqual({ type: 'bash', command: 'ls', excludeFromContext: true })
+    await expect(validate({ type: 'bash', command: '' })).rejects.toThrow()
+    await expect(validate({ type: 'bash', command: 'ls', excludeFromContext: 'yes' })).rejects.toThrow()
+    await expect(validate({ type: 'bash', command: 'ls', cwd: '/' })).rejects.toThrow('command.cwd is not supported')
   })
 
   it('resolves the parent session of a new_session command through the path validator', async () => {

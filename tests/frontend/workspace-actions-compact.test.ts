@@ -443,4 +443,21 @@ describe('Pi /mode dispatch', () => {
     expect(fixtureState.command).toHaveBeenCalledOnce()
     expect(fixtureState.command).toHaveBeenCalledWith('idle-runtime', expect.objectContaining({ type: 'prompt', message: 'hello' }))
   })
+
+  it('rejects a streaming slash command instead of queuing it in another session when navigation occurs during get_commands', async () => {
+    const state = fixture({ harness: 'pi', runtime: runtime('streaming-a', true), ownsStreaming: true })
+    let finishCommands!: (response: Record<string, unknown>) => void
+    const commands = new Promise<Record<string, unknown>>((resolve) => { finishCommands = resolve })
+    state.command.mockImplementation(async (_runtimeId, request) => request.type === 'get_commands' ? commands : {})
+
+    const sending = state.actions.sendPrompt('/ship release notes', [], 'queue')
+    expect(state.command).toHaveBeenCalledWith('streaming-a', { type: 'get_commands' })
+
+    state.workspace.workspaceRef.current.generation += 1
+    state.workspace.attachRuntime(runtime('idle-b', false))
+    finishCommands({ data: { commands: [{ name: 'ship', source: 'prompt' }] } })
+
+    await expect(sending).rejects.toThrow('Workspace changed before the command could be sent.')
+    expect(state.queuePrompt).not.toHaveBeenCalled()
+  })
 })

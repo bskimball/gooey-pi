@@ -96,6 +96,21 @@ const piMetadataParser = createBucketedMetadataParser((state, value) => {
   } else if (value.type === 'session_info' && typeof value.name === 'string') {
     // The latest session_info name wins; an empty name falls back to the prompt.
     state.displayName = value.name
+  } else if (value.type === 'custom' && value.customType === 'behavior-mode' && isRecord(value.data)) {
+    const mode = value.data.mode
+    if (mode === 'pi' || mode === 'apex' || mode === 'apex-orchestrate' || mode === 'fusion' || mode === 'work') {
+      state.behaviorMode = mode
+      const choice = mode === 'fusion'
+        ? isRecord(value.data.fusion) && isRecord(value.data.fusion.lead) ? value.data.fusion.lead : undefined
+        : isRecord(value.data.models) && isRecord(value.data.models[mode]) ? value.data.models[mode] : undefined
+      if (choice && typeof choice.provider === 'string' && typeof choice.modelId === 'string') {
+        state.provider = choice.provider
+        state.model = choice.modelId
+        if (typeof choice.thinking === 'string') state.thinkingLevel = choice.thinking
+      }
+    }
+  } else if (value.type === 'custom' && value.customType === 'orchestrate-mode' && isRecord(value.data)) {
+    state.behaviorMode = value.data.enabled === true ? 'apex-orchestrate' : 'apex'
   }
 })
 

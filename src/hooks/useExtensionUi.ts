@@ -7,6 +7,7 @@ import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
 interface UseExtensionUiOptions {
   bridge: PrimeWorkApi | null
   activeRuntimeId?: string
+  activeSessionMode?: string
   runtimeSessionsRef: React.RefObject<Map<string, string>>
   setSessions: React.Dispatch<React.SetStateAction<SessionRecord[]>>
   setRuntime: React.Dispatch<React.SetStateAction<RuntimeInfo | null>>
@@ -37,6 +38,7 @@ function requestIds(pending: PendingExtensionUi): string[] {
 export function useExtensionUi({
   bridge,
   activeRuntimeId,
+  activeSessionMode,
   runtimeSessionsRef,
   setSessions,
   setRuntime,
@@ -51,7 +53,11 @@ export function useExtensionUi({
   const timerByRuntimeRef = useRef<Map<string, number>>(new Map())
   const timedOutQuestionnairesRef = useRef<Set<string>>(new Set())
   const activeRuntimeIdRef = useRef(activeRuntimeId)
-  useLayoutEffect(() => { activeRuntimeIdRef.current = activeRuntimeId })
+  const activeSessionModeRef = useRef(activeSessionMode)
+  useLayoutEffect(() => {
+    activeRuntimeIdRef.current = activeRuntimeId
+    activeSessionModeRef.current = activeSessionMode
+  })
 
   const showPendingForActiveRuntime = useCallback(() => {
     const currentRuntimeId = activeRuntimeIdRef.current
@@ -59,7 +65,8 @@ export function useExtensionUi({
     extensionUiRef.current = visible
     setExtensionUi(visible)
     const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
-    publishActivePiBehaviorMode(runtimeMode ?? readDefaultPiBehaviorMode())
+    const sessionMode = piModeFromStatusText(activeSessionModeRef.current)
+    publishActivePiBehaviorMode(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode())
     publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
   }, [])
 
@@ -184,6 +191,12 @@ export function useExtensionUi({
       const mode = piModeFromStatusText(rawEvent.statusText)
       if (mode) {
         modeByRuntimeRef.current.set(runtimeId, mode)
+        const sessionFile = runtimeSessionsRef.current.get(runtimeId)
+        if (sessionFile) {
+          setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== mode
+            ? { ...session, behaviorMode: mode }
+            : session))
+        }
         if (mode !== 'fusion') setFusionPair(runtimeId, undefined)
         if (activeRuntimeIdRef.current === runtimeId) {
           savePiBehaviorMode(mode)
@@ -284,7 +297,7 @@ export function useExtensionUi({
     return false
   }, [runtimeSessionsRef])
 
-  useEffect(() => { showPendingForActiveRuntime() }, [activeRuntimeId, showPendingForActiveRuntime])
+  useEffect(() => { showPendingForActiveRuntime() }, [activeRuntimeId, activeSessionMode, showPendingForActiveRuntime])
 
   useEffect(() => () => {
     for (const timer of timerByRuntimeRef.current.values()) window.clearTimeout(timer)

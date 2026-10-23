@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
 	AgentBrowserActivityEvent,
 	AgentBrowserExtensionStatus,
@@ -72,6 +72,10 @@ const api: PrimeWorkApi = {
 		setTitleBarTheme: (theme) => invoke("app:set-title-bar-theme", theme),
 		onOpenSettings: (callback) =>
 			subscribeSignal("app:open-settings", callback),
+		pathForFile: (file) => {
+			if (!(file instanceof File)) throw new TypeError("file must be a File");
+			return webUtils.getPathForFile(file);
+		},
 	},
 	updates: {
 		getState: () => invoke("updates:get-state"),

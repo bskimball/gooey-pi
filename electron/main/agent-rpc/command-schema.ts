@@ -7,7 +7,7 @@ const SIMPLE_COMMANDS = new Set([
   'abort', 'new_session', 'get_state', 'cycle_model', 'get_available_models', 'cycle_thinking_level',
   'abort_retry', 'get_session_stats', 'clone', 'get_fork_messages', 'get_last_assistant_text',
   'get_messages', 'agent_messages_status', 'agent_messages_pause', 'agent_messages_resume',
-  'agent_messages_clear', 'get_commands',
+  'agent_messages_clear', 'get_commands', 'abort_bash',
 ])
 const THINKING_LEVELS: ReadonlySet<string> = new Set(PRIME_THINKING_LEVELS)
 
@@ -62,6 +62,12 @@ export async function validateRpcCommand(raw: unknown, validateSessionPath: (pat
       if (command.streamingBehavior !== 'steer' && command.streamingBehavior !== 'followUp') throw new TypeError('Invalid streamingBehavior')
       result.streamingBehavior = command.streamingBehavior
     } else if (command.streamingBehavior !== undefined) throw new TypeError('streamingBehavior is only valid for prompt')
+    return result
+  }
+  if (type === 'bash') {
+    rejectUnknownKeys(command, ['type', 'command', 'excludeFromContext'], 'command')
+    const result: RpcObject = { type, command: requireString(command.command, 'command.command', { min: 1, max: 64 * 1024 }) }
+    if (command.excludeFromContext !== undefined) result.excludeFromContext = requireBoolean(command.excludeFromContext, 'excludeFromContext')
     return result
   }
   if (type === 'set_model') {

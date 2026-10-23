@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from 'react'
+import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PiModeControl } from '../../src/components/PiModeControl'
@@ -291,12 +291,12 @@ describe('Pi Fusion pair reporting', () => {
     const onCommand = vi.fn<(_: string) => Promise<void>>(async () => undefined)
     const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
     let show!: (runtimeId: string, event: Record<string, unknown>) => void
-    function PairProbe({ activeRuntimeId }: { activeRuntimeId?: string }) {
-      const extension = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime: vi.fn(), reportError: vi.fn() })
+    function PairProbe({ activeRuntimeId, activeSessionMode }: { activeRuntimeId?: string; activeSessionMode?: string }) {
+      const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime: vi.fn(), reportError: vi.fn() })
       show = extension.showExtensionUi
       return <PiModeControl disabled={false} modelsByProvider={pairModels} providers={pairCatalog.providers} onCommand={onCommand} />
     }
-    const render = (activeRuntimeId?: string) => act(async () => { root.render(<PairProbe activeRuntimeId={activeRuntimeId} />) })
+    const render = (activeRuntimeId?: string, activeSessionMode?: string) => act(async () => { root.render(<PairProbe activeRuntimeId={activeRuntimeId} activeSessionMode={activeSessionMode} />) })
     const emit = (runtimeId: string, event: Record<string, unknown>) => act(() => { show(runtimeId, event) })
     const pairText = () => document.querySelector<HTMLButtonElement>('[aria-label^="Lead model:"]:not(:disabled)') ? document.querySelector('.pi-fusion-pair')?.textContent ?? null : null
     return { command, onCommand, render, emit, pairText }
@@ -338,6 +338,11 @@ describe('Pi Fusion pair reporting', () => {
     expect(pairText()).toBeNull()
     await render(undefined)
     expect(pairText()).toBeNull()
+
+    await render(undefined, 'work')
+    expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Work')
+    await render(undefined, 'apex-orchestrate')
+    expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Apex Orchestrate')
   })
 
   it('resets pending role edits on runtime switches without letting old completions unlock new edits', async () => {
@@ -886,6 +891,50 @@ describe('Pi provider catalog authority', () => {
     expect(order).toEqual(['set_model', 'set_thinking_level', 'syncRuntime', 'prompt'])
     expect(provider.model).toBe(primeCatalog.models[0].key)
     expect(provider.effort).toBe('high')
+  })
+
+  it('preserves each session model when a new session starts with a different model and the first session is reopened', async () => {
+    const argon = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.4-argon', id: 'gpt-5.4-argon', name: 'Argon' }
+    const opus = { ...primeCatalog.models[0], key: 'anthropic/claude-opus-4-6', provider: 'anthropic', id: 'claude-opus-4-6', name: 'Opus' }
+    const catalog: PrimeModelCatalog = {
+      ...primeCatalog,
+      providers: [
+        primeCatalog.providers[0],
+        { id: 'anthropic', name: 'Anthropic', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
+      ],
+      models: [argon, opus],
+    }
+    const bridge = {
+      providers: { catalog: vi.fn(async () => catalog) },
+      agent: { command: vi.fn(async () => ({ type: 'response', success: true })) },
+    } as unknown as PrimeWorkApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useProviderCatalog>
+    function CatalogProbe({ sessionId, runtime }: { sessionId: string; runtime: RuntimeInfo | null }) {
+      const [sessionsState, setSessions] = useState<SessionRecord[]>(() => [
+        { ...primeSession, id: 'session-1' },
+        { ...primeSession, id: 'session-2' },
+      ])
+      const activeSession = sessionsState.find((item) => item.id === sessionId)
+      state = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession, setSessions, syncRuntime, reportError })
+      return <Probe />
+    }
+
+    // Session 1 starts with Argon before any message is sent (empty JSONL on disk).
+    await act(async () => { root.render(<CatalogProbe sessionId="session-1" runtime={null} />); await Promise.resolve() })
+    act(() => state.changeModel(argon.key))
+    expect(state.model).toBe(argon.key)
+
+    // Session 2 is created, warm runtime attaches with Argon, and user switches Session 2 to Opus.
+    const runtime2: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-2', model: { provider: 'openai-codex', id: 'gpt-5.4-argon' }, thinkingLevel: 'medium' }
+    await act(async () => { root.render(<CatalogProbe sessionId="session-2" runtime={runtime2} />); await Promise.resolve() })
+    await act(async () => { state.changeModel(opus.key); await Promise.resolve() })
+    expect(state.model).toBe(opus.key)
+
+    // Returning to Session 1 restores Argon even when Session 1 has no live runtime.
+    await act(async () => { root.render(<CatalogProbe sessionId="session-1" runtime={null} />); await Promise.resolve() })
+    expect(state.model).toBe(argon.key)
   })
 })
 

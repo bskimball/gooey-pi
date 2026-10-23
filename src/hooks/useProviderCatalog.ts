@@ -37,6 +37,8 @@ interface UseProviderCatalogOptions {
   runtime: RuntimeInfo | null
   /** Active session metadata if available. */
   activeSession?: SessionRecord
+  /** Updates session records when the active session's model or thinking level changes. */
+  setSessions?: React.Dispatch<React.SetStateAction<SessionRecord[]>>
   /** Persisted per-harness model preference. */
   lastSelectedModel?: string
   rememberModel?(modelKey: string): void
@@ -44,7 +46,7 @@ interface UseProviderCatalogOptions {
   reportError(error: unknown): void
 }
 
-export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runtime, activeSession, lastSelectedModel = '', rememberModel, syncRuntime, reportError }: UseProviderCatalogOptions) {
+export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runtime, activeSession, setSessions, lastSelectedModel = '', rememberModel, syncRuntime, reportError }: UseProviderCatalogOptions) {
   const [model, setModel] = useState('')
   const [effort, setEffort] = useState<PrimeThinkingLevel>('medium')
   const [fast, setFast] = useState(false)
@@ -128,14 +130,16 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     nextCatalog?.models.find((candidate) => candidate.enabled !== false && candidate.available)
   ), [])
 
+  const activeSessionRef = useRef(activeSession)
+  useLayoutEffect(() => { activeSessionRef.current = activeSession })
   const fallbackModel = useCallback((nextCatalog: PrimeModelCatalog | null | undefined) => {
     if (nextCatalog) {
-      const sessionModel = findSessionModel(nextCatalog, activeSession)
+      const sessionModel = findSessionModel(nextCatalog, activeSessionRef.current)
       if (sessionModel) return sessionModel
     }
     return nextCatalog?.models.find((candidate) => candidate.key === lastSelectedModel && candidate.enabled !== false && candidate.available)
       ?? firstUsableModel(nextCatalog)
-  }, [activeSession, firstUsableModel, lastSelectedModel])
+  }, [firstUsableModel, lastSelectedModel])
 
   const selectedModel = useMemo<PrimeModelDescriptor | undefined>(() => {
     return catalog?.models.find((candidate) => candidate.key === model && candidate.enabled !== false && candidate.available)
@@ -184,6 +188,18 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const sessionKey = activeSession?.id ?? ''
   const sessionKeyRef = useRef(sessionKey)
   useLayoutEffect(() => { sessionKeyRef.current = sessionKey })
+  const syncActiveSessionChoice = useCallback((providerId: string | undefined, modelId: string | undefined, thinkingLevel?: PrimeThinkingLevel) => {
+    const sessionId = sessionKeyRef.current
+    if (!sessionId || !setSessions) return
+    setSessions((items) => items.map((item) => {
+      if (item.id !== sessionId) return item
+      const nextProvider = providerId ?? item.provider
+      const nextModel = modelId ?? item.model
+      const nextThinking = thinkingLevel ?? item.thinkingLevel
+      if (item.provider === nextProvider && item.model === nextModel && item.thinkingLevel === nextThinking) return item
+      return { ...item, provider: nextProvider, model: nextModel, thinkingLevel: nextThinking }
+    }))
+  }, [setSessions])
   const applyPendingSelectionToRuntime = useCallback((targetRuntime: RuntimeInfo, targetSessionKey: string): boolean => {
     const pending = pendingSelectionsRef.current.get(targetSessionKey)
     if (!pending) return false
@@ -204,6 +220,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const nextFast = pendingModel.fastModeSupported && pending.fast
     const fastChanged = (targetRuntime.serviceTier === 'priority') !== nextFast
     updateFast(nextFast)
+    syncActiveSessionChoice(pendingModel.provider, pendingModel.id, nextEffort)
     if (!modelChanged && !effortChanged && !fastChanged) return false
     const previousModel = runtimeModel?.key ?? modelRef.current
     const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as PrimeThinkingLevel)
@@ -227,7 +244,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       () => { updateModel(previousModel); updateEffort(previousEffort); updateFast(previousFast) },
     )
     return true
-  }, [bridge, catalog, queueRuntimeMutation, updateEffort, updateFast, updateModel])
+  }, [bridge, catalog, queueRuntimeMutation, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
   const applyPendingSelectionToRuntimeRef = useRef(applyPendingSelectionToRuntime)
   useLayoutEffect(() => { applyPendingSelectionToRuntimeRef.current = applyPendingSelectionToRuntime })
   // Starts undefined so the first render with a catalog counts as a switch and
@@ -249,8 +266,12 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
         if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
         rememberSelectionRef.current(runtimeModel.key)
       }
-      if (runtime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)) {
-        if (effortRef.current !== runtime.thinkingLevel) updateEffort(runtime.thinkingLevel as PrimeThinkingLevel)
+      const nextRuntimeEffort = runtime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
+        ? runtime.thinkingLevel as PrimeThinkingLevel
+        : effortRef.current
+      if (effortRef.current !== nextRuntimeEffort) updateEffort(nextRuntimeEffort)
+      if (runtimeModel) {
+        syncActiveSessionChoice(runtimeModel.provider, runtimeModel.id, nextRuntimeEffort)
       }
       return
     }
@@ -266,11 +287,24 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     }
 
     const sessionModel = findSessionModel(catalog, activeSession)
-    if (sessionModel && modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
-    if (activeSession?.thinkingLevel && sessionModel?.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)) {
-      if (effortRef.current !== activeSession.thinkingLevel) updateEffort(activeSession.thinkingLevel as PrimeThinkingLevel)
+    if (sessionModel) {
+      if (modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
+      const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)
+        ? activeSession.thinkingLevel as PrimeThinkingLevel
+        : effortRef.current
+      if (effortRef.current !== sessionEffort) updateEffort(sessionEffort)
+    } else if (sessionKey) {
+      const inherited = fallbackModel(catalog)
+      if (inherited) {
+        if (modelRef.current !== inherited.key) updateModel(inherited.key)
+        const inheritedEffort = inherited.availableThinkingLevels.includes(effortRef.current)
+          ? effortRef.current
+          : inherited.availableThinkingLevels.includes('medium') ? 'medium' : inherited.availableThinkingLevels[0] ?? 'off'
+        if (effortRef.current !== inheritedEffort) updateEffort(inheritedEffort)
+        syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
+      }
     }
-  }, [activeSession, applyPendingSelectionToRuntime, catalog, runtime, sessionKey, updateEffort, updateFast, updateModel])
+  }, [activeSession, applyPendingSelectionToRuntime, catalog, fallbackModel, runtime, sessionKey, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
   // Scoped to the runtime's reported tier so a catalog refresh cannot revert
   // an optimistic fast-mode toggle that the runtime has not confirmed yet.
@@ -285,12 +319,14 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const nextEffort = nextModel && !nextModel.availableThinkingLevels.includes(effortRef.current)
       ? nextModel.availableThinkingLevels.includes('medium') ? 'medium' : nextModel.availableThinkingLevels[0] ?? 'off'
       : effortRef.current
+    const nextFast = Boolean(nextModel?.fastModeSupported && fastRef.current)
     updateModel(nextModelKey)
     updateEffort(nextEffort)
     if (!nextModel?.fastModeSupported) updateFast(false)
+    if (nextModel) syncActiveSessionChoice(nextModel.provider, nextModel.id, nextEffort)
     if (!bridge || !runtime || !nextModel) {
       if (nextModel) {
-        pendingSelectionsRef.current.set(sessionKeyRef.current, { model: nextModelKey, effort: nextEffort, fast: fastRef.current })
+        pendingSelectionsRef.current.set(sessionKeyRef.current, { model: nextModelKey, effort: nextEffort, fast: nextFast })
         rememberSelection(nextModelKey)
       }
       return
@@ -304,11 +340,12 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       },
       () => { updateModel(previous.model); updateEffort(previous.effort); updateFast(previous.fast) },
     )
-  }, [bridge, catalog?.models, queueRuntimeMutation, rememberSelection, runtime, updateEffort, updateFast, updateModel])
+  }, [bridge, catalog?.models, queueRuntimeMutation, rememberSelection, runtime, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
   const changeEffort = useCallback((nextEffort: PrimeThinkingLevel) => {
     const previous = effortRef.current
     updateEffort(nextEffort)
+    syncActiveSessionChoice(undefined, undefined, nextEffort)
     if (!bridge || !runtime) {
       pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: nextEffort, fast: fastRef.current })
       return
@@ -318,7 +355,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       async () => { await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: nextEffort }) },
       () => updateEffort(previous),
     )
-  }, [bridge, queueRuntimeMutation, runtime, updateEffort])
+  }, [bridge, queueRuntimeMutation, runtime, syncActiveSessionChoice, updateEffort])
 
   const changeFast = useCallback((enabled: boolean) => {
     const previous = fastRef.current

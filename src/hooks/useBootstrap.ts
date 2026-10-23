@@ -48,6 +48,7 @@ function sessionRecordChanged(previous: SessionRecord, record: SessionRecord, st
     || previous.model !== record.model
     || previous.provider !== record.provider
     || previous.thinkingLevel !== record.thinkingLevel
+    || previous.behaviorMode !== record.behaviorMode
     || previous.depth !== record.depth
     || previous.pinned !== record.pinned
     || previous.preview !== record.preview
@@ -107,6 +108,10 @@ export function mergeSessionCatalog(
       && previous.lastUserMessageAt === lastUserMessageAt) return previous
     return {
       ...record,
+      provider: record.provider ?? previous?.provider,
+      model: record.model ?? previous?.model,
+      thinkingLevel: record.thinkingLevel ?? previous?.thinkingLevel,
+      behaviorMode: record.behaviorMode ?? previous?.behaviorMode,
       status,
       lastUserMessageAt,
       // eventRevision is renderer-only lifecycle state; disk records never

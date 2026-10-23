@@ -4,15 +4,22 @@ import type { ExtensionTabControls } from "@/hooks/useAgentBrowserTabs";
 import { useComposerImages } from "@/hooks/useComposerImages";
 import { useDictation } from "@/hooks/useDictation";
 import { appendAnnotationsToPrompt } from "@/lib/browser-annotations";
+import { useComposerMenu } from "@/hooks/useComposerMenu";
 import {
 	appendCapabilityRouting,
-	capabilitiesForMention,
 	capabilityTrigger,
-	compareMentionMatch,
-	findMentionQuery,
-	type MentionTrigger,
-	orderedAtMentions,
 } from "@/lib/capability-mentions";
+import {
+	type ComposerCommand,
+	type ComposerCommandAction,
+	isLocalCommand,
+	parseCompactCommand,
+	parseSlashCommand,
+	resolveLocalCommand,
+	selectableModels,
+} from "@/lib/composer-commands";
+import { parsePiModeCommand } from "@/lib/harness";
+import { formatFileMention, mentionPathForFile } from "@/lib/file-mentions";
 import {
 	clearComposerDraft,
 	readComposerDraft,
@@ -58,18 +65,15 @@ import {
 import { ExtensionTabPill } from "./ExtensionTabControls";
 import {
 	ArrowUp,
-	At,
 	CaretDown,
 	ChatCircleText,
 	CircleNotch,
-	Command,
 	Gauge,
 	Image as ImageIcon,
 	Lightning,
 	Microphone,
 	Paperclip,
 	Plus,
-	Sparkle,
 	Square,
 	TerminalWindow,
 	X,
@@ -142,23 +146,13 @@ interface ComposerProps {
 	onClearTerminalSelection?(): void;
 	/** Stable per-workspace key; without it the composer keeps no draft of its own. */
 	draftKey?: string;
+	/** Working directory searched by `@` file completion and used to relativize dropped files. */
+	fileRoot?: string;
+	/** Commands the runtime reported via `get_commands`; undefined until known. */
+	runtimeCommands?: readonly ComposerCommand[];
+	/** Runs app-level slash commands such as `/new` or `/name`. */
+	onCommand?(action: ComposerCommandAction): void;
 }
-
-const commands = [
-	{ command: "/review", detail: "Review current changes" },
-	{ command: "/plan", detail: "Create an implementation plan" },
-	{ command: "/compact", detail: "Compact session context" },
-	{ command: "/status", detail: "Show runtime status" },
-];
-
-const piCommands = [
-	...commands,
-	{
-		command: "/mode",
-		detail: "Switch Pi, Apex, Apex Orchestrate, Fusion, or Work",
-	},
-	{ command: "/orchestrate", detail: "Toggle Apex Orchestrate mode" },
-];
 
 const reasoningLabels: Record<PrimeThinkingLevel, string> = {
 	off: "Off",
@@ -174,6 +168,12 @@ const MAX_IMAGE_PROMPT_BYTES = 2 * 1024 * 1024;
 
 const EMPTY_ANNOTATIONS: BrowserAnnotation[] = [];
 const noop = () => undefined;
+
+function resolveDroppedFilePath(file: File): string {
+	return typeof window === "undefined"
+		? ""
+		: (window.prime?.app.pathForFile?.(file) ?? "");
+}
 
 export const Composer = memo(function Composer({
 	busy,
@@ -222,6 +222,9 @@ export const Composer = memo(function Composer({
 	onClearAnnotations = noop,
 	onClearTerminalSelection = noop,
 	draftKey,
+	fileRoot,
+	runtimeCommands,
+	onCommand,
 }: ComposerProps) {
 	const modelControls = (
 		<>
@@ -253,14 +256,21 @@ export const Composer = memo(function Composer({
 			(draftKey ? readComposerDraft(draftKey)?.text : undefined) ??
 			takeComposerDraft(),
 	);
-	const [menu, setMenu] = useState<"add" | "mention" | "command" | null>(null);
+	const [caret, setCaret] = useState(() => value.length);
 	const [sessionReferenceIds, setSessionReferenceIds] = useState<
 		ReadonlyMap<string, string>
 	>(() => new Map());
-	const [activeSuggestion, setActiveSuggestion] = useState(0);
 	const [annotationsOpen, setAnnotationsOpen] = useState(false);
 	const [terminalSelectionOpen, setTerminalSelectionOpen] = useState(false);
-	const imageAttachments = useComposerImages({ shortName });
+	const referenceFilesRef = useRef<(paths: string[]) => void>(noop);
+	const [forwardFileReferences] = useState(
+		() => (paths: string[]) => referenceFilesRef.current(paths),
+	);
+	const imageAttachments = useComposerImages({
+		shortName,
+		resolveFilePath: resolveDroppedFilePath,
+		onFileReferences: forwardFileReferences,
+	});
 	const {
 		images,
 		imagesRef,
@@ -278,9 +288,6 @@ export const Composer = memo(function Composer({
 	const menuId = useId();
 	const menuRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const acceptedMentionRef = useRef<{ start: number; text: string } | null>(
-		null,
-	);
 	const submittingRef = useRef(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const imageStatusId = useId();
@@ -323,28 +330,6 @@ export const Composer = memo(function Composer({
 	}, [draftKey, effort, fast, model, value]);
 
 	useEffect(() => {
-		const mention = findMentionQuery(value);
-		const acceptedMention = acceptedMentionRef.current;
-		const suppressAcceptedMention = Boolean(
-			mention &&
-				acceptedMention &&
-				mention.start === acceptedMention.start &&
-				value.slice(
-					acceptedMention.start,
-					acceptedMention.start + acceptedMention.text.length,
-				) === acceptedMention.text,
-		);
-		if (acceptedMention && !suppressAcceptedMention)
-			acceptedMentionRef.current = null;
-		setMenu(
-			value.startsWith("/") && !value.includes(" ")
-				? "command"
-				: mention && !suppressAcceptedMention
-					? "mention"
-					: null,
-		);
-	}, [value]);
-	useEffect(() => {
 		setSessionReferenceIds((current) => {
 			if (!current.size) return current;
 			const mentionedTitles = new Set(
@@ -370,6 +355,86 @@ export const Composer = memo(function Composer({
 	useEffect(() => {
 		if (!terminalSelection?.text) setTerminalSelectionOpen(false);
 	}, [terminalSelection?.text]);
+
+	const replaceRange = (start: number, end: number, text: string) => {
+		const textarea = textareaRef.current;
+		if (textarea) {
+			textarea.setRangeText(text, start, end, "end");
+			setValue(textarea.value);
+			setCaret(textarea.selectionStart);
+			textarea.focus();
+			return;
+		}
+		setValue((current) => `${current.slice(0, start)}${text}${current.slice(end)}`);
+		setCaret(start + text.length);
+	};
+	const insert = (text: string) => {
+		const textarea = textareaRef.current;
+		const start = textarea?.selectionStart ?? value.length;
+		replaceRange(start, textarea?.selectionEnd ?? start, text);
+	};
+	const setDraft = (text: string) => {
+		setValue(text);
+		setCaret(text.length);
+		requestAnimationFrame(() => textareaRef.current?.focus());
+	};
+	referenceFilesRef.current = (paths) => {
+		const mentions = paths.map((path) =>
+			formatFileMention(mentionPathForFile(path, fileRoot)),
+		);
+		const textarea = textareaRef.current;
+		const start = textarea?.selectionStart ?? value.length;
+		const before = (textarea?.value ?? value).slice(0, start);
+		const separator = before && !/\s$/.test(before) ? " " : "";
+		replaceRange(
+			start,
+			textarea?.selectionEnd ?? start,
+			`${separator}${mentions.join(" ")} `,
+		);
+	};
+	const {
+		menu,
+		setMenu,
+		suggestions,
+		activeSuggestion,
+		setActiveSuggestion,
+		mentionsSkills,
+		forgetAcceptedMention,
+	} = useComposerMenu({
+		value,
+		caret,
+		harness,
+		fileRoot,
+		sessions,
+		enabledSkills,
+		skills,
+		runtimeCommands,
+		modelsByProvider,
+		providers,
+		reasoningLevels,
+		reasoningLabels,
+		replaceBeforeCaret: (start, text) =>
+			replaceRange(start, Math.min(caret, value.length), text),
+		insert,
+		setDraft,
+		openFilePicker: () => {
+			setMenu(null);
+			fileInputRef.current?.click();
+		},
+		rememberSession: (session) =>
+			setSessionReferenceIds((current) =>
+				new Map(current).set(session.title.trim().toLocaleLowerCase(), session.id),
+			),
+		onModelChange,
+		onEffortChange,
+		runCommand: (action) => onCommand?.(action),
+	});
+	const chooseSuggestion = (index: number) => suggestions[index]?.choose();
+	useEffect(() => {
+		menuRef.current
+			?.querySelector('[aria-selected="true"]')
+			?.scrollIntoView?.({ block: "nearest" });
+	}, [activeSuggestion, menu]);
 
 	useEffect(() => {
 		if (!menu) return;
@@ -440,6 +505,26 @@ export const Composer = memo(function Composer({
 			(intent !== "steer" && !busy && (submitting || submittingRef.current))
 		)
 			return;
+		const slash = parseSlashCommand(draftValue);
+		if (slash && isLocalCommand(slash.name)) {
+			const outcome = resolveLocalCommand(slash.name, slash.args, {
+				models: selectableModels(modelsByProvider, providers),
+				reasoningLevels,
+				sessions,
+			});
+			if (outcome.type === "error") return setAttachmentError(outcome.message);
+			if (outcome.type === "complete") return setDraft(outcome.draft);
+			if (outcome.type === "model") onModelChange(outcome.key);
+			else if (outcome.type === "effort") onEffortChange(outcome.level);
+			else if (onCommand) onCommand(outcome.action);
+			else return setAttachmentError(`/${slash.name} is not available here.`);
+			setAttachmentError("");
+			setDraft("");
+			return;
+		}
+		// Commands take their text verbatim: context blocks would become command arguments.
+		const commandDraft = /^\s*[/!]/.test(draftValue);
+		const bashDraft = /^\s*!/.test(draftValue);
 		if (imageAttachments.hasPending()) {
 			setAttachmentError(
 				"Wait for the file to finish processing before sending.",
@@ -457,6 +542,17 @@ export const Composer = memo(function Composer({
 		if (currentImages.length > 0 && !imageInputSupported) {
 			setAttachmentError(
 				"This model does not accept images. Remove the attachment or choose a vision model.",
+			);
+			return;
+		}
+		if (
+			currentImages.length > 0 &&
+			(bashDraft ||
+				parseCompactCommand(draftValue) !== undefined ||
+				parsePiModeCommand(draftValue, harness) !== undefined)
+		) {
+			setAttachmentError(
+				`${bashDraft ? "! commands do" : `${slash?.name ? `/${slash.name}` : "This command"} does`} not accept attachments. Remove the attachment and try again.`,
 			);
 			return;
 		}
@@ -492,14 +588,13 @@ export const Composer = memo(function Composer({
 					!sessionTitles.has(skill.name.trim().toLocaleLowerCase()),
 			),
 		);
-		const promptWithAnnotations = appendAnnotationsToPrompt(
-			promptWithCapabilities,
-			currentAnnotations,
-		);
-		const promptWithContext = appendTerminalContextToPrompt(
-			promptWithAnnotations,
-			currentTerminalContext,
-		);
+		const sentAnnotations = commandDraft ? [] : currentAnnotations;
+		const promptWithContext = bashDraft
+			? prompt
+			: appendTerminalContextToPrompt(
+					appendAnnotationsToPrompt(promptWithCapabilities, sentAnnotations),
+					commandDraft ? undefined : currentTerminalContext,
+				);
 		const frame = `${JSON.stringify({ type: intent === "steer" ? "steer" : "follow_up", message: promptWithContext, ...(submittedImages.length ? { images: submittedImages } : {}), id: "00000000-0000-0000-0000-000000000000" })}\n`;
 		if (new TextEncoder().encode(frame).byteLength > MAX_IMAGE_PROMPT_BYTES) {
 			setAttachmentError(
@@ -518,7 +613,7 @@ export const Composer = memo(function Composer({
 			await onSend(promptWithContext, submittedImages, intent);
 			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
 			// The annotations were delivered: clear the attachment and page markers.
-			if (currentAnnotations.length > 0) onClearAnnotations();
+			if (sentAnnotations.length > 0) onClearAnnotations();
 		} catch {
 			if (!mountedRef.current && draftKeyRef.current) {
 				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
@@ -561,142 +656,6 @@ export const Composer = memo(function Composer({
 		else requestAnimationFrame(() => textareaRef.current?.focus());
 	};
 
-	const insertAtCaret = (textarea: HTMLTextAreaElement, text: string) => {
-		const start = textarea.selectionStart ?? textarea.value.length;
-		const end = textarea.selectionEnd ?? textarea.value.length;
-		textarea.setRangeText(text, start, end, "end");
-		setValue(textarea.value);
-	};
-	const insert = (text: string) => {
-		const textarea = textareaRef.current;
-		if (textarea) insertAtCaret(textarea, text);
-		else setValue((current) => `${current}${text}`);
-		setMenu(null);
-		textarea?.focus();
-	};
-	const mention = findMentionQuery(value);
-	const mentionQuery = mention?.query.toLocaleLowerCase().trim() ?? "";
-	const mentionsSkills = mention?.trigger === "$";
-	const mentionCapabilities = mention
-		? capabilitiesForMention(enabledSkills, mention)
-		: [];
-	const insertMention = (
-		trigger: MentionTrigger,
-		label: string,
-		session?: SessionRecord,
-	) => {
-		const textarea = textareaRef.current;
-		if (!mention) {
-			insert(`${trigger}${label} `);
-			return;
-		}
-		const start = mention.start + 1;
-		acceptedMentionRef.current = {
-			start: mention.start,
-			text: `${trigger}${label} `,
-		};
-		if (textarea) {
-			textarea.setRangeText(`${label} `, start, value.length, "end");
-			setValue(textarea.value);
-		} else {
-			setValue(`${value.slice(0, start)}${label} `);
-		}
-		if (session) {
-			const key = session.title.trim().toLocaleLowerCase();
-			setSessionReferenceIds((current) =>
-				new Map(current).set(key, session.id),
-			);
-		}
-		setMenu(null);
-		textarea?.focus();
-	};
-
-	const suggestions =
-		menu === "command"
-			? piCommands
-					.filter((item) => item.command.startsWith(value))
-					.map((item) => ({
-						key: item.command,
-						label: item.command,
-						detail: item.detail,
-						icon: <Command size={14} />,
-						choose: () => {
-							setValue(`${item.command} `);
-							setMenu(null);
-							textareaRef.current?.focus();
-						},
-					}))
-			: menu === "mention" && mentionsSkills
-				? [...mentionCapabilities]
-						.sort((left, right) =>
-							compareMentionMatch(left.name, right.name, mentionQuery),
-						)
-						.slice(0, 8)
-						.map((skill) => ({
-							key: `skill:${skill.id}`,
-							label: `$${skill.name}`,
-							detail: skill.description,
-							icon: <Sparkle size={14} />,
-							choose: () => insertMention("$", skill.name),
-						}))
-				: menu === "mention"
-					? orderedAtMentions(sessions, mentionCapabilities, mentionQuery).map(
-							(target) =>
-								target.kind === "session"
-									? {
-											key: `session:${target.session.harness}:${target.session.id}`,
-											label: `@${target.session.title}`,
-											detail: `${target.session.harness.toUpperCase()} session · ${target.session.status}`,
-											icon: <ChatCircleText size={14} />,
-											choose: () =>
-												insertMention(
-													"@",
-													target.session.title,
-													target.session,
-												),
-										}
-									: {
-											key: `capability:${target.skill.id}`,
-											label: `@${target.skill.name}`,
-											detail: target.skill.description,
-											icon: <At size={14} />,
-											choose: () => insertMention("@", target.skill.name),
-										},
-						)
-					: menu === "add"
-						? [
-								{
-									key: "files",
-									label: "Add files",
-									detail: "Attach images, audio, video, or other files",
-									icon: <Paperclip size={14} />,
-									choose: () => {
-										setMenu(null);
-										fileInputRef.current?.click();
-									},
-								},
-								{
-									key: "skill",
-									label: "Use a skill",
-									detail: "Invoke an enabled skill with $",
-									icon: <Sparkle size={14} />,
-									choose: () => insert("$"),
-								},
-								{
-									key: "mention",
-									label: "Mention a session or capability",
-									detail:
-										"Reference sidebar work or an enabled extension with @",
-									icon: <At size={14} />,
-									choose: () => insert("@"),
-								},
-							]
-						: [];
-
-	useEffect(() => {
-		setActiveSuggestion(0);
-	}, [menu, value, suggestions.length]);
-	const chooseSuggestion = (index: number) => suggestions[index]?.choose();
 	const contextPercent =
 		contextUsage?.percent === null || contextUsage?.percent === undefined
 			? null
@@ -731,8 +690,7 @@ export const Composer = memo(function Composer({
 					}}
 					onEdit={(queued) => {
 						onEditQueuedMessage?.(queued);
-						setValue(queued.text);
-						requestAnimationFrame(() => textareaRef.current?.focus());
+						setDraft(queued.text);
 					}}
 					onDelete={onDeleteQueuedMessage}
 				/>
@@ -760,7 +718,7 @@ export const Composer = memo(function Composer({
 									? "Loading session…"
 									: submitting
 										? `Starting ${shortName}…`
-										: `Ask ${shortName} anything, $ for skills, @ for sessions, / for commands`
+										: `Ask ${shortName} anything, @ for files, / for commands, $ for skills`
 						}
 						aria-label={`Message ${shortName}`}
 						role="combobox"
@@ -772,7 +730,13 @@ export const Composer = memo(function Composer({
 								? `${menuId}-option-${activeSuggestion}`
 								: undefined
 						}
-						onChange={(event) => setValue(event.target.value)}
+						onChange={(event) => {
+							setValue(event.target.value);
+							setCaret(event.target.selectionStart ?? event.target.value.length);
+						}}
+						onSelect={(event) =>
+							setCaret(event.currentTarget.selectionStart)
+						}
 						onPaste={(event) => {
 							const files = [...event.clipboardData.items]
 								.filter((item) => item.kind === "file")
@@ -783,11 +747,11 @@ export const Composer = memo(function Composer({
 							if (!files.length) return;
 							const pastedText = event.clipboardData.getData("text/plain");
 							event.preventDefault();
-							if (pastedText) insertAtCaret(event.currentTarget, pastedText);
+							if (pastedText) insert(pastedText);
 							void imageAttachments.ingest(files);
 						}}
 						onKeyDown={(event) => {
-							if (event.key === "Backspace") acceptedMentionRef.current = null;
+							if (event.key === "Backspace") forgetAcceptedMention();
 							if (
 								menu &&
 								suggestions.length &&
@@ -848,11 +812,13 @@ export const Composer = memo(function Composer({
 						aria-label={
 							menu === "command"
 								? "Commands"
-								: menu === "mention"
-									? mentionsSkills
-										? "Skills"
-										: "Sessions and capabilities"
-									: "Add context"
+								: menu === "argument"
+									? "Command options"
+									: menu === "mention"
+										? mentionsSkills
+											? "Skills"
+											: "Files, sessions, and capabilities"
+										: "Add context"
 						}
 					>
 						{suggestions.map((suggestion, index) => (

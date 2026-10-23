@@ -279,21 +279,28 @@ describe("Composer skill mentions", () => {
 		expect(prompt).not.toContain("/disabled/SKILL.md");
 	});
 
-	it("invokes the selected @prompt file instead of an unresolvable catalog ID", async () => {
+	it("offers prompt templates as /commands and sends them verbatim for Pi to expand", async () => {
 		const prompt = skillRecord("ship", {
 			id: "f564f966285e35df629790ba8b753aab",
 			kind: "prompt",
 			path: "/home/user/.pi/agent/prompts/ship.md",
 		});
-		const { onSend } = renderComposer({ skills: [prompt] });
-		await setDraft("@ship");
-		await clickSend();
+		const { onSend } = renderComposer({
+			skills: [prompt],
+			annotations: [annotation("a1")],
+		});
+		await setDraft("/sh");
+		expect(optionLabels()).toContain("/ship");
+		expect(await pressKey("Tab")).toBe(true);
+		expect(composerTextarea().value).toBe("/ship ");
 
-		const [sent] = onSend.mock.calls[0];
-		expect(sent).not.toContain(prompt.id);
-		expect(sent).toContain(
-			`- @ship: Read the prompt file at ${JSON.stringify(prompt.path)}`,
-		);
+		await setDraft("/ship release notes");
+		await clickSend();
+		// Annotations stay attached instead of becoming template arguments.
+		expect(onSend.mock.calls[0][0]).toBe("/ship release notes");
+
+		await setDraft("@sh");
+		expect(optionLabels()).not.toContain("@ship");
 	});
 
 	it("lists only enabled skills for $ and accepts the arrow-highlighted one with Tab", async () => {
@@ -397,7 +404,7 @@ describe("Composer skill mentions", () => {
 		await setDraft("Ask @brow");
 		expect(
 			container.querySelector('[role="listbox"]')?.getAttribute("aria-label"),
-		).toBe("Sessions and capabilities");
+		).toBe("Files, sessions, and capabilities");
 		expect(optionLabels()).toEqual(["@Browser", "@Browser notes"]);
 		expect(await pressKey("ArrowDown")).toBe(true);
 		expect(await pressKey("Tab")).toBe(true);
@@ -413,7 +420,7 @@ describe("Composer skill mentions", () => {
 		expect(prompt).not.toContain("browser-skill/SKILL.md");
 	});
 
-	it("puts the exact @prompt first when sessions and other prompts only start with the query", async () => {
+	it("puts the exact @capability first when sessions and other capabilities only start with the query", async () => {
 		renderComposer({
 			sessions: [
 				sessionRecord(
@@ -428,12 +435,12 @@ describe("Composer skill mentions", () => {
 			skills: [
 				skillRecord("poteto-bug-fix", {
 					id: "poteto-bug-fix",
-					kind: "prompt",
+					kind: "extension",
 					path: undefined,
 				}),
 				skillRecord("poteto", {
 					id: "poteto",
-					kind: "prompt",
+					kind: "extension",
 					path: undefined,
 				}),
 			],
@@ -475,9 +482,96 @@ describe("Composer skill mentions", () => {
 
 	it("completes slash commands with Tab", async () => {
 		renderComposer();
-		await setDraft("/rev");
+		await setDraft("/comp");
 		expect(await pressKey("Tab")).toBe(true);
-		expect(composerTextarea().value).toBe("/review ");
+		expect(composerTextarea().value).toBe("/compact ");
+	});
+
+	it("lists runtime commands with fuzzy matching and runs local commands without sending them", async () => {
+		const onCommand = vi.fn();
+		const onEffortChange = vi.fn();
+		const { onSend } = renderComposer({
+			sessions: [sessionRecord("Release prep")],
+			composerProps: {
+				onCommand,
+				onEffortChange,
+				reasoningLevels: ["low", "medium", "high"],
+				runtimeCommands: [
+					{ name: "graphify", source: "extension" },
+					{ name: "skill:unslop", source: "skill" },
+				],
+			},
+		});
+		await setDraft("/unsl");
+		expect(optionLabels()).toEqual(["/skill:unslop"]);
+		await setDraft("/grfy");
+		expect(optionLabels()).toEqual(["/graphify"]);
+
+		await setDraft("/name Ship it");
+		await clickSend();
+		expect(onCommand).toHaveBeenLastCalledWith({ type: "name", title: "Ship it" });
+		expect(composerTextarea().value).toBe("");
+
+		await setDraft("/thinking ");
+		expect(optionLabels()).toEqual(["low", "medium", "high"]);
+		await setDraft("/thinking hi");
+		expect(await pressKey("Enter")).toBe(true);
+		expect(onEffortChange).toHaveBeenCalledWith("high");
+
+		await setDraft("/resume release");
+		await clickSend();
+		expect(onCommand).toHaveBeenLastCalledWith({
+			type: "resume",
+			sessionId: "019f0000-0000-7000-8000-000000000009",
+		});
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it("completes @ file paths from the project like the TUI and keeps them out of capability routing", async () => {
+		const listFiles = vi.fn(async () => ({
+			entries: [
+				{ path: "src", type: "directory" as const },
+				{ path: "src/browser.ts", type: "file" as const },
+				{ path: "docs", type: "directory" as const },
+				{ path: "docs/my notes.md", type: "file" as const },
+				{ path: "browser.md", type: "file" as const },
+			],
+			skipped: 0,
+		}));
+		const previous = window.prime;
+		window.prime = { projects: { listFiles } } as unknown as typeof window.prime;
+		try {
+			const { onSend } = renderComposer({
+				composerProps: { fileRoot: "/project-files-test" },
+				skills: [
+					skillRecord("browser", {
+						id: "prime-work-browser",
+						kind: "extension",
+						path: undefined,
+					}),
+				],
+			});
+			const textarea = composerTextarea();
+			await setDraft("Read @sr");
+			await act(async () => undefined);
+			expect(listFiles).toHaveBeenCalledWith("/project-files-test", "pi");
+			expect(optionLabels()[0]).toBe("src/");
+			expect(await pressKey("Enter")).toBe(true);
+			expect(textarea.value).toBe("Read @src/");
+			expect(optionLabels()).toContain("browser.ts");
+
+			await setDraft("Read @my");
+			await pressKey("Enter");
+			expect(textarea.value).toBe('Read @"docs/my notes.md" ');
+			expect(textarea.getAttribute("aria-expanded")).toBe("false");
+
+			await setDraft("Compare @browser.md with @browser.");
+			await clickSend();
+			const [prompt] = onSend.mock.calls[0];
+			expect(prompt.match(/- @browser:/g)).toHaveLength(1);
+		} finally {
+			window.prime = previous;
+		}
 	});
 
 	it("leaves Tab alone without a completion, with modifiers, during IME composition, and in the Add context menu", async () => {

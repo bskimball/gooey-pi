@@ -5,6 +5,7 @@ import { isRecord } from '../validation'
 import type { SessionMetadata } from './metadata'
 
 const MAX_CACHE_BYTES = 32 * 1024 * 1024
+const CACHE_SCHEMA_VERSION = 2
 
 function parseMetadata(value: unknown): SessionMetadata | undefined {
   if (!isRecord(value)) return undefined
@@ -15,7 +16,7 @@ function parseMetadata(value: unknown): SessionMetadata | undefined {
     || (status !== 'idle' && status !== 'running' && status !== 'waiting' && status !== 'complete' && status !== 'failed' && status !== 'unknown')
     || typeof depth !== 'number' || !Number.isInteger(depth) || depth < 0) return undefined
   const metadata: SessionMetadata = { id, filePath, projectPath, title, createdAt, updatedAt, status, depth }
-  for (const key of ['model', 'provider', 'thinkingLevel', 'sessionName', 'preview', 'lastUserMessageAt'] as const) {
+  for (const key of ['model', 'provider', 'thinkingLevel', 'behaviorMode', 'sessionName', 'preview', 'lastUserMessageAt'] as const) {
     if (value[key] === undefined) continue
     if (typeof value[key] !== 'string') return undefined
     metadata[key] = value[key]
@@ -46,7 +47,7 @@ export class PersistentMetadataCache {
     try {
       if ((await stat(this.path)).size > MAX_CACHE_BYTES) return entries
       const value: unknown = JSON.parse(await readFile(this.path, 'utf8'))
-      if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.entries)) return entries
+      if (!isRecord(value) || value.version !== CACHE_SCHEMA_VERSION || !Array.isArray(value.entries)) return entries
       for (const entry of value.entries.slice(0, this.limit)) {
         if (!isRecord(entry) || typeof entry.fingerprint !== 'string') continue
         const metadata = parseMetadata(entry.metadata)
@@ -57,7 +58,7 @@ export class PersistentMetadataCache {
   }
 
   save(entries: ReadonlyMap<string, SessionMetadata>): Promise<void> {
-    const data = JSON.stringify({ version: 1, entries: [...entries].slice(0, this.limit).map(([fingerprint, metadata]) => ({ fingerprint, metadata })) })
+    const data = JSON.stringify({ version: CACHE_SCHEMA_VERSION, entries: [...entries].slice(0, this.limit).map(([fingerprint, metadata]) => ({ fingerprint, metadata })) })
     if (Buffer.byteLength(data) > MAX_CACHE_BYTES) return Promise.resolve()
     this.pending = data
     this.writing ??= this.drain().finally(() => { this.writing = undefined })

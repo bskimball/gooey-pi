@@ -12,7 +12,12 @@ import { createPiSessionFile } from './sessions/pi'
 import type { JsonStateStore } from './store'
 import { isPathWithin, requireBoolean, requireExistingDirectory, requireString } from './validation'
 
-interface RuntimeSessionState { isStreaming: boolean; isCompacting?: boolean }
+interface RuntimeSessionState {
+  isStreaming: boolean
+  isCompacting?: boolean
+  model?: { provider?: string; id?: string; name?: string } | null
+  thinkingLevel?: string
+}
 
 interface RuntimeSessionSnapshot extends RuntimeSessionState { sessionFile?: string }
 
@@ -192,7 +197,14 @@ export class SessionService {
       const runtime = runtimeBySession
         ? runtimeBySession.get(resolve(metadata.filePath))
         : this.runtimeForSession(metadata.filePath)
-      if (runtime) metadata.status = runtime.isStreaming || runtime.isCompacting ? 'running' : 'idle'
+      if (runtime) {
+        metadata.status = runtime.isStreaming || runtime.isCompacting ? 'running' : 'idle'
+        if (runtime.model?.provider && runtime.model.id) {
+          metadata.provider = runtime.model.provider
+          metadata.model = runtime.model.id
+        }
+        if (typeof runtime.thinkingLevel === 'string') metadata.thinkingLevel = runtime.thinkingLevel
+      }
       const { sessionName: _sessionName, ...record } = metadata
       records.push({ ...record, harness: this.harness, archived: isArchived })
     }

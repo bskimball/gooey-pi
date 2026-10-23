@@ -122,7 +122,8 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
     }]
   }
   if (message.role === 'bashExecution') {
-    return [{
+    const command = typeof message.command === 'string' ? boundedString(message.command, MAX_PART_TOOL_CHARS) : undefined
+    return [...(command === undefined ? [] : [{ type: 'toolCall' as const, name: 'bash', args: { command } }]), {
       type: 'toolResult',
       name: 'bash',
       text: typeof message.output === 'string' ? boundedString(message.output, MAX_PART_TOOL_CHARS) : '',

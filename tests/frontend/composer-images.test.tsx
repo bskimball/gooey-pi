@@ -326,7 +326,7 @@ describe('Composer image ingestion', () => {
     act(() => (container.querySelector('button[aria-label="Add context"]') as HTMLButtonElement).click())
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Add files')
     expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Use a skill')
-    expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Mention a session or capability')
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain('Reference a file, session, or capability')
     act(() => (Array.from(container.querySelectorAll<HTMLButtonElement>('.composer-menu button')).find((button) => button.textContent?.includes('Add files')) as HTMLButtonElement).click())
     expect(click).toHaveBeenCalledOnce()
     expect(input?.multiple).toBe(true)
@@ -387,6 +387,37 @@ describe('Composer image ingestion', () => {
     })
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('notes.txt cannot be sent')
     expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this text')
+    expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('references on-disk non-image files by @path instead of attaching them', async () => {
+    const previous = window.prime
+    window.prime = { app: { pathForFile: (file: File) => file.name === 'notes.txt' ? 'C:\\work\\my notes.txt' : '' } } as unknown as typeof window.prime
+    try {
+      const onSend = renderComposer()
+      await pasteFiles([new File(['plain text'], 'notes.txt', { type: 'text/plain' })], 'summarize')
+      expect(container.querySelectorAll('.composer-attachment')).toHaveLength(0)
+      expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('summarize @"C:\\work\\my notes.txt" ')
+      await act(async () => {
+        ;(container.querySelector('button[aria-label="Send message"]') as HTMLButtonElement).click()
+      })
+      expect(onSend).toHaveBeenCalledWith('summarize @"C:\\work\\my notes.txt"', [], 'queue')
+    } finally {
+      window.prime = previous
+    }
+  })
+
+  it('rejects ! commands with image attachments before clearing the draft or images', async () => {
+    const onSend = renderComposer()
+    await pasteFiles([pastedPng()], '!echo hello')
+    expect(container.querySelectorAll('.composer-attachment')).toHaveLength(1)
+
+    await act(async () => {
+      ;(container.querySelector('button[aria-label="Send message"]') as HTMLButtonElement).click()
+    })
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('! commands do not accept attachments')
+    expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('!echo hello')
+    expect(container.querySelectorAll('.composer-attachment')).toHaveLength(1)
     expect(onSend).not.toHaveBeenCalled()
   })
 

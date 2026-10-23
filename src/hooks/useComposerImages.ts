@@ -21,6 +21,14 @@ export interface ComposerUnsupportedFile {
 
 interface UseComposerImagesOptions {
   shortName: string
+  /** Absolute path of an on-disk file, or empty when the file has none (clipboard data, browser demo). */
+  resolveFilePath?(file: File): string
+  /** Receives on-disk non-image files, which the prompt references by path instead of attaching. */
+  onFileReferences?(paths: string[]): void
+}
+
+function filePath(file: File, resolve: UseComposerImagesOptions['resolveFilePath']): string {
+  try { return resolve?.(file) ?? '' } catch { return '' }
 }
 
 function base64FromBuffer(buffer: ArrayBuffer): string {
@@ -34,7 +42,7 @@ function isFileDrag(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer.types).includes('Files')
 }
 
-export function useComposerImages({ shortName }: UseComposerImagesOptions) {
+export function useComposerImages({ shortName, resolveFilePath, onFileReferences }: UseComposerImagesOptions) {
   const [images, setImages] = useState<ComposerImage[]>([])
   const [unsupportedFiles, setUnsupportedFiles] = useState<ComposerUnsupportedFile[]>([])
   const [error, setError] = useState('')
@@ -61,9 +69,21 @@ export function useComposerImages({ shortName }: UseComposerImagesOptions) {
     setError(message)
   }, [])
 
-  const ingest = useCallback(async (files: readonly File[]) => {
-    if (files.length === 0) return
+  const ingest = useCallback(async (incoming: readonly File[]) => {
+    if (incoming.length === 0) return
     const startingErrorRevision = errorRevisionRef.current
+    const referenced: string[] = []
+    const files = incoming.filter((file) => {
+      if (supportedImageTypes.has(file.type.toLowerCase())) return true
+      const path = filePath(file, resolveFilePath)
+      if (path) referenced.push(path)
+      return !path
+    })
+    if (referenced.length > 0) {
+      onFileReferences?.(referenced)
+      setError('')
+    }
+    if (files.length === 0) return
     if (imagesRef.current.length + unsupportedFilesRef.current.length + reservedCountRef.current + files.length > MAX_COMPOSER_FILE_COUNT) {
       updateError(`You can attach up to ${MAX_COMPOSER_FILE_COUNT} files.`)
       return
@@ -118,7 +138,7 @@ export function useComposerImages({ shortName }: UseComposerImagesOptions) {
       pendingBatchesRef.current -= 1
       if (mountedRef.current && pendingBatchesRef.current === 0) setProcessing(false)
     }
-  }, [shortName, updateError])
+  }, [onFileReferences, resolveFilePath, shortName, updateError])
 
   const clear = useCallback(() => {
     imagesRef.current = []

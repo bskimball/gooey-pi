@@ -89,7 +89,8 @@ describe('pi metadata reader', () => {
         piEntry('model_change', '090e7d4b', null, { provider: 'anthropic', modelId: 'claude-opus-4-8' }, '2026-08-10T22:41:20.300Z'),
         piEntry('thinking_level_change', '77ca5df2', '090e7d4b', { thinkingLevel: 'high' }, '2026-08-10T22:41:20.300Z'),
         piEntry('model_change', '9e21e960', '77ca5df2', { provider: 'openai-codex', modelId: 'gpt-5.6-luna' }, '2026-08-10T22:41:25.000Z'),
-        piEntry('session_info', '15f3a4e9', '9e21e960', { name: 'First name' }, '2026-08-10T22:41:26.000Z'),
+        piEntry('custom', '8f00a1b2', '9e21e960', { customType: 'behavior-mode', data: { mode: 'apex-orchestrate', models: { 'apex-orchestrate': { provider: 'openai-codex', modelId: 'gpt-5.6-luna', thinking: 'high' } } } }, '2026-08-10T22:41:25.500Z'),
+        piEntry('session_info', '15f3a4e9', '8f00a1b2', { name: 'First name' }, '2026-08-10T22:41:26.000Z'),
         piEntry('message', 'aa11bb22', '15f3a4e9', { message: { role: 'user', content: [{ type: 'text', text: 'first prompt' }], timestamp: 1786155361373 } }, '2026-08-10T22:42:01.000Z'),
         piEntry('message', 'cc33dd44', 'aa11bb22', { message: { role: 'assistant', content: [{ type: 'text', text: 'the answer' }], timestamp: 1786155362489 } }, '2026-08-10T22:42:02.495Z'),
         piEntry('session_info', 'ee55ff66', 'cc33dd44', { name: 'Latest name wins' }, '2026-08-10T22:42:03.000Z'),
@@ -110,8 +111,57 @@ describe('pi metadata reader', () => {
       model: 'gpt-5.6-luna',
       provider: 'openai-codex',
       thinkingLevel: 'high',
+      behaviorMode: 'apex-orchestrate',
       depth: 0,
       preview: 'the answer',
+    })
+  })
+
+  it('invalidates legacy v1 metadata cache entries so saved behaviorMode and model choices are parsed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prime-work-pi-cache-')); dirs.push(dir)
+    const root = join(dir, 'sessions'); mkdirSync(join(root, BUCKET), { recursive: true })
+    const project = join(dir, 'project'); mkdirSync(project)
+    const file = join(root, BUCKET, NAME_C)
+    writePiSession(file, {
+      id: 'pi-cached-session',
+      cwd: project,
+      entries: [
+        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode: 'work', models: { work: { provider: 'openai-codex', modelId: 'gpt-5.4-argon', thinking: 'low' } } } }, '2026-08-10T22:41:25.500Z'),
+        piEntry('message', 'aa11bb22', '8f00a1b2', { message: { role: 'user', content: 'cached prompt' } }, '2026-08-10T22:42:01.000Z'),
+      ],
+    })
+    const canonicalFile = realpathSync(file)
+    const fileStat = statSync(canonicalFile)
+    const cachePath = join(dir, 'metadata-cache.json')
+    writeFileSync(cachePath, JSON.stringify({
+      version: 1,
+      entries: [{
+        fingerprint: `${canonicalFile}\0${fileStat.dev}\0${fileStat.ino}\0${fileStat.ctimeMs}\0${fileStat.mtimeMs}\0${fileStat.size}`,
+        metadata: {
+          id: 'pi-cached-session',
+          filePath: canonicalFile,
+          projectPath: realpathSync(project),
+          title: 'cached prompt',
+          createdAt: '2026-08-10T22:41:20.246Z',
+          updatedAt: '2026-08-10T22:42:01.000Z',
+          status: 'idle',
+          depth: 0,
+        },
+      }],
+    }))
+    const store = new JsonStateStore(join(dir, 'state.json'))
+    const service = new SessionService(store, null, undefined, {
+      ...piSessionServiceOptions(root),
+      metadataCachePath: cachePath,
+    })
+
+    const [record] = await service.list()
+    expect(record).toMatchObject({
+      id: 'pi-cached-session',
+      behaviorMode: 'work',
+      provider: 'openai-codex',
+      model: 'gpt-5.4-argon',
+      thinkingLevel: 'low',
     })
   })
 

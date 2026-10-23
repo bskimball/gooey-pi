@@ -5,11 +5,12 @@ import { clearComposerDraft } from '@/lib/composer-draft'
 import { errorMessage } from '@/lib/errors'
 import { startWorkspaceRuntime } from '@/lib/runtime-start'
 import { HARNESS_AGENT_NAMES, hasPiExtensionCommand, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
-import { parseMcpAuthenticationCommand } from '@/lib/mcp-policy'
+import { parseBashCommand, parseCompactCommand, parseMcpCommand } from '@/lib/composer-commands'
+import { runBashCommand, runExtensionCommandNow } from '@/lib/runtime-commands'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/session-actions'
 import type { DEFAULT_SETTINGS } from '@/lib/data'
 import { type createSingleFlightAdmission, findProjectForSession, findRuntimeForWorkspace, newSessionProject, projectContainsPath, workspaceCwd } from '@/lib/workspace'
-import type { CapabilityMutationInput, ExtensionInstallInput, GitStatus, HarnessId, McpConnectionInput, McpStateInput, PrimeWorkApi, ProjectRecord, ProjectSortMode, PromptDeliveryIntent, PromptImage, ScheduleInput, SchedulePatch, SessionRecord, TranscriptMessage, WorkspaceView } from '@/types/api'
+import type { CapabilityMutationInput, ExtensionInstallInput, GitStatus, InspectorTab, McpConnectionInput, McpStateInput, PrimeWorkApi, ProjectRecord, ProjectSortMode, PromptDeliveryIntent, PromptImage, ScheduleInput, SchedulePatch, SessionRecord, TranscriptMessage, WorkspaceView } from '@/types/api'
 import type { useAppSettings } from '@/hooks/useAppSettings'
 import type { usePanelLayout } from '@/hooks/usePanelLayout'
 import type { usePluginSkills } from '@/hooks/usePluginSkills'
@@ -45,8 +46,6 @@ export interface WorkspaceActionsDeps {
   reportError(error: unknown): void
 }
 
-export type McpCommand = { type: 'authenticate'; server?: string }
-
 interface StartedSessionIndexInput {
   bridge: PrimeWorkApi
   harness: ProjectRecord['harness']
@@ -72,24 +71,6 @@ export async function indexStartedSession({ bridge, harness, sessionFile, setSes
     })
   }
   return indexedSession
-}
-
-export function parseCompactCommand(prompt: string): { customInstructions?: string } | undefined {
-  const trimmed = prompt.trim()
-  if (trimmed === '/compact') return {}
-  if (trimmed.startsWith('/compact ')) {
-    const customInstructions = trimmed.slice(9).trim()
-    return customInstructions ? { customInstructions } : {}
-  }
-  return undefined
-}
-
-export function parseMcpCommand(prompt: string, harness: HarnessId): McpCommand | undefined {
-  const value = prompt.trim()
-  const authentication = parseMcpAuthenticationCommand(value, harness)
-  return authentication
-    ? authentication.server ? { type: 'authenticate', server: authentication.server } : { type: 'authenticate' }
-    : undefined
 }
 
 /**
@@ -284,6 +265,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const compactCommand = parseCompactCommand(prompt)
     const modeCommand = parsePiModeCommand(prompt, commandHarness)
     const mcpCommand = parseMcpCommand(prompt, commandHarness)
+    const bashCommand = parseBashCommand(prompt)
     if (mcpCommand?.type === 'authenticate') {
       const target = mcpCommand.server ? ` to sign in to ${mcpCommand.server}` : ' to authenticate network MCP servers'
       setToast(`Network MCP authentication is managed outside Apex. Use ${HARNESS_AGENT_NAMES[commandHarness]} directly${target}.`)
@@ -293,18 +275,21 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       reportError('/compact does not accept attachments. Remove the attachment and try again.')
       return
     }
-    if (modeCommand && images.length > 0) {
-      reportError('/mode does not accept attachments. Remove the attachment and try again.')
+    if ((modeCommand || bashCommand) && images.length > 0) {
+      reportError(`${modeCommand ? '/mode' : '! commands'} ${modeCommand ? 'does' : 'do'} not accept attachments. Remove the attachment and try again.`)
       return
     }
     const currentWorkspace = workspace.workspaceRef.current
     const currentRuntime = workspace.runtime
     const currentOwner = workspace.runtimeOwnerRef.current
+    const ownsCurrentRuntime = () => Boolean(
+      currentRuntime && workspace.workspaceRef.current.generation === currentWorkspace.generation
+      && workspace.runtimeIdRef.current === currentRuntime.runtimeId && workspace.runtimeOwnerRef.current?.runtimeId === currentRuntime.runtimeId
+      && workspace.runtimeOwnerRef.current.generation === currentWorkspace.generation,
+    )
     const ownsStreamingRuntime = Boolean(
       bridge && currentRuntime && (currentRuntime.isStreaming || submissionAdmissionRef.current.active)
-      && workspace.runtimeIdRef.current === currentRuntime.runtimeId
-      && currentOwner?.runtimeId === currentRuntime.runtimeId
-      && currentOwner.generation === currentWorkspace.generation,
+      && currentOwner?.runtimeId === currentRuntime.runtimeId && ownsCurrentRuntime(),
     )
     const completeQueuedFlush = () => {
       if (queuedFlushPromptId) workspace.removeQueuedPrompt(queuedFlushPromptId)
@@ -321,6 +306,15 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         if (intent === 'steer') setToast('Compaction will run when the current turn finishes.')
         return
       }
+      // Like the TUI, `!` commands and extension commands run now instead of waiting for the turn.
+      try {
+        if (bashCommand) {
+          await runBashCommand({ bridge, runtimeId: currentRuntime.runtimeId, bash: bashCommand, setMessages: workspace.setMessages, isCurrent: () => workspace.workspaceRef.current.generation === currentWorkspace.generation })
+          completeQueuedFlush()
+          return
+        }
+        if (images.length === 0 && await runExtensionCommandNow(bridge, currentRuntime.runtimeId, prompt, ownsCurrentRuntime)) { completeQueuedFlush(); return }
+      } catch (error) { reportError(error); throw error }
       if (intent === 'queue' && images.length === 0) {
         if (!queuedFlushPromptId) workspace.queuePrompt(prompt, intent)
         return
@@ -409,7 +403,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           demoTimerRef.current.push(window.setTimeout(() => workspace.setMessages((items) => items.map((item) => item.id === assistantId ? { ...item, streaming: false, completedAt: Date.now(), parts: [...item.parts, { type: 'toolResult', name: 'Inspect project', text: 'Project context loaded' }, { type: 'text', text: 'I’ve reviewed the project context and prepared the workspace. Connect the desktop bridge to run this request with Pi.' }] } : item)), 1_250))
           return
         }
-        const continueInBackground = (!admitted.sessionFile || createdSessionFiles.has(admitted.sessionFile)) && !compactCommand && !modeCommand
+        const continueInBackground = (!admitted.sessionFile || createdSessionFiles.has(admitted.sessionFile)) && !compactCommand && !modeCommand && !bashCommand
         const submissionIsCurrent = () => workspace.workspaceRef.current.generation === generation
         const model = provider.model
         const thinking = provider.effort
@@ -438,7 +432,11 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           setToast('Stop active agent work before switching modes.')
           return
         }
-        if ((intent === 'queue' || compactCommand) && images.length === 0 && (activeRuntime?.isStreaming || selectedSession?.status === 'running')) {
+        if (bashCommand && !activeRuntime && selectedSession?.status === 'running') {
+          setToast('! commands are unavailable while this session is running outside Apex.')
+          return
+        }
+        if (!bashCommand && (intent === 'queue' || compactCommand) && images.length === 0 && (activeRuntime?.isStreaming || selectedSession?.status === 'running')) {
           if (!queuedFlushPromptId) queuedPromptId = workspace.queuePrompt(prompt, compactCommand ? 'queue' : intent)
           if (compactCommand && intent === 'steer') setToast('Compaction will run when the current turn finishes.')
           return
@@ -466,11 +464,11 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           }
           try {
             if (!model) throw new Error(`No model is available for ${HARNESS_AGENT_NAMES[activeHarness]}. Enable or connect a provider, then try again.`)
-            if (!compactCommand && !modeCommand) beginOptimisticPrompt()
+            if (!compactCommand && !modeCommand && !bashCommand) beginOptimisticPrompt()
             activeRuntime = await startWorkspaceRuntime(bridge, { cwd: selected.cwd, sessionPath: selected.sessionFile, model, thinking, fast, harness: activeHarness }, generation)
           } catch (startError) {
             // A mode command must reach the modes extension; as a follow-up it would be chat text.
-            if (!modeCommand && images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
+            if (!modeCommand && !bashCommand && images.length === 0 && selected.sessionFile && await followUpExternalSession(selected.sessionFile)) {
               startedPrompt = false
               if (workspace.workspaceRef.current.generation === generation) {
                 workspace.setMessages((items) => items.filter((item) => item.id !== assistantId && (intent === 'steer' || item.id !== userMessage.id)))
@@ -499,6 +497,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             ...(compactCommand.customInstructions ? { customInstructions: compactCommand.customInstructions } : {}),
           })
           completeQueuedFlush()
+        } else if (bashCommand) {
+          await runBashCommand({ bridge, runtimeId: activeRuntime.runtimeId, bash: bashCommand, setMessages: workspace.setMessages, isCurrent: submissionIsCurrent })
+          completeQueuedFlush()
         } else if (modeCommand) {
           const runtimeId = activeRuntime.runtimeId
           const ownsModeRuntime = () => workspace.workspaceRef.current.generation === generation
@@ -524,6 +525,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           const refreshed = (await bridge.agent.list()).find((candidate) => candidate.runtimeId === runtimeId)
           if (!ownsModeRuntime()) return
           if (refreshed) workspace.attachRuntime(refreshed, generation)
+          completeQueuedFlush()
+        } else if (activeRuntime.isStreaming && images.length === 0 && await runExtensionCommandNow(bridge, activeRuntime.runtimeId, prompt, () => submissionIsCurrent() || continueInBackground)) {
           completeQueuedFlush()
         } else if (activeRuntime.isStreaming) {
           // Follow-ups are daemon-owned. Steers get a renderer-only pending
@@ -597,6 +600,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const stoppedOwnerRuntimeId = stoppedOwner?.runtimeId
     const stoppedOwnerGeneration = stoppedOwner?.generation
     try {
+      // A running `!` command is separate from the agent turn; aborting with no command running is a no-op.
+      void bridge.agent.command(stoppedRuntimeId, { type: 'abort_bash' }).catch(() => undefined)
       await bridge.agent.command(stoppedRuntimeId, { type: 'abort' })
       const currentOwner = workspace.runtimeOwnerRef.current
       if (
@@ -716,19 +721,20 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     settingsState.selectInspectorTab('browser')
     if (!settingsState.inspectorOpen) persistPanel({ inspectorOpen: true })
   }
-  const openChanges = () => {
+  const openInspectorTab = (tab: InspectorTab) => {
     const { layout, settingsState } = getDeps()
     if (layout.compactLayout && settingsState.sidebarOpen) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
-    settingsState.selectInspectorTab('changes')
+    settingsState.selectInspectorTab(tab)
     if (!settingsState.inspectorOpen) persistPanel({ inspectorOpen: true })
   }
+  const openChanges = () => openInspectorTab('changes')
 
   return {
     grantProject, persistPanel, toggleSidebar, toggleInspector, toggleTerminal,
     selectProject, selectSession, newSession, navigate, renameSession, setSessionArchived,
     addProject, removeProject, togglePinProject, setProjectSortMode, sendPrompt, stopRuntime, installSkill, installExtension, setMcpSupport, connectMcp, setMcpEnabled, mutateCapability,
     createSchedule, updateSchedule, mutateSchedule, openScheduledSession,
-    openBrowser, openChanges,
+    openBrowser, openChanges, openInspectorTab,
   }
 }
 

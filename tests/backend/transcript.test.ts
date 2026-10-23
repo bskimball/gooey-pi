@@ -206,6 +206,23 @@ describe('persisted system-prompt snapshots', () => {
   })
 })
 
+describe('user bash executions', () => {
+  it('renders a persisted !command with its command and output', async () => {
+    const file = makeSessionFile()
+    writeFileSync(file, [
+      JSON.stringify({ type: 'session', id: 'session-1', cwd: '/tmp', timestamp: '2026-10-18T00:00:00.000Z' }),
+      JSON.stringify({ type: 'message', id: 'bash-1', parentId: null, message: { role: 'bashExecution', command: 'git status', output: 'clean', exitCode: 1 } }),
+      '',
+    ].join('\n'))
+
+    const [message] = await readTranscript(file, false)
+    expect(message.parts).toEqual([
+      { type: 'toolCall', name: 'bash', args: { command: 'git status' } },
+      { type: 'toolResult', name: 'bash', text: 'clean', isError: true },
+    ])
+  })
+})
+
 function makeSessionFile(): string {
   const dir = mkdtempSync(join(tmpdir(), 'prime-work-transcript-'))
   dirs.push(dir)

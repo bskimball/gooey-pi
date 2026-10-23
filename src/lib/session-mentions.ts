@@ -1,3 +1,4 @@
+import { endsMention } from '@/lib/capability-mentions'
 import type { HarnessId, SessionRecord } from '@/types/api'
 
 export interface SessionMention {
@@ -22,7 +23,6 @@ export interface RoutedSessionReference {
 }
 
 const boundaryBefore = (value: string | undefined): boolean => value === undefined || /[\s([{"'`]/.test(value)
-const boundaryAfter = (value: string | undefined): boolean => value === undefined || /[\s.,!?;:()[\]{}"'`]/.test(value)
 
 /** Resolves exact visible @title references to stable session UUIDs. */
 export function findSessionMentions(value: string, sessions: readonly SessionRecord[], preferredIds: ReadonlyMap<string, string> = new Map()): SessionMention[] {
@@ -39,7 +39,7 @@ export function findSessionMentions(value: string, sessions: readonly SessionRec
     if (value[index] !== '@' || !boundaryBefore(value[index - 1])) continue
     const session = candidates.find((candidate) => {
       const token = `@${candidate.title.trim()}`.toLocaleLowerCase()
-      return lowerValue.startsWith(token, index) && boundaryAfter(value[index + token.length])
+      return lowerValue.startsWith(token, index) && endsMention(value, index + token.length)
     })
     if (!session) continue
     const end = index + session.title.trim().length + 1

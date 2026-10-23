@@ -1,6 +1,6 @@
 import type { SessionRecord, SkillRecord } from '@/types/api'
 
-/** `$` invokes skills; `@` references sessions and every other capability kind. */
+/** `$` invokes skills; `@` references files, sessions, and other capabilities. Prompt templates are `/name` commands. */
 export type MentionTrigger = '@' | '$'
 
 export interface CapabilityMention {
@@ -24,6 +24,10 @@ export const CAPABILITY_ROUTING_END = '===== END GOOEYPI CAPABILITY ROUTING ====
 
 const boundaryBefore = (value: string | undefined): boolean => value === undefined || /[\s([{"'`]/.test(value)
 const boundaryAfter = (value: string | undefined): boolean => value === undefined || /[\s.,!?;:()[\]{}"'`]/.test(value)
+/** `@browser.` ends a mention; `@browser.md` is a file path. */
+export const endsMention = (value: string, end: number): boolean =>
+  boundaryAfter(value[end]) && !(value[end] === '.' && /[\w-]/.test(value[end + 1] ?? ''))
+const mentionable = (skill: SkillRecord): boolean => skill.kind !== 'prompt'
 
 const MENTION_QUERY_PATTERNS: Record<MentionTrigger, RegExp> = {
   '@': /(?:^|\s)@([^@\n]*)$/,
@@ -45,7 +49,7 @@ export function findMentionQuery(value: string): MentionQuery | null {
 /** Lists the capabilities a typed mention can complete to: skills for `$`, everything else for `@`. */
 export function capabilitiesForMention(skills: readonly SkillRecord[], mention: MentionQuery): SkillRecord[] {
   const query = mention.query.toLocaleLowerCase().trim()
-  return skills.filter((skill) => capabilityTrigger(skill) === mention.trigger && skill.name.toLocaleLowerCase().includes(query))
+  return skills.filter((skill) => mentionable(skill) && capabilityTrigger(skill) === mention.trigger && skill.name.toLocaleLowerCase().includes(query))
 }
 
 const MENTION_MENU_LIMIT = 8
@@ -96,7 +100,7 @@ export function orderedAtMentions(
 function mentionCandidates(skills: readonly SkillRecord[]): SkillRecord[] {
   const seen = new Set<string>()
   return skills
-    .filter((skill) => skill.enabled && skill.name.trim())
+    .filter((skill) => skill.enabled && mentionable(skill) && skill.name.trim())
     .sort((left, right) => right.name.length - left.name.length)
     .filter((skill) => {
       // Skills and other capabilities live under different triggers, so a
@@ -119,7 +123,7 @@ export function findCapabilityMentions(value: string, skills: readonly SkillReco
     const skill = candidates.find((candidate) => {
       if (capabilityTrigger(candidate) !== trigger) return false
       const token = `${trigger}${candidate.name.trim()}`.toLocaleLowerCase()
-      return lowerValue.startsWith(token, index) && boundaryAfter(value[index + token.length])
+      return lowerValue.startsWith(token, index) && endsMention(value, index + token.length)
     })
     if (!skill) continue
     const end = index + skill.name.trim().length + 1
@@ -137,8 +141,8 @@ function routingInstruction(mention: CapabilityMention): string {
   if (mention.skill.id === 'prime-work-schedules' || mention.skill.id === 'omp-work-schedules') {
     return `${token}: use Apex's Scheduled tasks capability and its own schedule tools.`
   }
-  // Skills and prompts are Markdown files; agents have no tool that resolves catalog ids.
-  if ((mention.skill.kind === 'skill' || mention.skill.kind === 'prompt') && mention.skill.path) {
+  // Skills are Markdown files; agents have no tool that resolves catalog ids.
+  if (mention.skill.kind === 'skill' && mention.skill.path) {
     const kind = mention.skill.kind
     return `${token}: Read the ${kind} file at ${JSON.stringify(mention.skill.path)} and follow its instructions for this request. This is the exact ${kind} file selected by the user, not a substitute. No catalog lookup or catalog-ID verification is required, including for any catalog ID mentioned earlier in this conversation. Resolve its relative paths from the directory containing that ${kind} file. This is an explicit user invocation, even if the ${kind} is omitted from the automatic ${kind} list.`
   }
