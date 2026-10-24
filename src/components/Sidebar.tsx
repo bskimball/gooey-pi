@@ -10,7 +10,6 @@ import {
   CircleNotch,
   Copy,
   DotsThree,
-  DownloadSimple,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -23,8 +22,8 @@ import {
   SidebarLeft,
   Trash,
 } from './icons'
-import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { PROJECT_SORT_MODES, type AppUpdateState, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
@@ -44,8 +43,6 @@ export interface SidebarProps {
   activeView: WorkspaceView
   activeHarness?: HarnessId
   clearedAttention?: Record<string, string>
-  updateState?: AppUpdateState
-  onUpdateAction?(): void | Promise<void>
   onSelectProject(project: ProjectRecord): void
   onSelectSession(session: SessionRecord): void
   onNavigate(view: WorkspaceView): void
@@ -126,46 +123,6 @@ function SessionStatusMark({ status, attention }: { status: SessionRecord['statu
   return <span className={`session-status-mark session-status-mark--${status}`} title={title}><span /></span>
 }
 
-function updateControlCopy(state: AppUpdateState): { label: string; title: string } {
-  const version = state.version ? ` ${state.version}` : ''
-  switch (state.phase) {
-    case 'checking': return { label: 'Checking for updates', title: 'Checking GitHub Releases for a new Apex version' }
-    case 'available': return { label: `Download${version}`, title: `Download and restart Apex${version}` }
-    case 'downloading': return {
-      label: state.percent === undefined ? `Downloading${version}` : `Downloading${version} · ${state.percent}%`,
-      title: `Downloading Apex${version}`,
-    }
-    case 'downloaded': return { label: `Restart for${version}`, title: `Restart Apex and install version${version}` }
-    case 'not-available': return { label: 'Apex is up to date', title: 'Check again for a new Apex release' }
-    case 'error': return { label: version ? `Retry update${version}` : 'Retry update', title: state.message ?? 'Update failed — try checking again' }
-    case 'unsupported': return { label: 'Automatic updates', title: state.message ?? 'Automatic updates are available in installed builds' }
-    default: return { label: 'Release updates', title: 'Check for a new Apex release' }
-  }
-}
-
-/** Announced without the percentage so progress ticks do not spam assistive tech. */
-function updateAnnouncement(state: AppUpdateState): string {
-  const version = state.version ? ` ${state.version}` : ''
-  switch (state.phase) {
-    case 'available': return `Apex update${version} is available`
-    case 'downloading': return `Downloading Apex update${version}`
-    case 'downloaded': return `Apex update${version} is ready to install`
-    case 'error': return `Apex update failed. ${state.message ?? 'Try again.'}`
-    default: return ''
-  }
-}
-
-function updateConfirmCopy(state: AppUpdateState): { title: string; body: string } {
-  if (state.phase === 'downloaded') return {
-    title: 'Restart Apex to install the update?',
-    body: 'Apex will close and restart to finish installing the update.',
-  }
-  return {
-    title: 'Download and Restart Apex?',
-    body: 'Apex will download the update, close, and restart when it is ready.',
-  }
-}
-
 async function copySessionUuid(id: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     try {
@@ -186,7 +143,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, updateState = { phase: 'unsupported' }, onUpdateAction, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -202,7 +159,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const [renameValue, setRenameValue] = useState('')
   const [archiveTarget, setArchiveTarget] = useState<SessionRecord | null>(null)
   const [removeTarget, setRemoveTarget] = useState<ProjectRecord | null>(null)
-  const [confirmUpdate, setConfirmUpdate] = useState(false)
   const { activeSessions, sessionsByProject } = useMemo(() => indexSidebarSessions(projects, sessions), [projects, sessions])
   const needsAttention = (session: SessionRecord) => {
     const signature = sessionAttentionSignature(session)
@@ -213,11 +169,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const commandsShortcut = shortcutLabel(platform, ['Primary', 'K'])
   const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
-  const updateCopy = updateControlCopy(updateState)
-  const updateConfirm = updateConfirmCopy(updateState)
-  const updateBusy = updateState.phase === 'checking' || updateState.phase === 'downloading'
-  const updateIndeterminate = updateState.phase === 'downloading' && updateState.percent === undefined
-  const updateVisible = updateState.phase === 'available' || updateState.phase === 'downloading' || updateState.phase === 'downloaded' || updateState.phase === 'error'
   useEffect(() => {
     if (!projectMenu) return
     const dismiss = (event: PointerEvent) => { if (!(event.target instanceof Element) || !event.target.closest('.project-group')) setProjectMenu(null) }
@@ -383,27 +334,10 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
 
       <div className="sidebar__footer">
         <button type="button" title="Commands" onClick={onOpenPalette}><MagnifyingGlass size={15} /><span>Commands</span><kbd>{commandsShortcut}</kbd></button>
-        {updateVisible ? (
-          <>
-            <span className="sr-only" role="status" aria-live="polite">{updateAnnouncement(updateState)}</span>
-            <button
-              type="button"
-              className={`sidebar-update sidebar-update--${updateState.phase} ${updateIndeterminate ? 'sidebar-update--indeterminate' : ''}`}
-              title={updateCopy.title}
-              aria-label={updateCopy.title}
-              disabled={updateBusy}
-              onClick={() => { if (updateState.phase === 'error') void onUpdateAction?.(); else setConfirmUpdate(true) }}
-            >
-              <span className="sidebar-update__icon" style={{ '--update-progress': `${updateState.percent ?? 0}%` } as CSSProperties}><DownloadSimple size={12} /></span>
-              <span>{updateCopy.label}</span>
-            </button>
-          </>
-        ) : null}
         <button type="button" title={t('nav.settings')} className={activeView === 'settings' ? 'is-active' : ''} onClick={() => onNavigate('settings')}><Gear size={15} /><span>{t('nav.settings')}</span><kbd>{settingsShortcut}</kbd></button>
       </div>
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</button></>}><label className="field"><span>Session name</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}
       {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><button type="button" className="button" onClick={() => setRemoveTarget(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</button></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
-      {confirmUpdate ? <Modal title={updateConfirm.title} onClose={() => setConfirmUpdate(false)} footer={<><button type="button" className="button" onClick={() => setConfirmUpdate(false)}>No</button><button type="button" className="button button--primary" onClick={() => { setConfirmUpdate(false); void onUpdateAction?.() }}>Yes</button></>}><p>{updateConfirm.body}</p></Modal> : null}
     </aside>
   )
 }
@@ -416,8 +350,6 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.activeView === next.activeView
     && previous.activeHarness === next.activeHarness
     && previous.clearedAttention === next.clearedAttention
-    && previous.updateState === next.updateState
-    && previous.onUpdateAction === next.onUpdateAction
     && previous.onSelectProject === next.onSelectProject
     && previous.onSelectSession === next.onSelectSession
     && previous.onNavigate === next.onNavigate

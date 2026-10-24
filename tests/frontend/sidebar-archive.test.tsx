@@ -247,49 +247,6 @@ describe('sidebar project context menu', () => {
     expect([...container.querySelectorAll('[aria-label^="Project options"] button')].some((button) => button.textContent?.includes('Pin project'))).toBe(false)
   })
 
-  it('requires confirmation before downloading and restarting an available update', async () => {
-    const onUpdateAction = vi.fn()
-    await act(async () => {
-      root.render(
-        <Sidebar
-          projects={[project]} sessions={[session]} activeView="session" updateState={{ phase: 'available', version: '0.2.0' }} onUpdateAction={onUpdateAction}
-          onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
-        />,
-      )
-    })
-
-    const update = container.querySelector('.sidebar__footer .sidebar-update')
-    const settings = container.querySelector('.sidebar__footer button[title="Settings"]')
-    expect(update).not.toBeNull()
-    expect(update?.nextElementSibling).toBe(settings)
-    expect(update?.textContent).toContain('Download 0.2.0')
-    expect(update?.querySelector('.ph-download-simple')).not.toBeNull()
-    await press(update!)
-    expect(onUpdateAction).not.toHaveBeenCalled()
-    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Download and Restart Apex?')
-
-    const yes = [...document.body.querySelectorAll<HTMLButtonElement>('.modal__footer button')].find((button) => button.textContent === 'Yes')
-    expect(yes).toBeDefined()
-    await press(yes!)
-    expect(onUpdateAction).toHaveBeenCalledOnce()
-  })
-
-  it('keeps the release control hidden when no update is available', async () => {
-    await act(async () => {
-      root.render(
-        <Sidebar
-          projects={[project]} sessions={[session]} activeView="session" updateState={{ phase: 'not-available' }}
-          onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
-        />,
-      )
-    })
-
-    expect(container.querySelector('.sidebar__footer .sidebar-update')).toBeNull()
-    expect(container.querySelector('.sidebar__footer button[title="Settings"]')).not.toBeNull()
-  })
-
   it('copies the exact session UUID from the session context menu', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

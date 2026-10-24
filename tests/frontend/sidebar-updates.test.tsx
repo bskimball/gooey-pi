@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from '../../src/components/Sidebar'
-import type { AppUpdateState, ProjectRecord, SessionRecord } from '../../src/types/api'
+import type { ProjectRecord, SessionRecord } from '../../src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -34,81 +34,27 @@ afterEach(async () => {
 
 const noop = () => undefined
 
-async function press(element: Element) {
-  await act(async () => {
-    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
-    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  })
-}
+describe('sidebar footer', () => {
+  it('offers commands and settings without a release download control', async () => {
+    const onNavigate = vi.fn()
+    const onOpenPalette = vi.fn()
+    await act(async () => {
+      root.render(
+        <Sidebar
+          projects={[project]} sessions={[session]} activeView="session"
+          onSelectProject={noop} onSelectSession={noop} onNavigate={onNavigate} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
+          onClose={noop} onOpenPalette={onOpenPalette} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+        />,
+      )
+    })
 
-async function renderSidebar(updateState: AppUpdateState, onUpdateAction: () => void) {
-  await act(async () => {
-    root.render(
-      <Sidebar
-        projects={[project]} sessions={[session]} activeView="session" updateState={updateState} onUpdateAction={onUpdateAction}
-        onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-        onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
-      />,
-    )
-  })
-}
-
-describe('sidebar update control', () => {
-  it('asks only about restarting when the update is already downloaded', async () => {
-    const onUpdateAction = vi.fn()
-    await renderSidebar({ phase: 'downloaded', version: '0.2.0' }, onUpdateAction)
-
-    await press(container.querySelector('.sidebar-update')!)
-    const dialog = document.body.querySelector('[role="dialog"]')
-    expect(dialog?.textContent).toContain('Restart Apex to install the update?')
-    expect(dialog?.textContent).toContain('close and restart')
-    expect(dialog?.textContent).not.toContain('download the update')
-
-    const yes = [...document.body.querySelectorAll<HTMLButtonElement>('.modal__footer button')].find((button) => button.textContent === 'Yes')
-    await press(yes!)
-    expect(onUpdateAction).toHaveBeenCalledOnce()
-  })
-
-  it('keeps a retry affordance and the version after a failed download', async () => {
-    const onUpdateAction = vi.fn()
-    await renderSidebar({ phase: 'error', version: '0.2.0', message: 'network went away' }, onUpdateAction)
-
-    const update = container.querySelector<HTMLButtonElement>('.sidebar-update')
-    expect(update).not.toBeNull()
-    expect(update?.classList.contains('sidebar-update--error')).toBe(true)
-    expect(update?.textContent).toContain('Retry update 0.2.0')
-    expect(update?.getAttribute('title')).toBe('network went away')
-    expect(update?.disabled).toBe(false)
-
-    // Retrying re-checks straight away instead of asking to download and restart.
-    await press(update!)
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')]
+    expect(buttons.map((button) => button.title)).toEqual(['Commands', 'Settings'])
+    expect(container.querySelector('.sidebar-update')).toBeNull()
+    await act(async () => buttons[0].click())
+    expect(onOpenPalette).toHaveBeenCalledOnce()
+    await act(async () => buttons[1].click())
+    expect(onNavigate).toHaveBeenCalledWith('settings')
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
-    expect(onUpdateAction).toHaveBeenCalledOnce()
-  })
-
-  it('shows a busy state instead of a stuck 0% until progress is known', async () => {
-    const onUpdateAction = vi.fn()
-    await renderSidebar({ phase: 'downloading', version: '0.2.0' }, onUpdateAction)
-
-    const update = container.querySelector('.sidebar-update')
-    expect(update?.textContent).toContain('Downloading 0.2.0')
-    expect(update?.textContent).not.toContain('%')
-    expect(update?.classList.contains('sidebar-update--indeterminate')).toBe(true)
-
-    await renderSidebar({ phase: 'downloading', version: '0.2.0', percent: 12 }, onUpdateAction)
-    const progressing = container.querySelector('.sidebar-update')
-    expect(progressing?.textContent).toContain('Downloading 0.2.0 · 12%')
-    expect(progressing?.classList.contains('sidebar-update--indeterminate')).toBe(false)
-  })
-
-  it('announces phase changes from a dedicated status element without the percentage', async () => {
-    const onUpdateAction = vi.fn()
-    await renderSidebar({ phase: 'downloading', version: '0.2.0', percent: 42 }, onUpdateAction)
-
-    const update = container.querySelector('.sidebar-update')
-    expect(update?.getAttribute('aria-live')).toBeNull()
-    const status = container.querySelector('.sidebar__footer [role="status"]')
-    expect(status?.getAttribute('aria-live')).toBe('polite')
-    expect(status?.textContent).toBe('Downloading Apex update 0.2.0')
   })
 })
