@@ -106,7 +106,7 @@ setTimeout(() => update(-1), 250)
 
     const count = PROCESS_CONCURRENCY_LIMIT + 6
     const results = await Promise.all(Array.from({ length: count }, () => runProcess(process.execPath, [workerPath, statePath], { timeoutMs: 5_000 })))
-    expect(results.every((result) => result.code === 0)).toBe(true)
+    expect(results.filter((result) => result.code !== 0)).toEqual([])
     const state = JSON.parse(readFileSync(statePath, 'utf8')) as { active: number; max: number }
     expect(state.active).toBe(0)
     expect(state.max).toBeGreaterThan(1)
