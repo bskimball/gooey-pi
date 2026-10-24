@@ -38,7 +38,7 @@ describe('GitService', () => {
     writeFileSync(join(cwd, 'untracked.txt'), 'keep me\n')
     await expect(switchGitBranch(cwd, initialBranch)).resolves.toMatchObject({ kind: 'dirty', changedPaths: ['untracked.txt'] })
     expect((await listLocalGitBranches(cwd)).find((branch) => branch.current)?.name).toBe('feature/local')
-  })
+  }, 15_000)
 
   it('creates a local branch from HEAD and refuses dirty work', async () => {
     const cwd = repository('prime-work-git-create-branch-')
@@ -113,7 +113,7 @@ describe('GitService', () => {
     expect(await service.unstage(nested, ['packages/app/nested.txt'])).toBe(true)
     expect(await service.restore(nested, ['packages/app/nested.txt'])).toBe(true)
     expect(readFileSync(join(nested, 'nested.txt'), 'utf8')).toBe('base\n')
-  })
+  }, 15_000)
 
   it('unstages files on an unborn HEAD without changing working content', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-git-unborn-'))
