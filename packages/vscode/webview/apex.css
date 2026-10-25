@@ -18,6 +18,10 @@ body { padding: 0; }
   align-items: center;
 }
 
+.apex-shell .apex-session-picker__trigger {
+  display: inline-flex;
+}
+
 .apex-session-picker__trigger {
   position: relative;
   min-width: 0;
