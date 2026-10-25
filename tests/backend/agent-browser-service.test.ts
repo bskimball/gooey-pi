@@ -392,7 +392,7 @@ describe("AgentBrowserService", () => {
 		});
 		expect(call).toHaveBeenCalledExactlyOnceWith("create_tab", {
 			url: "http://localhost:3000/",
-		});
+		}, sessionA);
 		expect(guest.listenerCount("did-navigate")).toBe(0);
 		service.beginShutdown();
 	});

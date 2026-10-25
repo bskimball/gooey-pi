@@ -1,0 +1,7 @@
+src/**
+webview/**
+node_modules/**
+*.vsix
+tsconfig.json
+vite.config.ts
+.gitignore

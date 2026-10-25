@@ -1,0 +1,20 @@
+{
+  "name": "apex-vscode-theme",
+  "displayName": "Pi Desktop Theme",
+  "description": "Dark and light VS Code themes matching the pi-desktop app.",
+  "version": "0.1.0",
+  "publisher": "bdkinc",
+  "license": "MIT",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Themes"],
+  "scripts": {
+    "build": "node build.mjs",
+    "package": "node build.mjs && npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license"
+  },
+  "contributes": {
+    "themes": [
+      { "label": "Pi Desktop Dark", "uiTheme": "vs-dark", "path": "./themes/pi-desktop-dark-color-theme.json" },
+      { "label": "Pi Desktop Light", "uiTheme": "vs", "path": "./themes/pi-desktop-light-color-theme.json" }
+    ]
+  }
+}

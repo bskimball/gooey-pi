@@ -40,6 +40,7 @@ export class AgentBrowserBridge extends CapabilityBridge {
 
   protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim): Promise<unknown> {
     if (!claim.sessionPath) throw new Error('Browser control is not available yet for this thread; try again in a moment')
+    await this.options.service.refreshExtensionState()
     return this.call(method, params, canonicalSessionPath(claim.sessionPath))
   }
 

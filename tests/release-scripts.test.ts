@@ -1633,8 +1633,15 @@ describe('vendored supply-chain pins', () => {
   test('every non-registry dependency in the lockfile matches its recorded pin exactly', () => {
     const lockfile = JSON.parse(readFileSync('package-lock.json', 'utf8'))
     const pins = JSON.parse(readFileSync('scripts/release/dependency-pins.json', 'utf8')).packages
-    const nonRegistry = (Object.entries(lockfile.packages ?? {}) as Array<[string, { resolved?: string; integrity?: string }]>).filter(
-      ([, entry]) => typeof entry.resolved === 'string' && entry.resolved.length > 0 && !entry.resolved.startsWith('https://registry.npmjs.org'),
+    const entries = Object.entries(lockfile.packages ?? {}) as Array<[string, { resolved?: string; integrity?: string; link?: boolean }]>
+    // These workspace projects are not desktop runtime dependencies. Only their
+    // exact npm workspace links are exempt from registry integrity pins.
+    expect(entries.filter(([, entry]) => entry.link)).toEqual([
+      ['node_modules/apex-vscode', { resolved: 'packages/vscode', link: true }],
+      ['node_modules/apex-vscode-theme', { resolved: 'packages/vscode-theme', link: true }],
+    ])
+    const nonRegistry = entries.filter(
+      ([, entry]) => !entry.link && typeof entry.resolved === 'string' && entry.resolved.length > 0 && !entry.resolved.startsWith('https://registry.npmjs.org'),
     )
 
     expect(Object.keys(lockfile.packages).filter((name) => /prime-agent|@earendil-works\/pi-(agent-core|tui)/.test(name))).toEqual([])

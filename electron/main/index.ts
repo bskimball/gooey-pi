@@ -1124,7 +1124,7 @@ async function bootstrap(): Promise<void> {
 		},
 	});
 	const extensionBridge = new ExtensionBrowserBridge();
-	await extensionBridge.start();
+	await extensionBridge.startOrConnect('vscode');
 	extensionBrowserBridge = extensionBridge;
 	const browserService = new AgentBrowserService({
 		extensionBridge,

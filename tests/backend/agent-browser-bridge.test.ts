@@ -21,6 +21,7 @@ function fakeService() {
     return { method }
   }
   const service = {
+    refreshExtensionState: async () => undefined,
     listTabs: record('tabs.list'),
     openTab: record('tabs.open'),
     closeTabScoped: record('tabs.close'),

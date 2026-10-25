@@ -1,3 +1,4 @@
+import { callMethod, probeBroker } from './extension-bridge-client';
 import { randomBytes } from "node:crypto";
 import {
 	createServer,
@@ -14,6 +15,7 @@ export interface ExtensionCommand {
 export interface ExtensionBridgeOptions {
 	port?: number;
 	commandTimeoutMs?: number;
+	bridgeKind?: 'desktop' | 'vscode';
 }
 
 /** Separate from CapabilityBridge because Chrome extensions send an Origin header. */
@@ -33,7 +35,112 @@ export class ExtensionBrowserBridge {
 	private readonly events = new Set<(event: Record<string, unknown>) => void>();
 	private readonly changes = new Set<() => void>();
 	private context: () => Record<string, unknown> = () => ({});
+	private readonly tabState = new Map<number, Record<string, unknown>>();
+	private readonly remoteTabs = new Set<number>();
+	private readonly releasedTabs = new Set<number>();
+	private remoteBase: string | null = null;
+	private remoteConnected = false;
+	private polling: NodeJS.Timeout | null = null;
+	private refresh: Promise<void> | null = null;
+	private disposed = false;
+	private latestSession: string | null | undefined;
 	port: number | null = null;
+
+	async startOrConnect(onlyKind?: 'vscode', base = 'http://127.0.0.1:29301'): Promise<void> {
+		const broker = await probeBroker(base);
+		if (broker.running && (!onlyKind || broker.kind === onlyKind)) {
+			this.remoteBase = base;
+			this.port = Number(new URL(base).port);
+			await this.refreshState();
+		} else {
+			await this.start();
+			if (this.port !== Number(new URL(base).port) && this.options.port !== 0) {
+				let winner = await probeBroker(base);
+				if (!winner.running) {
+					await new Promise(resolve => setTimeout(resolve, 100));
+					winner = await probeBroker(base);
+				}
+				if (winner.running && (!onlyKind || winner.kind === onlyKind)) {
+					await this.stop();
+					this.disposed = false;
+					this.remoteBase = base;
+					this.port = Number(new URL(base).port);
+					await this.refreshState();
+				}
+			}
+		}
+	}
+
+	async refreshState(): Promise<void> {
+		if (!this.remoteBase || this.disposed) return;
+		if (this.refresh) return this.refresh;
+		this.refresh = this.readRemoteState().finally(() => { this.refresh = null; });
+		return this.refresh;
+	}
+
+	private async readRemoteState(): Promise<void> {
+		try {
+			const base = this.remoteBase;
+			const hello = await fetch(`${base}/v1/extension/hello`, { signal: AbortSignal.timeout(500) });
+			const identity = await hello.json() as { token: string };
+			this.token = identity.token;
+			const response = await fetch(`${base}/v1/extension/tab-state`, { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(500) });
+			if (!response.ok) throw new Error('Broker state unavailable');
+			const state = await response.json() as { connected: boolean; tabs: Record<string, unknown>[] };
+			if (this.disposed) return;
+			this.remoteConnected = state.connected;
+			const context = this.context();
+			const ownTabs = Array.isArray(context.tabs) ? context.tabs as Record<string, unknown>[] : [];
+			const sessions = new Set(ownTabs.map(tab => tab.sessionFile));
+			sessions.add(context.activeSessionKey);
+			const seen = new Set<number>();
+			for (const tab of state.tabs) {
+				if (typeof tab.chromeTabId !== 'number' || !sessions.has(tab.sessionKey)) continue;
+				seen.add(tab.chromeTabId);
+				const existing = ownTabs.find(item => item.chromeTabId === tab.chromeTabId);
+				if (!existing) this.emitEvent({ ...tab, type: 'tab_paired' });
+				this.emitEvent({ ...tab, type: 'tab_updated' });
+				if (typeof tab.paused === 'boolean' && existing?.paused !== tab.paused) this.emitEvent({ ...tab, type: 'tab_pause_changed' });
+			}
+			for (const tab of ownTabs) {
+				if (typeof tab.chromeTabId === 'number' && !seen.has(tab.chromeTabId)) this.emitEvent({ ...tab, type: 'tab_closed' });
+			}
+		} catch { this.remoteConnected = false; }
+		if (!this.disposed) this.changed();
+	}
+
+	async setActiveSession(sessionKey: string | null): Promise<void> {
+		if (!this.remoteBase) return;
+		if (this.polling) clearInterval(this.polling);
+		this.polling = null;
+		if (sessionKey !== null) {
+			this.polling = setInterval(() => { void this.refreshState(); }, 2000);
+			this.polling.unref?.();
+			await this.refreshState();
+		}
+	}
+
+	private emitEvent(event: Record<string, unknown>): void {
+		for (const listener of this.events) listener(event);
+	}
+
+	private snapshot(): Record<string, unknown>[] {
+		const context = this.context();
+		if (Array.isArray(context.tabs)) this.rememberTabs(context.tabs);
+		return [...this.tabState.values()];
+	}
+
+	private rememberTabs(tabs: unknown[], remote = false): void {
+		for (const tab of tabs) {
+			if (!tab || typeof tab !== 'object' || !('chromeTabId' in tab) || typeof tab.chromeTabId !== 'number') continue;
+			if (this.releasedTabs.has(tab.chromeTabId)) continue;
+			if (!remote && this.remoteTabs.has(tab.chromeTabId)) continue;
+			if (remote) this.remoteTabs.add(tab.chromeTabId);
+			const record = tab as Record<string, unknown>;
+			const previous = this.tabState.get(tab.chromeTabId);
+			this.tabState.set(tab.chromeTabId, { ...previous, ...record, paused: previous?.paused ?? record.paused, sessionKey: previous?.sessionKey ?? record.sessionKey ?? record.sessionFile });
+		}
+	}
 
 	constructor(private readonly options: ExtensionBridgeOptions = {}) {}
 
@@ -53,7 +160,7 @@ export class ExtensionBrowserBridge {
 		};
 	}
 	isConnected(): boolean {
-		return this.stream !== null && !this.stream.destroyed;
+		return this.remoteBase ? this.remoteConnected : this.stream !== null && !this.stream.destroyed;
 	}
 	private changed(): void {
 		for (const listener of this.changes) listener();
@@ -109,8 +216,14 @@ export class ExtensionBrowserBridge {
 	}
 
 	async stop(): Promise<void> {
+		this.disposed = true;
+		if (this.polling) clearInterval(this.polling);
+		this.polling = null;
+		await this.refresh;
 		this.disconnect();
 		this.token = "";
+		this.tabState.clear();
+		this.remoteTabs.clear();
 		const server = this.server;
 		this.server = null;
 		this.port = null;
@@ -121,7 +234,44 @@ export class ExtensionBrowserBridge {
 			});
 	}
 
-	call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+	async call(method: string, params: Record<string, unknown> = {}, sessionKey?: string, remote = false): Promise<unknown> {
+		if (this.remoteBase) {
+			const context = this.context();
+			return callMethod(method, params, this.token, this.remoteBase, sessionKey ?? (typeof context.activeSessionKey === 'string' ? context.activeSessionKey : undefined));
+		}
+		if (method === 'release_tab' && typeof params.chromeTabId === 'number') {
+			this.releasedTabs.add(params.chromeTabId);
+			this.tabState.delete(params.chromeTabId);
+			this.remoteTabs.delete(params.chromeTabId);
+			if (this.isConnected()) await this.sendCommand('sync_tab_state', { tabs: this.snapshot() });
+			return true;
+		}
+		if (method === 'sync_tab_state') {
+			if ('activeSessionKey' in params) this.latestSession = typeof params.activeSessionKey === 'string' ? params.activeSessionKey : null;
+			if (Array.isArray(params.tabs)) {
+				this.rememberTabs(params.tabs, remote);
+				params = { ...params, tabs: this.snapshot() };
+			}
+			// setTabPaused sends a targeted command, not a tabs snapshot.
+			// Explicit user intent may change pause state; stale snapshots may not.
+			if (!Array.isArray(params.tabs) && typeof params.chromeTabId === 'number' && typeof params.paused === 'boolean') {
+				const tab = this.tabState.get(params.chromeTabId);
+				if (tab) tab.paused = params.paused;
+			}
+		}
+		const result = await this.sendCommand(method, params);
+		if (method === 'create_tab' && typeof result === 'number') {
+			if (remote) this.remoteTabs.add(result);
+			this.tabState.set(result, { chromeTabId: result, sessionKey: sessionKey ?? this.context().activeSessionKey, url: params.url, paused: false });
+		}
+		if (method === 'close_tab' && typeof params.chromeTabId === 'number') {
+			this.tabState.delete(params.chromeTabId);
+			this.remoteTabs.delete(params.chromeTabId);
+		}
+		return result;
+	}
+
+	private sendCommand(method: string, params: Record<string, unknown>): Promise<unknown> {
 		if (!this.isConnected())
 			return Promise.reject(new Error("Browser extension is not connected"));
 		const id = randomBytes(12).toString("hex");
@@ -183,13 +333,21 @@ export class ExtensionBrowserBridge {
 				.end(JSON.stringify(value));
 		};
 		try {
+			if (url.pathname === '/v1/extension/status' && request.method === 'GET') {
+				json(200, { ok: true, bridge: 'apex', version: 1, kind: this.options.bridgeKind ?? 'desktop' });
+				return;
+			}
+			if (url.pathname === '/v1/extension/execute' && origin) {
+				json(403, { error: 'Origin is not allowed' });
+				return;
+			}
 			if (
 				(url.pathname === "/v1/extension/hello" && request.method === "GET") ||
 				(url.pathname === "/v1/extension/connect" &&
 					["GET", "POST"].includes(request.method ?? ""))
 			) {
 				if (!this.token) this.token = randomBytes(32).toString("hex");
-				json(200, { token: this.token, ...this.context() });
+				json(200, { ...this.context(), token: this.token, tabs: this.snapshot() });
 				return;
 			}
 			if (
@@ -197,6 +355,11 @@ export class ExtensionBrowserBridge {
 				request.headers.authorization !== `Bearer ${this.token}`
 			) {
 				json(401, { error: "Invalid extension token" });
+				return;
+			}
+			if (url.pathname === '/v1/extension/tab-state' && request.method === 'GET') {
+				// Chrome's sync_tab_state is write-only; clients need attributed state.
+				json(200, { connected: this.isConnected(), tabs: this.snapshot() });
 				return;
 			}
 			if (url.pathname === "/v1/extension/events" && request.method === "GET") {
@@ -222,6 +385,19 @@ export class ExtensionBrowserBridge {
 				return;
 			}
 			const body = await this.body(request);
+			if (url.pathname === '/v1/extension/execute') {
+				// This server binds only to 127.0.0.1. Native clients reuse the
+				// existing unauthenticated hello token, not agent capability claims.
+				if (typeof body.method !== 'string' || !body.method || !body.params || typeof body.params !== 'object' || Array.isArray(body.params))
+					throw new TypeError('Expected method and params');
+				if (!this.isConnected() && body.method !== 'release_tab') {
+					json(503, { error: 'extension_not_connected' });
+					return;
+				}
+				if (body.sessionKey !== undefined && typeof body.sessionKey !== 'string') throw new TypeError('Invalid sessionKey');
+				json(200, { result: await this.call(body.method, body.params as Record<string, unknown>, body.sessionKey as string | undefined, true) });
+				return;
+			}
 			if (url.pathname === "/v1/extension/result") {
 				if (typeof body.id !== "string")
 					throw new Error("Command id is required");
@@ -234,7 +410,24 @@ export class ExtensionBrowserBridge {
 					else pending.resolve(body.result);
 				}
 			} else if (url.pathname === "/v1/extension/event") {
-				for (const listener of this.events) listener(body);
+				if (typeof body.chromeTabId === 'number') {
+					if (this.releasedTabs.has(body.chromeTabId) && body.type !== 'tab_paired') {
+						json(200, { ok: true });
+						return;
+					}
+					const previous = this.tabState.get(body.chromeTabId);
+					// Popup pairing has no caller identity. Unregistered shared tabs
+					// belong to the most recently active session across both apps.
+					body.sessionKey = previous?.sessionKey ?? body.sessionKey ?? this.latestSession ?? this.context().activeSessionKey;
+					if (body.type === 'tab_paired') this.releasedTabs.delete(body.chromeTabId);
+					if (body.type === 'tab_closed' || body.type === 'tab_unpaired') {
+						this.releasedTabs.add(body.chromeTabId);
+						this.tabState.delete(body.chromeTabId);
+						this.remoteTabs.delete(body.chromeTabId);
+					}
+					else if (!this.releasedTabs.has(body.chromeTabId)) this.tabState.set(body.chromeTabId, { ...previous, ...body });
+				}
+				this.emitEvent(body);
 			} else {
 				json(404, { error: "Unknown endpoint" });
 				return;

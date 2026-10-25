@@ -136,6 +136,9 @@ export class AgentBrowserService {
 			offTabs();
 		};
 	}
+	async refreshExtensionState(): Promise<void> {
+		await this.options.extensionBridge?.refreshState();
+	}
 	async setActiveSession(value: unknown): Promise<void> {
 		this.activeSessionKey =
 			value === null
@@ -143,6 +146,7 @@ export class AgentBrowserService {
 				: canonicalSessionPath(
 						requireString(value, "sessionKey", { min: 1, max: 4096 }),
 					);
+		await this.options.extensionBridge?.setActiveSession(this.activeSessionKey);
 		if (this.options.extensionBridge?.isConnected())
 			await this.options.extensionBridge.call("sync_tab_state", {
 				activeSessionKey: this.activeSessionKey,
@@ -187,6 +191,7 @@ export class AgentBrowserService {
 			const chromeTabId = await this.options.extensionBridge.call(
 				"create_tab",
 				{ url: tab.url },
+				tab.sessionKey,
 			);
 			if (!Number.isSafeInteger(chromeTabId))
 				throw new Error("Invalid Chrome tab id");
@@ -585,9 +590,7 @@ export class AgentBrowserService {
 				);
 				try {
 					if (params.url !== undefined) {
-						const id = await this.options.extensionBridge.call("create_tab", {
-							url,
-						});
+						const id = await this.options.extensionBridge.call("create_tab", { url }, sessionKey);
 						if (!Number.isSafeInteger(id))
 							throw new Error("Invalid Chrome tab id");
 						tab.chromeTabId = id as number;

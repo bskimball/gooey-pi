@@ -1,0 +1,119 @@
+{
+  "name": "apex-vscode",
+  "displayName": "Apex",
+  "description": "The Apex workspace for Pi, inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "bdkinc",
+  "license": "MIT",
+  "private": true,
+  "icon": "media/icon-1024.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "scripts": {
+    "build:host": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js && node scripts/copy-browser.mjs",
+    "build:webview": "vite build",
+    "build": "npm run build:host && npm run build:webview",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository --skip-license"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "apex",
+          "title": "Apex",
+          "icon": "media/apex.svg"
+        }
+      ]
+    },
+    "views": {
+      "apex": [
+        {
+          "type": "webview",
+          "id": "apex.chat",
+          "name": "Apex"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "apex.open",
+        "title": "Open",
+        "category": "Apex"
+      },
+      {
+        "command": "apex.newSession",
+        "title": "New Session",
+        "category": "Apex",
+        "icon": "$(add)"
+      },
+      {
+        "command": "apex.stop",
+        "title": "Stop",
+        "category": "Apex",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "apex.restart",
+        "title": "Restart Pi",
+        "category": "Apex",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "apex.newSession",
+          "when": "view == apex.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "apex.restart",
+          "when": "view == apex.chat",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "apex.open",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      }
+    ],
+    "configuration": {
+      "title": "Apex",
+      "properties": {
+        "apex.piPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the pi executable (pi.cmd on Windows). Leave empty to auto-detect the global npm install."
+        },
+        "apex.messageEnterAction": {
+          "type": "string",
+          "enum": [
+            "queue",
+            "steer"
+          ],
+          "default": "queue",
+          "description": "What Enter does while Pi is working: queue the message for after the turn, or steer the running turn."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^4.0.0"
+  }
+}

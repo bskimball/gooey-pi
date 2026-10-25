@@ -232,7 +232,7 @@ describe("ExtensionBrowserBridge", () => {
 	});
 
 	it("revokes queued extension mutations on user pause and permits explicit resume", async () => {
-		const { service, post, commands } = await fixture();
+		const { service, post, commands, setResponder, base, headers } = await fixture();
 		const tab = await service.openTab(sessionA, {
 			url: "https://example.com/",
 		});
@@ -266,7 +266,20 @@ describe("ExtensionBrowserBridge", () => {
 			);
 		}
 		expect(commands).toHaveLength(1);
+		let chromePaused = true;
+		setResponder(command => {
+			if (command.method === 'sync_tab_state') {
+				if (typeof command.params.paused === 'boolean') chromePaused = command.params.paused;
+				return true;
+			}
+			if (chromePaused) throw new Error('Chrome tab is paused');
+			return JSON.stringify({ url: 'https://example.com/', title: 'Example' });
+		});
 		await service.setTabPaused(sessionA, String(tab.tabId), false);
+		expect(commands.at(-1)).toMatchObject({ method: 'sync_tab_state', params: { chromeTabId: tab.chromeTabId, paused: false } });
+		expect(chromePaused).toBe(false);
+		const state = await fetch(`${base}/tab-state`, { headers });
+		expect(await state.json()).toMatchObject({ tabs: expect.arrayContaining([expect.objectContaining({ chromeTabId: tab.chromeTabId, paused: false })]) });
 		await service.evaluate(sessionA, {
 			tabId: tab.tabId,
 			code: "1",

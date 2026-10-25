@@ -1,0 +1,150 @@
+/* Fit pi-desktop's conversation pane into a VS Code side panel. */
+body { padding: 0; }
+.apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
+.apex-shell .conversation-pane { min-width: 0; }
+.apex-shell .conversation-bottom-dock { inset: auto 10px 10px; }
+
+.apex-toolbar {
+  z-index: 30;
+  flex: 0 0 38px;
+  padding: 0 10px;
+}
+
+.apex-session-picker {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.apex-session-picker__trigger {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  gap: 6px;
+  padding: 0 8px;
+  cursor: pointer;
+  transition:
+    color 120ms ease-out,
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    transform 100ms ease-out;
+}
+.apex-session-picker__trigger::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.apex-session-picker__trigger:hover:not(:disabled),
+.apex-session-picker__trigger[aria-expanded='true'] {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.apex-session-picker__trigger:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.apex-session-picker__trigger > svg {
+  flex: 0 0 auto;
+  transition: transform 140ms ease-out;
+}
+.apex-session-picker__trigger > svg.is-open {
+  transform: rotate(180deg);
+}
+.apex-session-picker__trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 540;
+}
+
+.apex-session-picker__popover {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(380px, calc(100vw - 20px));
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+  animation: sidebar-menu-in 120ms cubic-bezier(.2, 0, 0, 1);
+}
+
+.apex-session-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 3px;
+}
+.apex-session-picker__count {
+  padding: 0 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.apex-session-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(360px, calc(100vh - 84px));
+  overflow-y: auto;
+}
+
+.apex-session-picker .session-row-wrap > .session-row {
+  padding-right: 8px;
+}
+.apex-session-picker .session-row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.apex-session-picker .session-status-mark--active {
+  color: var(--prime);
+  background: var(--prime-soft);
+}
+.apex-session-picker .session-row__heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.apex-session-picker .session-row__title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.apex-session-picker .session-row__time {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.apex-banner {
+  position: relative;
+  z-index: 11;
+  margin: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--text-primary);
+}
+.apex-banner pre { margin: 0 0 8px; white-space: pre-wrap; font-size: 12px; }
+.apex-banner button {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+}

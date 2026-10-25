@@ -51,6 +51,7 @@ function fakeService() {
     return result
   }
   const service = {
+    refreshExtensionState: vi.fn(),
     listTabs: record('tabs.list'),
     openTab: record('tabs.open', { tabId: 'tab-1', url: 'https://example.test/', title: 'Example' }),
     closeTabScoped: record('tabs.close'),
