@@ -12,7 +12,7 @@ import { MarkdownText } from '../MarkdownText'
 import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { TranscriptImage } from './TranscriptImage'
-import { formatWorkedDuration, LiveWorkVerb, ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
+import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 
 function imageSource(part: Extract<MessagePart, { type: 'image' }>): string | undefined {
@@ -119,10 +119,9 @@ function messageText(message: TranscriptMessage): string {
     .join('\n')
 }
 
-function MessageActions({ message, text: suppliedText }: { message: TranscriptMessage; text?: string }) {
+function CopyMessageButton({ message, text, className }: { message: TranscriptMessage; text: string; className?: string }) {
   const [copied, setCopied] = useState(false)
   const resetTimerRef = useRef<number | null>(null)
-  const text = suppliedText ?? messageText(message)
   const role = message.role === 'assistant' ? 'assistant' : message.role === 'agent' ? 'agent' : 'user'
 
   useEffect(
@@ -146,12 +145,14 @@ function MessageActions({ message, text: suppliedText }: { message: TranscriptMe
   }
 
   return (
-    <div className="message-actions">
-      <button type="button" disabled={!text} aria-label={`${copied ? 'Copied' : 'Copy'} ${role} message`} onClick={() => void copyMessage()}>
-        {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
-      </button>
-    </div>
+    <button type="button" className={className} disabled={!text} aria-label={`${copied ? 'Copied' : 'Copy'} ${role} message`} onClick={() => void copyMessage()}>
+      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+    </button>
   )
+}
+
+function MessageActions({ message, text = messageText(message) }: { message: TranscriptMessage; text?: string }) {
+  return text ? <div className="message-actions"><CopyMessageButton message={message} text={text} /></div> : null
 }
 
 const HARNESS_MARKS = { pi: PiMark } satisfies Record<HarnessId, unknown>
@@ -174,15 +175,15 @@ function timestampValue(value?: string | number): number | undefined {
 }
 
 export const AssistantMessage = memo(
-  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools, git }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean; git?: GitStatus }) {
+  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
     const [logOpen, setLogOpen] = useState(false)
     const logId = useId()
     const { before, work, after } = splitAssistantTurn(message.parts)
     const counts = workCounts(message.parts)
-    const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || Boolean(git?.files.length))
     const hasVisibleActivity = work.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
     )
+    const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || hasVisibleActivity || Boolean(git?.files.length))
     const hiddenMiddleNarrative = !hasVisibleActivity ? work.filter((part) => part.type === 'text' || part.type === 'image') : []
     const copyableNarrative = hasVisibleActivity ? [...before, ...after] : [...before, ...hiddenMiddleNarrative, ...after]
     const copyableText = copyableNarrative.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n')
@@ -195,7 +196,7 @@ export const AssistantMessage = memo(
           {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
           {renderNarrative(before, 'before', message.streaming)}
           {hasVisibleActivity ? (
-            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} open={logOpen} onOpenChange={setLogOpen} logId={logId} />
+            logOpen ? <section className="work-log" aria-label="Turn work log"><WorkTimeline id={logId} parts={work} showReasoning={showReasoning} showTools={showTools} /></section> : null
           ) : (
             renderNarrative(hiddenMiddleNarrative, 'middle', message.streaming)
           )}
@@ -205,13 +206,25 @@ export const AssistantMessage = memo(
               <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
             </div>
           ) : null}
-          {showReceipt ? <TurnReceipt duration={workedDuration(message)} failed={Boolean(message.errorMessage)} agents={counts.agents} tools={counts.tools} git={git} logOpen={logOpen} logId={logId} onToggleLog={hasVisibleActivity ? () => setLogOpen((open) => !open) : undefined} /> : null}
-          {!message.streaming ? <MessageActions message={message} text={copyableText} /> : null}
+          {showReceipt ? (
+            <TurnReceipt
+              duration={workedDuration(message)}
+              failed={Boolean(message.errorMessage)}
+              agents={counts.agents}
+              tools={counts.tools}
+              git={git}
+              onReviewChanges={onOpenChanges}
+              logOpen={logOpen}
+              logId={logId}
+              onToggleLog={hasVisibleActivity ? () => setLogOpen((open) => !open) : undefined}
+              copy={copyableText ? <CopyMessageButton className="turn-receipt__action turn-receipt__copy" message={message} text={copyableText} /> : undefined}
+            />
+          ) : !message.streaming ? <MessageActions message={message} text={copyableText} /> : null}
         </div>
       </article>
     )
   },
-  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git,
+  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git && previous.onOpenChanges === next.onOpenChanges,
 )
 
 function SessionReferenceText({ text, references, onOpen }: { text: string; references: RoutedSessionReference[]; onOpen?(sessionId: string, harness: HarnessId): void }) {
@@ -286,7 +299,7 @@ function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessio
   )
 }
 
-export const UserMessage = memo(function UserMessage({ message, turnLabel, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+export const UserMessage = memo(function UserMessage({ message, turnLabel, turnSince, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnSince?: string | number; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
   const turnState = turnRunning ? 'running' : turnFailed ? 'failed' : turnLabel ? 'done' : undefined
   return (
@@ -296,7 +309,7 @@ export const UserMessage = memo(function UserMessage({ message, turnLabel, turnR
       </div>
       {turnState ? (
         <span className={`message__turn-status is-${turnState}`}>
-          <span aria-hidden="true">{turnState === 'running' ? <><span className="message__turn-dot" /> running</> : turnState === 'failed' ? <><X size={11} /> failed</> : <><Check size={11} /> {turnLabel}</>}</span>
+          <span aria-hidden="true">{turnState === 'running' ? <><span className="message__turn-dot" /> Running <LiveElapsed since={turnSince} /></> : turnState === 'failed' ? <><X size={11} /> Turn failed</> : <><Check size={11} /> {turnLabel}</>}</span>
           <span className="sr-only">{turnState === 'running' ? 'Turn running' : turnState === 'failed' ? 'Turn failed' : `Turn took ${turnLabel}`}</span>
         </span>
       ) : null}

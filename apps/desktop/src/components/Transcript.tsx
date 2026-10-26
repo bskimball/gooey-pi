@@ -61,7 +61,7 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
         {visibleActivity
           ? <>
             {renderNarrative(before, 'before')}
-            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} running>{renderNarrativeWithActivity(after, 'after', showReasoning, showTools, true)}</WorkDisclosure>
+            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(after, 'after', showReasoning, showTools, true)}</WorkDisclosure>
           </>
           : <>
             {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} streaming /> : null)}
@@ -115,6 +115,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
           // The prompt line carries its turn's outcome, borrowed from every assistant segment
           // before the following prompt: steering and compaction can split one turn into several.
           let turnLabel: string | undefined
+          let turnSince: string | number | undefined
           let turnRunning = false
           let turnFailed = false
           if (message.role === 'user') {
@@ -128,6 +129,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
             // An active session's last turn is still running even between segments (e.g. mid-compaction).
             turnRunning = segments.some((segment) => segment.streaming || segment.id === activeAssistantId) || (active && isLastPrompt)
             turnFailed = !turnRunning && segments.some((segment) => Boolean(segment.errorMessage))
+            turnSince = segments[0]?.startedAt ?? segments[0]?.timestamp ?? message.timestamp
             if (segments.length > 0 && !turnRunning) {
               const startedAt = timestampValue(segments[0].startedAt ?? segments[0].timestamp)
               const completedAt = timestampValue(segments.at(-1)?.completedAt)
@@ -136,10 +138,10 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
           }
           return <ErrorBoundary key={message.id} fallback={<div className="message message--render-failure" role="note">This message could not be displayed.</div>}>
           {message.kind === 'steer-read-marker' ? <SteerReadMarker message={message} />
-            : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnRunning={turnRunning} turnFailed={turnFailed} onOpenSessionReference={onOpenSessionReference} />
+            : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnSince={turnSince} turnRunning={turnRunning} turnFailed={turnFailed} onOpenSessionReference={onOpenSessionReference} />
             : message.role === 'assistant' ? message.streaming || message.id === activeAssistantId
               ? <ActiveAssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} />
-              : <AssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} git={message.id === latestSettledAssistantId && git.files.length ? git : undefined} />
+              : <AssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} git={message.id === latestSettledAssistantId && git.files.length ? git : undefined} onOpenChanges={onOpenChanges} />
             : message.role === 'agent' ? <AgentMessage message={message} />
             : message.role === 'goal' ? <GoalMessage message={message} />
             : message.role === 'tool' || message.role === 'system' ? <ActivityMessage message={message} harness={harness} />

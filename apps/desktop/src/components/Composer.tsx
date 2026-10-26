@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ExtensionTabControls } from "@/hooks/useAgentBrowserTabs";
 import { useComposerImages } from "@/hooks/useComposerImages";
@@ -27,7 +26,6 @@ import {
 	saveComposerDraft,
 	takeComposerDraft,
 } from "@/lib/composer-draft";
-import { contextDialLabel } from "@/lib/format-cost";
 import { messageActionForKey } from "@/lib/message-shortcuts";
 import {
 	appendSessionRouting,
@@ -43,10 +41,11 @@ import type {
 	PrimeModelDescriptor,
 	PrimeProviderDescriptor,
 	PrimeThinkingLevel,
-	PrimeWorkApi,
+	 PrimeWorkApi,
 	PromptDeliveryIntent,
 	PromptImage,
 	QueuedPrompt,
+	RuntimeInfo,
 	SessionRecord,
 	SessionUsage,
 	SkillRecord,
@@ -94,10 +93,11 @@ interface ComposerProps {
 	shortName?: string;
 	harness?: HarnessId;
 	imageInputSupported: boolean;
+	contextUsage?: PrimeContextUsage | null;
+	sessionUsage?: SessionUsage | null;
+	executingModel?: RuntimeInfo["executingModel"] | null;
 	/** Primary action for Enter; Ctrl/Cmd+Enter selects the opposite action. */
 	messageEnterAction?: MessageEnterAction;
-	contextUsage?: PrimeContextUsage;
-	sessionUsage?: SessionUsage;
 	voice?: PrimeWorkApi["voice"] | null;
 	transcriptionProvider?: VoiceTranscriptionProvider;
 	skills: SkillRecord[];
@@ -181,8 +181,6 @@ export const Composer = memo(function Composer({
 	harness = "pi",
 	imageInputSupported,
 	messageEnterAction = "queue",
-	contextUsage,
-	sessionUsage,
 	voice,
 	transcriptionProvider = "openai-live",
 	skills,
@@ -640,16 +638,6 @@ export const Composer = memo(function Composer({
 		else requestAnimationFrame(() => textareaRef.current?.focus());
 	};
 
-	const contextPercent =
-		contextUsage?.percent === null || contextUsage?.percent === undefined
-			? null
-			: Math.min(100, Math.max(0, contextUsage.percent));
-	const contextLabel = contextDialLabel(contextUsage, sessionUsage);
-	const contextDisplayPercent =
-		contextPercent === null ? null : Math.min(99, Math.round(contextPercent));
-	const contextStyle = {
-		"--context-percent": `${contextPercent ?? 0}%`,
-	} as CSSProperties;
 	const sendQueuedMessageImmediately = async (queued: QueuedPrompt) => {
 		if (onSendQueuedMessage) return onSendQueuedMessage(queued);
 		onDeleteQueuedMessage?.(queued);
@@ -662,11 +650,6 @@ export const Composer = memo(function Composer({
 
 	return (
 		<div className="composer-wrap">
-			{extensionTab && browserExtension ? (
-				<div className="composer-context-bar">
-					<ExtensionTabPill tab={extensionTab} extension={browserExtension} />
-				</div>
-			) : null}
 			{queuedMessages.length ? (
 				<ComposerQueue
 					queuedMessages={queuedMessages}
@@ -688,6 +671,162 @@ export const Composer = memo(function Composer({
 					<div className="composer-drop-feedback" aria-hidden="true">
 						<Paperclip size={18} />
 						Drop files to attach
+					</div>
+				) : null}
+				{images.length ||
+				unsupportedFiles.length ||
+				annotations.length ||
+				terminalSelection?.text ||
+				(extensionTab && browserExtension) ? (
+					<div className="composer-attachments composer__context-chips" aria-label="Attachments">
+						{extensionTab && browserExtension ? (
+							<ExtensionTabPill tab={extensionTab} extension={browserExtension} />
+						) : null}
+						{annotations.length ? (
+							<div
+								className="composer-attachment composer-attachment--annotations"
+								title={`${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
+							>
+								<button
+									type="button"
+									className="composer-attachment__expand"
+									aria-expanded={annotationsOpen}
+									aria-label={`Inspect ${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
+									onClick={() => setAnnotationsOpen((open) => !open)}
+								>
+									<ChatCircleText size={13} />
+									<span>{annotations.length}</span>
+									<CaretDown
+										size={11}
+										className={annotationsOpen ? "is-open" : ""}
+									/>
+								</button>
+								<button
+									type="button"
+									className="composer-attachment__clear"
+									aria-label="Remove page annotations"
+									onClick={() => {
+										setAnnotationsOpen(false);
+										onClearAnnotations();
+									}}
+								>
+									<X size={12} />
+								</button>
+							</div>
+						) : null}
+						{terminalSelection?.text ? (
+							<div
+								className="composer-attachment composer-attachment--terminal has-selection"
+								title={`Selected text from ${terminalSelection.label}`}
+							>
+								<button
+									type="button"
+									className="composer-attachment__expand"
+									aria-expanded={terminalSelectionOpen}
+									aria-label={`Inspect selected text from ${terminalSelection.label}`}
+									onClick={() => setTerminalSelectionOpen((open) => !open)}
+								>
+									<TerminalWindow size={13} />
+									<span>{terminalSelection.label}</span>
+									<small>selected</small>
+									<CaretDown
+										size={11}
+										className={terminalSelectionOpen ? "is-open" : ""}
+									/>
+								</button>
+								<button
+									type="button"
+									className="composer-attachment__clear"
+									aria-label="Clear terminal selection"
+									onClick={onClearTerminalSelection}
+								>
+									<X size={12} />
+								</button>
+							</div>
+						) : null}
+						{images.map((image) => (
+							<div className="composer-attachment" key={image.id}>
+								<img
+									src={`data:${image.mimeType};base64,${image.data}`}
+									alt=""
+								/>
+								<span>
+									<ImageIcon size={12} />
+									{image.name}
+								</span>
+								<button
+									type="button"
+									aria-label={`Remove ${image.name}`}
+									onClick={() => imageAttachments.remove(image.id)}
+								>
+									<X size={12} />
+								</button>
+							</div>
+						))}
+						{unsupportedFiles.map((file) => (
+							<div className="composer-attachment" key={file.id}>
+								<span>
+									<Paperclip size={12} />
+									{file.name}
+								</span>
+								<button
+									type="button"
+									aria-label={`Remove ${file.name}`}
+									onClick={() => imageAttachments.remove(file.id)}
+								>
+									<X size={12} />
+								</button>
+							</div>
+						))}
+					</div>
+				) : null}
+				{annotationsOpen && annotations.length ? (
+					<div
+						className="composer-annotations"
+						role="region"
+						aria-label="Page annotation details"
+					>
+						{annotations.map((annotation, index) => {
+							return (
+								<div className="composer-annotation" key={annotation.id}>
+									<span
+										className="composer-annotation__badge"
+										aria-hidden="true"
+									>
+										{index + 1}
+									</span>
+									<div className="composer-annotation__body">
+										<p>{annotation.comment}</p>
+										{annotation.stale ? (
+											<small>page changed since capture</small>
+										) : null}
+									</div>
+									<button
+										type="button"
+										aria-label={`Remove annotation ${index + 1}`}
+										onClick={() => onRemoveAnnotation(annotation.id)}
+									>
+										<X size={12} />
+									</button>
+								</div>
+							);
+						})}
+					</div>
+				) : null}
+				{terminalSelectionOpen && terminalSelection?.text ? (
+					<div
+						className="composer-terminal-selection"
+						role="region"
+						aria-label="Selected terminal text"
+					>
+						<div>
+							<TerminalWindow size={14} aria-hidden="true" />
+							<strong>{terminalSelection.label}</strong>
+							{terminalSelection.truncated ? (
+								<small>start truncated</small>
+							) : null}
+						</div>
+						<pre>{terminalSelection.text}</pre>
 					</div>
 				) : null}
 				<div className="composer-input">
@@ -831,158 +970,6 @@ export const Composer = memo(function Composer({
 						))}
 					</div>
 				) : null}
-				{annotationsOpen && annotations.length ? (
-					<div
-						className="composer-annotations"
-						role="region"
-						aria-label="Page annotation details"
-					>
-						{annotations.map((annotation, index) => {
-							return (
-								<div className="composer-annotation" key={annotation.id}>
-									<span
-										className="composer-annotation__badge"
-										aria-hidden="true"
-									>
-										{index + 1}
-									</span>
-									<div className="composer-annotation__body">
-										<p>{annotation.comment}</p>
-										{annotation.stale ? (
-											<small>page changed since capture</small>
-										) : null}
-									</div>
-									<button
-										type="button"
-										aria-label={`Remove annotation ${index + 1}`}
-										onClick={() => onRemoveAnnotation(annotation.id)}
-									>
-										<X size={12} />
-									</button>
-								</div>
-							);
-						})}
-					</div>
-				) : null}
-				{terminalSelectionOpen && terminalSelection?.text ? (
-					<div
-						className="composer-terminal-selection"
-						role="region"
-						aria-label="Selected terminal text"
-					>
-						<div>
-							<TerminalWindow size={14} aria-hidden="true" />
-							<strong>{terminalSelection.label}</strong>
-							{terminalSelection.truncated ? (
-								<small>start truncated</small>
-							) : null}
-						</div>
-						<pre>{terminalSelection.text}</pre>
-					</div>
-				) : null}
-				{images.length ||
-				unsupportedFiles.length ||
-				annotations.length ||
-				terminalSelection?.text ? (
-					<div className="composer-attachments" aria-label="Attachments">
-						{annotations.length ? (
-							<div
-								className="composer-attachment composer-attachment--annotations"
-								title={`${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
-							>
-								<button
-									type="button"
-									className="composer-attachment__expand"
-									aria-expanded={annotationsOpen}
-									aria-label={`Inspect ${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
-									onClick={() => setAnnotationsOpen((open) => !open)}
-								>
-									<ChatCircleText size={13} />
-									<span>{annotations.length}</span>
-									<CaretDown
-										size={11}
-										className={annotationsOpen ? "is-open" : ""}
-									/>
-								</button>
-								<button
-									type="button"
-									className="composer-attachment__clear"
-									aria-label="Remove page annotations"
-									onClick={() => {
-										setAnnotationsOpen(false);
-										onClearAnnotations();
-									}}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						) : null}
-						{terminalSelection?.text ? (
-							<div
-								className="composer-attachment composer-attachment--terminal has-selection"
-								title={`Selected text from ${terminalSelection.label}`}
-							>
-								<button
-									type="button"
-									className="composer-attachment__expand"
-									aria-expanded={terminalSelectionOpen}
-									aria-label={`Inspect selected text from ${terminalSelection.label}`}
-									onClick={() => setTerminalSelectionOpen((open) => !open)}
-								>
-									<TerminalWindow size={13} />
-									<span>{terminalSelection.label}</span>
-									<small>selected</small>
-									<CaretDown
-										size={11}
-										className={terminalSelectionOpen ? "is-open" : ""}
-									/>
-								</button>
-								<button
-									type="button"
-									className="composer-attachment__clear"
-									aria-label="Clear terminal selection"
-									onClick={onClearTerminalSelection}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						) : null}
-						{images.map((image) => (
-							<div className="composer-attachment" key={image.id}>
-								<img
-									src={`data:${image.mimeType};base64,${image.data}`}
-									alt=""
-								/>
-								<span>
-									<ImageIcon size={12} />
-									{image.name}
-								</span>
-								<button
-									type="button"
-									aria-label={`Remove ${image.name}`}
-									onClick={() => imageAttachments.remove(image.id)}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						))}
-						{unsupportedFiles.map((file) => (
-							<div className="composer-attachment" key={file.id}>
-								<span>
-									<Paperclip size={12} />
-									{file.name}
-								</span>
-								<button
-									type="button"
-									aria-label={`Remove ${file.name}`}
-									onClick={() => imageAttachments.remove(file.id)}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						))}
-					</div>
-				) : null}
 				{attachmentError ? (
 					<p className="composer-attachment-error" role="alert">
 						{attachmentError}
@@ -1031,6 +1018,7 @@ export const Composer = memo(function Composer({
 								void imageAttachments.ingest(files);
 							}}
 						/>
+						<div className="composer__run-settings">
 						{harness === "pi" ? (
 							<PiModeControl
 								disabled={Boolean(disabled || loading || busy || submitting)}
@@ -1060,6 +1048,7 @@ export const Composer = memo(function Composer({
 								<span className="fast-mode-toggle__label">Fast</span>
 							</button>
 						) : null}
+						</div>
 					</div>
 					<div className="composer__actions">
 						{dictation.state === "connecting" ||
@@ -1073,27 +1062,7 @@ export const Composer = memo(function Composer({
 							>
 								<X size={14} />
 							</button>
-						) : (
-							<span
-								className={`context-usage-dial ${contextPercent === null ? "is-unavailable" : contextPercent >= 95 ? "is-critical" : contextPercent >= 80 ? "is-warning" : ""}`}
-								role="meter"
-								tabIndex={0}
-								aria-label="Context usage"
-								aria-valuemin={0}
-								aria-valuemax={100}
-								aria-valuenow={
-									contextPercent === null
-										? undefined
-										: Math.round(contextPercent)
-								}
-								aria-valuetext={contextLabel}
-								title={contextLabel}
-								data-tooltip={contextLabel}
-								style={contextStyle}
-							>
-								<span>{contextDisplayPercent ?? "—"}</span>
-							</span>
-						)}
+						) : null}
 						<button
 							type="button"
 							className={`dictation-button ${dictation.state === "recording" ? "is-recording" : ""}`}
@@ -1140,17 +1109,6 @@ export const Composer = memo(function Composer({
 							</button>
 						) : (
 							<>
-								{busy ? (
-									<button
-										type="button"
-										className="send-button send-button--stop"
-										aria-label="Stop Pi"
-										title="Stop this run"
-										onClick={() => void onStop()}
-									>
-										<Square size={10} fill="currentColor" aria-hidden="true" />
-									</button>
-								) : null}
 								<button
 									type="button"
 									className={`send-button ${busy ? "send-button--steer" : ""}`}
@@ -1171,6 +1129,17 @@ export const Composer = memo(function Composer({
 								>
 									<ArrowUp size={17} />
 								</button>
+								{busy ? (
+									<button
+										type="button"
+										className="send-button send-button--stop"
+										aria-label="Stop Pi"
+										title="Stop this run"
+										onClick={() => void onStop()}
+									>
+										<Square size={10} fill="currentColor" aria-hidden="true" />
+									</button>
+								) : null}
 							</>
 						)}
 					</div>

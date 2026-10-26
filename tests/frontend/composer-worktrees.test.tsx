@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
-import { SessionStatusBar } from '../../apps/desktop/src/components/SessionStatusBar'
+import { SessionStatusItems } from '../../apps/desktop/src/components/SessionStatusBar'
 import type { CheckoutCatalog, GitStatus, GitWorktree } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -74,7 +74,7 @@ describe('composer and session status worktree picker', () => {
   })
 
   it('shows the checkout name instead of a generic Workspace label before the catalog loads', () => {
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ checkoutCatalog: undefined, checkoutLabel: 'feature/current' })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ checkoutCatalog: undefined, checkoutLabel: 'feature/current' })} />))
 
     const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: feature/current"]')
     expect(trigger?.textContent).toContain('feature/current')
@@ -83,7 +83,7 @@ describe('composer and session status worktree picker', () => {
 
   it('shows the active branch and switches to another worktree', async () => {
     const onExecuteCheckout = vi.fn()
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ onExecuteCheckout })} />))
 
     const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')
     expect(trigger).not.toBeNull()
@@ -103,7 +103,7 @@ describe('composer and session status worktree picker', () => {
 
   it('creates a worktree from an inline branch form', async () => {
     const onExecuteCheckout = vi.fn().mockResolvedValue(undefined)
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ onExecuteCheckout })} />))
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
     const input = container.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
@@ -126,7 +126,7 @@ describe('composer and session status worktree picker', () => {
       activeName: 'main',
       checkouts: [{ name: 'main', current: true }, { name: 'feature/local', current: false }],
     }
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ checkoutCatalog, onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ checkoutCatalog, onExecuteCheckout })} />))
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
     expect(container.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Git branches')
@@ -137,7 +137,7 @@ describe('composer and session status worktree picker', () => {
   })
 
   it('locks checkout switching while a run is in flight', () => {
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ busy: true })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ busy: true })} />))
     expect(container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.disabled).toBe(true)
   })
 
@@ -147,10 +147,11 @@ describe('composer and session status worktree picker', () => {
       { path: 'src/App.tsx', status: 'M', staged: false, additions: 4, deletions: 1 },
       { path: 'src/new.ts', status: '??', staged: false, additions: 10, deletions: 0 },
     ] }
-    act(() => root.render(<SessionStatusBar {...statusBarProps({ git, onOpenChanges })} />))
+    act(() => root.render(<SessionStatusItems {...statusBarProps({ git, onOpenChanges })} />))
 
     const pill = container.querySelector<HTMLButtonElement>('.session-status-pill--dirty')!
-    expect(pill.textContent).toContain('2 files changed')
+    expect(pill.textContent).toContain('2 dirty')
+    expect(pill.title).toBe('2 files changed')
     expect(pill.textContent).toContain('+14')
     expect(pill.textContent).toContain('−1')
     act(() => pill.click())

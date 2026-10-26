@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { Fragment, useId, useState, type ReactNode } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
 import type { GitStatus, MessagePart } from '@/types/api'
 import { ChangedFilesList, changeTotals, filesChangedLabel } from '../ChangedFiles'
@@ -31,28 +31,42 @@ interface TurnReceiptProps {
   onToggleLog?(): void
   /** Workspace changes, shown on the latest settled turn only. */
   git?: GitStatus
+  onReviewChanges?(): void
+  /** The turn's copy control, kept on the receipt line instead of a separate row. */
+  copy?: ReactNode
 }
 
-/** The settled turn's closing line: outcome, scale of the work, and what it left in the working tree. */
-export function TurnReceipt({ duration, failed = false, agents, tools, logOpen = false, logId, onToggleLog, git }: TurnReceiptProps) {
+/** The settled turn's one closing line: outcome, scale of the work, what it left in the working tree, and copy. */
+export function TurnReceipt({ duration, failed = false, agents, tools, logOpen = false, logId, onToggleLog, git, onReviewChanges, copy }: TurnReceiptProps) {
   const [diffOpen, setDiffOpen] = useState(false)
   const diffId = useId()
   const files = git?.files ?? []
   const { additions, deletions } = changeTotals(files)
-  const facts = [duration, agents ? plural(agents, 'agent') : '', tools ? plural(tools, 'tool') : ''].filter(Boolean).join(' · ')
-  return <div className={failed ? 'turn-receipt is-failed' : 'turn-receipt'}>
-    <div className="turn-receipt__line">
-      <span className="turn-receipt__outcome">{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className="sr-only">{failed ? 'Turn failed after' : 'Turn finished in'}</span> {facts}</span>
-      {onToggleLog ? <button type="button" className="turn-receipt__action" aria-expanded={logOpen} aria-controls={logOpen ? logId : undefined} onClick={onToggleLog}>{logOpen ? 'Collapse log' : 'Expand log'}</button> : null}
-    </div>
-    {files.length ? <div className="turn-receipt__diff">
-      <button type="button" className="turn-receipt__diff-summary" aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>
-        <span>{filesChangedLabel(files.length)}</span>
+  const facts: Array<{ key: string; node: ReactNode }> = [
+    { key: 'outcome', node: <span className="turn-receipt__outcome">{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className="sr-only">{failed ? 'Turn failed after' : 'Turn finished in'}</span> {duration}</span> },
+  ]
+  if (agents) facts.push({ key: 'agents', node: <span>{plural(agents, 'agent')}</span> })
+  if (onToggleLog) {
+    facts.push({ key: 'log', node: <button type="button" className="turn-receipt__action turn-receipt__log" aria-expanded={logOpen} aria-controls={logOpen ? logId : undefined} onClick={onToggleLog}>
+      {tools ? plural(tools, 'step') : 'Show log'}<CaretRight className="disclosure-caret" size={11} />
+    </button> })
+  } else if (tools) facts.push({ key: 'log', node: <span>{plural(tools, 'step')}</span> })
+  if (files.length) {
+    facts.push({ key: 'diff', node: <span className="turn-receipt__diff">
+      <button type="button" className="turn-receipt__action turn-receipt__diff-summary" aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>
+        {filesChangedLabel(files.length)}
         <span className="diff-count diff-count--add">+{additions}</span>
         <span className="diff-count diff-count--remove">−{deletions}</span>
-        <span className="turn-receipt__diff-toggle">{diffOpen ? 'Collapse' : 'Expand'}<CaretRight className="disclosure-caret" size={12} /></span>
+        <CaretRight className="disclosure-caret" size={11} />
       </button>
-      {diffOpen ? <ChangedFilesList id={diffId} files={files} /> : null}
-    </div> : null}
+      {onReviewChanges ? <button type="button" className="turn-receipt__action turn-receipt__review" onClick={onReviewChanges}>Review</button> : null}
+    </span> })
+  }
+  if (copy) facts.push({ key: 'copy', node: copy })
+  return <div className={failed ? 'turn-receipt is-failed' : 'turn-receipt'}>
+    <div className="turn-receipt__line">
+      {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className="turn-receipt__separator" aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
+    </div>
+    {diffOpen ? <ChangedFilesList id={diffId} files={files} /> : null}
   </div>
 }

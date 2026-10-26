@@ -56,8 +56,8 @@ describe('timeline part identity', () => {
   it('defers closed tool formatting and retains expanded rows across unrelated updates', () => {
     const toJSON = vi.fn(() => ({ command: 'echo done' }))
     const parts: TranscriptMessage['parts'] = Array.from({ length: 80 }, (_, index) => [
-      { type: 'toolCall' as const, id: `tool-${index}`, name: 'bash', args: { command: 'echo done', toJSON } },
-      { type: 'toolResult' as const, name: 'bash', text: 'done' },
+      { type: 'toolCall' as const, id: `tool-${index}`, name: 'probe', args: { command: 'echo done', toJSON } },
+      { type: 'toolResult' as const, name: 'probe', text: 'done' },
     ]).flat()
     renderTimeline({ id: 'tools', role: 'assistant', parts })
     for (let update = 0; update < 10; update++) {
@@ -73,10 +73,33 @@ describe('timeline part identity', () => {
     expect(container.querySelector('.activity-tool__details')).toBe(details)
     expect(toJSON).toHaveBeenCalledTimes(1)
     const updated = [...parts]
-    updated[1] = { type: 'toolResult', name: 'bash', text: 'changed result', isError: true }
+    updated[1] = { type: 'toolResult', name: 'probe', text: 'changed result', isError: true }
     renderTimeline({ id: 'tools', role: 'assistant', parts: updated })
     expect(details?.textContent).toContain('changed result')
     expect(container.querySelector('.activity-line--tool')?.classList.contains('is-error')).toBe(true)
+  })
+
+  it('folds back-to-back settled tools of one kind into an expandable run and keeps running tools lifted out', () => {
+    renderTimeline({
+      id: 'runs', role: 'assistant', parts: [
+        { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'a.ts' } },
+        { type: 'toolResult', name: 'read', text: 'a' },
+        { type: 'toolCall', id: 'grep-1', name: 'ffgrep', args: { pattern: 'b' } },
+        { type: 'toolResult', name: 'ffgrep', text: 'b' },
+        { type: 'toolCall', id: 'bash-1', name: 'bash', args: { command: 'npm test' } },
+        { type: 'toolResult', name: 'bash', text: 'ok' },
+        { type: 'toolCall', id: 'bash-2', name: 'bash', args: { command: 'npm run lint' } },
+        { type: 'toolResult', name: 'bash', text: 'failed', isError: true },
+        { type: 'toolCall', id: 'bash-3', name: 'bash', args: { command: 'npm run build' } },
+      ],
+    })
+    const runs = [...container.querySelectorAll<HTMLButtonElement>('.activity-run__summary')]
+    expect(runs.map((run) => run.textContent)).toEqual(['Read 2 files', 'Ran 2 commands 1 failed'])
+    // The still-running build stays a visible row of its own.
+    expect([...container.querySelectorAll('.timeline-page__body > .activity-line--tool')].map((row) => row.textContent)).toEqual([expect.stringContaining('npm run build')])
+    act(() => runs[1].click())
+    expect(runs[1].getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('.activity-run__items .activity-line--tool')).toHaveLength(2)
   })
 
   it('copies the promoted final report when reasoning trails it', async () => {

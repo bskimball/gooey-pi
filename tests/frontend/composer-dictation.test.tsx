@@ -54,11 +54,11 @@ describe('composer dictation controls', () => {
     container.remove()
   })
 
-  it('places an idle microphone between context usage and Send', () => {
+  it('places an idle microphone before Send', () => {
     vi.mocked(useDictation).mockReturnValue({ state: 'idle', start, finish, cancel })
     act(() => root.render(<Composer {...composerProps()} />))
     const actions = container.querySelector('.composer__actions')!
-    expect([...actions.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Context usage', 'Start dictation', 'Send message'])
+    expect([...actions.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Start dictation', 'Send message'])
   })
 
   it('turns context into cancel and the microphone into stop while recording', () => {

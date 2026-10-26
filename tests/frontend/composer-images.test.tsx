@@ -4,9 +4,9 @@ import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
-import { SessionStatusBar } from '../../apps/desktop/src/components/SessionStatusBar'
+import { SessionStatusItems } from '../../apps/desktop/src/components/SessionStatusBar'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
-import type { PrimeContextUsage, PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
+import type { PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -42,7 +42,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue', contextUsage?: PrimeContextUsage) {
+function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue') {
   act(() => root.render(<Composer
     busy={busy}
     model="provider/vision"
@@ -55,7 +55,6 @@ function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = fal
     fastAvailable
     imageInputSupported={imageInputSupported}
     messageEnterAction={messageEnterAction}
-    contextUsage={contextUsage}
     skills={[]}
     onModelChange={vi.fn()}
     onEffortChange={vi.fn()}
@@ -556,39 +555,38 @@ describe('Composer submission lifecycle', () => {
   })
 })
 
-describe('Composer context usage and stop control', () => {
-  it('shows the exact context usage in a filled dial before the send button', () => {
-    renderComposer(vi.fn(), true, false, 'queue', { tokens: 50_000, contextWindow: 100_000, percent: 50 })
+describe('Session context usage and composer stop control', () => {
+  it('shows the exact context usage in the session header and keeps it out of the composer', () => {
+    renderComposer(vi.fn(), true, false, 'queue')
+    expect(container.querySelector('[role="meter"]')).toBeNull()
+    expect([...container.querySelector('.composer__actions')!.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Start dictation', 'Send message'])
 
-    const dial = container.querySelector<HTMLElement>('[role="meter"]')
-    const actions = container.querySelector('.composer__actions')
-    expect(dial?.textContent).toBe('50')
-    expect(dial?.title).toBe('50,000 / 100,000 tokens')
-    expect(dial?.getAttribute('aria-valuenow')).toBe('50')
-    expect(dial?.style.getPropertyValue('--context-percent')).toBe('50%')
-    expect(actions?.firstElementChild).toBe(dial)
-    expect(dial?.nextElementSibling?.getAttribute('aria-label')).toBe('Start dictation')
-    expect(dial?.nextElementSibling?.nextElementSibling?.getAttribute('aria-label')).toBe('Send message')
+    act(() => root.render(<SessionStatusItems contextUsage={{ tokens: 50_000, contextWindow: 100_000, percent: 50 }} />))
+    const meter = container.querySelector<HTMLElement>('[role="meter"]')
+    expect(meter?.textContent).toBe('context 50%')
+    expect(meter?.title).toBe('50,000 / 100,000 tokens')
+    expect(meter?.getAttribute('aria-valuenow')).toBe('50')
   })
 
   it('shows unavailable usage honestly and uses a square stop icon', () => {
-    renderComposer(vi.fn(), true, true, 'queue', { tokens: null, contextWindow: 100_000, percent: null })
+    act(() => root.render(<SessionStatusItems contextUsage={{ tokens: null, contextWindow: 100_000, percent: null }} />))
+    const meter = container.querySelector<HTMLElement>('[role="meter"]')
+    expect(meter?.textContent).toBe('context —')
+    expect(meter?.hasAttribute('aria-valuenow')).toBe(false)
+    expect(meter?.title).toContain('unavailable')
 
-    const dial = container.querySelector<HTMLElement>('[role="meter"]')
-    expect(dial?.textContent).toBe('—')
-    expect(dial?.hasAttribute('aria-valuenow')).toBe(false)
-    expect(dial?.title).toContain('unavailable')
+    renderComposer(vi.fn(), true, true, 'queue')
     expect(container.querySelector('button[aria-label="Stop Pi"] .ph-square')).not.toBeNull()
     expect(container.querySelector('.ph-stop-circle')).toBeNull()
   })
 
-  it('keeps Stop beside an explicit Steer action while a run is busy', () => {
+  it('keeps Stop after an explicit Steer action while a run is busy', () => {
     renderComposer(vi.fn(), true, true)
 
     expect(container.querySelector('textarea')?.placeholder).toBe('Steer this run… (Ctrl+Enter to steer, Enter to queue)')
     const stop = container.querySelector('button[aria-label="Stop Pi"]')
     const steer = container.querySelector<HTMLButtonElement>('button[aria-label="Steer this run"]')
-    expect(stop?.nextElementSibling).toBe(steer)
+    expect(steer?.nextElementSibling).toBe(stop)
     expect(steer?.disabled).toBe(true)
     expect(container.querySelector('button[aria-label="Send message"]')).toBeNull()
   })
@@ -602,11 +600,11 @@ describe('Session status fallback indicator', () => {
       label: 'anthropic/claude-sonnet',
       isFallback: true,
     }
-    renderComposer(vi.fn(), true, false, 'queue', undefined)
+    renderComposer(vi.fn(), true, false, 'queue')
     expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
     expect(container.querySelector('.model-fallback-chip')).toBeNull()
 
-    act(() => root.render(<SessionStatusBar git={{ isRepo: true, files: [] }} executingModel={executingModel} onOpenChanges={vi.fn()} />))
+    act(() => root.render(<SessionStatusItems git={{ isRepo: true, files: [] }} executingModel={executingModel} onOpenChanges={vi.fn()} />))
     expect(container.querySelector('.model-fallback-chip')?.textContent).toContain('Running on anthropic/claude-sonnet')
     expect(container.querySelector('.model-fallback-chip')?.getAttribute('title')).toContain('Provider fallback')
   })

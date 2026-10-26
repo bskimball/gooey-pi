@@ -54,11 +54,11 @@ describe('transcript rendering', () => {
   })
 
   it.each([
-    ['a running tool', true, 'read_file', { path: 'package.json' }],
-    ['a hidden running tool', false, 'read_file', { path: 'package.json' }],
-    ['an ask_user wait', true, 'ask_user', { question: 'Which release channel?' }],
-    ['a hidden ask_user wait', false, 'ask_user', { question: 'Which release channel?' }],
-  ])('announces Working when reasoning transitions to %s', (_description, showTools, name, args) => {
+    ['a running tool', true, 'read_file', { path: 'package.json' }, 'Running read_file: package.json'],
+    ['a hidden running tool', false, 'read_file', { path: 'package.json' }, undefined],
+    ['an ask_user wait', true, 'ask_user', { question: 'Which release channel?' }, 'Waiting for your answer'],
+    ['a hidden ask_user wait', false, 'ask_user', { question: 'Which release channel?' }, undefined],
+  ])('names the live work when reasoning transitions to %s', (_description, showTools, name, args, activity) => {
     const html = render([{
       id: 'active', role: 'assistant', timestamp: 1_000, streaming: true,
       parts: [{ type: 'thinking', text: 'Checking the workspace.' }, { type: 'toolCall', id: 'tool-1', name, args }],
@@ -66,7 +66,18 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('activity-line--reasoning')
     expect(html.includes('activity-line--tool')).toBe(showTools)
-    expect(html).toContain('role="status"><span class="sr-only">Working</span><span class="live-work-verb" aria-hidden="true">Working</span>')
+    if (activity) {
+      expect(html).toContain(`role="status"><span class="work-disclosure__activity" title="${activity}">${activity}</span>`)
+      expect(html).not.toContain('live-work-verb')
+    } else expect(html).toContain('role="status"><span class="sr-only">Working</span><span class="live-work-verb" aria-hidden="true">Working</span>')
+  })
+
+  it('names a running subagent in the live status line', () => {
+    const html = render([{
+      id: 'active', role: 'assistant', timestamp: 1_000, streaming: true,
+      parts: [{ type: 'toolCall', id: 'build', name: 'task_start', args: { agent: 'machinist', prompt: 'Build it' } }],
+    }])
+    expect(html).toContain('>Running machinist</span>')
   })
 
   it.each([[true, 'Working'], [false, 'Thinking']] as const)(
@@ -155,7 +166,7 @@ describe('transcript rendering', () => {
       parts: [{ type: 'text', text: 'Continue externally' }],
     }], true)
 
-    expect(html).toContain('Worked for 1s')
+    expect(html).toContain('Turn finished in</span> 1s')
     expect(html).not.toContain('Prior completed reasoning.')
     expect(html).toContain('transcript-active-placeholder')
     expect(html).toContain('Pi is working')
@@ -193,7 +204,9 @@ describe('transcript rendering', () => {
       parts: [{ type: 'thinking', text: 'This stays collapsed until requested.' }],
     }])
 
-    expect(html).toContain('Worked for 3s')
+    expect(html).not.toContain('Worked for')
+    expect(html).toContain('Turn finished in</span> 3s')
+    expect(html).toContain('Show log')
     expect(html).toContain('aria-expanded="false"')
     expect(html).not.toContain('This stays collapsed until requested.')
     expect(html).not.toContain('thinking-dots')
@@ -212,8 +225,8 @@ describe('transcript rendering', () => {
     ])
 
     expect(html.match(/class="message message--assistant"/g)).toHaveLength(1)
-    expect(html.match(/Worked for/g)).toHaveLength(1)
-    expect(html).toContain('Worked for 4s')
+    expect(html.match(/class="turn-receipt"/g)).toHaveLength(1)
+    expect(html).toContain('Turn finished in</span> 4s')
   })
 
 
@@ -304,7 +317,7 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html).toContain('Worked for 1s')
+    expect(html).toContain('Turn finished in</span> 1s')
     expect(html).toContain('The primary final report stays visible.')
     expect(html).toContain('Trailing lightweight reasoning.')
     expect(html).not.toContain('Earlier reasoning.')
@@ -327,11 +340,16 @@ describe('transcript rendering', () => {
     }])
 
     expect(html).toContain('Cleanup complete.')
-    expect(html).toContain('Worked for 1s')
+    expect(html).not.toContain('Worked for')
+    expect(html).toContain('Turn finished in</span> 1s')
     expect(html).not.toContain('This is the complete substantive report with the requested conclusions and evidence.')
     expect(html).toContain('class="turn-receipt"')
-    expect(html).toContain('1 tool')
-    expect(html).toContain('Expand log')
+    expect(html).toContain('1 step')
+    expect(html).toContain('turn-receipt__log')
+    // Copy rides on the receipt line instead of a separate actions row.
+    expect(html).toContain('turn-receipt__copy')
+    expect(html).toContain('aria-label="Copy assistant message"')
+    expect(html).not.toContain('message-actions')
   })
 
   it('renders subagent calls as inline lanes and plan updates as step headers', () => {
@@ -494,7 +512,7 @@ describe('transcript rendering', () => {
         completedAt: now.getTime() - 1_000,
         parts: [{ type: 'thinking', text: 'Done thinking.' }],
       }], false)
-      expect(finished).toContain('Worked for 1m05s')
+      expect(finished).toContain('Turn finished in</span> 1m05s')
       expect(finished).not.toContain('live-elapsed')
     } finally {
       vi.useRealTimers()

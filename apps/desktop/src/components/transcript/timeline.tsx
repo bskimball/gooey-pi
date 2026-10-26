@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   CaretRight,
   ChatCircle,
@@ -65,7 +65,44 @@ function serialize(value: unknown, pretty = false): string {
   try { return JSON.stringify(value, null, pretty ? 2 : undefined) } catch { return String(value) }
 }
 
-function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): string {
+/** Settled calls that read as one batch of work when they run back to back. */
+type ToolRunKind = 'read' | 'edit' | 'terminal' | 'web' | 'git'
+
+function toolRunKind(name: string): ToolRunKind | undefined {
+  const kind = classifyTool(name)
+  if (kind === 'terminal' || kind === 'web' || kind === 'git') return kind
+  if (kind === 'file') return /write|edit|patch/i.test(name) ? 'edit' : 'read'
+  if (kind === 'mcp' && /grep|find|glob|^ls$/i.test(name)) return 'read'
+  return undefined
+}
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+
+function toolRunLabel(kind: ToolRunKind, count: number): string {
+  if (kind === 'read') return `Read ${plural(count, 'file')}`
+  if (kind === 'edit') return `Edited ${plural(count, 'file')}`
+  if (kind === 'terminal') return `Ran ${plural(count, 'command')}`
+  if (kind === 'web') return plural(count, 'web lookup')
+  return plural(count, 'git operation')
+}
+
+function ToolRun({ kind, failed, children }: { kind: ToolRunKind; failed: number; children: ReactElement[] }) {
+  const [open, setOpen] = useState(false)
+  const bodyId = useId()
+  return (
+    <div className={`activity-run activity-line--${kind === 'read' || kind === 'edit' ? 'file' : kind} ${failed ? 'is-error' : 'is-done'}`}>
+      <button type="button" className="activity-run__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+        <span className="activity-line__icon">{toolIcon(kind === 'read' || kind === 'edit' ? 'file' : kind)}</span>
+        <span className="activity-run__label">{toolRunLabel(kind, children.length)}</span>
+        {failed ? <span className="activity-run__failed"><WarningCircle size={12} /> {failed} failed</span> : null}
+        <CaretRight className="disclosure-caret" size={13} />
+      </button>
+      {open ? <div className="activity-run__items" id={bodyId}>{children}</div> : null}
+    </div>
+  )
+}
+
+export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): string {
   const raw = part.args
   if (raw && typeof raw === 'object') {
     const args = raw as Record<string, unknown>
@@ -241,7 +278,8 @@ function partKey(part: MessagePart, index: number): string {
 export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean }) {
   const pairedResults = new Set<number>()
   const pendingKeys = new Set<string>()
-  const rows = parts.map((part, index) => {
+  const runKinds = new Map<string, { kind: ToolRunKind; failed: boolean }>()
+  const items = parts.map((part, index) => {
     const key = partKey(part, index)
     if (part.type === 'toolResult' && pairedResults.has(index)) return null
     if (part.type === 'compaction') {
@@ -257,6 +295,8 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       const result = next?.type === 'toolResult' ? next : undefined
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
       if (isSubagentTool(part.name)) return <SubagentLane key={key} part={part} result={result} />
+      const runKind = result && !result.streaming ? toolRunKind(part.name) : undefined
+      if (runKind) runKinds.set(key, { kind: runKind, failed: Boolean(result?.isError) })
       return <ToolPart key={key} part={part} result={result} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
@@ -264,6 +304,19 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     if (part.type === 'text') return <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={streaming} /></div>
     return null
   }).filter((row) => row !== null)
+  // Back-to-back settled calls of one kind fold into a single row; running, question, plan, and subagent rows stay lifted out.
+  const rows: ReactElement[] = []
+  for (let index = 0; index < items.length;) {
+    const run = runKinds.get(String(items[index].key))
+    let end = index + 1
+    while (run && end < items.length && runKinds.get(String(items[end].key))?.kind === run.kind) end += 1
+    if (run && end - index >= 2) {
+      const members = items.slice(index, end)
+      const failed = members.filter((row) => runKinds.get(String(row.key))?.failed).length
+      rows.push(<ToolRun key={`run:${String(items[index].key)}`} kind={run.kind} failed={failed}>{members}</ToolRun>)
+    } else rows.push(...items.slice(index, end))
+    index = end
+  }
   const pages = []
   const pageCount = Math.ceil(rows.length / TIMELINE_PAGE_SIZE)
   for (let index = 0; index < pageCount; index++) {
@@ -324,6 +377,25 @@ export function LiveWorkVerb({ mode, prefix = '' }: { mode: 'Thinking' | 'Workin
   </>
 }
 
+/** What the live turn is waiting on right now, named from the newest unsettled tool call. */
+export function activeWorkLabel(parts: MessagePart[]): string | undefined {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]
+    const next = parts[index + 1]
+    if (part.type !== 'toolCall' || (next?.type === 'toolResult' && !next.streaming)) continue
+    if (part.name === 'todo_write') return 'Updating the plan'
+    if (classifyTool(part.name) === 'question') return 'Waiting for your answer'
+    const args = (part.args && typeof part.args === 'object' ? part.args : {}) as { agent?: unknown; steps?: unknown }
+    if (isSubagentTool(part.name)) {
+      const roles = Array.isArray(args.steps) ? args.steps.flatMap((step) => typeof step?.agent === 'string' ? [step.agent] : []) : typeof args.agent === 'string' ? [args.agent] : []
+      return `Running ${roles.length ? roles.join(' → ') : part.name}`
+    }
+    const preview = toolPreview(part)
+    return `Running ${part.name}${preview ? `: ${boundText(preview, 60, '…')}` : ''}`
+  }
+  return undefined
+}
+
 function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools: boolean): 'Thinking' | 'Working' {
   let status: 'Thinking' | 'Working' | undefined
   for (let index = parts.length - 1; index >= 0; index -= 1) {
@@ -338,34 +410,20 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
 }
 
 /**
- * `children` is the live answer streaming after the work; it renders between the timeline and the status row.
- * Settled disclosures may be controlled (`open`/`onOpenChange`) so a turn receipt can share the same log toggle.
+ * The live run ledger. `children` is the answer streaming after the work; it renders between the timeline and the status row.
+ * Settled turns hide the ledger behind their receipt instead.
  */
-export function WorkDisclosure({ message, parts, showReasoning, showTools, running = message.streaming, children, open: controlledOpen, onOpenChange, logId }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; running?: boolean; children?: ReactNode; open?: boolean; onOpenChange?(open: boolean): void; logId?: string }) {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-  const open = controlledOpen ?? uncontrolledOpen
-  const setOpen = (next: boolean) => { if (onOpenChange) onOpenChange(next); else setUncontrolledOpen(next) }
-  if (running) {
-    const status = liveWorkStatus(message.parts, showReasoning, showTools)
-    return <section className="work-disclosure is-running" aria-label="Agent work activity">
-      <span className="work-disclosure__rail" aria-hidden="true" />
-      <div className="work-disclosure__live">
-        <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} streaming />
-        {children}
-        <div className="work-disclosure__status" role="status"><LiveWorkVerb mode={status} /><LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots /></div>
+export function WorkDisclosure({ message, parts, showReasoning, showTools, children }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
+  const activity = showTools ? activeWorkLabel(message.parts) : undefined
+  return <section className="work-disclosure is-running" aria-label="Agent work activity">
+    <span className="work-disclosure__rail" aria-hidden="true" />
+    <div className="work-disclosure__live">
+      <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} streaming />
+      {children}
+      <div className="work-disclosure__status" role="status">
+        {activity ? <span className="work-disclosure__activity" title={activity}>{activity}</span> : <LiveWorkVerb mode={liveWorkStatus(message.parts, showReasoning, showTools)} />}
+        <LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots />
       </div>
-    </section>
-  }
-  const startedAt = timestamp(message.startedAt ?? message.timestamp) ?? 0
-  const completedAt = timestamp(message.completedAt) ?? startedAt
-  const duration = formatWorkedDuration(Math.max(0, completedAt - startedAt))
-  const steps = parts.filter((part) => (part.type === 'toolCall' && showTools) || part.type === 'agentMessage' || part.type === 'compaction').length
-  return (
-    <section className="work-disclosure">
-      <button type="button" className="work-disclosure__button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={open ? logId : undefined}>
-        <CaretRight className="disclosure-caret" size={13} /><span>Worked for {duration}{steps > 0 ? ` · ${steps} step${steps === 1 ? '' : 's'}` : ''}</span>
-      </button>
-      {open ? <WorkTimeline id={logId} parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
-    </section>
-  )
+    </div>
+  </section>
 }

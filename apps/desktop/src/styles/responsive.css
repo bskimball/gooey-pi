@@ -18,12 +18,11 @@
   .fast-mode-toggle__label, .worktree-picker__label, .model-picker__trigger > span { display: none; }
   .worktree-picker, .worktree-picker__trigger, .model-picker, .model-picker__trigger { width: 28px; max-width: 28px; flex: 0 0 28px; }
   .worktree-picker__trigger, .model-picker__trigger { justify-content: center; padding-inline: 0; }
-  .session-status-pill--mode, .session-status-pill__meter, .session-status-pill__diff { display: none; }
+  .session-status-pill__diff, .title-toolbar .model-fallback-chip { display: none; }
 }
 
 @media (max-width: 720px) {
   .conversation-bottom-dock { padding: 0 9px 8px; }
-  .session-status-bar { padding-inline: 9px; }
 }
 
 @media (max-width: 1180px) {

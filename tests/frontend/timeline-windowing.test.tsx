@@ -12,8 +12,8 @@ let container: HTMLDivElement
 let root: Root
 const recentLimit = TIMELINE_PAGE_SIZE * RECENT_TIMELINE_PAGES
 const tools = (count: number): MessagePart[] => Array.from({ length: count }, (_, index): MessagePart[] => [
-  { type: 'toolCall', id: `call-${index}`, name: 'bash', args: { command: `command-${index}` } },
-  { type: 'toolResult', name: 'bash', text: `result-${index}` },
+  { type: 'toolCall', id: `call-${index}`, name: 'probe', args: { command: `command-${index}` } },
+  { type: 'toolResult', name: 'probe', text: `result-${index}` },
 ]).flat()
 const render = (parts: MessagePart[]) => act(() => root.render(<WorkTimeline parts={parts} showReasoning showTools streaming />))
 const toolRows = () => container.querySelectorAll('.activity-line--tool')
@@ -73,12 +73,12 @@ describe('bounded long-turn timelines', () => {
 
   it('keeps pending tools visible outside the recent pages', () => {
     const parts = tools(300)
-    parts[1] = { type: 'toolResult', name: 'bash', text: 'still running', streaming: true }
+    parts[1] = { type: 'toolResult', name: 'probe', text: 'still running', streaming: true }
     render(parts)
     expect(toolRows()).toHaveLength(recentLimit + TIMELINE_PAGE_SIZE)
     expect(container.textContent).toContain('still running')
     const completed = [...parts]
-    completed[1] = { type: 'toolResult', name: 'bash', text: 'done' }
+    completed[1] = { type: 'toolResult', name: 'probe', text: 'done' }
     render(completed)
     expect(toolRows()).toHaveLength(recentLimit)
   })
