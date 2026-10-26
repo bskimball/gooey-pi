@@ -398,7 +398,7 @@ function workerFixture() {
 		alarms: { create: vi.fn(), onAlarm: eventSource() },
 	};
 	const source = readFileSync(
-		new URL("../../packages/browser-extension/extension/background.js", import.meta.url),
+		new URL("../../packages/browser-extension/background.js", import.meta.url),
 		"utf8",
 	);
 	const worker = runInNewContext(`${source}\n;({ execute, tabs })`, {
@@ -439,7 +439,7 @@ function workerFixture() {
 describe("extension manifest", () => {
 	it("declares toolbar and store icons that exist on disk", () => {
 		const extensionDir = new URL(
-			"../../packages/browser-extension/extension/",
+			"../../packages/browser-extension/",
 			import.meta.url,
 		);
 		const manifest = JSON.parse(
@@ -603,7 +603,7 @@ describe("extension worker input and physical-tab queues", () => {
 		runInNewContext(
 			readFileSync(
 				new URL(
-					"../../packages/browser-extension/extension/content-overlay.js",
+					"../../packages/browser-extension/content-overlay.js",
 					import.meta.url,
 				),
 				"utf8",

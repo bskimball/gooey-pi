@@ -7,4 +7,8 @@ const desktop = resolve(process.env.PI_DESKTOP_DIR || resolve(__dirname, '../../
 await mkdir('dist/extensions', { recursive: true })
 await cp(resolve(__dirname, 'src/editor-extension.ts'), 'dist/extensions/editor-extension.ts')
 await cp(resolve(desktop, 'assets/extensions/omp-work-browser.ts'), 'dist/extensions/omp-work-browser.ts')
-await cp(resolve(__dirname, '../../packages/browser-extension/extension'), 'dist/browser-extension', { recursive: true })
+const browserExtension = resolve(__dirname, '../../packages/browser-extension')
+await cp(browserExtension, 'dist/browser-extension', {
+  recursive: true,
+  filter: (src) => !src.endsWith('package.json'),
+})

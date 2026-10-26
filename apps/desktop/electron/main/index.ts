@@ -1131,7 +1131,7 @@ async function bootstrap(): Promise<void> {
 		extensionBridge,
 		extensionPath: app.isPackaged
 			? join(process.resourcesPath, "browser-extension")
-			: join(app.getAppPath(), "packages", "browser-extension", "extension"),
+			: join(app.getAppPath(), "packages", "browser-extension"),
 		imageFromDataURL: (url) => nativeImage.createFromDataURL(url),
 		getGuest: (webContentsId) => {
 			const contents = webContents.fromId(webContentsId);

@@ -198,8 +198,9 @@
 				"to": "browser-agent/runtime.mjs"
 			},
 			{
-				"from": "packages/browser-extension/extension",
-				"to": "browser-extension"
+				"from": "packages/browser-extension",
+				"to": "browser-extension",
+				"filter": ["**/*", "!package.json"]
 			},
 			{
 				"from": "apps/desktop/assets/icon.png",
