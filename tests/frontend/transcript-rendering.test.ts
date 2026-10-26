@@ -311,7 +311,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('aria-label="Copy assistant message"')
   })
 
-  it('promotes a substantive report ahead of trailing activity and an incidental note', () => {
+  it('keeps a concise closing answer as the outcome and files earlier narrative in the work log', () => {
     const html = render([{
       id: 'trailing-tool-and-note',
       role: 'assistant',
@@ -326,9 +326,85 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html).toContain('This is the complete substantive report with the requested conclusions and evidence.')
     expect(html).toContain('Cleanup complete.')
-    expect(html).toContain('update_todo')
+    expect(html).toContain('Worked for 1s')
+    expect(html).not.toContain('This is the complete substantive report with the requested conclusions and evidence.')
+    expect(html).toContain('class="turn-receipt"')
+    expect(html).toContain('1 tool')
+    expect(html).toContain('Expand log')
+  })
+
+  it('renders subagent calls as inline lanes and plan updates as step headers', () => {
+    const html = render([{
+      id: 'orchestrated',
+      role: 'assistant',
+      timestamp: 1_000,
+      parts: [
+        { type: 'toolCall', id: 'plan', name: 'todo_write', args: { todos: [{ content: 'Scout the repo', status: 'completed' }, { content: 'Implement the lane', status: 'in_progress' }] } },
+        { type: 'toolCall', id: 'scout', name: 'task', args: { agent: 'scout', prompt: 'Map the transcript code' } },
+        { type: 'toolResult', name: 'task', text: 'Found it.', details: { finalReport: 'Transcript lives in messages.tsx' } },
+        { type: 'toolCall', id: 'build', name: 'task_start', args: { agent: 'machinist', prompt: 'Build the lane' } },
+      ],
+    }], true)
+
+    expect(html).toContain('1/2 done')
+    expect(html).toContain('Implement the lane')
+    expect(html.match(/class="subagent-lane /g)).toHaveLength(2)
+    expect(html).toContain('>scout</span>')
+    expect(html).toContain('>machinist</span>')
+    expect(html).toContain('subagent-lane is-done')
+    expect(html).toContain('subagent-lane is-running')
+    expect(html).not.toContain('Transcript lives in messages.tsx')
+  })
+
+  it('marks a failed turn on its prompt and shows the latest turn diff inline', () => {
+    const html = renderToStaticMarkup(createElement(Transcript, {
+      messages: [
+        { id: 'prompt', role: 'user', parts: [{ type: 'text', text: 'Try it' }] },
+        { id: 'reply', role: 'assistant', timestamp: 1_000, startedAt: 1_000, completedAt: 3_000, errorMessage: 'Provider failed', parts: [{ type: 'toolCall', id: 'r', name: 'read_file', args: { path: 'a.ts' } }, { type: 'toolResult', name: 'read_file', text: 'ok' }] },
+      ],
+      git: { isRepo: true, files: [{ path: 'src/App.tsx', status: 'M', additions: 2, deletions: 1, staged: false }] },
+      showPinnedChanges: false,
+      onOpenChanges: noop,
+      onSuggestion: noop,
+    }))
+
+    expect(html).toContain('message__turn-status is-failed')
+    expect(html).toContain('Turn failed')
+    expect(html).toContain('turn-receipt is-failed')
+    expect(html).toContain('1 file changed')
+    expect(html).not.toContain('changes-card')
+  })
+
+  it('keeps a later segment failure when coalescing assistant segments', () => {
+    const html = render([
+      { id: 'prompt', role: 'user', parts: [{ type: 'text', text: 'Try it' }] },
+      { id: 'first', role: 'assistant', timestamp: 1_000, completedAt: 2_000, parts: [{ type: 'toolCall', id: 'r', name: 'read_file', args: { path: 'a.ts' } }, { type: 'toolResult', name: 'read_file', text: 'ok' }] },
+      { id: 'second', role: 'assistant', timestamp: 2_000, completedAt: 3_000, errorMessage: 'Provider failed', parts: [{ type: 'text', text: 'Partial answer.' }] },
+    ])
+
+    expect(html).toContain('message__turn-status is-failed')
+    expect(html).toContain('Turn failed')
+    expect(html).toContain('turn-receipt is-failed')
+    expect(html).toContain('Provider failed')
+  })
+
+  it('counts subagents that follow the final report in the turn receipt', () => {
+    const html = render([{
+      id: 'report-then-task',
+      role: 'assistant',
+      timestamp: 1_000,
+      completedAt: 2_000,
+      parts: [
+        { type: 'thinking', text: 'Planning.' },
+        { type: 'text', text: 'Here is the complete report with the requested conclusions and supporting evidence.' },
+        { type: 'toolCall', id: 'scout', name: 'task', args: { agent: 'scout', prompt: 'Map it' } },
+        { type: 'toolResult', name: 'task', text: 'Found it.' },
+      ],
+    }])
+
+    expect(html).toContain('class="turn-receipt"')
+    expect(html).toContain('1 agent')
   })
 
   it('nests agent messages in active work without opening their contents', () => {

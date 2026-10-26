@@ -46,12 +46,50 @@
 .workbench__content { flex: 1; min-height: 0; min-width: 0; }
 .session-workspace { display: flex; height: 100%; min-height: 0; min-width: 0; }
 .conversation-column { position: relative; display: flex; min-height: 0; min-width: 0; flex: 1 1 auto; flex-direction: column; }
-.conversation-pane { position: relative; min-width: 360px; min-height: 0; flex: 1 1 auto; background: radial-gradient(96% 48% at 50% 0%, color-mix(in srgb, var(--prime-soft) 34%, transparent), transparent 72%), var(--canvas); overflow: hidden; container-type: inline-size; }
+/* One column, three rows: session status, the scrolling transcript, and the docked composer. */
+.conversation-pane { position: relative; display: flex; flex-direction: column; min-width: 360px; min-height: 0; flex: 1 1 auto; background: radial-gradient(96% 48% at 50% 0%, color-mix(in srgb, var(--prime-soft) 34%, transparent), transparent 72%), var(--canvas); overflow: hidden; container-type: inline-size; }
 .conversation-bottom-dock, .transcript-changes-pin, .transcript__inner, .composer-wrap { max-width: var(--transcript-measure); margin: 0 auto; }
-.conversation-bottom-dock, .transcript-changes-pin, .composer-wrap { position: absolute; inset: auto 24px 13px; z-index: 10; }
-.conversation-bottom-dock { display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-.conversation-bottom-dock > * { pointer-events: auto; }
+.transcript-changes-pin, .composer-wrap { position: absolute; inset: auto 24px 13px; z-index: 10; }
+.conversation-bottom-dock { position: relative; inset: auto; z-index: 10; flex: 0 0 auto; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 24px 12px; pointer-events: auto; }
 .conversation-bottom-dock .composer-wrap { position: relative; inset: auto; width: 100%; margin: 0; }
+
+.session-status-bar { position: relative; z-index: 11; flex: 0 0 36px; height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: var(--transcript-measure); margin: 0 auto; padding: 0 24px; }
+.session-status-bar__group { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.session-status-bar__group--end { flex: 0 0 auto; }
+.session-status-bar .worktree-picker__menu { position: absolute; top: calc(100% + 6px); right: auto; bottom: auto; left: 0; }
+.session-status-pill { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); background: var(--surface-subtle); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+button.session-status-pill { transition: color 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out; }
+button.session-status-pill:hover, button.session-status-pill[aria-expanded='true'] { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
+button.session-status-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.session-status-pill__dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--warning); }
+.session-status-pill__diff { display: inline-flex; gap: 3px; font-family: var(--chat-mono); font-size: 10px; }
+.session-status-pill__diff .is-add { color: var(--success); }
+.session-status-pill__diff .is-remove { color: var(--danger); }
+.session-status-pill__caret { color: var(--text-tertiary); transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
+[aria-expanded='true'] > .session-status-pill__caret { transform: rotate(180deg); }
+.session-status-pill--mode.is-orchestrate { color: var(--prime); border-color: color-mix(in srgb, var(--prime) 35%, var(--border)); background: var(--prime-soft); }
+.session-status-pill--context { cursor: help; }
+.session-status-pill__meter { width: 22px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--surface-selected); }
+.session-status-pill__meter > span { display: block; height: 100%; border-radius: inherit; background: var(--prime); }
+.session-status-pill--context.is-warning .session-status-pill__meter > span { background: var(--warning); }
+.session-status-pill--context.is-critical { color: var(--danger); }
+.session-status-pill--context.is-critical .session-status-pill__meter > span { background: var(--danger); }
+.session-status-pill--context.is-unavailable { color: var(--text-tertiary); }
+.session-status-bar .model-fallback-chip { height: 24px; }
+.session-status-bar__changes { position: relative; min-width: 0; }
+.session-changes-popover { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; width: min(440px, calc(100cqi - 48px)); display: grid; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
+.session-changes-popover .changed-files { max-height: min(320px, 50vh); overflow-y: auto; }
+.session-changes-popover__note { margin: 0; padding: 0 6px; color: var(--text-tertiary); font-size: 10.5px; }
+.session-changes-popover__review { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; color: var(--text); background: var(--surface-subtle); font-size: 11.5px; font-weight: 540; transition: background 120ms ease-out; }
+.session-changes-popover__review:hover { background: var(--surface-hover); }
+.session-changes-popover__review:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.changed-files { margin: 0; padding: 0; list-style: none; }
+.changed-files__row { min-height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 6px; border-radius: 5px; font-size: 11px; }
+.changed-files__row:hover { background: var(--surface-subtle); }
+.changed-files__status { width: 16px; height: 16px; display: inline-grid; flex: 0 0 16px; place-items: center; border-radius: 4px; color: var(--warning); background: var(--warning-soft); font: 600 9.5px/1 var(--chat-mono); }
+.changed-files__status.is-added, .changed-files__status.is-untracked { color: var(--success); background: var(--success-soft); }
+.changed-files__status.is-deleted, .changed-files__status.is-conflicted { color: var(--danger); background: var(--danger-soft); }
+.changed-files__path { min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-family: var(--chat-mono); text-overflow: ellipsis; white-space: nowrap; }
 
 .resize-handle { position: relative; z-index: 12; flex: 0 0 auto; padding: 0; touch-action: none; outline: 0; }
 .resize-handle > span { position: absolute; display: block; background: var(--border); transition: background 130ms ease-out, box-shadow 130ms ease-out; }

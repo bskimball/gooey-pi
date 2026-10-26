@@ -1,6 +1,6 @@
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { CaretRight, Check, CircleNotch, Copy, Crosshair } from '../icons'
-import type { HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
+import { CaretRight, Check, Copy, Crosshair, X } from '../icons'
+import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { splitAnnotationBlock } from '@/lib/browser-annotations'
 import { splitCapabilityRouting } from '@/lib/capability-mentions'
 import { routedSessionReferences, splitSessionRouting, type RoutedSessionReference } from '@/lib/session-mentions'
@@ -12,7 +12,8 @@ import { MarkdownText } from '../MarkdownText'
 import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { TranscriptImage } from './TranscriptImage'
-import { LiveWorkVerb, ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
+import { formatWorkedDuration, LiveWorkVerb, ThinkingDots, WorkDisclosure, WorkTimeline } from './timeline'
+import { TurnReceipt, workCounts } from './turn-receipt'
 
 function imageSource(part: Extract<MessagePart, { type: 'image' }>): string | undefined {
   if (part.dataTruncated || !part.data || !part.mimeType || !/^image\/(png|jpeg|gif|webp)$/i.test(part.mimeType) || !/^[a-z\d+/=\s]+$/i.test(part.data)) return undefined
@@ -61,9 +62,9 @@ function isNarrative(part: MessagePart): part is Extract<MessagePart, { type: 't
 
 /**
  * Completed turns can receive lightweight activity after their final answer.
- * Anchor the visible tail at the most substantial narrative run, preferring
- * the later run on ties, so everything after that anchor remains in order and
- * a short trailing note cannot bury a longer deliverable in the work rail.
+ * When no narrative follows the last activity, anchor the visible tail at the
+ * most substantial narrative run, preferring the later run on ties, so the
+ * answer is not lost behind trailing reasoning or tool calls.
  */
 function primaryNarrativeStart(parts: MessagePart[], start: number): number {
   let bestStart = -1
@@ -104,7 +105,9 @@ export function splitAssistantTurn(parts: MessagePart[]): { before: MessagePart[
       break
     }
   }
-  const finalNarrative = primaryNarrativeStart(parts, firstActivity + 1)
+  // Narrative after the last activity is the turn's outcome, however short; an earlier, longer run stays in the work log.
+  const hasTrailingNarrative = parts.slice(lastActivity + 1).some((part) => part.type === 'image' || (part.type === 'text' && part.text.trim().length > 0))
+  const finalNarrative = hasTrailingNarrative ? lastActivity + 1 : primaryNarrativeStart(parts, firstActivity + 1)
   const workEnd = finalNarrative >= 0 ? finalNarrative : lastActivity + 1
   return { before: parts.slice(0, firstActivity), work: parts.slice(firstActivity, workEnd), after: parts.slice(workEnd) }
 }
@@ -158,9 +161,25 @@ function AssistantHarnessMark({ harness, size = 24 }: { harness: HarnessId; size
   return <Mark size={size} />
 }
 
+function workedDuration(message: TranscriptMessage): string {
+  const startedAt = timestampValue(message.startedAt ?? message.timestamp) ?? 0
+  const completedAt = timestampValue(message.completedAt) ?? startedAt
+  return formatWorkedDuration(Math.max(0, completedAt - startedAt))
+}
+
+function timestampValue(value?: string | number): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = typeof value === 'number' ? value : Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export const AssistantMessage = memo(
-  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean }) {
+  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools, git }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean; git?: GitStatus }) {
+    const [logOpen, setLogOpen] = useState(false)
+    const logId = useId()
     const { before, work, after } = splitAssistantTurn(message.parts)
+    const counts = workCounts(message.parts)
+    const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || Boolean(git?.files.length))
     const hasVisibleActivity = work.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
     )
@@ -176,7 +195,7 @@ export const AssistantMessage = memo(
           {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
           {renderNarrative(before, 'before', message.streaming)}
           {hasVisibleActivity ? (
-            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} />
+            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools} open={logOpen} onOpenChange={setLogOpen} logId={logId} />
           ) : (
             renderNarrative(hiddenMiddleNarrative, 'middle', message.streaming)
           )}
@@ -186,12 +205,13 @@ export const AssistantMessage = memo(
               <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
             </div>
           ) : null}
+          {showReceipt ? <TurnReceipt duration={workedDuration(message)} failed={Boolean(message.errorMessage)} agents={counts.agents} tools={counts.tools} git={git} logOpen={logOpen} logId={logId} onToggleLog={hasVisibleActivity ? () => setLogOpen((open) => !open) : undefined} /> : null}
           {!message.streaming ? <MessageActions message={message} text={copyableText} /> : null}
         </div>
       </article>
     )
   },
-  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools,
+  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git,
 )
 
 function SessionReferenceText({ text, references, onOpen }: { text: string; references: RoutedSessionReference[]; onOpen?(sessionId: string, harness: HarnessId): void }) {
@@ -266,17 +286,18 @@ function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessio
   )
 }
 
-export const UserMessage = memo(function UserMessage({ message, turnLabel, turnRunning = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnRunning?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+export const UserMessage = memo(function UserMessage({ message, turnLabel, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
+  const turnState = turnRunning ? 'running' : turnFailed ? 'failed' : turnLabel ? 'done' : undefined
   return (
     <article className="message message--user">
       <div className="user-bubble">
         {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' ? renderImage(part, `user-${index}`) : null))}
       </div>
-      {turnRunning || turnLabel ? (
-        <span className="message__turn-status">
-          <span aria-hidden="true">{turnRunning ? <><CircleNotch className="spin" size={11} /> running</> : <><Check size={11} /> {turnLabel}</>}</span>
-          <span className="sr-only">{turnRunning ? 'Turn running' : `Turn took ${turnLabel}`}</span>
+      {turnState ? (
+        <span className={`message__turn-status is-${turnState}`}>
+          <span aria-hidden="true">{turnState === 'running' ? <><span className="message__turn-dot" /> running</> : turnState === 'failed' ? <><X size={11} /> failed</> : <><Check size={11} /> {turnLabel}</>}</span>
+          <span className="sr-only">{turnState === 'running' ? 'Turn running' : turnState === 'failed' ? 'Turn failed' : `Turn took ${turnLabel}`}</span>
         </span>
       ) : null}
       {message.steerState ? <div className={`message__steer-state is-${message.steerState}`} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}

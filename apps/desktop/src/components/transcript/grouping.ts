@@ -27,10 +27,15 @@ export function createAssistantTurnCoalescer() {
       }
       const streaming = segments.some((message) => message.streaming)
       let completedAt = first.completedAt
-      for (const segment of segments) completedAt = segment.completedAt ?? completedAt
+      let errorMessage = first.errorMessage
+      for (const segment of segments) {
+        completedAt = segment.completedAt ?? completedAt
+        errorMessage = segment.errorMessage || errorMessage
+      }
       const message: TranscriptMessage = {
         ...first,
         completedAt: streaming ? undefined : completedAt,
+        errorMessage,
         streaming,
         // Flatten once, rather than copying the accumulated parts for each continuation.
         parts: segments.flatMap((segment) => segment.parts),

@@ -2,12 +2,11 @@
 /* One type scale for the session: body prose, the monospace command line, activity rows, metadata. */
 :root { --chat-body: 14px; --chat-code: 13px; --chat-ui: 12.5px; --chat-meta: 11px; --chat-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", Menlo, monospace; }
 /* A gutter on both edges keeps the scrolled column centred on the same axis as the pane-centred
-   turn header and composer, so their text lines up with the transcript's. */
-.transcript { position: absolute; inset: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 30px 0 170px; }
-.transcript.has-pinned-changes { padding-bottom: 245px; }
-.transcript.has-docked-changes { padding-bottom: 250px; }
-.transcript.has-queued-messages { padding-bottom: 325px; }
-.transcript.has-docked-changes.has-queued-messages { padding-bottom: 405px; }
+   turn header and composer, so their text lines up with the transcript's. The composer is docked
+   below as its own row, so the scroller only needs breathing room, not overlay clearance. */
+.transcript { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 30px 0 24px; }
+.transcript.has-queued-messages { padding-bottom: 36px; }
+.transcript.has-pinned-changes { padding-bottom: 96px; }
 .transcript-changes-pin { z-index: 9; bottom: 137px; }
 .conversation-pane .changes-card { margin: 0; box-shadow: 0 4px 18px color-mix(in srgb, #000 12%, transparent); }
 .transcript__inner { min-height: 100%; padding: 0 24px; }
@@ -34,7 +33,14 @@
 .message ~ .message--user { margin-top: 28px; }
 /* Prompt-line turn outcome: duration (or live state) borrowed from the reply, right-aligned
    where the copy action appears on hover, so the two trade places instead of stacking. */
-.message--user > .message__turn-status { grid-row: 1; grid-column: 2; align-self: start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
+.message--user > .message__turn-status { grid-row: 1; grid-column: 2; align-self: start; display: inline-flex; align-items: center; margin-top: 2px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
+.message__turn-status > span[aria-hidden] { height: 20px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--canvas); }
+.message__turn-status.is-done { color: var(--success); }
+.message__turn-status.is-running { color: var(--prime); }
+.message__turn-status.is-running > span[aria-hidden] { border-color: color-mix(in srgb, var(--prime) 32%, var(--border)); }
+.message__turn-status.is-failed { color: var(--danger); }
+.message__turn-status.is-failed > span[aria-hidden] { border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); background: var(--danger-soft); }
+.message__turn-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: work-rail-beacon 2.6s ease-in-out infinite; }
 .message--user:hover > .message__turn-status, .message--user:focus-within > .message__turn-status { opacity: 0; }
 .message__steer-state { margin-top: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .message__steer-state.is-read { color: var(--success); }
@@ -165,6 +171,55 @@
 .activity-line--result.is-error { color: var(--danger); }
 .activity-line--note { padding: 4px 6px 2px 32px; color: var(--text-secondary); }
 .activity-line--note .prose { margin-bottom: 0; font-size: var(--chat-code); line-height: 1.6; }
+/* Subagent lanes are independent units of work, so they earn a bounded row; the role badge says who, the pill says where it stands. */
+.subagent-lane { margin: 3px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+.subagent-lane.is-running { border-color: color-mix(in srgb, var(--prime) 30%, var(--border)); }
+.subagent-lane.is-error { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.subagent-lane__summary { width: 100%; min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 6px; color: var(--text-secondary); background: transparent; text-align: left; font-size: var(--chat-ui); transition: background 120ms ease-out; }
+.subagent-lane__summary:hover:not(:disabled) { background: var(--surface-subtle); }
+.subagent-lane__summary:disabled { opacity: 1; cursor: default; }
+.subagent-lane__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.subagent-lane__verb { flex: 0 0 auto; font-weight: 540; }
+.subagent-lane__role { flex: 0 0 auto; padding: 0 6px; border-radius: 4px; color: var(--prime); background: var(--prime-soft); font: 600 10.5px/18px var(--chat-mono); }
+.subagent-lane__id { flex: 0 0 auto; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); }
+.subagent-lane__mission { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); font-size: var(--chat-meta); text-overflow: ellipsis; white-space: nowrap; }
+.subagent-lane__state { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 999px; color: var(--success); background: var(--success-soft); font-size: 10.5px; white-space: nowrap; }
+.subagent-lane.is-running .subagent-lane__state { color: var(--prime); background: var(--prime-soft); }
+.subagent-lane.is-sent .subagent-lane__state { color: var(--text-secondary); background: var(--surface-subtle); }
+.subagent-lane.is-error .subagent-lane__state { color: var(--danger); background: var(--danger-soft); }
+.subagent-lane__body { max-height: 360px; overflow: auto; padding: 10px 12px 10px 32px; border-top: 1px solid var(--border); background: var(--canvas); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.subagent-lane__body .prose { margin: 0; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
+/* Plan updates head the steps that follow them: the count and active step read as a section label, not a tool call. */
+.todo-step { margin: 6px 0 2px; }
+.todo-step__summary { width: 100%; min-height: 28px; display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 6px; color: var(--text); background: transparent; text-align: left; font-size: var(--chat-ui); }
+.todo-step__summary:hover:not(:disabled) { background: var(--surface-subtle); }
+.todo-step__summary:disabled { opacity: 1; cursor: default; }
+.todo-step__count { flex: 0 0 auto; padding: 0 6px; border-radius: 4px; color: var(--text-secondary); background: var(--surface-selected); font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 18px; }
+.todo-step.is-finished .todo-step__count { color: var(--success); background: var(--success-soft); }
+.todo-step__label { min-width: 0; flex: 1; overflow: hidden; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
+.todo-step__list { display: grid; gap: 3px; margin: 2px 0 6px; padding: 0 6px 0 14px; list-style: none; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.todo-step__list > li { display: flex; align-items: baseline; gap: 8px; color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.5; }
+.todo-step__mark { width: 12px; height: 12px; display: inline-grid; flex: 0 0 12px; place-items: center; align-self: center; border: 1.5px solid var(--border-strong); border-radius: 50%; }
+.todo-step__list > li.is-completed { color: var(--text-tertiary); }
+.todo-step__list > li.is-completed .todo-step__mark { border-color: var(--success); color: var(--canvas); background: var(--success); }
+.todo-step__list > li.is-in_progress { color: var(--text); font-weight: 540; }
+.todo-step__list > li.is-in_progress .todo-step__mark { border-color: var(--prime); background: radial-gradient(circle, var(--prime) 0 2.5px, transparent 3px); }
+.todo-step__list > li.is-cancelled { color: var(--text-tertiary); text-decoration: line-through; }
+/* The settled turn's closing line: outcome and scale, then the working-tree diff it left behind. */
+.turn-receipt { display: grid; gap: 6px; margin-top: 12px; }
+.turn-receipt__line { min-height: 24px; display: flex; align-items: center; gap: 10px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; }
+.turn-receipt__outcome { display: inline-flex; align-items: center; gap: 5px; }
+.turn-receipt__outcome > svg { color: var(--success); }
+.turn-receipt.is-failed .turn-receipt__outcome > svg { color: var(--danger); }
+.turn-receipt__action { min-height: 24px; padding: 0 7px; border-radius: 5px; color: var(--text-secondary); background: transparent; font-size: var(--chat-meta); transition: color 120ms ease-out, background 120ms ease-out; }
+.turn-receipt__action:hover { color: var(--text); background: var(--surface-hover); }
+.turn-receipt__action:focus-visible, .turn-receipt__diff-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.turn-receipt__diff { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
+.turn-receipt__diff-summary { width: 100%; min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px; color: var(--text); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 540; transition: background 120ms ease-out; }
+.turn-receipt__diff-summary:hover { background: var(--surface-subtle); }
+.turn-receipt__diff-toggle { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; color: var(--text-tertiary); font-size: var(--chat-meta); font-weight: 500; }
+.turn-receipt__diff-summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
+.turn-receipt__diff .changed-files { max-height: 280px; overflow-y: auto; padding: 4px; border-top: 1px solid var(--border); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
 .syntax-key { color: var(--annotation); }
 .syntax-string { color: var(--success); }
 .syntax-keyword { color: var(--prime); }
@@ -239,6 +294,7 @@
 .turn-header__state { display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); }
 .turn-header__jump { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border-radius: 6px; color: var(--text-tertiary); background: transparent; transition: color 120ms ease-out, background 120ms ease-out; }
 .turn-header__jump:hover { color: var(--text); background: var(--surface-hover); }
+.session-status-bar ~ .turn-header { top: 36px; }
 @keyframes turn-header-in { from { opacity: 0; transform: translateY(-4px); } }
 
 /* Motion: new prompts and the live placeholder ease in; disclosures unfold under a rotating caret;

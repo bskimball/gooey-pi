@@ -4,7 +4,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
-import type { CheckoutCatalog, GitWorktree } from '../../apps/desktop/src/types/api'
+import { SessionStatusBar } from '../../apps/desktop/src/components/SessionStatusBar'
+import type { CheckoutCatalog, GitStatus, GitWorktree } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -27,8 +28,6 @@ function props(overrides: Record<string, unknown> = {}) {
     fastAvailable: false,
     imageInputSupported: true,
     skills: [],
-    checkoutCatalog: worktreeCatalog,
-    onExecuteCheckout: vi.fn(),
     onModelChange: vi.fn(),
     onEffortChange: vi.fn(),
     onFastChange: vi.fn(),
@@ -38,7 +37,19 @@ function props(overrides: Record<string, unknown> = {}) {
   }
 }
 
-describe('composer worktree picker', () => {
+const cleanGit: GitStatus = { isRepo: true, files: [] }
+
+function statusBarProps(overrides: Record<string, unknown> = {}) {
+  return {
+    git: cleanGit,
+    checkoutCatalog: worktreeCatalog,
+    onExecuteCheckout: vi.fn(),
+    onOpenChanges: vi.fn(),
+    ...overrides,
+  }
+}
+
+describe('composer and session status worktree picker', () => {
   let root: Root
   let container: HTMLDivElement
 
@@ -63,7 +74,7 @@ describe('composer worktree picker', () => {
   })
 
   it('shows the checkout name instead of a generic Workspace label before the catalog loads', () => {
-    act(() => root.render(<Composer {...props({ checkoutCatalog: undefined, checkoutLabel: 'feature/current' })} />))
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ checkoutCatalog: undefined, checkoutLabel: 'feature/current' })} />))
 
     const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: feature/current"]')
     expect(trigger?.textContent).toContain('feature/current')
@@ -72,7 +83,7 @@ describe('composer worktree picker', () => {
 
   it('shows the active branch and switches to another worktree', async () => {
     const onExecuteCheckout = vi.fn()
-    act(() => root.render(<Composer {...props({ onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ onExecuteCheckout })} />))
 
     const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')
     expect(trigger).not.toBeNull()
@@ -92,7 +103,7 @@ describe('composer worktree picker', () => {
 
   it('creates a worktree from an inline branch form', async () => {
     const onExecuteCheckout = vi.fn().mockResolvedValue(undefined)
-    act(() => root.render(<Composer {...props({ onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ onExecuteCheckout })} />))
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
     const input = container.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
@@ -115,7 +126,7 @@ describe('composer worktree picker', () => {
       activeName: 'main',
       checkouts: [{ name: 'main', current: true }, { name: 'feature/local', current: false }],
     }
-    act(() => root.render(<Composer {...props({ checkoutCatalog, onExecuteCheckout })} />))
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ checkoutCatalog, onExecuteCheckout })} />))
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
     expect(container.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Git branches')
@@ -123,6 +134,34 @@ describe('composer worktree picker', () => {
     const options = container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
     act(() => options[1].click())
     expect(onExecuteCheckout).toHaveBeenCalledWith({ strategy: 'branch', operation: 'switch', branch: 'feature/local' })
+  })
+
+  it('locks checkout switching while a run is in flight', () => {
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ busy: true })} />))
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.disabled).toBe(true)
+  })
+
+  it('expands workspace changes inline and hands off to the Changes review', () => {
+    const onOpenChanges = vi.fn()
+    const git: GitStatus = { isRepo: true, files: [
+      { path: 'src/App.tsx', status: 'M', staged: false, additions: 4, deletions: 1 },
+      { path: 'src/new.ts', status: '??', staged: false, additions: 10, deletions: 0 },
+    ] }
+    act(() => root.render(<SessionStatusBar {...statusBarProps({ git, onOpenChanges })} />))
+
+    const pill = container.querySelector<HTMLButtonElement>('.session-status-pill--dirty')!
+    expect(pill.textContent).toContain('2 files changed')
+    expect(pill.textContent).toContain('+14')
+    expect(pill.textContent).toContain('−1')
+    act(() => pill.click())
+    expect(pill.getAttribute('aria-expanded')).toBe('true')
+    const rows = container.querySelectorAll('.changed-files__row')
+    expect(rows).toHaveLength(2)
+    expect(rows[1].querySelector('.changed-files__status')?.getAttribute('aria-label')).toBe('untracked')
+
+    act(() => [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Review in Changes'))?.click())
+    expect(onOpenChanges).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.session-changes-popover')).toBeNull()
   })
 
   it('restores an unsent draft and model after the composer remounts', async () => {

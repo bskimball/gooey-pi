@@ -6,6 +6,7 @@ interface CheckoutPickerProps {
   catalog?: CheckoutCatalog
   fallbackLabel?: string
   loading?: boolean
+  disabled?: boolean
   onExecute?(action: CheckoutAction): Promise<void> | void
 }
 
@@ -17,7 +18,7 @@ function checkoutLabel(catalog: CheckoutCatalog | undefined, fallback: string | 
   return active?.branch ?? active?.name ?? fallback ?? 'Checkout'
 }
 
-export function CheckoutPicker({ catalog, fallbackLabel, loading = false, onExecute }: CheckoutPickerProps) {
+export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabled = false, onExecute }: CheckoutPickerProps) {
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [branch, setBranch] = useState('')
@@ -65,7 +66,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, onExec
     }
   }
 
-  const enabled = Boolean(onExecute && catalog && (catalog.checkouts.length > 0 || strategy === 'branch'))
+  const enabled = Boolean(!disabled && onExecute && catalog && (catalog.checkouts.length > 0 || strategy === 'branch'))
   const label = checkoutLabel(catalog, fallbackLabel)
   return (
     <div className="worktree-picker" ref={rootRef}>

@@ -4,6 +4,7 @@ import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
+import { SessionStatusBar } from '../../apps/desktop/src/components/SessionStatusBar'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
 import type { PrimeContextUsage, PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
 
@@ -41,7 +42,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue', contextUsage?: PrimeContextUsage, executingModel?: RuntimeInfo['executingModel']) {
+function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue', contextUsage?: PrimeContextUsage) {
   act(() => root.render(<Composer
     busy={busy}
     model="provider/vision"
@@ -55,7 +56,6 @@ function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = fal
     imageInputSupported={imageInputSupported}
     messageEnterAction={messageEnterAction}
     contextUsage={contextUsage}
-    executingModel={executingModel}
     skills={[]}
     onModelChange={vi.fn()}
     onEffortChange={vi.fn()}
@@ -581,18 +581,32 @@ describe('Composer context usage and stop control', () => {
     expect(container.querySelector('button[aria-label="Stop Pi"] .ph-square')).not.toBeNull()
     expect(container.querySelector('.ph-stop-circle')).toBeNull()
   })
+
+  it('keeps Stop beside an explicit Steer action while a run is busy', () => {
+    renderComposer(vi.fn(), true, true)
+
+    expect(container.querySelector('textarea')?.placeholder).toBe('Steer this run… (Ctrl+Enter to steer, Enter to queue)')
+    const stop = container.querySelector('button[aria-label="Stop Pi"]')
+    const steer = container.querySelector<HTMLButtonElement>('button[aria-label="Steer this run"]')
+    expect(stop?.nextElementSibling).toBe(steer)
+    expect(steer?.disabled).toBe(true)
+    expect(container.querySelector('button[aria-label="Send message"]')).toBeNull()
+  })
 })
 
-describe('Composer fallback indicator', () => {
-  it('shows the executing fallback without changing the selected model', () => {
-    renderComposer(vi.fn(), true, false, 'queue', undefined, {
+describe('Session status fallback indicator', () => {
+  it('shows the executing fallback in the session header without changing the selected model', () => {
+    const executingModel: RuntimeInfo['executingModel'] = {
       provider: 'anthropic',
       id: 'claude-sonnet',
       label: 'anthropic/claude-sonnet',
       isFallback: true,
-    })
-
+    }
+    renderComposer(vi.fn(), true, false, 'queue', undefined)
     expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
+    expect(container.querySelector('.model-fallback-chip')).toBeNull()
+
+    act(() => root.render(<SessionStatusBar git={{ isRepo: true, files: [] }} executingModel={executingModel} onOpenChanges={vi.fn()} />))
     expect(container.querySelector('.model-fallback-chip')?.textContent).toContain('Running on anthropic/claude-sonnet')
     expect(container.querySelector('.model-fallback-chip')?.getAttribute('title')).toContain('Provider fallback')
   })

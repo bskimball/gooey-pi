@@ -20,6 +20,7 @@ import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
+import { isSubagentTool, SubagentLane, TodoStep } from './subagent-lane'
 
 function timestamp(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -68,30 +69,7 @@ function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): string {
   const raw = part.args
   if (raw && typeof raw === 'object') {
     const args = raw as Record<string, unknown>
-    if (part.name === 'todo_write' && Array.isArray(args.todos)) {
-      const total = args.todos.length
-      const done = args.todos.filter((item) => item && typeof item === 'object' && (item as Record<string, unknown>).status === 'completed').length
-      const active = args.todos.find((item) => item && typeof item === 'object' && (item as Record<string, unknown>).status === 'in_progress') as Record<string, unknown> | undefined
-      const label = typeof active?.content === 'string' ? ` · ${active.content}` : ''
-      return boundText(`${done}/${total} done${label}`.replace(/\s+/g, ' ').trim(), 180, '…')
-    }
-    if ((part.name === 'task' || part.name === 'task_start') && typeof args.agent === 'string') {
-      const promptText = typeof args.prompt === 'string' ? `: ${args.prompt}` : ''
-      return boundText(`${args.agent}${promptText}`.replace(/\s+/g, ' ').trim(), 180, '…')
-    }
-    if (part.name === 'task_chain' && Array.isArray(args.steps)) {
-      const steps = args.steps.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && typeof (item as Record<string, unknown>).agent === 'string'))
-      if (steps.length > 0) {
-        const agents = steps.map((step) => String(step.agent)).join(' → ')
-        const firstPrompt = typeof steps[0]?.prompt === 'string' ? `: ${steps[0].prompt}` : ''
-        return boundText(`${agents}${firstPrompt}`.replace(/\s+/g, ' ').trim(), 180, '…')
-      }
-    }
-    if (part.name === 'task_send' && typeof args.id === 'string') {
-      const mode = typeof args.mode === 'string' ? ` (${args.mode})` : ''
-      const messageText = typeof args.message === 'string' ? `: ${args.message}` : ''
-      return boundText(`${args.id}${mode}${messageText}`.replace(/\s+/g, ' ').trim(), 180, '…')
-    }
+    // Plan updates and subagent calls render as TodoStep and SubagentLane rows instead.
     const preferred = args.question ?? args.command ?? args.query ?? args.pattern ?? args.url ?? args.path ?? args.operation ?? args.id ?? args.action ?? args.code ?? args.cwd
     if (typeof preferred === 'string') return boundText(preferred.replace(/\s+/g, ' ').trim(), 180, '…')
   }
@@ -260,7 +238,7 @@ function partKey(part: MessagePart, index: number): string {
   return part.partId ?? `${part.type}:${index}`
 }
 
-export function WorkTimeline({ parts, showReasoning, showTools, streaming = false }: { parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean }) {
+export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean }) {
   const pairedResults = new Set<number>()
   const pendingKeys = new Set<string>()
   const rows = parts.map((part, index) => {
@@ -276,7 +254,10 @@ export function WorkTimeline({ parts, showReasoning, showTools, streaming = fals
       const next = parts[index + 1]
       if (next?.type === 'toolResult') pairedResults.add(index + 1)
       if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
-      return <ToolPart key={key} part={part} result={next?.type === 'toolResult' ? next : undefined} />
+      const result = next?.type === 'toolResult' ? next : undefined
+      if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
+      if (isSubagentTool(part.name)) return <SubagentLane key={key} part={part} result={result} />
+      return <ToolPart key={key} part={part} result={result} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
@@ -291,7 +272,7 @@ export function WorkTimeline({ parts, showReasoning, showTools, streaming = fals
     const recent = index >= pageCount - RECENT_TIMELINE_PAGES || page.some((row) => row.key !== null && pendingKeys.has(String(row.key)))
     pages.push(<TimelinePage key={page[0].key} recent={recent} start={start + 1} count={page.length}>{page}</TimelinePage>)
   }
-  return <div className="work-timeline">{pages}</div>
+  return <div className="work-timeline" id={id}>{pages}</div>
 }
 
 const THINKING_STATUS_VERBS = [
@@ -356,9 +337,14 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
   return status ?? 'Working'
 }
 
-/** `children` is the live answer streaming after the work; it renders between the timeline and the status row. */
-export function WorkDisclosure({ message, parts, showReasoning, showTools, running = message.streaming, children }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; running?: boolean; children?: ReactNode }) {
-  const [open, setOpen] = useState(false)
+/**
+ * `children` is the live answer streaming after the work; it renders between the timeline and the status row.
+ * Settled disclosures may be controlled (`open`/`onOpenChange`) so a turn receipt can share the same log toggle.
+ */
+export function WorkDisclosure({ message, parts, showReasoning, showTools, running = message.streaming, children, open: controlledOpen, onOpenChange, logId }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; running?: boolean; children?: ReactNode; open?: boolean; onOpenChange?(open: boolean): void; logId?: string }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = (next: boolean) => { if (onOpenChange) onOpenChange(next); else setUncontrolledOpen(next) }
   if (running) {
     const status = liveWorkStatus(message.parts, showReasoning, showTools)
     return <section className="work-disclosure is-running" aria-label="Agent work activity">
@@ -376,10 +362,10 @@ export function WorkDisclosure({ message, parts, showReasoning, showTools, runni
   const steps = parts.filter((part) => (part.type === 'toolCall' && showTools) || part.type === 'agentMessage' || part.type === 'compaction').length
   return (
     <section className="work-disclosure">
-      <button type="button" className="work-disclosure__button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+      <button type="button" className="work-disclosure__button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={open ? logId : undefined}>
         <CaretRight className="disclosure-caret" size={13} /><span>Worked for {duration}{steps > 0 ? ` · ${steps} step${steps === 1 ? '' : 's'}` : ''}</span>
       </button>
-      {open ? <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
+      {open ? <WorkTimeline id={logId} parts={parts} showReasoning={showReasoning} showTools={showTools} /> : null}
     </section>
   )
 }

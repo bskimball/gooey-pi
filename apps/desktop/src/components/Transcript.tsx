@@ -79,6 +79,14 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
   const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages)
   const activeAssistantId = useMemo(() => active && groupedMessages.at(-1)?.role === 'assistant' ? groupedMessages.at(-1)?.id : undefined, [active, groupedMessages])
+  // Workspace changes belong to the newest settled turn; older turns cannot claim the current working tree.
+  const latestSettledAssistantId = useMemo(() => {
+    for (let index = groupedMessages.length - 1; index >= 0; index -= 1) {
+      const message = groupedMessages[index]
+      if (message.role === 'assistant' && !message.streaming && message.id !== activeAssistantId) return message.id
+    }
+    return undefined
+  }, [activeAssistantId, groupedMessages])
   const transcriptClasses = [
     'transcript',
     'scroll-area',
@@ -108,6 +116,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
           // before the following prompt: steering and compaction can split one turn into several.
           let turnLabel: string | undefined
           let turnRunning = false
+          let turnFailed = false
           if (message.role === 'user') {
             const segments: TranscriptMessage[] = []
             for (let index = messageIndex + 1; index < visibleMessages.length; index += 1) {
@@ -118,6 +127,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
             const isLastPrompt = !visibleMessages.slice(messageIndex + 1).some((candidate) => candidate.role === 'user' && candidate.kind !== 'steer-read-marker')
             // An active session's last turn is still running even between segments (e.g. mid-compaction).
             turnRunning = segments.some((segment) => segment.streaming || segment.id === activeAssistantId) || (active && isLastPrompt)
+            turnFailed = !turnRunning && segments.some((segment) => Boolean(segment.errorMessage))
             if (segments.length > 0 && !turnRunning) {
               const startedAt = timestampValue(segments[0].startedAt ?? segments[0].timestamp)
               const completedAt = timestampValue(segments.at(-1)?.completedAt)
@@ -126,10 +136,10 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
           }
           return <ErrorBoundary key={message.id} fallback={<div className="message message--render-failure" role="note">This message could not be displayed.</div>}>
           {message.kind === 'steer-read-marker' ? <SteerReadMarker message={message} />
-            : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnRunning={turnRunning} onOpenSessionReference={onOpenSessionReference} />
+            : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnRunning={turnRunning} turnFailed={turnFailed} onOpenSessionReference={onOpenSessionReference} />
             : message.role === 'assistant' ? message.streaming || message.id === activeAssistantId
               ? <ActiveAssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} />
-              : <AssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} />
+              : <AssistantMessage message={message} harness={harness} showReasoning={showReasoning} showTools={showTools} git={message.id === latestSettledAssistantId && git.files.length ? git : undefined} />
             : message.role === 'agent' ? <AgentMessage message={message} />
             : message.role === 'goal' ? <GoalMessage message={message} />
             : message.role === 'tool' || message.role === 'system' ? <ActivityMessage message={message} harness={harness} />

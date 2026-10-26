@@ -1164,14 +1164,10 @@
 	fill: currentColor;
 	stroke: none;
 }
-.composer-note {
-	margin: 0;
-	padding: 5px 0 0;
-	color: var(--text-tertiary);
-	background: var(--canvas);
-	box-shadow: 0 13px 0 var(--canvas);
-	font-size: 9.5px;
-	text-align: center;
+/* Mid-run the primary action steers the live turn; prime ink separates it from the red Stop beside it. */
+.send-button--steer:not(:disabled) {
+	color: var(--canvas);
+	background: var(--prime);
 }
 .composer-menu {
 	position: absolute;

@@ -37,8 +37,6 @@ import { appendTerminalContextToPrompt } from "@/lib/terminal-context";
 import type {
 	AgentBrowserTabRecord,
 	BrowserAnnotation,
-	CheckoutAction,
-	CheckoutCatalog,
 	HarnessId,
 	MessageEnterAction,
 	PrimeContextUsage,
@@ -56,12 +54,7 @@ import type {
 	TerminalSelectionContext,
 	VoiceTranscriptionProvider,
 } from "@/types/api";
-import { CheckoutPicker } from "./CheckoutPicker";
 import { ComposerQueue } from "./ComposerQueue";
-import {
-	ExecutingModelChip,
-	type ExecutingModelChipProps,
-} from "./ExecutingModelChip";
 import { ExtensionTabPill } from "./ExtensionTabControls";
 import {
 	ArrowUp,
@@ -104,7 +97,6 @@ interface ComposerProps {
 	/** Primary action for Enter; Ctrl/Cmd+Enter selects the opposite action. */
 	messageEnterAction?: MessageEnterAction;
 	contextUsage?: PrimeContextUsage;
-	executingModel?: ExecutingModelChipProps["executingModel"];
 	sessionUsage?: SessionUsage;
 	voice?: PrimeWorkApi["voice"] | null;
 	transcriptionProvider?: VoiceTranscriptionProvider;
@@ -130,11 +122,6 @@ interface ComposerProps {
 	onModelChange(value: string): void;
 	onEffortChange(value: PrimeThinkingLevel): void;
 	onFastChange(value: boolean): void;
-	checkoutCatalog?: CheckoutCatalog;
-	/** Branch/worktree name shown before or without the linked-worktree catalog. */
-	checkoutLabel?: string;
-	checkoutsLoading?: boolean;
-	onExecuteCheckout?(action: CheckoutAction): Promise<void> | void;
 	onSend(
 		prompt: string,
 		images: PromptImage[],
@@ -195,7 +182,6 @@ export const Composer = memo(function Composer({
 	imageInputSupported,
 	messageEnterAction = "queue",
 	contextUsage,
-	executingModel,
 	sessionUsage,
 	voice,
 	transcriptionProvider = "openai-live",
@@ -214,10 +200,6 @@ export const Composer = memo(function Composer({
 	onModelChange,
 	onEffortChange,
 	onFastChange,
-	checkoutCatalog,
-	checkoutLabel,
-	checkoutsLoading = false,
-	onExecuteCheckout,
 	onSend,
 	onStop,
 	onRemoveAnnotation = noop,
@@ -719,9 +701,13 @@ export const Composer = memo(function Composer({
 								? "Add a project to begin"
 								: loading
 									? "Loading session…"
-									: submitting
-										? `Starting ${shortName}…`
-										: `Ask ${shortName} anything, @ for files, / for commands, $ for skills`
+									: busy
+										? messageEnterAction === "steer"
+											? "Steer this run… (Enter to steer, Ctrl+Enter to queue)"
+											: "Steer this run… (Ctrl+Enter to steer, Enter to queue)"
+										: submitting
+											? `Starting ${shortName}…`
+											: `Ask ${shortName} anything, @ for files, / for commands, $ for skills`
 						}
 						aria-label={`Message ${shortName}`}
 						role="combobox"
@@ -1057,13 +1043,6 @@ export const Composer = memo(function Composer({
 						) : (
 							modelControls
 						)}
-						<CheckoutPicker
-							catalog={checkoutCatalog}
-							fallbackLabel={checkoutLabel}
-							loading={checkoutsLoading}
-							onExecute={onExecuteCheckout}
-						/>
-						<ExecutingModelChip executingModel={executingModel} />
 						{fastSupported ? (
 							<button
 								type="button"
@@ -1159,43 +1138,44 @@ export const Composer = memo(function Composer({
 							>
 								<ArrowUp size={17} />
 							</button>
-						) : busy ? (
-							<button
-								type="button"
-								className="send-button send-button--stop"
-								aria-label="Stop Pi"
-								onClick={() => void onStop()}
-							>
-								<Square size={10} fill="currentColor" aria-hidden="true" />
-							</button>
 						) : (
-							<button
-								type="button"
-								className="send-button"
-								aria-label="Send message"
-								disabled={
-									(!value.trim() &&
-										images.length === 0 &&
-										unsupportedFiles.length === 0 &&
-										annotations.length === 0 &&
-										!terminalSelection?.text) ||
-									processingImages ||
-									submitting ||
-									loading ||
-									disabled
-								}
-								onClick={() => void submit()}
-							>
-								<ArrowUp size={17} />
-							</button>
+							<>
+								{busy ? (
+									<button
+										type="button"
+										className="send-button send-button--stop"
+										aria-label="Stop Pi"
+										title="Stop this run"
+										onClick={() => void onStop()}
+									>
+										<Square size={10} fill="currentColor" aria-hidden="true" />
+									</button>
+								) : null}
+								<button
+									type="button"
+									className={`send-button ${busy ? "send-button--steer" : ""}`}
+									aria-label={busy ? "Steer this run" : "Send message"}
+									title={busy ? "Steer this run" : undefined}
+									disabled={
+										(!value.trim() &&
+											images.length === 0 &&
+											unsupportedFiles.length === 0 &&
+											annotations.length === 0 &&
+											!terminalSelection?.text) ||
+										processingImages ||
+										(!busy && submitting) ||
+										loading ||
+										disabled
+									}
+									onClick={() => void submit(busy ? "steer" : "queue")}
+								>
+									<ArrowUp size={17} />
+								</button>
+							</>
 						)}
 					</div>
 				</div>
 			</div>
-			<p className="composer-note">
-				{shortName} can make mistakes. Review commands and changes before
-				committing.
-			</p>
 		</div>
 	);
 });
