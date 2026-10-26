@@ -1,7 +1,7 @@
 import type { PrimeContextUsage, RuntimeHarnessId, SessionUsage, SessionUsageTokens } from '../../../src/types/api'
 import { extensionInjections } from '../extension-manifest'
 import { HARNESSES } from '../harness'
-import { isRecord } from '../validation'
+import { isRecord } from 'apex-core/validation'
 import type { RpcObject } from './types'
 
 export interface HarnessStartArgsInput {

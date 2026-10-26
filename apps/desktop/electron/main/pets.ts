@@ -2,7 +2,7 @@ import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
 import type { PetDefinition } from '../../src/types/api'
-import { isRecord } from './validation'
+import { isRecord } from 'apex-core/validation'
 
 const MAX_PETS = 64
 const MAX_MANIFEST_BYTES = 16 * 1024

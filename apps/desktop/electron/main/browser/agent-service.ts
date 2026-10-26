@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
-import type { WebContents } from "electron";
+import type { NativeImage, WebContents } from "electron";
 import {
 	extensionGuest,
 	isLocalPreviewUrl,
 	PAUSED_MESSAGE,
 	routeExtensionNavigation,
-} from "./extension-tab-driver";
+} from "apex-core/browser/extension-tab-driver";
 
-export { isLocalPreviewUrl } from "./extension-tab-driver";
+export { isLocalPreviewUrl } from "apex-core/browser/extension-tab-driver";
 
 import type {
 	AgentBrowserActivityEvent,
@@ -15,11 +15,11 @@ import type {
 	AgentBrowserState,
 	AgentBrowserTabRecord,
 } from "../../../src/types/api";
-import { canonicalSessionPath } from "../session-paths";
-import { requireString } from "../validation";
+import { canonicalSessionPath } from "apex-core/session-paths";
+import { requireString } from "apex-core/validation";
 import {
 	ACTION_REVOKED_MESSAGE,
-	type AgentBrowserServiceOptions,
+	type AgentBrowserServiceOptions as CoreBrowserServiceOptions,
 	ATTACH_TIMEOUT_MS,
 	CDP_BUTTON_MASKS,
 	type CdpKey,
@@ -47,16 +47,21 @@ import {
 	SETTLE_MS,
 	type TabActionSerial,
 	type TabState,
-} from "./service-support";
+} from "apex-core/browser/service-support";
 
-export type { AgentBrowserServiceOptions, PageInfo } from "./service-support";
+export type { PageInfo } from "apex-core/browser/service-support";
+
+export interface AgentBrowserServiceOptions extends Omit<CoreBrowserServiceOptions, "getGuest" | "imageFromDataURL"> {
+	getGuest(webContentsId: number): WebContents | undefined;
+	imageFromDataURL?: (url: string) => NativeImage;
+}
 
 import {
 	ACTION_TIMEOUT_MS,
 	guardGuestCall,
 	QUEUE_RELEASE_GRACE_MS,
 	releaseQueueEventually,
-} from "./guest-call-guard";
+} from "apex-core/browser/guest-call-guard";
 
 /** The user's own Preview webview, adoptable by the active thread's agent. */
 export const PREVIEW_TAB_ID = "preview";
@@ -70,7 +75,7 @@ import {
 	refPointScript,
 	removeCursorMarkerScript,
 	scrollByScript,
-} from "./page-scripts";
+} from "apex-core/browser/page-scripts";
 
 /**
  * Owns the agent-controlled browser tabs. The registry (which tabs exist, per
@@ -1226,6 +1231,7 @@ export class AgentBrowserService {
 			const bridge = this.options.extensionBridge;
 			if (!bridge?.isConnected())
 				throw new Error("Browser extension is not connected");
+			// The shared CDP adapter implements the guest operations used below.
 			return extensionGuest(
 				bridge,
 				tab,
@@ -1233,7 +1239,7 @@ export class AgentBrowserService {
 					(() => {
 						throw new Error("Screenshot decoder is unavailable");
 					}),
-			);
+			) as unknown as WebContents;
 		}
 		const existing =
 			tab.webContentsId === null

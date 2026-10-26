@@ -1,5 +1,5 @@
 import { PRIME_THINKING_LEVELS, type PrimeThinkingLevel } from '../../../src/types/api'
-import { rejectUnknownKeys, requireBoolean, requireId, requireRecord, requireString } from '../validation'
+import { rejectUnknownKeys, requireBoolean, requireId, requireRecord, requireString } from 'apex-core/validation'
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from './limits'
 import type { RpcObject } from './types'
 

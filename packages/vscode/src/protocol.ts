@@ -1,4 +1,4 @@
-import type { AgentBrowserState, AgentBrowserExtensionStatus } from '../../../apps/desktop/src/types/api'
+import type { AgentBrowserState, AgentBrowserExtensionStatus, TranscriptMessage } from 'apex-core/types/api'
 
 export type BrowserMethod = 'getExtensionStatus' | 'state' | 'setActiveSession' | 'setTabPaused' | 'focusExtensionTab' | 'popOutTab'
 
@@ -67,7 +67,7 @@ export interface HostState {
  * pi-desktop's reducer; the apex_* ops cover what the reducer leaves to the app.
  */
 export type TranscriptOp =
-  | { kind: 'saved'; message: import('../../../apps/desktop/src/types/api').TranscriptMessage }
+  | { kind: 'saved'; message: TranscriptMessage }
   | { kind: 'event'; event: Record<string, unknown> }
   | { kind: 'user'; id: string; text: string; images?: PromptImage[]; timestamp: number; startAssistant: boolean }
   | { kind: 'notice'; id: string; text: string; timestamp: number }

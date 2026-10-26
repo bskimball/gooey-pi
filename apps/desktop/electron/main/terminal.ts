@@ -8,8 +8,8 @@ import * as pty from 'node-pty'
 import type { TerminalActiveContext, TerminalDataEvent, TerminalExitEvent } from '../../src/types/api'
 import type { WorkspaceUseLease, WorkspaceUseOwner } from './repository-use-gate'
 import { killProcessTree, safeChildEnvironment } from './process-utils'
-import { canonicalSessionPath } from './session-paths'
-import { isPathWithin, rejectUnknownKeys, requireInteger, requireRecord, requireString } from './validation'
+import { canonicalSessionPath } from 'apex-core/session-paths'
+import { isPathWithin, rejectUnknownKeys, requireInteger, requireRecord, requireString } from 'apex-core/validation'
 
 interface OwnedTerminal {
   terminal: pty.IPty

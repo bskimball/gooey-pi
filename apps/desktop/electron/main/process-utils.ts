@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { delimiter, posix, win32 } from 'node:path'
 import type { ProcessFailureReason, ProcessOutcome } from '../../src/types/api'
 import { HARNESSES, type HarnessDescriptor } from './harness'
-import { createAdmissionQueue } from './lib/async'
+import { createAdmissionQueue } from 'apex-core/lib/async'
 
 export interface ProcessResult {
   code: number

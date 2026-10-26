@@ -14,7 +14,7 @@ import type {
   HarnessId,
 } from '../../../src/types/api'
 import { isPiSchedule, type JsonStateStore } from '../store'
-import { rejectUnknownKeys, requireId, requireRecord, requireString } from '../validation'
+import { rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
 import {
   countMissedOccurrences,
   nextScheduleOccurrence,

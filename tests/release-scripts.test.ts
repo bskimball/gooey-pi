@@ -1225,7 +1225,7 @@ describe('post-package verification helpers', () => {
     const macIcon = readFileSync('apps/desktop/assets/icon.icns')
     expect(macIcon.subarray(0, 4).toString('ascii')).toBe('icns')
     const macIconChunks = new Map<string, Buffer>()
-    for (let offset = 8; offset < macIcon.length; ) {
+    for (let offset = 8; offset < macIcon.length;) {
       const type = macIcon.subarray(offset, offset + 4).toString('ascii')
       const size = macIcon.readUInt32BE(offset + 4)
       expect(size).toBeGreaterThanOrEqual(8)
@@ -1640,6 +1640,7 @@ describe('vendored supply-chain pins', () => {
       ['node_modules/apex-browser-extension', { resolved: 'packages/browser-extension', link: true }],
       ['node_modules/apex-core', { resolved: 'packages/core', link: true }],
       ['node_modules/apex-desktop', { resolved: 'apps/desktop', link: true }],
+      ['node_modules/apex-ui', { resolved: 'packages/ui', link: true }],
       ['node_modules/apex-vscode', { resolved: 'packages/vscode', link: true }],
       ['node_modules/apex-vscode-theme', { resolved: 'packages/vscode-theme', link: true }],
     ])

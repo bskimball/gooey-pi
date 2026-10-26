@@ -3,7 +3,7 @@ import type { PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor }
 import { catalogLimitWarnings, limitCatalogRelations, type ModelCatalogProvider } from './model-catalog'
 import { withModelVisibility } from './model-visibility'
 import { resolveExecutable, runProcess, type ExecutableSource } from './process-utils'
-import { requireString } from './validation'
+import { requireString } from 'apex-core/validation'
 
 /**
  * Shared model-catalog machinery for the harnesses whose catalog comes from an

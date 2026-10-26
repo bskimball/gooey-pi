@@ -22,7 +22,7 @@ import type { ModelCatalogProvider } from './model-catalog'
 import { availableModels, rankedModelMatches, resolveModel, resolveReasoning } from './model-selection'
 import type { ProcessResult } from './process-utils'
 import type { ProjectService } from './projects'
-import { isRecord, requireExistingPath, requireId, requireRecord, requireSelfHostedVoiceUrl, requireString } from './validation'
+import { isRecord, requireExistingPath, requireId, requireRecord, requireSelfHostedVoiceUrl, requireString } from 'apex-core/validation'
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 const MAX_SECRET_BYTES = 16 * 1024

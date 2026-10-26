@@ -2,7 +2,7 @@ import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import type { GitDiff, GitFileChange, GitStatus, GitWorktree, LocalGitBranch, ProcessOutcome } from '../../src/types/api'
 import { restrictedGitEnvironment, runProcess, type ProcessResult } from './process-utils'
-import { errorMessage, requireGitPath, requireString, stripAnsi } from './validation'
+import { errorMessage, requireGitPath, requireString, stripAnsi } from 'apex-core/validation'
 
 interface Numstat { additions: number; deletions: number }
 interface ParsedNumstat { values: Map<string, Numstat>; truncated: boolean }

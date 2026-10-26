@@ -1,5 +1,5 @@
-import { CapabilityBridge, type CapabilityClaim } from '../lib/capability-bridge'
-import { canonicalSessionPath } from '../session-paths'
+import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
+import { canonicalSessionPath } from 'apex-core/session-paths'
 import type { TerminalService } from '../terminal'
 import type { AgentBrowserService } from './agent-service'
 

@@ -31,7 +31,7 @@ import {
 	requireRecord,
 	requireString,
 	requireWebUrl,
-} from "./validation";
+} from "apex-core/validation";
 import type { VoiceService } from "./voice";
 
 interface Services {

@@ -4,11 +4,11 @@ import type { PrimeModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessag
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import type { AgentRpcManager } from '../agent-rpc'
-import { CapabilityBridge, type CapabilityClaim } from '../lib/capability-bridge'
+import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
 import type { ModelCatalogProvider } from '../model-catalog'
 import { availableModels, rankedModelMatches, resolveModel, resolveReasoning } from '../model-selection'
-import { requireBoolean, requireId, requireInteger, requireString } from '../validation'
-import { encodeGooeyPiAgentMessage } from './message-envelope'
+import { requireBoolean, requireId, requireInteger, requireString } from 'apex-core/validation'
+import { encodeGooeyPiAgentMessage } from 'apex-core/collaboration/message-envelope'
 
 const MAX_LISTED_SESSIONS = 100
 const MAX_MESSAGES = 40

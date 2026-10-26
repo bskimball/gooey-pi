@@ -1,4 +1,4 @@
-import { RPC_WRITE_FRAME_LIMIT_BYTES } from '../jsonl-limits'
+import { RPC_WRITE_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
 import type { RpcObject } from './types'
 
 export const MAX_RPC_WRITE_FRAME_BYTES = RPC_WRITE_FRAME_LIMIT_BYTES

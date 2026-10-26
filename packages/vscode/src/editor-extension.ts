@@ -1,4 +1,4 @@
-import type { OmpExtensionApi } from '../../../apps/desktop/assets/extensions/omp-work-browser'
+import type { OmpExtensionApi } from 'apex-core/types/api'
 
 export default function editorExtension(pi: OmpExtensionApi) {
   const url = process.env.PRIME_WORK_BROWSER_URL
@@ -14,7 +14,7 @@ export default function editorExtension(pi: OmpExtensionApi) {
     { name: 'editor_open', method: 'editor.open', description: 'Open a text document and reveal a line or range in VS Code without editing it. Use a diagnostic range to reveal a problem. Positions are 1-based and range ends exclusive.', properties: { uri, line, column, endLine: line, endColumn: column } },
   ]
   for (const tool of tools) {
-    pi.registerTool<Record<string, unknown>>({
+    pi.registerTool({
       name: tool.name, label: tool.name, description: tool.description,
       parameters: { type: 'object', properties: tool.properties, additionalProperties: false },
       async execute(_id, params) {

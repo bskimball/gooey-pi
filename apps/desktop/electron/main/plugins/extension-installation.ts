@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync } from 'node:fs'
 import { extname, isAbsolute } from 'node:path'
-import { isRecord, requireString } from '../validation'
+import { isRecord, requireString } from 'apex-core/validation'
 
 const EXTENSION_SUFFIXES = new Set(['.ts', '.js', '.mjs', '.cjs'])
 const MAX_EXTENSION_BYTES = 4 * 1024 * 1024

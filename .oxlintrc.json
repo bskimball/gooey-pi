@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "rules": {
+    "no-unused-vars": ["error", { "args": "none", "varsIgnorePattern": "^_", "ignoreRestSiblings": true }],
+    "no-shadow": "off",
+    "no-new": "off",
+    "no-underscore-dangle": "off",
+    "no-unmodified-loop-condition": "off",
+    "preserve-caught-error": "off",
+    "no-control-regex": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/no-array-reverse": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-useless-spread": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-single-promise-in-promise-methods": "off",
+    "unicorn/require-module-specifiers": "off",
+    "unicorn/require-post-message-target-origin": "off"
+  },
+  "overrides": [{ "files": ["tests/**"], "rules": { "no-eval": "off", "no-empty-pattern": "off", "typescript/no-this-alias": "off", "typescript/no-extraneous-class": "off" } }],
+  "ignorePatterns": ["out/**", "release/**", "coverage/**", "node_modules/**", "**/dist/**", "test-results/**", "playwright-report/**", "packages/vscode-theme/themes/**"]
+}

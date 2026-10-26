@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { RPC_READ_FRAME_LIMIT_BYTES } from '../jsonl-limits'
-import { StrictJsonlDecoder } from '../jsonl'
-import { errorMessage } from '../validation'
+import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
+import { StrictJsonlDecoder } from 'apex-core/jsonl'
+import { errorMessage } from 'apex-core/validation'
 import { MAX_RPC_WRITE_FRAME_BYTES } from './limits'
 
 export interface QueuedRpcWrite {

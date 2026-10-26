@@ -1,6 +1,6 @@
 import type { AutomationScheduleRecord, HarnessId, ScheduleInput, SchedulePatch, ScheduleTarget } from '../../../src/types/api'
-import { CapabilityBridge, type CapabilityClaim } from '../lib/capability-bridge'
-import { requireRecord, requireString } from '../validation'
+import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
+import { requireRecord, requireString } from 'apex-core/validation'
 import type { AutomationService } from './service'
 
 interface AgentScheduleScope {

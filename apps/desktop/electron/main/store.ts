@@ -17,7 +17,7 @@ import {
   type ScheduleTiming,
 } from '../../src/types/api'
 import { normalizeScheduleRunHistory } from './schedules/retention'
-import { isRecord } from './validation'
+import { isRecord } from 'apex-core/validation'
 
 export interface FolderIdentity {
   dev: string

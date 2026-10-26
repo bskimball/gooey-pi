@@ -1,5 +1,5 @@
 import type { PrimeContextUsage } from '../../../src/types/api'
-import { isRecord } from '../validation'
+import { isRecord } from 'apex-core/validation'
 import type { RpcObject } from './types'
 
 const CHARS_PER_TOKEN_ESTIMATE = 4

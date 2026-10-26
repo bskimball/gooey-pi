@@ -1,7 +1,7 @@
 import type { NativeImage, WebContents } from 'electron'
 import type { ExtensionTab } from 'apex-core/browser/extension-tab-driver'
 import { extensionGuest as coreExtensionGuest } from 'apex-core/browser/extension-tab-driver'
-import type { ExtensionBrowserBridge } from './extension-bridge'
+import type { ExtensionBrowserBridge } from 'apex-core/browser/extension-bridge'
 
 export * from 'apex-core/browser/extension-tab-driver'
 

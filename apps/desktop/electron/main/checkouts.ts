@@ -3,7 +3,7 @@ import type { AppSettings, CheckoutAction, CheckoutCatalog, CheckoutChangeResult
 import { createAndSwitchGitBranch, createGitWorktree, isNotARepositoryFailure, listGitWorktrees, listLocalGitBranches, resolveGitRepositoryRoot, switchGitBranch, validateGitBranch } from './git'
 import type { ProjectService } from './projects'
 import { RepositoryUseError, type RepositoryUseGate } from './repository-use-gate'
-import { rejectUnknownKeys, requireId, requireRecord, requireString } from './validation'
+import { rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
 
 function parseAction(value: unknown): CheckoutAction {
   const action = requireRecord(value, 'checkout action')

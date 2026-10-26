@@ -1,5 +1,4 @@
-import { CaretDown, Check, ClockCounterClockwise } from '@/components/icons'
-import { formatRelative } from '@/lib/data'
+import { CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { HostState, SessionSummary } from '../src/protocol'
 import { sessions } from './host'

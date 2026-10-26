@@ -2,7 +2,7 @@ import { session } from 'electron'
 import { isAbsolute } from 'node:path'
 import { BROWSER_PARTITION, HARNESS_IDS, INTERFACE_FONT_SCALES, PROJECT_SORT_MODES, type AppSettings, type ProjectSortMode } from '../../src/types/api'
 import type { JsonStateStore } from './store'
-import { isRecord, rejectUnknownKeys, requireBoolean, requireInteger, requireSelfHostedVoiceUrl, requireString, requireWebUrl } from './validation'
+import { isRecord, rejectUnknownKeys, requireBoolean, requireInteger, requireSelfHostedVoiceUrl, requireString, requireWebUrl } from 'apex-core/validation'
 
 export class SettingsService {
   constructor(

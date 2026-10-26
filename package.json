@@ -26,9 +26,10 @@
 		"build:all": "npm run build:theme && npm run build:apps && npm run build:vscode",
 		"build:bundle": "electron-vite build && node scripts/build-browser-agent.mjs",
 		"preview": "electron-vite preview",
-		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json && tsc --noEmit -p tsconfig.browser-agent.json",
-		"lint": "biome lint --config-path=scripts/release/biome.json apps/desktop/electron apps/desktop/src packages/core/src tests scripts apps/desktop/assets/extensions apps/desktop/browser-agent electron.vite.config.ts playwright.config.ts vitest.config.ts",
-		"format:check": "biome format --config-path=scripts/release/biome.json scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",
+		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json && tsc --noEmit -p tsconfig.browser-agent.json && npm run typecheck --workspace=packages/vscode",
+		"lint": "oxlint -c .oxlintrc.json apps packages scripts tests electron.vite.config.ts playwright.config.ts vitest.config.ts",
+		"format": "oxfmt -c .oxfmtrc.json --write apps packages scripts tests electron.vite.config.ts playwright.config.ts vitest.config.ts",
+		"format:check": "oxfmt -c .oxfmtrc.json --check scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",
 		"check": "npm run lint && npm run format:check",
 		"test": "vitest run",
 		"test:watch": "vitest",
@@ -62,7 +63,6 @@
 		"extract-zip": "npm:@electron-internal/extract-zip@1.0.5"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.8",
 		"@earendil-works/chord": "1.4.0",
 		"@earendil-works/pi-ai": "1.4.0",
 		"@earendil-works/pi-durable": "1.4.0",
@@ -81,9 +81,10 @@
 		"electron": "^43.4.0",
 		"electron-builder": "^26.15.7",
 		"electron-vite": "^5.0.0",
-		"esbuild": "0.25.12",
 		"extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
 		"jsdom": "^30.0.1",
+		"oxfmt": "^0.74.0",
+		"oxlint": "^1.89.0",
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
 		"react-markdown": "^10.1.0",
@@ -200,7 +201,10 @@
 			{
 				"from": "packages/browser-extension",
 				"to": "browser-extension",
-				"filter": ["**/*", "!package.json"]
+				"filter": [
+					"**/*",
+					"!package.json"
+				]
 			},
 			{
 				"from": "apps/desktop/assets/icon.png",

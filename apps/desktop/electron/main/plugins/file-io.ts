@@ -1,5 +1,5 @@
 import { open } from 'node:fs/promises'
-import { isRecord } from '../validation'
+import { isRecord } from 'apex-core/validation'
 
 export function errorCode(error: unknown): string {
   return isRecord(error) && typeof error.code === 'string' ? error.code : ''

@@ -42,14 +42,14 @@ import { installApplicationMenu } from "./application-menu";
 import { MacBackgroundController, shouldStartInBackground } from "./background";
 import { AgentBrowserBridge } from "./browser/agent-bridge";
 import { AgentBrowserService } from "./browser/agent-service";
-import { ExtensionBrowserBridge } from "./browser/extension-bridge";
+import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
 import {
 	configureGooeyPiAgentMessageSigning,
 	loadOrCreateGooeyPiAgentMessageKey,
-} from "./collaboration/message-envelope";
+} from "apex-core/collaboration/message-envelope";
 import { installCrashGuards } from "./crash-guard";
 import { CuaDriverService } from "./cua-driver";
 import {
@@ -85,7 +85,7 @@ import { AgentScheduleBridge } from "./schedules/agent-bridge";
 import { ScheduledRunExecutor } from "./schedules/executor";
 import { AutomationService } from "./schedules/service";
 import { SessionService } from "./sessions";
-import { piSessionServiceOptions } from "./sessions/pi";
+import { piSessionServiceOptions } from "apex-core/sessions/pi";
 import { SettingsService } from "./settings-schedules";
 import {
 	type JsonStateStore,

@@ -1,7 +1,7 @@
 import rrule from 'rrule'
 import type { RRule as RRuleType } from 'rrule'
 import type { ScheduleTiming } from '../../../src/types/api'
-import { rejectUnknownKeys, requireRecord, requireString as requireValidatedString } from '../validation'
+import { rejectUnknownKeys, requireRecord, requireString as requireValidatedString } from 'apex-core/validation'
 
 const { RRule } = rrule as typeof import('rrule')
 

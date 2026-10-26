@@ -5,6 +5,24 @@
  */
 export const BROWSER_PARTITION = 'persist:prime-work-browser'
 
+export interface OmpExtensionTool {
+  name: string
+  label: string
+  description: string
+  parameters: Record<string, unknown>
+  execute(
+    toolCallId: string,
+    params: unknown,
+    signal?: AbortSignal,
+    onUpdate?: unknown,
+    ctx?: unknown,
+  ): Promise<{ content: Array<{ type: 'text'; text: string }>; details?: unknown; isError?: boolean }>
+}
+
+export interface OmpExtensionApi {
+  registerTool(tool: OmpExtensionTool): void
+}
+
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type WorkspaceView = 'session' | 'projects' | 'activity' | 'scheduled' | 'plugins' | 'settings'
 export type InspectorTab = 'summary' | 'specialists' | 'changes' | 'browser' | 'files'

@@ -17,7 +17,7 @@
   "main": "./dist/extension.js",
   "activationEvents": [],
   "scripts": {
-    "build:host": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js && node scripts/copy-browser.mjs",
+    "build:host": "vite build --config vite.host.config.ts && node scripts/copy-browser.mjs",
     "build:webview": "vite build",
     "build": "npm run build:host && npm run build:webview",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
@@ -110,6 +110,7 @@
   },
   "dependencies": {
     "apex-core": "0.1.0",
+    "apex-ui": "*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

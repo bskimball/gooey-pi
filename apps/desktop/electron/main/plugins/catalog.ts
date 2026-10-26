@@ -12,8 +12,8 @@ import {
   NETWORK_MCP_UNAVAILABLE_DETAIL,
 } from '../../../src/lib/mcp-policy'
 import { HARNESSES } from '../harness'
-import { mapLimit } from '../lib/async'
-import { isPathWithin, isRecord } from '../validation'
+import { mapLimit } from 'apex-core/lib/async'
+import { isPathWithin, isRecord } from 'apex-core/validation'
 import { errorCode, readAtMost } from './file-io'
 
 type Kind = SkillRecord['kind']

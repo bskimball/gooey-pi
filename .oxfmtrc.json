@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 200,
+  "singleQuote": true,
+  "semi": false,
+  "trailingComma": "all",
+  "ignorePatterns": ["out/**", "release/**", "coverage/**", "node_modules/**", "**/dist/**", "test-results/**", "playwright-report/**", "packages/vscode-theme/themes/**"]
+}

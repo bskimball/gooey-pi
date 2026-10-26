@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "main": "../../out/main/index.js",
+  "dependencies": {
+    "apex-browser-extension": "*",
+    "apex-core": "*",
+    "apex-ui": "*"
+  },
   "scripts": {
     "dev": "npm --prefix ../.. run dev",
     "build": "npm --prefix ../.. run build",

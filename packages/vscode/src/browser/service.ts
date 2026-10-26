@@ -35,7 +35,7 @@ import {
 } from 'apex-core/browser/service-support'
 import { canonicalSessionPath } from 'apex-core/session-paths'
 import { requireString } from 'apex-core/validation'
-import type { AgentBrowserState, AgentBrowserTabRecord } from '../../../../apps/desktop/src/types/api'
+import type { AgentBrowserState, AgentBrowserTabRecord } from 'apex-core/types/api'
 
 function jpegDimensions(data: string): { width: number; height: number } {
   const bytes = Buffer.from(data, 'base64')

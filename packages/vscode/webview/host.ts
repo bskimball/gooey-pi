@@ -1,5 +1,5 @@
 import type { BrowserMethod, HostMessage, SessionSummary, WebviewMessage } from '../src/protocol'
-import type { AgentBrowserState, AgentBrowserTabRecord, AgentBrowserExtensionStatus, ProjectFileListing } from '@/types/api'
+import type { AgentBrowserState, AgentBrowserTabRecord, AgentBrowserExtensionStatus, ProjectFileListing } from 'apex-core/types/api'
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void }
 

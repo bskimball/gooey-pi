@@ -8,9 +8,9 @@ import { sortProjects } from '../../src/lib/project-order'
 import type { GitWorktree, ProjectFileEntry, ProjectFileListing, ProjectRecord, ProjectScripts, SessionRecord } from '../../src/types/api'
 import { listGitWorktrees } from './git'
 import { HARNESSES } from './harness'
-import { mapLimit } from './lib/async'
+import { mapLimit } from 'apex-core/lib/async'
 import { isPiProject, type FolderIdentity, type JsonStateStore, type PersistedProject, type StoredProject } from './store'
-import { isPathWithin, rejectUnknownKeys, requireBoolean, requireExistingDirectory, requireExistingPath, requireId, requireInteger, requireRecord, requireString } from './validation'
+import { isPathWithin, rejectUnknownKeys, requireBoolean, requireExistingDirectory, requireExistingPath, requireId, requireInteger, requireRecord, requireString } from 'apex-core/validation'
 
 const MAX_CONCURRENT_BRANCH_LOOKUPS = 4
 

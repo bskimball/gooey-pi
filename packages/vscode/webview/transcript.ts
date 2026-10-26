@@ -1,5 +1,5 @@
-import { replayPrimeEvents } from '@/lib/events/reduce'
-import type { MessagePart, TranscriptMessage } from '@/types/api'
+import { replayPrimeEvents } from 'apex-ui'
+import type { MessagePart, TranscriptMessage } from 'apex-core/types/api'
 import type { TranscriptOp } from '../src/protocol'
 
 function finalizeStreaming(messages: TranscriptMessage[]): TranscriptMessage[] {
