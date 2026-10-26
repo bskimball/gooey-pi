@@ -33,9 +33,16 @@ export interface ProviderDescriptor {
 
 export interface PromptImage { type: 'image'; mimeType: string; data: string }
 
-export interface QueuedPrompt { id: string; text: string; intent: 'queue' | 'steer'; timestamp?: number; images?: PromptImage[] }
+export interface QueuedPrompt { id: string; text: string; intent: 'queue' | 'steer'; timestamp?: number; images?: PromptImage[]; editorContext?: string }
 
 export interface RuntimeCommand { name: string; description?: string; source: 'extension' | 'prompt' | 'skill' }
+
+export interface EditorFileContext {
+  name: string
+  path: string
+  dirty: boolean
+  selection: { startLine: number; endLine: number; count: number } | null
+}
 
 export interface HostState {
   status: 'starting' | 'ready' | 'exited'
@@ -68,6 +75,7 @@ export type TranscriptOp =
 export interface SessionSummary { path: string; id: string; title: string; preview: string; updatedAt: string; messageCount: number }
 
 export type HostMessage =
+  | { type: 'editorContext'; file: EditorFileContext | null }
   | { type: 'sessions:list'; requestId: number; sessions: SessionSummary[]; currentPath: string | null; error?: string }
   | { type: 'sessions:switch'; requestId: number; error?: string }
   | { type: 'sessions:current'; path: string | null }
@@ -89,6 +97,7 @@ export type WebviewMessage =
   | { type: 'send'; text: string; images: PromptImage[]; intent: 'queue' | 'steer' }
   | { type: 'stop' }
   | { type: 'removeQueued'; id: string }
+  | { type: 'sendQueued'; id: string }
   | { type: 'setModel'; key: string }
   | { type: 'setThinking'; level: ThinkingLevel }
   | { type: 'extensionUiResponse'; id: string; response: Record<string, unknown> }

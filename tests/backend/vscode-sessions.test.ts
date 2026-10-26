@@ -5,8 +5,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { listSessions, sessionBucket, sessionTranscriptOps } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
 
-vi.mock('vscode', () => ({ workspace: { workspaceFolders: [] }, window: {} }))
+vi.mock('vscode', () => ({
+  workspace: { workspaceFolders: [], openTextDocument: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
+  window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn() },
+  languages: { getDiagnostics: vi.fn() },
+  Uri: { parse: (value: string) => ({ scheme: value.split(':')[0], toString: () => value }) },
+  Range: class {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+    constructor(startLine: number, startColumn: number, endLine: number, endColumn: number) {
+      this.start = { line: startLine, character: startColumn }
+      this.end = { line: endLine, character: endColumn }
+    }
+  },
+  TabInputText: class {}, TabInputTextDiff: class {},
+  TextEditorRevealType: { InCenterIfOutsideViewport: 2 },
+}))
+import * as vscode from 'vscode'
 import { ApexSession } from '../../packages/vscode/src/apex-session'
+import { editorContext, editorFileContext, editorRequest } from '../../packages/vscode/src/editor'
+import editorExtension from '../../packages/vscode/src/editor-extension'
 
 const directories: string[] = []
 afterEach(async () => { for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }) })
@@ -88,5 +106,96 @@ describe('VS Code saved sessions', () => {
     Object.assign(session, { rpc: { command }, state: { status: mode === 'starting' ? 'starting' : 'ready', isStreaming: mode === 'busy' } })
     await expect(session.switchSession('/unused.jsonl')).rejects.toThrow('Cannot switch sessions while Pi is starting, busy, or not running.')
     expect(command).not.toHaveBeenCalled()
+  })
+})
+
+describe('VS Code editor integration', () => {
+  it('reports no active editor explicitly', () => {
+    expect(editorContext()).toMatchObject({ active: null, tabs: [], workspaceFolders: [] })
+    expect(editorFileContext()).toBeNull()
+  })
+
+  it('summarizes the active file, dirty state and exclusive selection end for display', () => {
+    const editor = {
+      document: { uri: { path: '/project/src/file.ts' }, isDirty: true },
+      selections: [{ isEmpty: false, start: { line: 2, character: 0 }, end: { line: 5, character: 0 } }],
+    }
+    Object.assign(vscode.window, { activeTextEditor: editor })
+    try {
+      expect(editorFileContext()).toEqual({ name: 'file.ts', path: 'src/file.ts', dirty: true, selection: { startLine: 3, endLine: 5, count: 1 } })
+      editor.document.isDirty = false
+      editor.selections = []
+      expect(editorFileContext()).toMatchObject({ dirty: false, selection: null })
+    } finally { Object.assign(vscode.window, { activeTextEditor: undefined }) }
+  })
+
+  it('reads the editor buffer with unsaved state and version rather than disk contents', async () => {
+    vi.mocked(vscode.workspace.openTextDocument).mockResolvedValue({
+      uri: { toString: () => 'file:///project/file.ts', fsPath: '/project/file.ts' },
+      languageId: 'typescript', isDirty: true, version: 7, lineCount: 2,
+      lineAt: () => ({ text: 'unsaved content' }), getText: () => 'unsaved content',
+    } as unknown as vscode.TextDocument)
+    expect(await editorRequest('editor.read', { uri: 'file:///project/file.ts', line: 2 })).toMatchObject({ text: 'unsaved content', dirty: true, version: 7, line: 2, endLine: 2, truncated: false })
+    await expect(editorRequest('editor.read', { uri: 'file:///project/file.ts', line: 3 })).rejects.toThrow('line exceeds')
+    await expect(editorRequest('editor.read', { uri: 'file:///project/file.ts', line: 0 })).rejects.toThrow('positive integer')
+  })
+
+  it('reveals a requested range without changing the document', async () => {
+    const revealRange = vi.fn()
+    vi.mocked(vscode.window.showTextDocument).mockResolvedValue({ revealRange } as unknown as vscode.TextEditor)
+    vi.mocked(vscode.workspace.openTextDocument).mockResolvedValue({
+      uri: { toString: () => 'file:///project/file.ts', fsPath: '/project/file.ts' },
+      languageId: 'typescript', isDirty: true, version: 7, lineCount: 2,
+      lineAt: () => ({ text: 'unsaved content' }),
+    } as unknown as vscode.TextDocument)
+    const result = await editorRequest('editor.open', { uri: 'file:///project/file.ts', line: 2, column: 3, endLine: 2, endColumn: 8 })
+    expect(result).toMatchObject({ dirty: true, version: 7, range: { start: { line: 2, column: 3 }, end: { line: 2, column: 8 } } })
+    expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ preserveFocus: true, selection: expect.objectContaining({ start: { line: 1, character: 2 }, end: { line: 1, character: 7 } }) }))
+    expect(revealRange).toHaveBeenCalledOnce()
+    await expect(editorRequest('editor.open', { uri: 'file:///project/file.ts', column: 100 })).rejects.toThrow('Column exceeds')
+  })
+
+  it('returns diagnostics in 1-based coordinates', async () => {
+    vi.mocked(vscode.languages.getDiagnostics).mockReturnValue([{
+      range: { start: { line: 2, character: 4 }, end: { line: 2, character: 8 } },
+      message: 'Unknown name', severity: 0, source: 'ts', code: 2304,
+    }] as vscode.Diagnostic[])
+    expect(await editorRequest('editor.diagnostics', { uri: 'file:///project/file.ts' })).toMatchObject({ diagnostics: [{ start: { line: 3, column: 5 }, end: { line: 3, column: 9 }, severity: 'error', message: 'Unknown name' }] })
+  })
+
+  it.each(['automatic', 'send now'])('retains message-time context for %s queue delivery', async mode => {
+    const command = vi.fn().mockResolvedValue({})
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command }, seq: 0, promptToken: 0,
+      state: { isStreaming: true, commands: [], queued: [] },
+      update(patch: object) { Object.assign(this.state, patch) }, addOp: vi.fn(), guard: (fn: () => Promise<unknown>) => fn(),
+    })
+    await session.send('Look here', [], 'queue', '\nCAPTURED_EDITOR')
+    expect(command).not.toHaveBeenCalled()
+    if (mode === 'automatic') {
+      session.state.isStreaming = false
+      session.flushQueue()
+      expect(command).toHaveBeenCalledWith('prompt', { message: 'Look here\nCAPTURED_EDITOR' })
+    } else {
+      await session.handle({ type: 'sendQueued', id: session.state.queued[0].id })
+      expect(command).toHaveBeenCalledWith('prompt', { message: 'Look here\nCAPTURED_EDITOR', streamingBehavior: 'steer' })
+    }
+    expect(session.state.queued).toEqual([])
+  })
+
+  it('registers editor tools and sends authenticated calls to the bridge', async () => {
+    vi.stubEnv('PRIME_WORK_BROWSER_URL', 'http://127.0.0.1:12345/v1/call')
+    vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'test-token')
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ ok: true, result: { dirty: true, text: 'buffer' } }) })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const registerTool = vi.fn()
+      editorExtension({ registerTool })
+      expect(registerTool.mock.calls.map(([tool]) => tool.name)).toEqual(['editor_context', 'editor_read', 'editor_diagnostics', 'editor_open'])
+      const result = await registerTool.mock.calls[1][0].execute('call', { uri: 'file:///project/file.ts' })
+      expect(JSON.parse(result.content[0].text)).toEqual({ dirty: true, text: 'buffer' })
+      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:12345/v1/call', expect.objectContaining({ headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'editor.read', params: { uri: 'file:///project/file.ts' } }) }))
+    } finally { vi.unstubAllEnvs(); vi.unstubAllGlobals() }
   })
 })

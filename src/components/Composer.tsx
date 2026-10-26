@@ -122,6 +122,7 @@ interface ComposerProps {
 	getTerminalContext?(): TerminalPromptContext | undefined;
 	/** Messages waiting for a turn boundary. */
 	queuedMessages?: QueuedPrompt[];
+	onSendQueuedMessage?(message: QueuedPrompt): void;
 	onDeleteQueuedMessage?(message: QueuedPrompt): void;
 	onEditQueuedMessage?(message: QueuedPrompt): void;
 	/** Each bump submits the current draft immediately (Ctrl/Cmd+Enter from the annotation popover). */
@@ -206,6 +207,7 @@ export const Composer = memo(function Composer({
 	terminalSelection,
 	getTerminalContext,
 	queuedMessages = [],
+	onSendQueuedMessage,
 	onDeleteQueuedMessage,
 	onEditQueuedMessage,
 	sendSignal = 0,
@@ -667,6 +669,7 @@ export const Composer = memo(function Composer({
 		"--context-percent": `${contextPercent ?? 0}%`,
 	} as CSSProperties;
 	const sendQueuedMessageImmediately = async (queued: QueuedPrompt) => {
+		if (onSendQueuedMessage) return onSendQueuedMessage(queued);
 		onDeleteQueuedMessage?.(queued);
 		try {
 			await onSend(queued.text, [], "steer");

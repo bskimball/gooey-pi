@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import { ApexSession } from './apex-session'
+import { editorFileContext } from './editor'
 import type { HostMessage, WebviewMessage } from './protocol'
 
 class ApexViewProvider implements vscode.WebviewViewProvider {
@@ -22,7 +23,10 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
     view.webview.html = this.html(view.webview, root)
     view.webview.onDidReceiveMessage((message: WebviewMessage) => {
       if (message.type === 'screenshotResized') this.resizeRequests.get(message.requestId)?.(message.data)
-      else void this.session.handle(message)
+      else {
+        if (message.type === 'ready') this.postEditorContext()
+        void this.session.handle(message)
+      }
     })
     view.onDidDispose(() => {
       if (this.view === view) {
@@ -34,6 +38,10 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
       this.started = true
       this.session.start()
     }
+  }
+
+  postEditorContext() {
+    this.post({ type: 'editorContext', file: editorFileContext() })
   }
 
   reveal() {
@@ -94,6 +102,11 @@ export function activate(context: vscode.ExtensionContext) {
   const provider = new ApexViewProvider(context.extensionUri)
   context.subscriptions.push(
     provider.session,
+    vscode.window.onDidChangeActiveTextEditor(() => provider.postEditorContext()),
+    vscode.window.onDidChangeTextEditorSelection(() => provider.postEditorContext()),
+    vscode.workspace.onDidChangeTextDocument(() => provider.postEditorContext()),
+    vscode.workspace.onDidSaveTextDocument(() => provider.postEditorContext()),
+    vscode.workspace.onDidCloseTextDocument(() => provider.postEditorContext()),
     vscode.window.registerWebviewViewProvider('apex.chat', provider, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('apex.open', () => provider.reveal()),
     vscode.commands.registerCommand('apex.newSession', () => provider.session.newSession()),

@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
+import { editorPromptContext } from './editor'
 import { createPiSessionMetadataReader } from '../../../electron/main/sessions/pi'
 import { BrowserHost } from './browser/host'
 import type { ScreenshotResizer } from './browser/service'
@@ -80,7 +81,7 @@ export class ApexSession implements vscode.Disposable {
   private launchGeneration = 0
   private browserPortNotice = false
 
-  constructor(private readonly post: (message: HostMessage) => void, distDirectory: string, resizeScreenshot?: ScreenshotResizer) {
+  constructor(private readonly post: (message: HostMessage) => void, private readonly distDirectory: string, resizeScreenshot?: ScreenshotResizer) {
     this.statusItem.name = 'Apex'
     this.browser = new BrowserHost(distDirectory, resizeScreenshot)
     this.browser.service.onExtensionStatusChanged(() => this.postBrowser())
@@ -123,7 +124,7 @@ export class ApexSession implements vscode.Disposable {
       const environment = this.browser.capability.environmentFor({ cwd: this.cwd, sessionPath: this.browserSessionKey })
       launchToken = environment.PRIME_WORK_BROWSER_TOKEN
       this.browserToken = launchToken
-      rpc = new PiRpc(resolvePi(config.get('piPath', '')), ['--mode', 'rpc', '--extension', this.browser.extensionPath], this.cwd, (record) => { if (this.rpc === rpc) this.onRecord(record) }, (code, stderr) => {
+      rpc = new PiRpc(resolvePi(config.get('piPath', '')), ['--mode', 'rpc', '--extension', this.browser.extensionPath, '--extension', join(this.distDirectory, 'extensions', 'editor-extension.ts')], this.cwd, (record) => { if (this.rpc === rpc) this.onRecord(record) }, (code, stderr) => {
         this.browser.capability.revoke(launchToken)
         if (this.browserToken === launchToken) this.browserToken = undefined
         if (this.rpc !== rpc) return
@@ -195,6 +196,13 @@ export class ApexSession implements vscode.Disposable {
       case 'ready': return this.replay()
       case 'send': return this.send(message.text, message.images, message.intent)
       case 'stop': return this.stop()
+      case 'sendQueued': {
+        if (this.switching || !this.rpc) return this.notice('Cannot send a queued message while switching sessions or Pi is not running.')
+        const queued = this.state.queued.find(item => item.id === message.id)
+        if (!queued) return
+        this.update({ queued: this.state.queued.filter(item => item.id !== message.id) })
+        return this.send(queued.text, queued.images ?? [], 'steer', queued.editorContext)
+      }
       case 'removeQueued': return this.update({ queued: this.state.queued.filter((item) => item.id !== message.id) })
       case 'setModel': return this.setModel(message.key)
       case 'setThinking': return this.guard(async () => { await this.rpc?.command('set_thinking_level', { level: message.level }); this.update({ thinkingLevel: message.level }) })
@@ -278,7 +286,7 @@ export class ApexSession implements vscode.Disposable {
     if (dropped.length) this.notice(`Stopped before delivering:\n${dropped.map((text) => `• ${text}`).join('\n')}`)
   }
 
-  private async send(text: string, images: PromptImage[], intent: 'queue' | 'steer') {
+  private async send(text: string, images: PromptImage[], intent: 'queue' | 'steer', editorContext = editorPromptContext()) {
     if (this.switching) { this.notice('Cannot send a prompt while switching sessions.'); return }
     const rpc = this.rpc
     if (!rpc) { this.notice('Pi is not running. Use Restart Pi to start it again.'); return }
@@ -290,12 +298,12 @@ export class ApexSession implements vscode.Disposable {
       }
       // The Composer's queue actions resend text only, so prompts with images go to pi's own follow-up queue.
       if (intent === 'queue' && !images.length) {
-        const queued: QueuedPrompt = { id: `queued-${++this.seq}`, text, intent, timestamp: Date.now() }
+        const queued: QueuedPrompt = { id: `queued-${++this.seq}`, text, intent, timestamp: Date.now(), editorContext }
         this.update({ queued: [...this.state.queued, queued] })
         return
       }
       this.addOp({ kind: 'user', id: `user-${++this.seq}`, text, ...imagePayload, timestamp: Date.now(), startAssistant: false })
-      await this.guard(() => rpc.command('prompt', { message: text, streamingBehavior: intent === 'steer' ? 'steer' : 'followUp', ...imagePayload }))
+      await this.guard(() => rpc.command('prompt', { message: text + editorContext, streamingBehavior: intent === 'steer' ? 'steer' : 'followUp', ...imagePayload }))
       return
     }
     this.queuePaused = false
@@ -304,7 +312,7 @@ export class ApexSession implements vscode.Disposable {
     this.addOp({ kind: 'user', id: `user-${++this.seq}`, text, ...imagePayload, timestamp: Date.now(), startAssistant: true })
     this.update({ isStreaming: true })
     try {
-      const response = await rpc.command<Json>('prompt', { message: text, ...imagePayload })
+      const response = await rpc.command<Json>('prompt', { message: this.isExtensionCommand(text) ? text : text + editorContext, ...imagePayload })
       if (response?.disposition === 'handled' && token === this.promptToken) this.endOptimisticRun()
     } catch (error) {
       if (token !== this.promptToken) return
@@ -490,7 +498,7 @@ export class ApexSession implements vscode.Disposable {
     if (this.queuePaused || !this.state.queued.length) return
     const [next, ...rest] = this.state.queued
     this.update({ queued: rest })
-    void this.send(next.text, next.images ?? [], 'queue')
+    void this.send(next.text, next.images ?? [], 'queue', next.editorContext)
   }
 
   private async guard(action: () => Promise<unknown>) {

@@ -6,7 +6,7 @@ import { parseExtensionUiRequest } from '@/lib/extension-ui'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
 import type { ComposerCommand } from '@/lib/composer-commands'
 import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, PrimeModelDescriptor, PrimeThinkingLevel, QueuedPrompt, TranscriptMessage } from '@/types/api'
-import type { HostState } from '../src/protocol'
+import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost } from './host'
 import type { ExtensionTabControls } from '@/hooks/useAgentBrowserTabs'
 import { SessionPicker } from './SessionPicker'
@@ -14,6 +14,12 @@ import { applyOps } from './transcript'
 
 const NO_GIT: GitStatus = { isRepo: false, files: [] }
 const NO_SKILLS: never[] = []
+
+function selectionLabel(selection: NonNullable<EditorFileContext['selection']>): string {
+  if (selection.count > 1) return `${selection.count} selections`
+  if (selection.startLine === selection.endLine) return `Line ${selection.startLine}`
+  return `Lines ${selection.startLine}–${selection.endLine}`
+}
 
 export function App() {
   const [browserState, setBrowserState] = useState<AgentBrowserState>({ tabs: [] })
@@ -26,6 +32,7 @@ export function App() {
   }), [browserStatus])
   const extensionTabs = browserState.tabs.filter(tab => tab.backend === 'extension' && tab.sessionFile === browserStatus?.activeSessionKey)
   const extensionTab = extensionTabs[0]
+  const [editorFile, setEditorFile] = useState<EditorFileContext | null>(null)
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [state, setState] = useState<HostState | undefined>()
   const [uiRequest, setUiRequest] = useState<Record<string, unknown> | null>(null)
@@ -38,6 +45,7 @@ export function App() {
   useEffect(() => {
     const stop = onHostMessage((message) => {
       if (message.type === 'browserState') { setBrowserState(message.state); setBrowserStatus(message.status) }
+      else if (message.type === 'editorContext') setEditorFile(message.file)
       else if (message.type === 'reset') setMessages(applyOps([], message.ops))
       else if (message.type === 'ops') setMessages((current) => applyOps(current, message.ops))
       else if (message.type === 'state') setState(message.state)
@@ -102,6 +110,14 @@ export function App() {
                 queuedMessageCount={queuedMessages.length}
               />
               <div className="conversation-bottom-dock">
+                <div className="apex-editor-context" role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
+                  <span className="apex-editor-context__label">Editor</span>
+                  <span className="apex-editor-context__file">{editorFile?.name ?? 'No active text file'}</span>
+                  {editorFile?.dirty ? <span className="apex-editor-context__detail">Unsaved</span> : null}
+                  {editorFile?.selection ? <span className="apex-editor-context__detail">
+                    {selectionLabel(editorFile.selection)}
+                  </span> : null}
+                </div>
                 <Composer
                   extensionTab={extensionTab}
                   browserExtension={browserExtension}
@@ -130,6 +146,7 @@ export function App() {
                   runtimeCommands={runtimeCommands}
                   onCommand={(action) => postToHost({ type: 'command', action })}
                   queuedMessages={queuedMessages}
+                  onSendQueuedMessage={(message) => postToHost({ type: 'sendQueued', id: message.id })}
                   onDeleteQueuedMessage={(message) => postToHost({ type: 'removeQueued', id: message.id })}
                   onEditQueuedMessage={(message) => postToHost({ type: 'removeQueued', id: message.id })}
                   onModelChange={(key) => postToHost({ type: 'setModel', key })}

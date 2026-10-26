@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { editorRequest } from '../editor'
 import { ExtensionBrowserBridge } from '../../../../electron/main/browser/extension-bridge'
 import { CapabilityBridge, type CapabilityClaim } from '../../../../electron/main/lib/capability-bridge'
 import { ExtensionBrowserService, type ScreenshotResizer } from './service'
@@ -12,6 +13,7 @@ class BrowserCapability extends CapabilityBridge {
   }
   protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim): Promise<unknown> {
     if (!claim.sessionPath) throw new Error('Browser control is not available yet for this thread; try again in a moment')
+    if (method.startsWith('editor.')) return editorRequest(method, params)
     await this.service.refreshExtensionState()
     const key = claim.sessionPath
     switch (method) {

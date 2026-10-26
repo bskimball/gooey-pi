@@ -3,6 +3,39 @@ body { padding: 0; }
 .apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
 .apex-shell .conversation-pane { min-width: 0; }
 .apex-shell .conversation-bottom-dock { inset: auto 10px 10px; }
+.apex-shell .transcript { padding-bottom: 208px; }
+.apex-shell .transcript.has-queued-messages { padding-bottom: 363px; }
+
+.apex-editor-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+.apex-editor-context__label {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+.apex-editor-context__file {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.apex-editor-context__detail {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .apex-toolbar {
   z-index: 30;
