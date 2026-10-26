@@ -10,7 +10,6 @@
 .windows-app-menu__button:hover, .windows-app-menu__button:focus-visible { color: var(--text); background: var(--surface-hover); outline: 0; }
 .title-toolbar__nav, .title-toolbar__actions { display: flex; align-items: center; gap: 2px; }
 .title-toolbar__identity { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
-.title-toolbar__separator { flex: 0 0 auto; color: var(--text-tertiary); font-size: 12.5px; }
 .title-toolbar__identity strong { max-width: 28vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12.5px; font-weight: 540; }
 .title-toolbar__actions { justify-content: flex-end; }
 .toolbar-divider { width: 1px; height: 16px; background: var(--border); margin: 0 5px; }
@@ -54,32 +53,6 @@
 .conversation-bottom-dock { position: relative; inset: auto; z-index: 10; flex: 0 0 auto; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 24px 12px; pointer-events: auto; }
 .conversation-bottom-dock .composer-wrap { position: relative; inset: auto; width: 100%; margin: 0; }
 
-/* Session status rides in the title bar's identity: checkout, dirty files, context room, fallback model. */
-.session-status__checkout { position: relative; min-width: 0; display: inline-flex; }
-.title-toolbar .worktree-picker__menu { position: absolute; top: calc(100% + 6px); right: auto; bottom: auto; left: 0; }
-.session-status-pill { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); background: var(--surface-subtle); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-button.session-status-pill { transition: color 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out; }
-button.session-status-pill:hover, button.session-status-pill[aria-expanded='true'] { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
-button.session-status-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.session-status-pill__dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--warning); }
-.session-status-pill__diff { display: inline-flex; gap: 3px; font-family: var(--chat-mono); font-size: 10px; }
-.session-status-pill__diff .is-add { color: var(--success); }
-.session-status-pill__diff .is-remove { color: var(--danger); }
-.session-status-pill__caret { color: var(--text-tertiary); transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
-[aria-expanded='true'] > .session-status-pill__caret { transform: rotate(180deg); }
-.session-status-pill--context { cursor: help; }
-.session-status-pill--context:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.session-status-pill--context.is-warning { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 32%, var(--border)); }
-.session-status-pill--context.is-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); }
-.session-status-pill--context.is-unavailable { color: var(--text-tertiary); }
-.title-toolbar .model-fallback-chip { height: 24px; flex: 0 0 auto; }
-.session-status__changes { position: relative; min-width: 0; flex: 0 0 auto; }
-.session-changes-popover { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; width: min(440px, calc(100cqi - 48px)); display: grid; gap: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
-.session-changes-popover .changed-files { max-height: min(320px, 50vh); overflow-y: auto; }
-.session-changes-popover__note { margin: 0; padding: 0 6px; color: var(--text-tertiary); font-size: 10.5px; }
-.session-changes-popover__review { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; color: var(--text); background: var(--surface-subtle); font-size: 11.5px; font-weight: 540; transition: background 120ms ease-out; }
-.session-changes-popover__review:hover { background: var(--surface-hover); }
-.session-changes-popover__review:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .changed-files { margin: 0; padding: 0; list-style: none; }
 .changed-files__row { min-height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 6px; border-radius: 5px; font-size: 11px; }
 .changed-files__row:hover { background: var(--surface-subtle); }

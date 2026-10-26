@@ -1,5 +1,6 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
+  Brain,
   CaretRight,
   ChatCircle,
   ChatCircleDots,
@@ -10,6 +11,7 @@ import {
   GitFork,
   Globe,
   Stack,
+  Terminal,
   TerminalWindow,
   WarningCircle,
   Wrench,
@@ -20,7 +22,8 @@ import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
-import { isSubagentTool, SubagentLane, TodoStep } from './subagent-lane'
+import { diffCounts, EditDiff, editDiffLines, isEditTool } from './edit-diff'
+import { isSubagentTool, pairSubagentCalls, SubagentLane, TodoStep, type SubagentPairs } from './subagent-lane'
 
 function timestamp(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -65,35 +68,34 @@ function serialize(value: unknown, pretty = false): string {
   try { return JSON.stringify(value, null, pretty ? 2 : undefined) } catch { return String(value) }
 }
 
-/** Settled calls that read as one batch of work when they run back to back. */
-type ToolRunKind = 'read' | 'edit' | 'terminal' | 'web' | 'git'
+/** Settled file reads and searches fold into one row when they run back to back; edits, commands, and agents stay visible. */
+const READ_TOOLS = /^(?:read|read_file|ls)$/i
+const SEARCH_TOOLS = /^(?:ffgrep|fffind|grep|find|glob)$/i
+const isExploreTool = (name: string) => READ_TOOLS.test(name) || SEARCH_TOOLS.test(name)
 
-function toolRunKind(name: string): ToolRunKind | undefined {
-  const kind = classifyTool(name)
-  if (kind === 'terminal' || kind === 'web' || kind === 'git') return kind
-  if (kind === 'file') return /write|edit|patch/i.test(name) ? 'edit' : 'read'
-  if (kind === 'mcp' && /grep|find|glob|^ls$/i.test(name)) return 'read'
-  return undefined
+const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`
+
+interface RunMember { failed: boolean; search: boolean; label: string }
+
+function exploreLabel(part: Extract<MessagePart, { type: 'toolCall' }>): string {
+  const preview = toolPreview(part)
+  return SEARCH_TOOLS.test(part.name) ? preview : preview.split(/[\\/]/).at(-1) ?? preview
 }
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
-
-function toolRunLabel(kind: ToolRunKind, count: number): string {
-  if (kind === 'read') return `Read ${plural(count, 'file')}`
-  if (kind === 'edit') return `Edited ${plural(count, 'file')}`
-  if (kind === 'terminal') return `Ran ${plural(count, 'command')}`
-  if (kind === 'web') return plural(count, 'web lookup')
-  return plural(count, 'git operation')
-}
-
-function ToolRun({ kind, failed, children }: { kind: ToolRunKind; failed: number; children: ReactElement[] }) {
+function ToolRun({ members, children }: { members: RunMember[]; children: ReactElement[] }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
+  const failed = members.filter((member) => member.failed).length
+  const searches = members.filter((member) => member.search).length
+  const reads = members.length - searches
+  const label = reads ? `Read ${plural(reads, 'file')}${searches ? `, ${plural(searches, 'search', 'searches')}` : ''}` : `Ran ${plural(searches, 'search', 'searches')}`
+  const names = members.map((member) => member.label).filter(Boolean)
   return (
-    <div className={`activity-run activity-line--${kind === 'read' || kind === 'edit' ? 'file' : kind} ${failed ? 'is-error' : 'is-done'}`}>
+    <div className={`activity-run activity-line--file ${failed ? 'is-error' : 'is-done'}`}>
       <button type="button" className="activity-run__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-        <span className="activity-line__icon">{toolIcon(kind === 'read' || kind === 'edit' ? 'file' : kind)}</span>
-        <span className="activity-run__label">{toolRunLabel(kind, children.length)}</span>
+        <span className="activity-line__icon">{toolIcon('file')}</span>
+        <span className="activity-run__label">{label}</span>
+        {names.length ? <span className="activity-run__names">{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
         {failed ? <span className="activity-run__failed"><WarningCircle size={12} /> {failed} failed</span> : null}
         <CaretRight className="disclosure-caret" size={13} />
       </button>
@@ -113,8 +115,20 @@ export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): s
   return boundText(serialize(raw).replace(/\s+/g, ' ').trim(), 180, '…')
 }
 
-function ReasoningPart({ part, streaming = false }: { part: Extract<MessagePart, { type: 'thinking' }>; streaming?: boolean }) {
-  return <div className="activity-line activity-line--reasoning"><MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} /></div>
+/** Reasoning stays readable while its turn runs; once the turn settles it folds to one quiet line. */
+function ReasoningPart({ part, live = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const bodyId = useId()
+  const body = <MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={live} />
+  if (live) return <div className="activity-line activity-line--reasoning">{body}</div>
+  return <div className="activity-line activity-line--reasoning is-collapsed">
+    <button type="button" className="activity-thought__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+      <span className="activity-line__icon"><Brain size={14} /></span>
+      <span className="activity-line__kind">Thought</span>
+      <CaretRight className="disclosure-caret" size={13} />
+    </button>
+    {open ? <div className="activity-thought__body" id={bodyId}>{body}</div> : null}
+  </div>
 }
 
 export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
@@ -148,26 +162,51 @@ export function LiveElapsed({ since }: { since?: string | number }) {
 }
 
 /** The last few lines of streamed output, shown under a running command like a terminal's live scrollback. */
-function outputTail(output: string, lines = 4): string {
+const TAIL_LINES = 5
+function outputTail(output: string, lines = TAIL_LINES): string {
   return output.slice(-4_000).trimEnd().split('\n').slice(-lines).join('\n')
 }
 
+function stringArg(part: Extract<MessagePart, { type: 'toolCall' }>, key: string): string | undefined {
+  const value = part.args && typeof part.args === 'object' ? (part.args as Record<string, unknown>)[key] : undefined
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+/** `:offset–end` for a ranged read, in the editor's 1-based lines. */
+function readRange(part: Extract<MessagePart, { type: 'toolCall' }>): string | undefined {
+  if (!READ_TOOLS.test(part.name) || !part.args || typeof part.args !== 'object') return undefined
+  const { offset, limit } = part.args as { offset?: unknown; limit?: unknown }
+  const start = typeof offset === 'number' && offset > 0 ? offset : undefined
+  const count = typeof limit === 'number' && limit > 0 ? limit : undefined
+  if (start === undefined && count === undefined) return undefined
+  const first = start ?? 1
+  return count === undefined ? `:${first}` : `:${first}–${first + count - 1}`
+}
+
 const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<MessagePart, { type: 'toolCall' }>; result?: Extract<MessagePart, { type: 'toolResult' }> }) {
-  const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const resetCopiedTimerRef = useRef<number | null>(null)
   const failed = result?.isError
   const finished = result && !result.streaming
   const kind = classifyTool(part.name)
+  const diff = useMemo(() => isEditTool(part.name) ? editDiffLines(part, result) : [], [part, result])
+  const showDiff = diff.length > 0
+  // Edits start open on their diff and other rows closed; a click flips either.
+  const [toggled, setToggled] = useState(false)
+  const open = showDiff !== toggled
+  const [copied, setCopied] = useState(false)
+  const resetCopiedTimerRef = useRef<number | null>(null)
+  const detailsId = useId()
   const output = result?.text ?? ''
+  const command = kind === 'terminal' ? stringArg(part, 'command') : undefined
   const visibleOutput = useMemo(() => {
-    if (!open) return ''
-    const args = serialize(part.args, true)
+    if (!open || showDiff) return ''
+    const args = command ? '' : serialize(part.args, true)
     return boundText(`${args}${args && output ? '\n\n' : ''}${output}`, 200_000, '\n\n[Output truncated in the desktop view.]')
-  }, [open, part.args, output])
-  const canExpand = Boolean(output || part.args !== undefined && part.args !== '')
+  }, [open, showDiff, command, part.args, output])
+  const canExpand = showDiff || Boolean(output || !command && part.args !== undefined && part.args !== '')
   const state = failed ? 'error' : finished ? 'done' : kind === 'question' ? 'waiting' : 'running'
   const preview = toolPreview(part)
+  const range = readRange(part)
+  const { additions, deletions } = diffCounts(diff)
   useEffect(
     () => () => {
       if (resetCopiedTimerRef.current !== null) window.clearTimeout(resetCopiedTimerRef.current)
@@ -187,17 +226,24 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
   }
 
   return (
-    <div className={`activity-line activity-line--tool activity-line--${kind} is-${state}`}>
-      <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-        <span className="activity-line__icon">{toolIcon(kind)}</span>
-        <span className="activity-line__kind">{kind === 'question' ? 'Question' : part.name}</span>
-        {preview ? <code className="activity-tool__preview"><SyntaxText text={preview} /></code> : null}
+    <div className={`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`}>
+      <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setToggled((value) => !value)} aria-expanded={canExpand ? open : undefined} aria-controls={canExpand && open ? detailsId : undefined}>
+        <span className="activity-line__icon">{command ? <Terminal size={14} /> : toolIcon(kind)}</span>
+        {command
+          ? <code className="activity-tool__command" title={command}><span className="activity-tool__prompt" aria-hidden="true">$</span> {boundText(command.replace(/\s+/g, ' ').trim(), 180, '…')}</code>
+          : <>
+            <span className="activity-line__kind">{kind === 'question' ? 'Question' : part.name}</span>
+            {preview ? <code className="activity-tool__preview"><SyntaxText text={preview} /></code> : null}
+            {range ? <span className="activity-tool__range">{range}</span> : null}
+          </>}
+        {showDiff ? <span className="activity-tool__diff-counts"><span className="diff-count diff-count--add">+{additions}</span><span className="diff-count diff-count--remove">−{deletions}</span></span> : null}
         <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><CircleNotch className="spin" size={12} /> running</>}</span>
         {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
       </button>
-      {state === 'running' && !open && output.trim() ? <pre className="activity-tool__tail">{outputTail(output)}</pre> : null}
+      {showDiff && open ? <EditDiff id={detailsId} diff={diff} /> : null}
+      {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <pre className={`activity-tool__tail${state === 'error' ? ' is-error' : ''}`}>{outputTail(output)}</pre> : null}
       {open && visibleOutput ? (
-        <div className="activity-tool__details">
+        <div className="activity-tool__details" id={detailsId}>
           <div className="activity-tool__details-toolbar">
             <button type="button" className="activity-tool__copy" aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
               {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
@@ -275,18 +321,19 @@ function partKey(part: MessagePart, index: number): string {
   return part.partId ?? `${part.type}:${index}`
 }
 
-export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean }) {
+export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false, subagents }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean; subagents?: SubagentPairs }) {
+  const { followUps, absorbed } = subagents ?? pairSubagentCalls(parts)
   const pairedResults = new Set<number>()
   const pendingKeys = new Set<string>()
-  const runKinds = new Map<string, { kind: ToolRunKind; failed: boolean }>()
+  const runMembers = new Map<string, RunMember>()
   const items = parts.map((part, index) => {
     const key = partKey(part, index)
-    if (part.type === 'toolResult' && pairedResults.has(index)) return null
+    if (absorbed.has(part) || part.type === 'toolResult' && pairedResults.has(index)) return null
     if (part.type === 'compaction') {
       if (part.status === 'running') pendingKeys.add(key)
       return <CompactionPart key={key} part={part} />
     }
-    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} streaming={streaming} /> : null
+    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} /> : null
     if (part.type === 'toolCall') {
       if (!showTools) return null
       const next = parts[index + 1]
@@ -294,9 +341,8 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
       const result = next?.type === 'toolResult' ? next : undefined
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
-      if (isSubagentTool(part.name)) return <SubagentLane key={key} part={part} result={result} />
-      const runKind = result && !result.streaming ? toolRunKind(part.name) : undefined
-      if (runKind) runKinds.set(key, { kind: runKind, failed: Boolean(result?.isError) })
+      if (isSubagentTool(part.name)) return <SubagentLane key={key} part={part} result={result} followUps={followUps.get(part)} />
+      if (result && !result.streaming && isExploreTool(part.name)) runMembers.set(key, { failed: Boolean(result.isError), search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
       return <ToolPart key={key} part={part} result={result} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
@@ -304,17 +350,18 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     if (part.type === 'text') return <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={streaming} /></div>
     return null
   }).filter((row) => row !== null)
-  // Back-to-back settled calls of one kind fold into a single row; running, question, plan, and subagent rows stay lifted out.
+  // Back-to-back settled reads and searches fold into a single row; edits, commands, plans, and agents stay in the stream.
   const rows: ReactElement[] = []
   for (let index = 0; index < items.length;) {
-    const run = runKinds.get(String(items[index].key))
-    let end = index + 1
-    while (run && end < items.length && runKinds.get(String(items[end].key))?.kind === run.kind) end += 1
-    if (run && end - index >= 2) {
+    let end = index
+    while (end < items.length && runMembers.has(String(items[end].key))) end += 1
+    if (end - index >= 2) {
       const members = items.slice(index, end)
-      const failed = members.filter((row) => runKinds.get(String(row.key))?.failed).length
-      rows.push(<ToolRun key={`run:${String(items[index].key)}`} kind={run.kind} failed={failed}>{members}</ToolRun>)
-    } else rows.push(...items.slice(index, end))
+      rows.push(<ToolRun key={`run:${String(items[index].key)}`} members={members.map((row) => runMembers.get(String(row.key))!)}>{members}</ToolRun>)
+    } else {
+      end = Math.max(end, index + 1)
+      rows.push(...items.slice(index, end))
+    }
     index = end
   }
   const pages = []
@@ -409,16 +456,12 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
   return status ?? 'Working'
 }
 
-/**
- * The live run ledger. `children` is the answer streaming after the work; it renders between the timeline and the status row.
- * Settled turns hide the ledger behind their receipt instead.
- */
-export function WorkDisclosure({ message, parts, showReasoning, showTools, children }: { message: TranscriptMessage; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
+/** The live run ledger: the turn's chronological stream (`children`) with the status row beneath it. */
+export function WorkDisclosure({ message, showReasoning, showTools, children }: { message: TranscriptMessage; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
   const activity = showTools ? activeWorkLabel(message.parts) : undefined
   return <section className="work-disclosure is-running" aria-label="Agent work activity">
     <span className="work-disclosure__rail" aria-hidden="true" />
     <div className="work-disclosure__live">
-      <WorkTimeline parts={parts} showReasoning={showReasoning} showTools={showTools} streaming />
       {children}
       <div className="work-disclosure__status" role="status">
         {activity ? <span className="work-disclosure__activity" title={activity}>{activity}</span> : <LiveWorkVerb mode={liveWorkStatus(message.parts, showReasoning, showTools)} />}

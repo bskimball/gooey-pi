@@ -25,10 +25,6 @@ interface TurnReceiptProps {
   failed?: boolean
   agents: number
   tools: number
-  /** Present when the turn has a work log to reveal. */
-  logOpen?: boolean
-  logId?: string
-  onToggleLog?(): void
   /** Workspace changes, shown on the latest settled turn only. */
   git?: GitStatus
   onReviewChanges?(): void
@@ -37,7 +33,7 @@ interface TurnReceiptProps {
 }
 
 /** The settled turn's one closing line: outcome, scale of the work, what it left in the working tree, and copy. */
-export function TurnReceipt({ duration, failed = false, agents, tools, logOpen = false, logId, onToggleLog, git, onReviewChanges, copy }: TurnReceiptProps) {
+export function TurnReceipt({ duration, failed = false, agents, tools, git, onReviewChanges, copy }: TurnReceiptProps) {
   const [diffOpen, setDiffOpen] = useState(false)
   const diffId = useId()
   const files = git?.files ?? []
@@ -46,11 +42,7 @@ export function TurnReceipt({ duration, failed = false, agents, tools, logOpen =
     { key: 'outcome', node: <span className="turn-receipt__outcome">{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className="sr-only">{failed ? 'Turn failed after' : 'Turn finished in'}</span> {duration}</span> },
   ]
   if (agents) facts.push({ key: 'agents', node: <span>{plural(agents, 'agent')}</span> })
-  if (onToggleLog) {
-    facts.push({ key: 'log', node: <button type="button" className="turn-receipt__action turn-receipt__log" aria-expanded={logOpen} aria-controls={logOpen ? logId : undefined} onClick={onToggleLog}>
-      {tools ? plural(tools, 'step') : 'Show log'}<CaretRight className="disclosure-caret" size={11} />
-    </button> })
-  } else if (tools) facts.push({ key: 'log', node: <span>{plural(tools, 'step')}</span> })
+  if (tools) facts.push({ key: 'tools', node: <span>{plural(tools, 'tool')}</span> })
   if (files.length) {
     facts.push({ key: 'diff', node: <span className="turn-receipt__diff">
       <button type="button" className="turn-receipt__action turn-receipt__diff-summary" aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>

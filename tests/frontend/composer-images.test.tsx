@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, useState } from 'react'
+import { act, useState, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
-import { SessionStatusItems } from '../../apps/desktop/src/components/SessionStatusBar'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
 import type { PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
 
@@ -42,8 +41,9 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue') {
+function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue', extra: Partial<ComponentProps<typeof Composer>> = {}) {
   act(() => root.render(<Composer
+    {...extra}
     busy={busy}
     model="provider/vision"
     effort="medium"
@@ -555,23 +555,20 @@ describe('Composer submission lifecycle', () => {
   })
 })
 
-describe('Session context usage and composer stop control', () => {
-  it('shows the exact context usage in the session header and keeps it out of the composer', () => {
-    renderComposer(vi.fn(), true, false, 'queue')
-    expect(container.querySelector('[role="meter"]')).toBeNull()
-    expect([...container.querySelector('.composer__actions')!.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Start dictation', 'Send message'])
-
-    act(() => root.render(<SessionStatusItems contextUsage={{ tokens: 50_000, contextWindow: 100_000, percent: 50 }} />))
+describe('Composer context usage and stop control', () => {
+  it('shows the exact context usage as a ring beside the send controls', () => {
+    renderComposer(vi.fn(), true, false, 'queue', { contextUsage: { tokens: 50_000, contextWindow: 100_000, percent: 50 } })
+    expect([...container.querySelector('.composer__actions')!.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Context usage', 'Start dictation', 'Send message'])
     const meter = container.querySelector<HTMLElement>('[role="meter"]')
-    expect(meter?.textContent).toBe('context 50%')
+    expect(meter?.textContent).toBe('50')
     expect(meter?.title).toBe('50,000 / 100,000 tokens')
     expect(meter?.getAttribute('aria-valuenow')).toBe('50')
   })
 
   it('shows unavailable usage honestly and uses a square stop icon', () => {
-    act(() => root.render(<SessionStatusItems contextUsage={{ tokens: null, contextWindow: 100_000, percent: null }} />))
+    renderComposer(vi.fn(), true, false, 'queue', { contextUsage: { tokens: null, contextWindow: 100_000, percent: null } })
     const meter = container.querySelector<HTMLElement>('[role="meter"]')
-    expect(meter?.textContent).toBe('context —')
+    expect(meter?.textContent).toBe('—')
     expect(meter?.hasAttribute('aria-valuenow')).toBe(false)
     expect(meter?.title).toContain('unavailable')
 
@@ -592,8 +589,8 @@ describe('Session context usage and composer stop control', () => {
   })
 })
 
-describe('Session status fallback indicator', () => {
-  it('shows the executing fallback in the session header without changing the selected model', () => {
+describe('Composer fallback indicator', () => {
+  it('shows the executing fallback in the composer footer without changing the selected model', () => {
     const executingModel: RuntimeInfo['executingModel'] = {
       provider: 'anthropic',
       id: 'claude-sonnet',
@@ -604,7 +601,8 @@ describe('Session status fallback indicator', () => {
     expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
     expect(container.querySelector('.model-fallback-chip')).toBeNull()
 
-    act(() => root.render(<SessionStatusItems git={{ isRepo: true, files: [] }} executingModel={executingModel} onOpenChanges={vi.fn()} />))
+    renderComposer(vi.fn(), true, false, 'queue', { executingModel })
+    expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
     expect(container.querySelector('.model-fallback-chip')?.textContent).toContain('Running on anthropic/claude-sonnet')
     expect(container.querySelector('.model-fallback-chip')?.getAttribute('title')).toContain('Provider fallback')
   })

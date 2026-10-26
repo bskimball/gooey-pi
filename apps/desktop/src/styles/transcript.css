@@ -162,7 +162,34 @@
 .activity-line.is-error .activity-tool__state { color: var(--danger); }
 .activity-tool__details { max-height: 260px; margin: 0 6px 8px 32px; overflow: auto; border-left: 2px solid var(--border-strong); background: transparent; color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.55; }
 /* Live scrollback: newest lines of a running command, fading out at the top edge. */
-.activity-tool__tail { max-height: calc(4 * 1.55em + 8px); margin: 0 6px 6px 32px; padding: 2px 10px 6px; overflow: hidden; border-left: 2px solid var(--border-strong); color: var(--text-tertiary); font: var(--chat-meta)/1.55 var(--chat-mono); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); display: flex; flex-direction: column; justify-content: flex-end; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-tool__tail { max-height: calc(5 * 1.55em + 10px); margin: 0 6px 6px 32px; padding: 4px 10px 6px; overflow: hidden; border-left: 2px solid var(--prime); border-radius: 0 6px 6px 0; color: var(--text-secondary); background: var(--canvas); font: var(--chat-meta)/1.55 var(--chat-mono); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); display: flex; flex-direction: column; justify-content: flex-end; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-tool__tail.is-error { border-left-color: var(--danger); color: var(--danger); -webkit-mask-image: none; mask-image: none; }
+/* Shell calls read as the command itself: `$ npm test`, status on the right. */
+.activity-tool__command { min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); background: transparent; border: 0; padding: 0; text-overflow: ellipsis; white-space: nowrap; font: var(--chat-meta)/1.5 var(--chat-mono); }
+.activity-tool__prompt { color: var(--text-tertiary); user-select: none; }
+.activity-line--shell.is-running .activity-tool__command { color: var(--text); }
+.activity-tool__range { flex: 0 0 auto; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); font-variant-numeric: tabular-nums; }
+.activity-tool__diff-counts { flex: 0 0 auto; display: inline-flex; gap: 4px; font-variant-numeric: tabular-nums; }
+/* Edits show the change itself under the header, sign column first, capped to a preview. */
+.activity-edit-diff { margin: 2px 6px 8px 32px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-edit-diff__lines { margin: 0; padding: 4px 0; overflow-x: auto; font: var(--chat-meta)/1.55 var(--chat-mono); }
+.activity-edit-diff__line { display: block; min-width: max-content; padding: 0 10px 0 0; color: var(--text-tertiary); white-space: pre; }
+.activity-edit-diff__sign { display: inline-block; width: 18px; text-align: center; user-select: none; }
+.activity-edit-diff__line.is-add { background: var(--diff-add); color: var(--success); }
+.activity-edit-diff__line.is-remove { background: var(--diff-remove); color: var(--danger); }
+.activity-edit-diff__line.is-gap { color: var(--text-tertiary); opacity: .7; }
+.activity-edit-diff__more { width: 100%; min-height: 26px; padding: 0 10px; border-top: 1px solid var(--border); color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-meta); transition: color 120ms ease-out, background-color 120ms ease-out; }
+.activity-edit-diff__more:hover { color: var(--text-secondary); background: var(--surface-subtle); }
+.activity-edit-diff__more:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.activity-edit-diff__note { margin: 0; padding: 4px 10px; border-top: 1px solid var(--border); color: var(--text-tertiary); font-size: var(--chat-meta); }
+/* Settled reasoning folds to one quiet line so the work and prose around it lead. */
+.activity-line--reasoning.is-collapsed { padding: 0; font-size: var(--chat-ui); }
+.activity-thought__summary { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; color: var(--text-tertiary); background: transparent; text-align: left; transition: color 120ms ease-out, background-color 120ms ease-out; }
+.activity-thought__summary:hover { color: var(--text-secondary); background: var(--surface-subtle); }
+.activity-thought__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.activity-thought__summary .activity-line__kind { color: inherit; font-weight: 500; }
+.activity-thought__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
+.activity-thought__body { margin: 0 6px 8px 32px; padding: 2px 10px; border-left: 2px solid var(--border-strong); color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
 .activity-tool__details-toolbar { display: flex; justify-content: flex-end; padding: 3px 4px 0; }
 .activity-tool__copy { min-height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 5px; color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); }
 .activity-tool__copy:hover { color: var(--text-secondary); background: var(--surface-hover); }
@@ -175,10 +202,21 @@
 .subagent-lane { margin: 3px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
 .subagent-lane.is-running { border-color: color-mix(in srgb, var(--prime) 30%, var(--border)); }
 .subagent-lane.is-error { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
-.subagent-lane__summary { width: 100%; min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 6px; color: var(--text-secondary); background: transparent; text-align: left; font-size: var(--chat-ui); transition: background 120ms ease-out; }
-.subagent-lane__summary:hover:not(:disabled) { background: var(--surface-subtle); }
-.subagent-lane__summary:disabled { opacity: 1; cursor: default; }
-.subagent-lane__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.subagent-lane__summary { min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 6px; color: var(--text-secondary); font-size: var(--chat-ui); }
+.subagent-lane__status { width: 20px; height: 20px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--text-tertiary); }
+.subagent-lane.is-running .subagent-lane__status { color: var(--prime); }
+.subagent-lane.is-done .subagent-lane__status { color: var(--success); }
+.subagent-lane.is-error .subagent-lane__status { color: var(--danger); }
+/* The tree rail: report highlights hang off the lane header like the TUI's agent tree. */
+.subagent-lane__tree { display: grid; gap: 1px; margin: -2px 0 0; padding: 0 10px 7px 15px; list-style: none; font-size: var(--chat-meta); line-height: 1.55; }
+.subagent-lane__tree > li { min-width: 0; display: flex; align-items: baseline; gap: 6px; color: var(--text-secondary); }
+.subagent-lane__tree > li.is-pending { color: var(--text-tertiary); }
+.subagent-lane__branch { flex: 0 0 auto; color: var(--border-strong); font-family: var(--chat-mono); user-select: none; }
+.subagent-lane__leaf { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subagent-lane__report-toggle { min-height: 22px; display: inline-flex; align-items: center; gap: 3px; margin: -2px 0; padding: 0 5px; border-radius: 5px; color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); transition: color 120ms ease-out, background-color 120ms ease-out; }
+.subagent-lane__report-toggle:hover { color: var(--text); background: var(--surface-subtle); }
+.subagent-lane__report-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.subagent-lane__report-toggle[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
 .subagent-lane__verb { flex: 0 0 auto; font-weight: 540; }
 .subagent-lane__role { flex: 0 0 auto; padding: 0 6px; border-radius: 4px; color: var(--prime); background: var(--prime-soft); font: 600 10.5px/18px var(--chat-mono); }
 .subagent-lane__id { flex: 0 0 auto; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); }
@@ -309,8 +347,6 @@ article.message--user:last-of-type, .transcript-active-placeholder { animation: 
 @keyframes disclosure-in { from { opacity: 0; transform: translateY(-3px); } }
 @keyframes stream-cursor { 50% { opacity: 0; } }
 
-/* Settled turns open their ledger above the answer from the receipt. */
-.work-log { margin: 2px 0 14px; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
 .work-disclosure__activity { min-width: 0; max-width: 52ch; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 /* Back-to-back settled calls of one kind read as one ledger row. */
 .activity-run { position: relative; min-width: 0; border-radius: 6px; color: var(--text-secondary); font-size: var(--chat-ui); line-height: 1.5; }
@@ -319,6 +355,7 @@ article.message--user:last-of-type, .transcript-active-placeholder { animation: 
 .activity-run__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .activity-run__label { color: var(--text-secondary); font-weight: 540; white-space: nowrap; }
 .activity-run__failed { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); font-size: var(--chat-meta); white-space: nowrap; }
+.activity-run__names { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); text-overflow: ellipsis; white-space: nowrap; }
 .activity-run__summary .disclosure-caret { margin-left: auto; color: var(--text-tertiary); }
 .activity-run__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
 .activity-run__items { margin-left: 13px; padding-left: 6px; border-left: 1px solid var(--border); animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }

@@ -79,7 +79,7 @@ describe('timeline part identity', () => {
     expect(container.querySelector('.activity-line--tool')?.classList.contains('is-error')).toBe(true)
   })
 
-  it('folds back-to-back settled tools of one kind into an expandable run and keeps running tools lifted out', () => {
+  it('folds back-to-back settled reads and searches into one row and keeps commands visible', () => {
     renderTimeline({
       id: 'runs', role: 'assistant', parts: [
         { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'a.ts' } },
@@ -94,12 +94,31 @@ describe('timeline part identity', () => {
       ],
     })
     const runs = [...container.querySelectorAll<HTMLButtonElement>('.activity-run__summary')]
-    expect(runs.map((run) => run.textContent)).toEqual(['Read 2 files', 'Ran 2 commands 1 failed'])
-    // The still-running build stays a visible row of its own.
-    expect([...container.querySelectorAll('.timeline-page__body > .activity-line--tool')].map((row) => row.textContent)).toEqual([expect.stringContaining('npm run build')])
-    act(() => runs[1].click())
-    expect(runs[1].getAttribute('aria-expanded')).toBe('true')
+    expect(runs.map((run) => run.textContent)).toEqual(['Read 1 file, 1 searcha.ts, b'])
+    // Commands never fold: each reads as `$ command`, and only the failed one keeps its output tail.
+    expect([...container.querySelectorAll('.timeline-page__body > .activity-line--shell .activity-tool__command')].map((row) => row.textContent)).toEqual(['$ npm test', '$ npm run lint', '$ npm run build'])
+    expect([...container.querySelectorAll('.activity-tool__tail')].map((tail) => tail.textContent)).toEqual(['failed'])
+    act(() => runs[0].click())
+    expect(runs[0].getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('.activity-run__items .activity-line--tool')).toHaveLength(2)
+  })
+
+  it('shows edit diffs inline by default and labels ranged reads', () => {
+    renderTimeline({
+      id: 'edits', role: 'assistant', parts: [
+        { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'src/a.ts', offset: 10, limit: 5 } },
+        { type: 'toolResult', name: 'read', text: 'a' },
+        { type: 'toolCall', id: 'edit-1', name: 'edit', args: { path: 'src/a.ts', edits: [{ oldText: 'keep\nold line\ntail', newText: 'keep\nnew line\nadded\ntail' }] } },
+        { type: 'toolResult', name: 'edit', text: 'ok' },
+      ],
+    })
+    expect(container.querySelector('.activity-tool__range')?.textContent).toBe(':10–14')
+    const counts = container.querySelector('.activity-tool__diff-counts')
+    expect(counts?.textContent).toBe('+2−1')
+    const lines = [...container.querySelectorAll('.activity-edit-diff__line')]
+    expect(lines.map((line) => line.className.replace('activity-edit-diff__line is-', ''))).toEqual(['context', 'remove', 'add', 'add', 'context'])
+    act(() => container.querySelector<HTMLButtonElement>('.activity-line--tool:last-child .activity-tool__summary')?.click())
+    expect(container.querySelector('.activity-edit-diff')).toBeNull()
   })
 
   it('copies the promoted final report when reasoning trails it', async () => {

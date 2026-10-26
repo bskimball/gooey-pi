@@ -35,6 +35,8 @@ import { appendTerminalContextToPrompt } from "@/lib/terminal-context";
 import type {
 	AgentBrowserTabRecord,
 	BrowserAnnotation,
+	CheckoutAction,
+	CheckoutCatalog,
 	HarnessId,
 	MessageEnterAction,
 	PrimeContextUsage,
@@ -53,7 +55,10 @@ import type {
 	TerminalSelectionContext,
 	VoiceTranscriptionProvider,
 } from "@/types/api";
+import { CheckoutPicker } from "./CheckoutPicker";
 import { ComposerQueue } from "./ComposerQueue";
+import { ContextUsageRing } from "./ContextUsageRing";
+import { ExecutingModelChip } from "./ExecutingModelChip";
 import { ExtensionTabPill } from "./ExtensionTabControls";
 import {
 	ArrowUp,
@@ -122,6 +127,11 @@ interface ComposerProps {
 	onModelChange(value: string): void;
 	onEffortChange(value: PrimeThinkingLevel): void;
 	onFastChange(value: boolean): void;
+	checkoutCatalog?: CheckoutCatalog;
+	/** Branch/worktree name shown before or without the linked-worktree catalog. */
+	checkoutLabel?: string;
+	checkoutsLoading?: boolean;
+	onExecuteCheckout?(action: CheckoutAction): Promise<void> | void;
 	onSend(
 		prompt: string,
 		images: PromptImage[],
@@ -198,6 +208,13 @@ export const Composer = memo(function Composer({
 	onModelChange,
 	onEffortChange,
 	onFastChange,
+	contextUsage,
+	sessionUsage,
+	executingModel,
+	checkoutCatalog,
+	checkoutLabel,
+	checkoutsLoading = false,
+	onExecuteCheckout,
 	onSend,
 	onStop,
 	onRemoveAnnotation = noop,
@@ -1031,6 +1048,14 @@ export const Composer = memo(function Composer({
 						) : (
 							modelControls
 						)}
+						<CheckoutPicker
+							catalog={checkoutCatalog}
+							fallbackLabel={checkoutLabel}
+							loading={checkoutsLoading}
+							disabled={busy || submitting}
+							onExecute={onExecuteCheckout}
+						/>
+						<ExecutingModelChip executingModel={executingModel ?? undefined} />
 						{fastSupported ? (
 							<button
 								type="button"
@@ -1062,7 +1087,12 @@ export const Composer = memo(function Composer({
 							>
 								<X size={14} />
 							</button>
-						) : null}
+						) : (
+							<ContextUsageRing
+								contextUsage={contextUsage}
+								sessionUsage={sessionUsage}
+							/>
+						)}
 						<button
 							type="button"
 							className={`dictation-button ${dictation.state === "recording" ? "is-recording" : ""}`}

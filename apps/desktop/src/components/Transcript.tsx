@@ -3,10 +3,9 @@ import { CircleNotch } from './icons'
 import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
 import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
-import { MarkdownText } from './MarkdownText'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { PiMark, PiWelcomeMark } from './ui'
-import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity, splitAssistantTurn } from './transcript/messages'
+import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { TurnNavigator } from './transcript/turn-navigator'
@@ -52,19 +51,15 @@ function AssistantMark({ harness, size = 24 }: { harness: HarnessId; size?: numb
 
 function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: { message: TranscriptMessage; harness: HarnessId; showReasoning: boolean; showTools: boolean }) {
   const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
-  // The live turn uses the settled split, so finishing collapses the work instead of moving or restyling the answer.
-  const { before, work, after } = splitAssistantTurn(message.parts)
+  // The live turn streams in the same chronological order the settled turn keeps, so finishing only folds reasoning.
   return (
     <article className="message message--assistant">
       <div className="assistant-mark"><AssistantMark harness={harness} /></div>
       <div className="message__content">
         {visibleActivity
-          ? <>
-            {renderNarrative(before, 'before')}
-            <WorkDisclosure message={message} parts={work} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(after, 'after', showReasoning, showTools, true)}</WorkDisclosure>
-          </>
+          ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true)}</WorkDisclosure>
           : <>
-            {message.parts.map((part, index) => part.type === 'text' ? <MarkdownText key={index} text={part.text} streaming /> : null)}
+            {renderNarrative(message.parts, 'live', true)}
             <div className="streaming-state" aria-live="polite"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /> <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
           </>}
       </div>

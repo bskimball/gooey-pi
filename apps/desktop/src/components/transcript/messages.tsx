@@ -12,6 +12,7 @@ import { MarkdownText } from '../MarkdownText'
 import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { TranscriptImage } from './TranscriptImage'
+import { pairSubagentCalls } from './subagent-lane'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 
@@ -39,77 +40,27 @@ export function renderNarrative(parts: MessagePart[], keyPrefix: string, streami
   })
 }
 
+/**
+ * The turn as it happened: narrative and work segments in order. Subagent follow-ups pair across the
+ * whole turn; work stays live until the turn settles, and only the newest narrative streams.
+ */
 export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false) {
+  const subagents = pairSubagentCalls(parts)
   const groups: Array<{ activity: boolean; parts: MessagePart[] }> = []
   for (const part of parts) {
+    if (subagents.absorbed.has(part)) continue
     const activity = part.type !== 'text' && part.type !== 'image'
     const current = groups.at(-1)
     if (current?.activity === activity) current.parts.push(part)
     else groups.push({ activity, parts: [part] })
   }
-  return groups.map((group, index) =>
-    group.activity ? (
-      <WorkTimeline key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} />
+  return groups.map((group, index) => {
+    return group.activity ? (
+      <WorkTimeline key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} subagents={subagents} />
     ) : (
-      <div key={`${keyPrefix}-narrative-${index}`}>{renderNarrative(group.parts, `${keyPrefix}-${index}`, streaming)}</div>
-    ),
-  )
-}
-
-function isNarrative(part: MessagePart): part is Extract<MessagePart, { type: 'text' | 'image' }> {
-  return part.type === 'text' || part.type === 'image'
-}
-
-/**
- * Completed turns can receive lightweight activity after their final answer.
- * When no narrative follows the last activity, anchor the visible tail at the
- * most substantial narrative run, preferring the later run on ties, so the
- * answer is not lost behind trailing reasoning or tool calls.
- */
-function primaryNarrativeStart(parts: MessagePart[], start: number): number {
-  let bestStart = -1
-  let bestScore = 0
-  for (let index = start; index < parts.length;) {
-    if (!isNarrative(parts[index])) {
-      index += 1
-      continue
-    }
-    const runStart = index
-    let score = 0
-    while (index < parts.length && isNarrative(parts[index])) {
-      const part = parts[index]
-      score += part.type === 'text' ? part.text.trim().length : 1
-      index += 1
-    }
-    if (score > 0 && score >= bestScore) {
-      bestStart = runStart
-      bestScore = score
-    }
-  }
-  return bestStart
-}
-
-const isActivity = (part: MessagePart) => part.type === 'thinking' || part.type === 'toolCall' || part.type === 'toolResult' || part.type === 'agentMessage' || part.type === 'compaction'
-
-/**
- * Splits a turn into opening narrative, the work behind the disclosure, and the answer tail.
- * Live and settled turns share it so a finishing turn collapses its work in place.
- */
-export function splitAssistantTurn(parts: MessagePart[]): { before: MessagePart[]; work: MessagePart[]; after: MessagePart[] } {
-  const firstActivity = parts.findIndex(isActivity)
-  if (firstActivity < 0) return { before: parts, work: [], after: [] }
-  let lastActivity = -1
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    if (isActivity(parts[index])) {
-      lastActivity = index
-      break
-    }
-  }
-  // Narrative after the last activity is the turn's outcome, however short; an earlier, longer run stays in the work log.
-  const hasTrailingNarrative = parts.slice(lastActivity + 1).some((part) => part.type === 'image' || (part.type === 'text' && part.text.trim().length > 0))
-  const finalNarrative = hasTrailingNarrative ? lastActivity + 1 : primaryNarrativeStart(parts, firstActivity + 1)
-  const workEnd = finalNarrative >= 0 ? finalNarrative : lastActivity + 1
-  return { before: parts.slice(0, firstActivity), work: parts.slice(firstActivity, workEnd), after: parts.slice(workEnd) }
+      <div key={`${keyPrefix}-narrative-${index}`}>{renderNarrative(group.parts, `${keyPrefix}-${index}`, streaming && index === groups.length - 1)}</div>
+    )
+  })
 }
 
 function messageText(message: TranscriptMessage): string {
@@ -176,17 +127,12 @@ function timestampValue(value?: string | number): number | undefined {
 
 export const AssistantMessage = memo(
   function AssistantMessage({ message, harness = 'pi', showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
-    const [logOpen, setLogOpen] = useState(false)
-    const logId = useId()
-    const { before, work, after } = splitAssistantTurn(message.parts)
     const counts = workCounts(message.parts)
-    const hasVisibleActivity = work.some(
+    const hasVisibleActivity = message.parts.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
     )
     const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || hasVisibleActivity || Boolean(git?.files.length))
-    const hiddenMiddleNarrative = !hasVisibleActivity ? work.filter((part) => part.type === 'text' || part.type === 'image') : []
-    const copyableNarrative = hasVisibleActivity ? [...before, ...after] : [...before, ...hiddenMiddleNarrative, ...after]
-    const copyableText = copyableNarrative.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n')
+    const copyableText = messageText(message)
     return (
       <article className="message message--assistant">
         <div className="assistant-mark">
@@ -194,13 +140,7 @@ export const AssistantMessage = memo(
         </div>
         <div className="message__content">
           {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
-          {renderNarrative(before, 'before', message.streaming)}
-          {hasVisibleActivity ? (
-            logOpen ? <section className="work-log" aria-label="Turn work log"><WorkTimeline id={logId} parts={work} showReasoning={showReasoning} showTools={showTools} /></section> : null
-          ) : (
-            renderNarrative(hiddenMiddleNarrative, 'middle', message.streaming)
-          )}
-          {renderNarrativeWithActivity(after, 'after', showReasoning, showTools, message.streaming)}
+          {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming)}
           {message.streaming && !hasVisibleActivity ? (
             <div className="streaming-state" aria-live="polite">
               <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
@@ -214,9 +154,6 @@ export const AssistantMessage = memo(
               tools={counts.tools}
               git={git}
               onReviewChanges={onOpenChanges}
-              logOpen={logOpen}
-              logId={logId}
-              onToggleLog={hasVisibleActivity ? () => setLogOpen((open) => !open) : undefined}
               copy={copyableText ? <CopyMessageButton className="turn-receipt__action turn-receipt__copy" message={message} text={copyableText} /> : undefined}
             />
           ) : !message.streaming ? <MessageActions message={message} text={copyableText} /> : null}

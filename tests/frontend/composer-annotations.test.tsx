@@ -1088,6 +1088,7 @@ describe("Composer sendSignal", () => {
 			"Behavior mode",
 			"Model: Vision",
 			"Reasoning effort",
+			"Checkout: Checkout",
 			"Fast",
 		]);
 		await act(async () => {
@@ -1185,6 +1186,7 @@ describe("Composer sendSignal", () => {
 			"Lead thinking",
 			"Sidekick model: Side Model",
 			"Sidekick thinking",
+			"Checkout: Checkout",
 			"Fast",
 		]);
 		expect(

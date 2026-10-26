@@ -1,5 +1,6 @@
 import {
   Code,
+  GitBranch,
   SidebarLeft,
   SidebarRight,
   Terminal,
@@ -10,7 +11,6 @@ import { useI18n, type MessageKey } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, IconButton } from './ui'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
-import { SessionStatusItems, type SessionStatusItemsProps } from './SessionStatusBar'
 import type { MouseEvent } from 'react'
 
 const viewTitles: Record<Exclude<WorkspaceView, 'session'>, MessageKey> = {
@@ -30,7 +30,7 @@ function openApplicationMenu(menu: ApplicationMenuName, event: MouseEvent<HTMLBu
   void window.prime?.app.popupMenu?.(menu, rect.left, rect.bottom).catch(() => undefined)
 }
 
-interface TitleToolbarProps extends Omit<SessionStatusItemsProps, 'checkoutLabel'> {
+interface TitleToolbarProps {
   project?: ProjectRecord
   gitBranch?: string
   view: WorkspaceView
@@ -53,7 +53,7 @@ interface TitleToolbarProps extends Omit<SessionStatusItemsProps, 'checkoutLabel
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin', ...sessionStatus }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
@@ -70,7 +70,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
       </div>
       <div className="title-toolbar__identity">
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>
-        {view === 'session' ? <SessionStatusItems {...sessionStatus} checkoutLabel={gitBranch ?? project?.gitBranch} /> : null}
+        {(gitBranch ?? project?.gitBranch) && view === 'session' ? <span className="branch-pill"><GitBranch size={12} />{gitBranch ?? project?.gitBranch}</span> : null}
       </div>
       <div className="title-toolbar__actions no-drag">
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts

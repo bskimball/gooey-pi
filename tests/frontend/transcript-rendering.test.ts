@@ -194,7 +194,7 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('transcript-active-placeholder')
   })
 
-  it('collapses all work behind the caret as soon as the response yields', () => {
+  it('folds settled reasoning to a one-line Thought as soon as the response yields', () => {
     const html = render([{
       id: 'complete',
       role: 'assistant',
@@ -206,7 +206,8 @@ describe('transcript rendering', () => {
 
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 3s')
-    expect(html).toContain('Show log')
+    expect(html).toContain('activity-line--reasoning is-collapsed')
+    expect(html).toContain('>Thought</span>')
     expect(html).toContain('aria-expanded="false"')
     expect(html).not.toContain('This stays collapsed until requested.')
     expect(html).not.toContain('thinking-dots')
@@ -255,6 +256,22 @@ describe('transcript rendering', () => {
     expect(html).toContain('aria-label="Expand pasted image"')
     expect(html).toContain('Image attachment unavailable')
     expect(html).not.toContain('src="data:image/png;base64,truncated"')
+  })
+
+  it('keeps assistant images visible while streaming without activity and after settling', () => {
+    const parts: TranscriptMessage['parts'] = [
+      { type: 'text', text: 'Here is the chart.' },
+      { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' },
+    ]
+    const live = render([{ id: 'live-image', role: 'assistant', timestamp: 1_000, streaming: true, parts }], true)
+    expect(live).toContain('streaming-state')
+    expect(live).toContain('Here is the chart.')
+    expect(live).toContain('src="data:image/png;base64,iVBORw0KGgo="')
+
+    const settled = render([{ id: 'live-image', role: 'assistant', timestamp: 1_000, completedAt: 2_000, parts }])
+    expect(settled).not.toContain('streaming-state')
+    expect(settled).toContain('Here is the chart.')
+    expect(settled).toContain('src="data:image/png;base64,iVBORw0KGgo="')
   })
 
   it('hides model-only session UUID routing from the visible user transcript', () => {
@@ -319,12 +336,14 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Turn finished in</span> 1s')
     expect(html).toContain('The primary final report stays visible.')
-    expect(html).toContain('Trailing lightweight reasoning.')
+    // Both reasoning blocks fold in place around the report.
+    expect(html.match(/activity-line--reasoning is-collapsed/g)).toHaveLength(2)
+    expect(html).not.toContain('Trailing lightweight reasoning.')
     expect(html).not.toContain('Earlier reasoning.')
     expect(html).toContain('aria-label="Copy assistant message"')
   })
 
-  it('keeps a concise closing answer as the outcome and files earlier narrative in the work log', () => {
+  it('keeps mid-turn narrative and tools visible in chronological order after the turn settles', () => {
     const html = render([{
       id: 'trailing-tool-and-note',
       role: 'assistant',
@@ -342,10 +361,14 @@ describe('transcript rendering', () => {
     expect(html).toContain('Cleanup complete.')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 1s')
-    expect(html).not.toContain('This is the complete substantive report with the requested conclusions and evidence.')
+    const report = html.indexOf('This is the complete substantive report with the requested conclusions and evidence.')
+    const tool = html.indexOf('update_todo')
+    expect(report).toBeGreaterThan(html.indexOf('>Thought</span>'))
+    expect(tool).toBeGreaterThan(report)
+    expect(html.indexOf('Cleanup complete.')).toBeGreaterThan(tool)
     expect(html).toContain('class="turn-receipt"')
-    expect(html).toContain('1 step')
-    expect(html).toContain('turn-receipt__log')
+    expect(html).toContain('1 tool')
+    expect(html).not.toContain('Earlier reasoning.')
     // Copy rides on the receipt line instead of a separate actions row.
     expect(html).toContain('turn-receipt__copy')
     expect(html).toContain('aria-label="Copy assistant message"')
@@ -372,7 +395,34 @@ describe('transcript rendering', () => {
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
-    expect(html).not.toContain('Transcript lives in messages.tsx')
+    // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
+    expect(html).toContain('├─</span><span class="subagent-lane__leaf">Transcript lives in messages.tsx</span>')
+    expect(html).toContain('View full report')
+    expect(html).toContain('╰─</span><span class="subagent-lane__leaf">Running in background…</span>')
+  })
+
+  it('folds a task_wait into the lane of the task it started and shows the settled report highlights', () => {
+    const html = render([{
+      id: 'paired',
+      role: 'assistant',
+      timestamp: 1_000,
+      completedAt: 2_000,
+      parts: [
+        { type: 'toolCall', id: 'start', name: 'task_start', args: { agent: 'scout', prompt: 'Map the code' } },
+        { type: 'toolResult', name: 'task_start', text: 'Started task_1 in background' },
+        { type: 'text', text: 'Waiting on the scout.' },
+        { type: 'toolCall', id: 'wait', name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\n## Findings\n- Lanes live in subagent-lane.tsx\n- Pairing is by id' },
+      ],
+    }])
+
+    expect(html.match(/class="subagent-lane /g)).toHaveLength(1)
+    expect(html).toContain('subagent-lane is-done')
+    expect(html).toContain('>settled</span>')
+    expect(html).toContain('>Findings</span>')
+    expect(html).toContain('>Lanes live in subagent-lane.tsx</span>')
+    expect(html).not.toContain('Waiting on</span>')
+    expect(html.indexOf('Waiting on the scout.')).toBeGreaterThan(html.indexOf('subagent-lane is-done'))
   })
 
   it('marks a failed turn on its prompt and shows the latest turn diff inline', () => {
