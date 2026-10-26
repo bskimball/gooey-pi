@@ -43,14 +43,15 @@ describe('transcript rendering', () => {
     }])
 
     expect(html).toContain('activity-line--reasoning')
-    expect(html).toContain('work-disclosure__rail')
+    expect(html).not.toContain('work-disclosure__rail')
+    expect(html).not.toContain('assistant-mark')
     expect(html).toContain('work-disclosure__status')
     expect(html).toContain('role="status"><span class="sr-only">Thinking</span><span class="live-work-verb" aria-hidden="true">Thinking</span>')
     expect(html).toContain('Checking <strong>the workspace</strong> now.')
     expect(html).not.toContain('**the workspace**')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('thinking-dots')
-    expect(html.match(/class="thinking-dots"[^>]*><svg[^>]*><path [^>]*stroke="currentColor"/)).not.toBeNull()
+    expect(html.match(/class="thinking-dots__dot"/g)).toHaveLength(3)
   })
 
   it.each([
@@ -573,7 +574,7 @@ describe('transcript rendering', () => {
     expect(renderToStaticMarkup(createElement(LiveElapsed, {}))).toBe('')
   })
 
-  it('renders the Seigaiha Fin Mon welcome emblem on blank chat and the Pi mark on messages', () => {
+  it('renders the Seigaiha Fin Mon welcome emblem on blank chat and no gutter mark on messages', () => {
     const emptyHtml = renderToStaticMarkup(createElement(Transcript, {
       messages: [],
       git,
@@ -592,7 +593,7 @@ describe('transcript rendering', () => {
       onOpenChanges: noop,
       onSuggestion: noop,
     }))
-    expect(replyHtml).toContain('pi-mark')
+    expect(replyHtml).not.toContain('pi-mark')
     expect(replyHtml).not.toContain('harness-mark--prime')
   })
 

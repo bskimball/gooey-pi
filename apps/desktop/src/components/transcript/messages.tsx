@@ -106,13 +106,6 @@ function MessageActions({ message, text = messageText(message) }: { message: Tra
   return text ? <div className="message-actions"><CopyMessageButton message={message} text={text} /></div> : null
 }
 
-const HARNESS_MARKS = { pi: PiMark } satisfies Record<HarnessId, unknown>
-
-function AssistantHarnessMark({ harness, size = 24 }: { harness: HarnessId; size?: number }) {
-  const Mark = HARNESS_MARKS[harness]
-  return <Mark size={size} />
-}
-
 function workedDuration(message: TranscriptMessage): string {
   const startedAt = timestampValue(message.startedAt ?? message.timestamp) ?? 0
   const completedAt = timestampValue(message.completedAt) ?? startedAt
@@ -135,9 +128,6 @@ export const AssistantMessage = memo(
     const copyableText = messageText(message)
     return (
       <article className="message message--assistant">
-        <div className="assistant-mark">
-          <AssistantHarnessMark harness={harness} />
-        </div>
         <div className="message__content">
           {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
           {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming)}

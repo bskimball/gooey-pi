@@ -132,12 +132,11 @@ function ReasoningPart({ part, live = false }: { part: Extract<MessagePart, { ty
 }
 
 export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
-  // One ink line, two periods wide, sliding one period per loop so the seam never shows.
   return (
     <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
-      <svg viewBox="0 0 18 8" fill="none" focusable="false" aria-hidden="true">
-        <path d="M0 4 Q2.25 1 4.5 4 T9 4 T13.5 4 T18 4 T22.5 4 T27 4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      </svg>
+      <span className="thinking-dots__dot" />
+      <span className="thinking-dots__dot" />
+      <span className="thinking-dots__dot" />
     </span>
   )
 }
@@ -460,7 +459,6 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
 export function WorkDisclosure({ message, showReasoning, showTools, children }: { message: TranscriptMessage; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
   const activity = showTools ? activeWorkLabel(message.parts) : undefined
   return <section className="work-disclosure is-running" aria-label="Agent work activity">
-    <span className="work-disclosure__rail" aria-hidden="true" />
     <div className="work-disclosure__live">
       {children}
       <div className="work-disclosure__status" role="status">

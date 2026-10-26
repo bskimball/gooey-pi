@@ -4,7 +4,7 @@ import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
 import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
-import { PiMark, PiWelcomeMark } from './ui'
+import { PiWelcomeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
@@ -43,18 +43,11 @@ interface TranscriptProps {
 }
 
 
-const ASSISTANT_MARKS = { pi: PiMark } satisfies Record<HarnessId, unknown>
-function AssistantMark({ harness, size = 24 }: { harness: HarnessId; size?: number }) {
-  const Mark = ASSISTANT_MARKS[harness]
-  return <Mark size={size} />
-}
-
 function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: { message: TranscriptMessage; harness: HarnessId; showReasoning: boolean; showTools: boolean }) {
   const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
   // The live turn streams in the same chronological order the settled turn keeps, so finishing only folds reasoning.
   return (
-    <article className="message message--assistant">
-      <div className="assistant-mark"><AssistantMark harness={harness} /></div>
+    <article className="message message--assistant message--streaming">
       <div className="message__content">
         {visibleActivity
           ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true)}</WorkDisclosure>
@@ -143,8 +136,8 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
             : <div className={`message message--${message.role}`}>{message.parts.map((part, partIndex) => part.type === 'text' ? <span key={partIndex}>{part.text}</span> : null)}</div>}
           </ErrorBoundary>
         })}
-        {active && !activeAssistantId ? <article className="message message--assistant transcript-active-placeholder" aria-live="polite">
-          <div className="assistant-mark"><AssistantMark harness={harness} /></div><div className="streaming-state"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /></div>
+        {active && !activeAssistantId ? <article className="message message--assistant message--streaming transcript-active-placeholder" aria-live="polite">
+          <div className="streaming-state"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /></div>
         </article> : null}
         <div />
       </div>

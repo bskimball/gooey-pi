@@ -25,7 +25,7 @@
    easy to find while scanning the agent's output. The edge sits on the axis the assistant mark and
    running work rail share (11px into the 38px gutter), the text starts in the reply column, and the
    block stays square so the rule reads as a straight margin line. */
-.message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px 11px; padding: 10px 10px 10px 25px; border-left: 2px solid color-mix(in srgb, var(--prime) 50%, var(--border-strong)); background: var(--surface-subtle); }
+.message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px; padding: 10px 10px 10px 14px; border-left: 1.5px solid color-mix(in srgb, var(--prime) 50%, var(--border-strong)); background: var(--surface-subtle); }
 .message--user > * { grid-column: 1; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
 /* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt.
@@ -54,14 +54,10 @@
 .user-annotations > summary:hover { background: color-mix(in srgb, var(--annotation) 14%, transparent); }
 .user-annotations[open] > summary { margin-bottom: 5px; }
 .user-annotations > pre { max-height: 220px; margin: 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.message--assistant { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; }
-.assistant-mark { position: relative; padding-top: 1px; }
-/* In the gutter the harness glyph stands bare in quiet ink; the brand tile stays for chrome. */
-.assistant-mark > .pi-mark { border: 0; color: color-mix(in srgb, var(--prime) 35%, var(--text-tertiary)); background: none; box-shadow: none; }
-.assistant-mark > .pi-mark svg { width: 68%; height: 68%; }
-/* The harness mark only earns its gutter while the turn is live; settled replies keep the
-   column alignment but retire the icon, and the running work rail supplies the only line. */
-.message--assistant:not(:has(.work-disclosure.is-running, .streaming-state)) .assistant-mark { opacity: 0; }
+/* Replies share the user turn's single left bar and inset, so prompt text, prose, and tool icons
+   start on one line. A live turn colours the bar; there is no second rail inside it. */
+.message--assistant { display: block; padding-left: 14px; border-left: 1.5px solid var(--border); }
+.message--assistant.message--streaming { border-left-color: var(--prime); }
 /* A live turn that ends the transcript sits directly above the composer, whose clearance the
    transcript's bottom padding already reserves, so it drops the margins that space later rows. */
 .message--assistant:has(.work-disclosure.is-running, .streaming-state):not(:has(~ .message)),
@@ -93,19 +89,12 @@
 .markdown-link-unsupported { color: var(--text-secondary); text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
 /* Settled work is one ledger line between prompt and answer: no rule above it, the caret and count carry it. */
 .work-disclosure { margin: 2px 0 14px; }
-/* The running rail hangs in the assistant-mark gutter (26px column + 12px gap), centred under
-   the icon, so live work keeps the full content width. */
 .work-disclosure.is-running { position: relative; margin-top: 0; padding: 0 0 7px; border-top: 0; }
 /* The caret hangs left by its padding plus the glyph's own inset, so its point lines up with the reply text. */
-.work-disclosure__button { width: calc(100% + 7px); min-height: 26px; display: flex; align-items: center; gap: 6px; margin-left: -7px; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
+.work-disclosure__button { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; margin-left: 0; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 520; transition: color 120ms ease-out; }
 .work-disclosure__button:hover { color: var(--text); }
-.work-disclosure__rail { position: absolute; top: 6px; bottom: 10px; left: -27px; width: 2px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--prime) 22%, var(--border)); }
-.message__content > .work-disclosure.is-running:first-child .work-disclosure__rail { top: 34px; }
-.work-disclosure__rail::before { position: absolute; top: -2px; left: -2px; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; background: color-mix(in srgb, var(--prime) 58%, var(--border-strong)); box-shadow: 0 0 0 2px var(--canvas); content: ''; }
-.work-disclosure__rail::after { position: absolute; bottom: -3px; left: -2px; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; background: color-mix(in srgb, var(--prime) 70%, var(--border-strong)); animation: work-rail-beacon 2.6s ease-in-out infinite; content: ''; }
 .work-disclosure__live { min-width: 0; display: flex; flex-direction: column; }
-/* Live status reads as a quiet activity row, not a capsule: the rail beacon already marks
-   "live", so the row carries only the wave mark, the rotating verb, and the clock. */
+/* Live status reads as a quiet activity row, not a capsule: the pulsing dots, the rotating verb, and the clock. */
 .work-disclosure__status, .streaming-state { position: relative; width: fit-content; min-height: 24px; display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: var(--chat-ui); font-weight: 520; letter-spacing: -.005em; }
 .work-disclosure__status { margin-top: 4px; }
 .work-disclosure.is-running .work-timeline:empty { display: none; }
@@ -117,7 +106,7 @@
 /* Live elapsed clock on running work rows: tabular digits keep the 1-second
    updates from shifting the adjacent dots around. */
 .live-elapsed { color: var(--text-tertiary); font-size: var(--chat-meta); font-weight: 500; font-variant-numeric: tabular-nums; }
-.work-timeline { display: flex; flex-direction: column; gap: 2px; padding: 3px 0 8px 5px; }
+.work-timeline { display: flex; flex-direction: column; gap: 2px; margin-left: 0; padding: 3px 0 8px; }
 .timeline-page, .timeline-page__body:not([hidden]) { display: flex; flex-direction: column; gap: 2px; }
 .timeline-page__body[hidden] { display: none; }
 .timeline-page__toggle { min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-radius: 5px; color: var(--text-tertiary); background: var(--surface-subtle); text-align: left; font-size: var(--chat-meta); }
@@ -131,7 +120,7 @@
 .activity-line--reasoning { padding: 2px 0 8px; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
 .activity-line--reasoning .prose { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .activity-line--reasoning strong { font-weight: inherit; }
-.activity-line__icon { width: 20px; height: 20px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--text-tertiary); }
+.activity-line__icon { width: 14px; height: 20px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--text-tertiary); }
 .activity-line__kind { flex: 0 0 auto; color: var(--text-secondary); font-weight: 540; white-space: nowrap; }
 .activity-line--tool, .activity-line--agent { border-radius: 6px; }
 .activity-line--tool:hover, .activity-line--agent:hover { background: var(--surface-subtle); }
@@ -143,15 +132,15 @@
 .activity-compaction__reason, .activity-compaction__tokens { min-width: 0; overflow: hidden; color: var(--text-tertiary); font-size: var(--chat-meta); text-overflow: ellipsis; white-space: nowrap; }
 .activity-compaction__tokens { margin-left: auto; }
 .activity-line--compaction .activity-tool__state { margin-left: 6px; }
-.activity-compaction__details { max-height: 260px; margin: 0 6px 8px 32px; padding: 8px 10px; overflow: auto; border-left: 2px solid var(--border-strong); color: var(--text-secondary); background: transparent; }
-.activity-compaction__details.is-error { border-left-color: var(--danger); color: var(--danger); }
+.activity-compaction__details { max-height: 260px; margin: 0 6px 8px 20px; padding: 8px 0; overflow: auto; color: var(--text-secondary); background: transparent; }
+.activity-compaction__details.is-error { color: var(--danger); }
 .activity-compaction__details .prose, .activity-agent__details .prose { margin: 0; font-size: var(--chat-ui); line-height: 1.55; }
 .activity-agent__name { min-width: 0; flex: 1; overflow: hidden; color: var(--prime); font-size: var(--chat-meta); text-overflow: ellipsis; white-space: nowrap; }
-.activity-agent__details { margin: 0 6px 8px 32px; padding: 8px 10px; border-left: 2px solid var(--border-strong); color: var(--text-secondary); }
+.activity-agent__details { margin: 0 6px 8px 20px; padding: 8px 0; color: var(--text-secondary); }
 .activity-line--question { color: var(--warning); background: color-mix(in srgb, var(--warning-soft) 62%, transparent); }
 .activity-line--question:hover { background: var(--warning-soft); }
 .activity-line--question .activity-line__icon, .activity-line--question .activity-line__kind, .activity-line--question .activity-tool__state { color: var(--warning); }
-.activity-tool__summary { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 2px 6px; color: inherit; background: transparent; text-align: left; }
+.activity-tool__summary { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; color: inherit; background: transparent; text-align: left; }
 .activity-tool__summary:disabled { opacity: 1; pointer-events: none; }
 .activity-tool__preview { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); background: transparent; border: 0; padding: 0; text-overflow: ellipsis; white-space: nowrap; font: var(--chat-meta)/1.5 var(--chat-mono); }
 .activity-tool__state { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); white-space: nowrap; }
@@ -160,10 +149,10 @@
 .activity-line--tool.is-running .activity-line__kind { color: var(--text); }
 .activity-line.is-done .activity-tool__state { color: var(--success); }
 .activity-line.is-error .activity-tool__state { color: var(--danger); }
-.activity-tool__details { max-height: 260px; margin: 0 6px 8px 32px; overflow: auto; border-left: 2px solid var(--border-strong); background: transparent; color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.55; }
+.activity-tool__details { max-height: 260px; margin: 0 6px 8px 20px; overflow: auto; background: transparent; color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.55; }
 /* Live scrollback: newest lines of a running command, fading out at the top edge. */
-.activity-tool__tail { max-height: calc(5 * 1.55em + 10px); margin: 0 6px 6px 32px; padding: 4px 10px 6px; overflow: hidden; border-left: 2px solid var(--prime); border-radius: 0 6px 6px 0; color: var(--text-secondary); background: var(--canvas); font: var(--chat-meta)/1.55 var(--chat-mono); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); display: flex; flex-direction: column; justify-content: flex-end; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
-.activity-tool__tail.is-error { border-left-color: var(--danger); color: var(--danger); -webkit-mask-image: none; mask-image: none; }
+.activity-tool__tail { max-height: calc(5 * 1.55em + 10px); margin: 0 6px 6px 20px; padding: 4px 10px 6px; overflow: hidden; border-radius: 6px; color: var(--text-secondary); background: var(--canvas); font: var(--chat-meta)/1.55 var(--chat-mono); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); display: flex; flex-direction: column; justify-content: flex-end; animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-tool__tail.is-error { color: var(--danger); -webkit-mask-image: none; mask-image: none; }
 /* Shell calls read as the command itself: `$ npm test`, status on the right. */
 .activity-tool__command { min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); background: transparent; border: 0; padding: 0; text-overflow: ellipsis; white-space: nowrap; font: var(--chat-meta)/1.5 var(--chat-mono); }
 .activity-tool__prompt { color: var(--text-tertiary); user-select: none; }
@@ -171,7 +160,7 @@
 .activity-tool__range { flex: 0 0 auto; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); font-variant-numeric: tabular-nums; }
 .activity-tool__diff-counts { flex: 0 0 auto; display: inline-flex; gap: 4px; font-variant-numeric: tabular-nums; }
 /* Edits show the change itself under the header, sign column first, capped to a preview. */
-.activity-edit-diff { margin: 2px 6px 8px 32px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-edit-diff { margin: 2px 6px 8px 20px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
 .activity-edit-diff__lines { margin: 0; padding: 4px 0; overflow-x: auto; font: var(--chat-meta)/1.55 var(--chat-mono); }
 .activity-edit-diff__line { display: block; min-width: max-content; padding: 0 10px 0 0; color: var(--text-tertiary); white-space: pre; }
 .activity-edit-diff__sign { display: inline-block; width: 18px; text-align: center; user-select: none; }
@@ -184,12 +173,12 @@
 .activity-edit-diff__note { margin: 0; padding: 4px 10px; border-top: 1px solid var(--border); color: var(--text-tertiary); font-size: var(--chat-meta); }
 /* Settled reasoning folds to one quiet line so the work and prose around it lead. */
 .activity-line--reasoning.is-collapsed { padding: 0; font-size: var(--chat-ui); }
-.activity-thought__summary { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; color: var(--text-tertiary); background: transparent; text-align: left; transition: color 120ms ease-out, background-color 120ms ease-out; }
+.activity-thought__summary { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; border-radius: 6px; color: var(--text-tertiary); background: transparent; text-align: left; transition: color 120ms ease-out, background-color 120ms ease-out; }
 .activity-thought__summary:hover { color: var(--text-secondary); background: var(--surface-subtle); }
 .activity-thought__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .activity-thought__summary .activity-line__kind { color: inherit; font-weight: 500; }
 .activity-thought__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
-.activity-thought__body { margin: 0 6px 8px 32px; padding: 2px 10px; border-left: 2px solid var(--border-strong); color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
+.activity-thought__body { margin: 0 6px 8px 20px; padding: 2px 0; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
 .activity-tool__details-toolbar { display: flex; justify-content: flex-end; padding: 3px 4px 0; }
 .activity-tool__copy { min-height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 5px; color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); }
 .activity-tool__copy:hover { color: var(--text-secondary); background: var(--surface-hover); }
@@ -292,11 +281,13 @@
 .streaming-state { margin-top: 10px; }
 .transcript-active-placeholder { align-items: center; }
 .transcript-active-placeholder .streaming-state { margin-top: 0; }
-/* A single ink line in the harness accent; the edge mask lets it enter and leave instead of being clipped. */
-.thinking-dots { width: 18px; min-width: 18px; height: 8px; display: inline-flex; color: color-mix(in srgb, var(--prime) 72%, var(--text-secondary)); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); }
-.thinking-dots svg { width: 18px; height: 8px; display: block; overflow: hidden; pointer-events: none; }
-.thinking-dots path { animation: thinking-wave-slide 1.6s linear infinite; }
-@keyframes thinking-wave-slide { to { transform: translateX(-9px); } }
+/* Three accent dots pulse in a stagger; reduced motion leaves them still at full ink. */
+.thinking-dots { height: 14px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; vertical-align: middle; }
+.thinking-dots__dot { width: 4px; height: 4px; border-radius: 999px; background: var(--prime); animation: thinking-dot-pulse 1.2s ease-in-out infinite; }
+.thinking-dots__dot:nth-child(2) { animation-delay: .18s; }
+.thinking-dots__dot:nth-child(3) { animation-delay: .36s; }
+@keyframes thinking-dot-pulse { 0%, 80%, 100% { opacity: .3; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .thinking-dots__dot { animation: none; } }
 @keyframes live-verb-in { from { opacity: 0; transform: translateY(2px); } }
 @keyframes live-verb-sweep { from { background-position: 100% 0; } to { background-position: 0% 0; } }
 @keyframes work-rail-beacon { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
@@ -351,11 +342,11 @@ article.message--user:last-of-type, .transcript-active-placeholder { animation: 
 /* Back-to-back settled calls of one kind read as one ledger row. */
 .activity-run { position: relative; min-width: 0; border-radius: 6px; color: var(--text-secondary); font-size: var(--chat-ui); line-height: 1.5; }
 .activity-run:hover { background: var(--surface-subtle); }
-.activity-run__summary { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; color: inherit; background: transparent; text-align: left; }
+.activity-run__summary { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; border-radius: 6px; color: inherit; background: transparent; text-align: left; }
 .activity-run__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .activity-run__label { color: var(--text-secondary); font-weight: 540; white-space: nowrap; }
 .activity-run__failed { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); font-size: var(--chat-meta); white-space: nowrap; }
 .activity-run__names { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); font: var(--chat-meta)/1.5 var(--chat-mono); text-overflow: ellipsis; white-space: nowrap; }
 .activity-run__summary .disclosure-caret { margin-left: auto; color: var(--text-tertiary); }
 .activity-run__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
-.activity-run__items { margin-left: 13px; padding-left: 6px; border-left: 1px solid var(--border); animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
+.activity-run__items { margin-left: 20px; animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
