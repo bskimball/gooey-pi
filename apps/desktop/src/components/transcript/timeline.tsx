@@ -132,11 +132,24 @@ function ReasoningPart({ part, live = false }: { part: Extract<MessagePart, { ty
 }
 
 export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
+  const clipId = `thinking-waterline-${useId().replace(/[^\w-]/g, '')}`
+  // Seeded once per mount so concurrent indicators drift out of step and the fin's passes feel unscripted.
+  const [fin] = useState(() => ({
+    duration: `${(4.4 + Math.random() * 1.8).toFixed(2)}s`,
+    delay: `${(-Math.random() * 4).toFixed(2)}s`,
+    reverse: Math.random() < 0.3,
+  }))
   return (
     <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
-      <span className="thinking-dots__dot" />
-      <span className="thinking-dots__dot" />
-      <span className="thinking-dots__dot" />
+      <svg width="24" height="10" viewBox="0 0 24 10" fill="none" aria-hidden="true" focusable="false">
+        <defs><clipPath id={clipId}><rect x="-8" y="0" width="40" height="7" /></clipPath></defs>
+        <g clipPath={`url(#${clipId})`}>
+          <g transform={fin.reverse ? 'matrix(-1 0 0 1 24 0)' : undefined}>
+            <path className="thinking-dots__fin" style={{ animationDuration: fin.duration, animationDelay: fin.delay }} d="M4.4 7.2C3 5.2 2 2.4 1.2 1.8C1.3 3.9 .9 5.6 0 7.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        </g>
+        <path className="thinking-dots__wave" d="M0 7 Q2 4.75 4 7 T8 7 T12 7 T16 7 T20 7 T24 7 T28 7 T32 7" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      </svg>
     </span>
   )
 }

@@ -51,7 +51,9 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('**the workspace**')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('thinking-dots')
-    expect(html.match(/class="thinking-dots__dot"/g)).toHaveLength(3)
+    expect(html).toMatch(/class="thinking-dots"[^>]*><svg/)
+    expect(html.match(/class="thinking-dots__wave"/g)).toHaveLength(1)
+    expect(html.match(/class="thinking-dots__fin"/g)).toHaveLength(1)
   })
 
   it.each([

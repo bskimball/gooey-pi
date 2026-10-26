@@ -1035,7 +1035,6 @@ export const Composer = memo(function Composer({
 								void imageAttachments.ingest(files);
 							}}
 						/>
-						<div className="composer__run-settings">
 						{harness === "pi" ? (
 							<PiModeControl
 								disabled={Boolean(disabled || loading || busy || submitting)}
@@ -1073,7 +1072,6 @@ export const Composer = memo(function Composer({
 								<span className="fast-mode-toggle__label">Fast</span>
 							</button>
 						) : null}
-						</div>
 					</div>
 					<div className="composer__actions">
 						{dictation.state === "connecting" ||

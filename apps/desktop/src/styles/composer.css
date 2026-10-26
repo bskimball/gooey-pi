@@ -1349,20 +1349,6 @@
 	width: 22px;
 	height: 22px;
 }
-/* Mode, model, effort, and fast mode are one run-settings cluster. */
-.composer__run-settings {
-	min-width: 0;
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	padding: 1px;
-	border: 1px solid var(--border);
-	border-radius: 9px;
-	background: var(--surface-subtle);
-}
-.composer__run-settings > * {
-	min-width: 0;
-}
 .composer-queue.is-collapsed {
 	padding-block: 4px;
 }
