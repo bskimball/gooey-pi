@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { RepositoryUseGate } from '../../electron/main/repository-use-gate'
+import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
 
 function deferred(): { promise: Promise<void>; resolve(): void } {
   let resolve!: () => void

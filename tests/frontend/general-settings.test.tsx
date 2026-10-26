@@ -2,8 +2,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { GeneralSettings } from '../../src/pages/settings/GeneralSettings'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { GeneralSettings } from '../../apps/desktop/src/pages/settings/GeneralSettings'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

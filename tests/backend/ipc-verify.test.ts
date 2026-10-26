@@ -13,7 +13,7 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
-import { registerIpc, type IpcRegistration } from '../../electron/main/ipc'
+import { registerIpc, type IpcRegistration } from '../../apps/desktop/electron/main/ipc'
 
 const EXPECTED_URL = 'prime-work://app/'
 
@@ -81,6 +81,111 @@ describe('registerIpc verify gate', () => {
     })
     stubs = services()
     registration = registerIpc(stubs as never, EXPECTED_URL)
+  })
+
+  it('enables a provider and clears only that provider model exclusions', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const catalog = { providers: [{ id: 'provider' }], models: [{ provider: 'provider', key: 'provider/model' }] }
+    const update = vi.fn().mockResolvedValue(undefined)
+    stubs.catalog = { catalog: vi.fn().mockResolvedValue(catalog) }
+    stubs.settings = { get: () => ({ piDisabledProviders: ['provider', 'other'], piDisabledModels: ['provider/model', 'other/model'] }), update }
+    await expect(handlers.get('providers:set-enabled')!(event, 'provider', true)).resolves.toEqual(catalog)
+    expect(update).toHaveBeenCalledWith({ piDisabledProviders: ['other'], piDisabledModels: ['other/model'] })
+    await handlers.get('providers:set-enabled')!(event, 'provider', false)
+    expect(update).toHaveBeenLastCalledWith({ piDisabledProviders: ['other', 'provider'], piDisabledModels: ['other/model', 'provider/model'] })
+    await expect(handlers.get('providers:set-enabled')!(event, 'unknown', true)).rejects.toThrow('Provider was not found')
+    await expect(handlers.get('providers:set-enabled')!(event, 'provider', 'yes')).rejects.toThrow('enabled must be a boolean')
+    registration.dispose()
+  })
+
+  it('routes runtime, update and application actions to their desktop services', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const cases = [
+      ['agent:command', 'agents', 'command', ['runtime', { type: 'abort' }]],
+      ['agent:stop', 'agents', 'stop', ['runtime']],
+      ['agent:list', 'agents', 'list', []],
+      ['updates:get-state', 'updates', 'getState', []],
+      ['updates:check', 'updates', 'check', []],
+      ['updates:download-and-install', 'updates', 'downloadAndInstall', []],
+    ] as const
+    for (const [channel, service, method, args] of cases) {
+      const operation = vi.fn().mockResolvedValue('result')
+      stubs[service] = { [method]: operation }
+      await expect(handlers.get(channel)!(event, ...args)).resolves.toBe('result')
+      expect(operation).toHaveBeenCalledWith(...args)
+    }
+    const refreshHarnesses = vi.fn().mockResolvedValue('refreshed')
+    const popupApplicationMenu = vi.fn()
+    const setTitleBarTheme = vi.fn()
+    Object.assign(stubs, { refreshHarnesses, popupApplicationMenu, setTitleBarTheme })
+    await expect(handlers.get('app:refresh-harnesses')!(event)).resolves.toBe('refreshed')
+    handlers.get('app:popup-menu')!(event, 'file', 10, 20)
+    expect(popupApplicationMenu).toHaveBeenCalledWith(event.sender, 'file', 10, 20)
+    handlers.get('app:set-title-bar-theme')!(event, 'dark')
+    expect(setTitleBarTheme).toHaveBeenCalledWith(event.sender, 'dark')
+    registration.dispose()
+  })
+
+  it('routes project operations to Pi with their arguments intact', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const cases = [
+      ['projects:list-files', 'listFiles', ['/repo']],
+      ['projects:add', 'add', []],
+      ['projects:grant-inferred', 'grantInferred', ['/repo']],
+      ['projects:remove', 'remove', ['project']],
+      ['projects:touch', 'touch', ['project']],
+      ['projects:pin', 'setPinned', ['project', true]],
+      ['projects:update-scripts', 'updateScripts', ['project', { run: 'npm test' }]],
+      ['projects:mark-setup-started', 'markSetupStarted', ['project', 'setup']],
+      ['projects:finish-setup', 'finishSetup', ['project', 'setup', 0]],
+    ] as const
+    for (const [channel, method, args] of cases) {
+      const operation = vi.fn().mockResolvedValue('result')
+      stubs.projects = { [method]: operation }
+      await expect(handlers.get(channel)!(event, ...args)).resolves.toBe('result')
+      expect(operation).toHaveBeenCalledWith(...args)
+    }
+    const list = vi.fn().mockResolvedValue(['checkout'])
+    const execute = vi.fn().mockResolvedValue('executed')
+    stubs.checkouts = { pi: { list, execute } }
+    await expect(handlers.get('projects:list-checkouts')!(event, 'project')).resolves.toEqual(['checkout'])
+    await expect(handlers.get('projects:execute-checkout')!(event, 'project', 'action')).resolves.toBe('executed')
+    expect(list).toHaveBeenCalledWith('project')
+    expect(execute).toHaveBeenCalledWith('project', 'action')
+    registration.dispose()
+  })
+
+  it('authorizes session paths before creation, reading, renaming and archiving', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const authorizePath = vi.fn().mockResolvedValue('/authorized')
+    const requireSessionPath = vi.fn().mockResolvedValue('/session')
+    const create = vi.fn().mockResolvedValue('created')
+    const read = vi.fn().mockResolvedValue('transcript')
+    const rename = vi.fn().mockResolvedValue(true)
+    const archive = vi.fn().mockResolvedValue(true)
+    const closeForSession = vi.fn()
+    const killForSession = vi.fn().mockResolvedValue(undefined)
+    stubs.projects = { authorizePath }
+    stubs.sessions = { requireSessionPath, create, read, rename, archive }
+    stubs.browser = { closeForSession }
+    stubs.terminals = { killForSession }
+    await expect(handlers.get('sessions:create')!(event, '/repo')).resolves.toBe('created')
+    expect(create).toHaveBeenCalledWith('/authorized')
+    await expect(handlers.get('sessions:read')!(event, '/session')).resolves.toBe('transcript')
+    await expect(handlers.get('sessions:follow-up')!(event, '/session')).resolves.toBe(false)
+    await expect(handlers.get('sessions:rename')!(event, '/session', 'Title')).resolves.toBe(true)
+    expect(rename).toHaveBeenCalledWith('/session', 'Title')
+    await expect(handlers.get('sessions:archive')!(event, '/session', true)).resolves.toBe(true)
+    expect(closeForSession).toHaveBeenCalledWith('/session')
+    expect(killForSession).toHaveBeenCalledWith('/session')
+    requireSessionPath.mockRejectedValue(new Error('denied'))
+    await expect(handlers.get('sessions:archive')!(event, '/denied', true)).rejects.toThrow('denied')
+    expect(archive).toHaveBeenCalledOnce()
+    registration.dispose()
   })
 
   it('allows an authorized main-frame sender at the trusted URL', () => {

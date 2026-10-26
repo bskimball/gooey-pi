@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentEventForwarder } from '../../electron/main/agent-rpc'
+import { AgentEventForwarder } from '../../apps/desktop/electron/main/agent-rpc'
 
 // Complements tests/backend/security.test.ts, which already covers the
 // envelope byte bound, aggregate window byte bound for normal events, and

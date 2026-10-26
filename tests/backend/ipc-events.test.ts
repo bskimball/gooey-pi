@@ -17,7 +17,7 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
-import { registerIpc } from '../../electron/main/ipc'
+import { registerIpc } from '../../apps/desktop/electron/main/ipc'
 
 function serviceStub(): Record<string, unknown> {
   return new Proxy({}, { get: () => vi.fn(async () => undefined) })

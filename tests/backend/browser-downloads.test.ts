@@ -2,7 +2,7 @@ import { basename, dirname, join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import type { DownloadItem, Event, WebContents } from 'electron'
-import { automaticDownloadPath, BrowserDownloadGuard } from '../../electron/main/browser-downloads'
+import { automaticDownloadPath, BrowserDownloadGuard } from '../../apps/desktop/electron/main/browser-downloads'
 
 class FakeDownload extends EventEmitter {
   received = 0

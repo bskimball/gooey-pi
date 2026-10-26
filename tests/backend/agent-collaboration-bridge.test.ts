@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentCollaborationBridge } from '../../electron/main/collaboration/agent-bridge'
-import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from '../../electron/main/collaboration/message-envelope'
-import type { AgentRpcManager } from '../../electron/main/agent-rpc'
-import type { HarnessId, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../src/types/api'
+import { AgentCollaborationBridge } from '../../apps/desktop/electron/main/collaboration/agent-bridge'
+import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
+import type { AgentRpcManager } from '../../apps/desktop/electron/main/agent-rpc'
+import type { HarnessId, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const bridges: AgentCollaborationBridge[] = []
 configureGooeyPiAgentMessageSigning(Buffer.alloc(32, 7))

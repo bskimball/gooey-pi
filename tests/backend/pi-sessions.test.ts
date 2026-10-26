@@ -4,16 +4,16 @@ import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SessionService } from '../../electron/main/sessions'
-import { METADATA_VERIFY_TAIL_BYTES } from '../../electron/main/sessions/metadata'
+import { SessionService } from '../../apps/desktop/electron/main/sessions'
+import { METADATA_VERIFY_TAIL_BYTES } from '../../apps/desktop/electron/main/sessions/metadata'
 import {
   appendPiSessionInfo,
   createPiSessionMetadataReader,
   isPiSessionPath,
   piSessionServiceOptions,
   piTimestampFromSessionName,
-} from '../../electron/main/sessions/pi'
-import { JsonStateStore } from '../../electron/main/store'
+} from '../../apps/desktop/electron/main/sessions/pi'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 

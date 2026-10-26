@@ -8,7 +8,7 @@ import {
   restoreComposerDraft,
   saveComposerDraft,
   takeComposerDraft,
-} from '../../src/lib/composer-draft'
+} from '../../apps/desktop/src/lib/composer-draft'
 
 afterEach(() => {
   window.sessionStorage.clear()

@@ -19,9 +19,9 @@ const electron = vi.hoisted(() => ({
 
 vi.mock('electron', () => electron)
 
-import { activeShutdownWork, confirmAppClose, hardenRenderer, isMacWindowCloseShortcut, loadInitialRenderer, mainWindowChromeOptions, resolveRendererAssetPath, routeAllWindowsClosed, settleShutdown, shutdownPrompt, startupFailureDialog } from '../../electron/main/index'
-import { StateMigrationError, UnsupportedStateVersionError } from '../../electron/main/store'
-import type { RuntimeInfo } from '../../src/types/api'
+import { activeShutdownWork, confirmAppClose, hardenRenderer, isMacWindowCloseShortcut, loadInitialRenderer, mainWindowChromeOptions, resolveRendererAssetPath, routeAllWindowsClosed, settleShutdown, shutdownPrompt, startupFailureDialog } from '../../apps/desktop/electron/main/index'
+import { StateMigrationError, UnsupportedStateVersionError } from '../../apps/desktop/electron/main/store'
+import type { RuntimeInfo } from '../../apps/desktop/src/types/api'
 import type { BrowserWindow } from 'electron'
 
 type Handler = (...args: never[]) => void

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
-import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../src/types/api'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
-import { runBashCommand, runExtensionCommandNow } from '../../src/lib/runtime-commands'
-import { parseRuntimeCommands } from '../../src/lib/composer-commands'
+import { runBashCommand, runExtensionCommandNow } from '../../apps/desktop/src/lib/runtime-commands'
+import { parseRuntimeCommands } from '../../apps/desktop/src/lib/composer-commands'
 
 describe('runtime command response contracts', () => {
   it('validates runtime command listings at the bridge boundary', () => {

@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ModelPicker } from '../../src/components/ModelPicker'
-import { groupModelsByProvider } from '../../src/hooks/useProviderCatalog'
-import type { PrimeModelDescriptor, PrimeProviderDescriptor } from '../../src/types/api'
+import { ModelPicker } from '../../apps/desktop/src/components/ModelPicker'
+import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
+import type { PrimeModelDescriptor, PrimeProviderDescriptor } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

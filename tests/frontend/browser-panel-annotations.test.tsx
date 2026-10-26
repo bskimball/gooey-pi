@@ -3,10 +3,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BrowserPanel } from '../../src/components/inspector/BrowserPanel'
-import { useBrowserAnnotations } from '../../src/hooks/useBrowserAnnotations'
-import type { BrowserAnnotationsApi } from '../../src/hooks/useBrowserAnnotations'
-import type { BrowserAnnotation } from '../../src/types/api'
+import { BrowserPanel } from '../../apps/desktop/src/components/inspector/BrowserPanel'
+import { useBrowserAnnotations } from '../../apps/desktop/src/hooks/useBrowserAnnotations'
+import type { BrowserAnnotationsApi } from '../../apps/desktop/src/hooks/useBrowserAnnotations'
+import type { BrowserAnnotation } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

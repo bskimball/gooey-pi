@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
   Menu: electron,
 }))
 
-import { buildApplicationMenuTemplate, installApplicationMenu } from '../../electron/main/application-menu'
+import { buildApplicationMenuTemplate, installApplicationMenu } from '../../apps/desktop/electron/main/application-menu'
 
 function submenu(item: ReturnType<typeof buildApplicationMenuTemplate>[number] | undefined) {
   return item && Array.isArray(item.submenu) ? item.submenu : []

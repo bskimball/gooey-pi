@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ExtensionBrowserBridge } from '../../electron/main/browser/extension-bridge'
-import { callMethod, probeBroker } from '../../electron/main/browser/extension-bridge-client'
+import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
+import { callMethod, probeBroker } from '../../apps/desktop/electron/main/browser/extension-bridge-client'
 
 const bridges: ExtensionBrowserBridge[] = []
 afterEach(async () => { await Promise.all(bridges.splice(0).map(bridge => bridge.stop())) })

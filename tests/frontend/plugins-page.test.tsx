@@ -2,9 +2,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOCAL_MCP_STATE_UNAVAILABLE_DETAIL } from '../../src/lib/mcp-policy'
-import { PluginsPage } from '../../src/pages/PluginsPage'
-import type { SkillRecord } from '../../src/types/api'
+import { LOCAL_MCP_STATE_UNAVAILABLE_DETAIL } from '../../apps/desktop/src/lib/mcp-policy'
+import { PluginsPage } from '../../apps/desktop/src/pages/PluginsPage'
+import type { SkillRecord } from '../../apps/desktop/src/types/api'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

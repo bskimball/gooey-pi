@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Composer } from '../../src/components/Composer'
-import type { CheckoutCatalog, GitWorktree } from '../../src/types/api'
+import { Composer } from '../../apps/desktop/src/components/Composer'
+import type { CheckoutCatalog, GitWorktree } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

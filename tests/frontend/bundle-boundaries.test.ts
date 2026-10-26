@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('renderer bundle boundaries', () => {
-  const appSource = readFileSync('src/App.tsx', 'utf8')
-  const terminalStyles = readFileSync('src/styles/terminal.css', 'utf8')
+  const appSource = readFileSync('apps/desktop/src/App.tsx', 'utf8')
+  const terminalStyles = readFileSync('apps/desktop/src/styles/terminal.css', 'utf8')
 
   it('keeps Transcript and its Markdown graph out of the initial App module graph', () => {
     expect(appSource).toContain("const Transcript = lazy(() => import('@/components/Transcript')")

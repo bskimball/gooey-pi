@@ -3,7 +3,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MarkdownText, STREAMING_PARSE_INTERVAL_MS } from '../../src/components/MarkdownText'
+import { MarkdownText, STREAMING_PARSE_INTERVAL_MS } from '../../apps/desktop/src/components/MarkdownText'
 
 describe('streaming Markdown rendering', () => {
   let container: HTMLDivElement

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import piWorkFastMode, { type PiFastModeExtensionApi } from '../../assets/extensions/pi-work-fast-mode'
+import piWorkFastMode, { type PiFastModeExtensionApi } from '../../apps/desktop/assets/extensions/pi-work-fast-mode'
 
 type ProviderHandler = (event: { payload: unknown }, context: { model?: { provider?: unknown; id?: unknown; api?: unknown } }) => unknown
 type CommandHandler = (args: string) => void | Promise<void>

@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { CURRENT_DESKTOP_STATE_FILENAME, LEGACY_DESKTOP_STATE_FILENAME } from '../../electron/main/store'
+import { CURRENT_DESKTOP_STATE_FILENAME, LEGACY_DESKTOP_STATE_FILENAME } from '../../apps/desktop/electron/main/store'
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -1568,7 +1568,7 @@ test.describe('Prime Work desktop smoke', () => {
       message: 'Ask me two questions',
     })
     const runtimeArgs = JSON.parse(readFileSync(join(fixtureRoot, 'pi-runtime-args.json'), 'utf8')) as string[]
-    expect(runtimeArgs).toContain(join(process.cwd(), 'assets', 'extensions', 'omp-work-ask-user.ts'))
+    expect(runtimeArgs).toContain(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', 'omp-work-ask-user.ts'))
     const worked = page.locator('.work-disclosure__button')
     await expect(worked).toContainText(/^Worked for /)
     await expect(worked).toHaveAttribute('aria-expanded', 'false')

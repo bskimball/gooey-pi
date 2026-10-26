@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { comparePaths, createAdmissionQueue, createSingleFlight, mapLimit } from '../../electron/main/lib/async'
+import { comparePaths, createAdmissionQueue, createSingleFlight, mapLimit } from '../../apps/desktop/electron/main/lib/async'
 
 const tick = () => new Promise<void>((resolveTick) => setTimeout(resolveTick, 0))
 

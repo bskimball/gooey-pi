@@ -3,10 +3,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Composer } from '../../src/components/Composer'
-import { useDictation } from '../../src/hooks/useDictation'
+import { Composer } from '../../apps/desktop/src/components/Composer'
+import { useDictation } from '../../apps/desktop/src/hooks/useDictation'
 
-vi.mock('../../src/hooks/useDictation', () => ({ useDictation: vi.fn() }))
+vi.mock('../../apps/desktop/src/hooks/useDictation', () => ({ useDictation: vi.fn() }))
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const start = vi.fn()

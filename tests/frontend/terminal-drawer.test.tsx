@@ -3,8 +3,8 @@
 import { act, type RefObject } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TerminalDrawer, type TerminalDrawerHandle } from '../../src/components/TerminalDrawer'
-import type { PrimeWorkApi, TerminalExitEvent } from '../../src/types/api'
+import { TerminalDrawer, type TerminalDrawerHandle } from '../../apps/desktop/src/components/TerminalDrawer'
+import type { PrimeWorkApi, TerminalExitEvent } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

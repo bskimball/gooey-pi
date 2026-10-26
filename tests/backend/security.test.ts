@@ -2,12 +2,12 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AgentEventForwarder, AgentRpcManager } from '../../electron/main/agent-rpc'
-import { runProcess, stopChildProcesses } from '../../electron/main/process-utils'
-import { PluginService } from '../../electron/main/plugins'
-import { ProjectService } from '../../electron/main/projects'
-import { JsonStateStore } from '../../electron/main/store'
-import type { SessionRecord } from '../../src/types/api'
+import { AgentEventForwarder, AgentRpcManager } from '../../apps/desktop/electron/main/agent-rpc'
+import { runProcess, stopChildProcesses } from '../../apps/desktop/electron/main/process-utils'
+import { PluginService } from '../../apps/desktop/electron/main/plugins'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
 
 const dirs: string[] = []

@@ -3,11 +3,11 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useWorkspaceRuntime } from '../../src/hooks/useWorkspaceRuntime'
-import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { createSingleFlightAdmission } from '../../src/lib/workspace'
-import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../src/types/api'
+import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRuntime'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { createSingleFlightAdmission } from '../../apps/desktop/src/lib/workspace'
+import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const project: ProjectRecord = {
   id: 'project', harness: 'pi', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',

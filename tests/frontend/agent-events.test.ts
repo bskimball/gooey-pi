@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_EVENT_QUEUE_LIMIT, admitAgentEvent, contextUsageFromEvent, sessionUsageFromEvent, type PendingAgentEvent } from '../../src/app/agent-events'
-import { replayPrimeEvents } from '../../src/lib/events'
-import { contextDialLabel, formatSessionCost, formatSessionTokens } from '../../src/lib/format-cost'
+import { AGENT_EVENT_QUEUE_LIMIT, admitAgentEvent, contextUsageFromEvent, sessionUsageFromEvent, type PendingAgentEvent } from '../../apps/desktop/src/app/agent-events'
+import { replayPrimeEvents } from '../../apps/desktop/src/lib/events'
+import { contextDialLabel, formatSessionCost, formatSessionTokens } from '../../apps/desktop/src/lib/format-cost'
 
 describe('context usage events', () => {
   it('accepts bounded authoritative usage and preserves post-compaction unknowns', () => {

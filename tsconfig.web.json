@@ -18,7 +18,7 @@
     "noEmit": true,
     "paths": {
       "@/*": [
-        "./src/*"
+        "./apps/desktop/src/*"
       ]
     },
     "types": [
@@ -26,7 +26,7 @@
     ]
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx"
+    "apps/desktop/src/**/*.ts",
+    "apps/desktop/src/**/*.tsx"
   ]
 }

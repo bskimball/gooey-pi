@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AgentScheduleBridge } from '../../electron/main/schedules/agent-bridge'
-import { AutomationService } from '../../electron/main/schedules/service'
-import { JsonStateStore } from '../../electron/main/store'
+import { AgentScheduleBridge } from '../../apps/desktop/electron/main/schedules/agent-bridge'
+import { AutomationService } from '../../apps/desktop/electron/main/schedules/service'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 const bridges: AgentScheduleBridge[] = []

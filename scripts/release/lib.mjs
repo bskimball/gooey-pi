@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, lstatSync, readFileSync, readdirSync
 import { createRequire } from 'node:module'
 import { dirname, join, posix, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SHIPPED_EXTENSION_FILENAMES } from '../../electron/main/extension-manifest.ts'
+import { SHIPPED_EXTENSION_FILENAMES } from '../../apps/desktop/electron/main/extension-manifest.ts'
 
 const localRequire = createRequire(import.meta.url)
 const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url))

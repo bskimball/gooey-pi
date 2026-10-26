@@ -2,11 +2,11 @@
 import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { VoiceSettings } from '../../src/pages/settings/VoiceSettings'
-import type { AppSettings, PrimeWorkApi, VoiceCredentialStatus } from '../../src/types/api'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { VoiceSettings } from '../../apps/desktop/src/pages/settings/VoiceSettings'
+import type { AppSettings, PrimeWorkApi, VoiceCredentialStatus } from '../../apps/desktop/src/types/api'
 
-vi.mock('../../src/components/ui', () => ({
+vi.mock('../../apps/desktop/src/components/ui', () => ({
   Modal: ({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) => <div role="dialog" aria-label={title}>{children}{footer}</div>,
 }))
 

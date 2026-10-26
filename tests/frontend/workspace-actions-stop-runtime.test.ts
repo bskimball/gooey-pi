@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
-import type { PrimeWorkApi, RuntimeInfo, TranscriptMessage } from '../../src/types/api'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import type { PrimeWorkApi, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 interface Deferred<T> {
   promise: Promise<T>

@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createClassifier } from '../../browser-agent/classifier'
+import { createClassifier } from '../../apps/desktop/browser-agent/classifier'
 
 const home = vi.hoisted(() => ({ directory: '' }))
 vi.mock('node:os', async (importOriginal) => ({ ...await importOriginal<typeof import('node:os')>(), homedir: () => home.directory }))

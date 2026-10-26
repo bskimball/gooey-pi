@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appShortcutForKey, createAppKeydownHandler, isOverlayOpen, type AppShortcutAction } from '../../src/lib/app-shortcuts'
+import { appShortcutForKey, createAppKeydownHandler, isOverlayOpen, type AppShortcutAction } from '../../apps/desktop/src/lib/app-shortcuts'
 
 function installHandler() {
   const calls: AppShortcutAction[] = []

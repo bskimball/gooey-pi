@@ -6,8 +6,8 @@ import {
   reconcileTranscriptMessages,
   reconciliationMatches,
   type TranscriptReconciliationMarker,
-} from '../../src/app/agent-events'
-import type { TranscriptMessage } from '../../src/types/api'
+} from '../../apps/desktop/src/app/agent-events'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const marker: TranscriptReconciliationMarker = {
   generation: 7,

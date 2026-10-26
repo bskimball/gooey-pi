@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { WorkTimeline } from '../../src/components/transcript/timeline'
-import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE } from '../../src/components/transcript/TimelinePage'
-import type { MessagePart } from '../../src/types/api'
+import { WorkTimeline } from '../../apps/desktop/src/components/transcript/timeline'
+import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE } from '../../apps/desktop/src/components/transcript/TimelinePage'
+import type { MessagePart } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let container: HTMLDivElement

@@ -1,8 +1,8 @@
 import { request as httpRequest } from 'node:http'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentBrowserBridge } from '../../electron/main/browser/agent-bridge'
-import type { AgentBrowserService } from '../../electron/main/browser/agent-service'
+import { AgentBrowserBridge } from '../../apps/desktop/electron/main/browser/agent-bridge'
+import type { AgentBrowserService } from '../../apps/desktop/electron/main/browser/agent-service'
 import { waitUntil } from '../helpers/wait'
 
 class TestAgentBrowserBridge extends AgentBrowserBridge {

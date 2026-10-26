@@ -8,8 +8,8 @@ import {
   annotationTeardownScript,
   boundInnerText,
   buildSelectorPath,
-} from '../../src/lib/annotation-picker'
-import { sanitizeCapturedElement } from '../../src/lib/browser-annotations'
+} from '../../apps/desktop/src/lib/annotation-picker'
+import { sanitizeCapturedElement } from '../../apps/desktop/src/lib/browser-annotations'
 
 type AnnotatorWindow = Window & { __primeAnnotator?: { take(): string | null } }
 

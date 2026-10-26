@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { blockingExtensionUiRequestId, parseExtensionUiRequest } from '../../src/lib/extension-ui'
-import { parsePiFusionPairStatus, parsePiModeCommand, piModeFromCommand, piModeFromStatusText } from '../../src/lib/harness'
-import { pendingExtensionUiForRuntime, type PendingExtensionUi } from '../../src/hooks/useExtensionUi'
+import { blockingExtensionUiRequestId, parseExtensionUiRequest } from '../../apps/desktop/src/lib/extension-ui'
+import { parsePiFusionPairStatus, parsePiModeCommand, piModeFromCommand, piModeFromStatusText } from '../../apps/desktop/src/lib/harness'
+import { pendingExtensionUiForRuntime, type PendingExtensionUi } from '../../apps/desktop/src/hooks/useExtensionUi'
 
 describe('extension UI request parsing', () => {
   it('accepts a bounded multiple-choice request', () => {

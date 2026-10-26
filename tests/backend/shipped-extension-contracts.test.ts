@@ -2,9 +2,9 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EXTENSION_INJECTIONS, SHIPPED_EXTENSION_FILENAMES, type ExtensionInjection } from '../../electron/main/extension-manifest'
-import type { OmpExtensionApi } from '../../assets/extensions/omp-work-browser'
-import type { PiFastModeExtensionApi } from '../../assets/extensions/pi-work-fast-mode'
+import { EXTENSION_INJECTIONS, SHIPPED_EXTENSION_FILENAMES, resolveExtensionPath, type ExtensionInjection } from '../../apps/desktop/electron/main/extension-manifest'
+import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-browser'
+import type { PiFastModeExtensionApi } from '../../apps/desktop/assets/extensions/pi-work-fast-mode'
 
 type Registration = { kind: 'tool' | 'command' | 'event'; name: string }
 
@@ -110,7 +110,7 @@ async function loadExtension(injection: ExtensionInjection, configured: boolean)
     vi.stubEnv(variables[0], 'http://127.0.0.1:1/')
     vi.stubEnv(variables[1], 'inert-test-token')
   }
-  const url = pathToFileURL(join(process.cwd(), 'assets', 'extensions', injection.filename)).href
+  const url = pathToFileURL(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', injection.filename)).href
   return (await import(url)).default as (api: object) => void | Promise<void>
 }
 
@@ -120,6 +120,14 @@ afterEach(() => {
 })
 
 describe('shipped extension contracts', () => {
+  it('resolves monorepo development assets without changing fixture or packaged roots', () => {
+    const filename = SHIPPED_EXTENSION_FILENAMES[0]
+    const context = { isPackaged: false, appPath: process.cwd(), resourcesPath: '/packaged/resources' }
+    expect(resolveExtensionPath(filename, context)).toBe(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', filename))
+    expect(resolveExtensionPath(filename, { ...context, appPath: '/synthetic/app' })).toBe(join('/synthetic/app', 'assets', 'extensions', filename))
+    expect(resolveExtensionPath(filename, { ...context, isPackaged: true })).toBe(join(context.resourcesPath, 'extensions', filename))
+  })
+
   it('initializes every manifest injection against its genuine host surface', async () => {
     for (const filename of SHIPPED_EXTENSION_FILENAMES) {
       expect(expectedRegistrations[filename], `Missing registration contract for ${filename}`).toBeDefined()
@@ -165,7 +173,7 @@ describe('shipped extension contracts', () => {
   })
 
   it('derives the shipped inventory from the actual extension directory', () => {
-    const actual = readdirSync(join(process.cwd(), 'assets', 'extensions'), { withFileTypes: true })
+    const actual = readdirSync(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions'), { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
       .map((entry) => entry.name)
       .sort()

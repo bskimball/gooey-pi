@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createAssistantTurnCoalescer } from '../../src/components/transcript/grouping'
-import type { TranscriptMessage } from '../../src/types/api'
+import { createAssistantTurnCoalescer } from '../../apps/desktop/src/components/transcript/grouping'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const message = (id: string, role: TranscriptMessage['role'], text = id): TranscriptMessage => ({
   id, role, timestamp: 100, parts: [{ type: 'text', text }],

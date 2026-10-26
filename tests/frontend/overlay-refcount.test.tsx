@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CommandPalette } from '../../src/components/CommandPalette'
-import { Modal } from '../../src/components/ui'
+import { CommandPalette } from '../../apps/desktop/src/components/CommandPalette'
+import { Modal } from '../../apps/desktop/src/components/ui'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

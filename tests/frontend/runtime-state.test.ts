@@ -6,8 +6,8 @@ import {
   gitStatusForWorkspace,
   newSessionProject,
   selectStartupWorkspace,
-} from '../../src/lib/workspace'
-import type { ProjectRecord, RuntimeInfo, SessionRecord } from '../../src/types/api'
+} from '../../apps/desktop/src/lib/workspace'
+import type { ProjectRecord, RuntimeInfo, SessionRecord } from '../../apps/desktop/src/types/api'
 
 const project = (id: string, folders: string[], pinned = false): ProjectRecord => ({
   id,

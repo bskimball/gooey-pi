@@ -3,11 +3,11 @@
 import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import App from '../../src/App'
-import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../src/hooks/useBrowserAnnotations'
-import type { InspectorProps } from '../../src/components/Inspector'
-import { SpecialistsPanel } from '../../src/components/inspector/SpecialistsPanel'
-import type { TranscriptMessage } from '../../src/types/api'
+import App from '../../apps/desktop/src/App'
+import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../apps/desktop/src/hooks/useBrowserAnnotations'
+import type { InspectorProps } from '../../apps/desktop/src/components/Inspector'
+import { SpecialistsPanel } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -15,8 +15,8 @@ const observed = vi.hoisted(() => ({ inspectorProps: [] as unknown[], changesPan
 
 // Wraps the memoized Inspector, so every App render is observed even when the
 // memo (correctly) skips the inspector subtree.
-vi.mock('../../src/components/Inspector', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/components/Inspector')>()
+vi.mock('../../apps/desktop/src/components/Inspector', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apps/desktop/src/components/Inspector')>()
   return {
     ...actual,
     Inspector(props: InspectorProps) {
@@ -28,8 +28,8 @@ vi.mock('../../src/components/Inspector', async (importOriginal) => {
 
 // Rendered inside the memo, so its render count is exactly the number of times
 // the memo let a re-render through on the changes tab.
-vi.mock('../../src/components/inspector/ChangesPanel', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/components/inspector/ChangesPanel')>()
+vi.mock('../../apps/desktop/src/components/inspector/ChangesPanel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apps/desktop/src/components/inspector/ChangesPanel')>()
   return {
     ...actual,
     ChangesPanel(props: Parameters<typeof actual.ChangesPanel>[0]) {
@@ -68,7 +68,7 @@ const toggleSidebar = async () => act(async () => { window.dispatchEvent(new Key
 
 const renderApp = async () => {
   // Resolve the lazy inspector chunk up front so its Suspense boundary settles on mount.
-  await import('../../src/components/Inspector')
+  await import('../../apps/desktop/src/components/Inspector')
   await act(async () => { root.render(<App />) })
   await act(async () => {})
 }

@@ -2,9 +2,9 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentRpcManager, PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
-import type { ProviderCatalog } from '../../electron/main/agent-rpc'
-import type { PrimeModelDescriptor } from '../../src/types/api'
+import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/main/agent-rpc'
+import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
+import type { PrimeModelDescriptor } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
 
 const dirs: string[] = []

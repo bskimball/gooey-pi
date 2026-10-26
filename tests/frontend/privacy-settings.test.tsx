@@ -2,9 +2,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { PrivacySettings } from '../../src/pages/settings/PrivacySettings'
-import { HARNESS_IDS, type HarnessId } from '../../src/types/api'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { PrivacySettings } from '../../apps/desktop/src/pages/settings/PrivacySettings'
+import { HARNESS_IDS, type HarnessId } from '../../apps/desktop/src/types/api'
 
 const TELEMETRY_VALUES = [false, true] as const
 const HARNESS_TELEMETRY_CASES = HARNESS_IDS.flatMap((harness) => (

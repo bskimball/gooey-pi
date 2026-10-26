@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CheckoutService } from '../../electron/main/checkouts'
-import { GitService } from '../../electron/main/git'
-import { ProjectService } from '../../electron/main/projects'
-import { RepositoryUseGate } from '../../electron/main/repository-use-gate'
-import { JsonStateStore } from '../../electron/main/store'
-import type { CheckoutStrategy } from '../../src/types/api'
+import { CheckoutService } from '../../apps/desktop/electron/main/checkouts'
+import { GitService } from '../../apps/desktop/electron/main/git'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { CheckoutStrategy } from '../../apps/desktop/src/types/api'
 
 vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() } }))
 

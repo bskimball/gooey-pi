@@ -3,12 +3,12 @@ import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { AgentBrowserService } from "../../electron/main/browser/agent-service";
-import { ExtensionBrowserBridge } from "../../electron/main/browser/extension-bridge";
+import { AgentBrowserService } from "../../apps/desktop/electron/main/browser/agent-service";
+import { ExtensionBrowserBridge } from "../../apps/desktop/electron/main/browser/extension-bridge";
 import type {
 	AgentBrowserPointerEvent,
 	AgentBrowserState,
-} from "../../src/types/api";
+} from "../../apps/desktop/src/types/api";
 
 const sessionA = resolve("/sessions/a.jsonl");
 const sessionB = resolve("/sessions/b.jsonl");

@@ -4,15 +4,15 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { Transcript } from '../../src/components/Transcript'
-import { LiveElapsed, LiveWorkVerb } from '../../src/components/transcript/timeline'
-import { replayPrimeEvents } from '../../src/lib/events/reduce'
-import type { TranscriptMessage } from '../../src/types/api'
+import { Transcript } from '../../apps/desktop/src/components/Transcript'
+import { LiveElapsed, LiveWorkVerb } from '../../apps/desktop/src/components/transcript/timeline'
+import { replayPrimeEvents } from '../../apps/desktop/src/lib/events/reduce'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock('../../src/components/ui', async () => {
-  const actual = await vi.importActual<typeof import('../../src/components/ui')>('../../src/components/ui')
+vi.mock('../../apps/desktop/src/components/ui', async () => {
+  const actual = await vi.importActual<typeof import('../../apps/desktop/src/components/ui')>('../../apps/desktop/src/components/ui')
   const { createElement: element } = await import('react')
   return { ...actual, PiMark: ({ size = 24 }: { size?: number }) => element('span', { className: 'pi-mark', style: { width: size, height: size } }) }
 })

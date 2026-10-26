@@ -4,16 +4,16 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { HarnessId } from '../../src/types/api'
-import { HARNESS_SHORT_NAMES } from '../../src/lib/harness'
-import App from '../../src/App'
+import type { HarnessId } from '../../apps/desktop/src/types/api'
+import { HARNESS_SHORT_NAMES } from '../../apps/desktop/src/lib/harness'
+import App from '../../apps/desktop/src/App'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const harnessState = vi.hoisted(() => ({ activeHarness: 'pi' as HarnessId }))
 
-vi.mock('../../src/hooks/useAppSettings', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/hooks/useAppSettings')>()
+vi.mock('../../apps/desktop/src/hooks/useAppSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apps/desktop/src/hooks/useAppSettings')>()
   return {
     ...actual,
     useAppSettings(options: Parameters<typeof actual.useAppSettings>[0]) {

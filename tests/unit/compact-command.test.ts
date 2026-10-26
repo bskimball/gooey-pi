@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCompactCommand } from '../../src/lib/composer-commands'
+import { parseCompactCommand } from '../../apps/desktop/src/lib/composer-commands'
 
 describe('parseCompactCommand', () => {
   it('parses bare /compact command', () => {

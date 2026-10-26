@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChangesCard } from '../../src/components/ChangesCard'
-import { ChangesPanel } from '../../src/components/inspector/ChangesPanel'
-import { INSPECTOR_DEFAULT, INSPECTOR_MIN, usePanelLayout } from '../../src/hooks/usePanelLayout'
+import { ChangesCard } from '../../apps/desktop/src/components/ChangesCard'
+import { ChangesPanel } from '../../apps/desktop/src/components/inspector/ChangesPanel'
+import { INSPECTOR_DEFAULT, INSPECTOR_MIN, usePanelLayout } from '../../apps/desktop/src/hooks/usePanelLayout'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

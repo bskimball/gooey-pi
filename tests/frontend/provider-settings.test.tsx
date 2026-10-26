@@ -2,9 +2,9 @@
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useProviderCatalog } from '../../src/hooks/useProviderCatalog'
-import { ProviderSettings } from '../../src/pages/settings/ProviderSettings'
-import type { HarnessId, PrimeModelCatalog, PrimeWorkApi, RuntimeInfo } from '../../src/types/api'
+import { useProviderCatalog } from '../../apps/desktop/src/hooks/useProviderCatalog'
+import { ProviderSettings } from '../../apps/desktop/src/pages/settings/ProviderSettings'
+import type { HarnessId, PrimeModelCatalog, PrimeWorkApi, RuntimeInfo } from '../../apps/desktop/src/types/api'
 
 const model = {
   key: 'openai-codex/gpt-5.6', provider: 'openai-codex', id: 'gpt-5.6', name: 'GPT-5.6', reasoning: true,

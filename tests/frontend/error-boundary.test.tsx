@@ -3,10 +3,10 @@
 import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ErrorBoundary } from '../../src/components/ErrorBoundary'
-import { Transcript } from '../../src/components/Transcript'
-import { saveComposerDraftFromDom, takeComposerDraft } from '../../src/lib/composer-draft'
-import type { TranscriptMessage } from '../../src/types/api'
+import { ErrorBoundary } from '../../apps/desktop/src/components/ErrorBoundary'
+import { Transcript } from '../../apps/desktop/src/components/Transcript'
+import { saveComposerDraftFromDom, takeComposerDraft } from '../../apps/desktop/src/lib/composer-draft'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -114,7 +114,7 @@ describe('composer draft preservation', () => {
     saveComposerDraftFromDom()
     composer.remove()
 
-    const { Composer } = await import('../../src/components/Composer')
+    const { Composer } = await import('../../apps/desktop/src/components/Composer')
     await act(async () => {
       root.render(<Composer
         busy={false}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { sortProjects } from '../../src/lib/project-order'
-import type { ProjectRecord } from '../../src/types/api'
+import { sortProjects } from '../../apps/desktop/src/lib/project-order'
+import type { ProjectRecord } from '../../apps/desktop/src/types/api'
 
 function project(id: string, overrides: Partial<ProjectRecord> = {}): ProjectRecord {
   return {

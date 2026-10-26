@@ -5,11 +5,11 @@ import { fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-work
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context'
 import { GenerationTask, Harness, createRegistry, type TaskId, type SubmissionId } from '@earendil-works/pi-durable'
 import { openNodeJsonlStorage } from '@earendil-works/pi-durable/storage/jsonl/node'
-import { hostModels } from '../../browser-agent/host-provider'
+import { hostModels } from '../../apps/desktop/browser-agent/host-provider'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { runBrowserTask } from '../../browser-agent/agent'
-import type { BrowserTaskInput } from '../../browser-agent/agent'
-import type { HostRegistry } from '../../browser-agent/host-provider'
+import { runBrowserTask } from '../../apps/desktop/browser-agent/agent'
+import type { BrowserTaskInput } from '../../apps/desktop/browser-agent/agent'
+import type { HostRegistry } from '../../apps/desktop/browser-agent/host-provider'
 
 const faux = fauxProvider({ provider: 'browser-test', tokensPerSecond: Infinity })
 const model = faux.getModel()

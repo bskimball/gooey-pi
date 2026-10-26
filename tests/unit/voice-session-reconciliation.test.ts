@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { waitForVoiceSession } from '../../src/lib/voice'
-import type { SessionRecord } from '../../src/types/api'
+import { waitForVoiceSession } from '../../apps/desktop/src/lib/voice'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
 const session: SessionRecord = {
   id: 'pi-session', harness: 'pi', projectPath: '/tmp/pi', filePath: '/tmp/pi/session.jsonl', title: 'Pi voice task',

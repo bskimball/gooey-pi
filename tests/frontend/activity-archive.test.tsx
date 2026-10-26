@@ -3,10 +3,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activityNotificationSignature, sessionShowsCompanionNotification } from '../../src/app/session-attention'
-import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
-import { ActivityPage } from '../../src/pages/ActivityPage'
-import type { ProjectRecord, SessionRecord } from '../../src/types/api'
+import { activityNotificationSignature, sessionShowsCompanionNotification } from '../../apps/desktop/src/app/session-attention'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import { ActivityPage } from '../../apps/desktop/src/pages/ActivityPage'
+import type { ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

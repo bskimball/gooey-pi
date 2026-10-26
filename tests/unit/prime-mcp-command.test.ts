@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMcpAuthenticationCommand } from '../../src/lib/mcp-policy'
+import { parseMcpAuthenticationCommand } from '../../apps/desktop/src/lib/mcp-policy'
 
 describe('Pi MCP authentication command routing', () => {
   it('extracts a bounded adapter authentication target', () => {

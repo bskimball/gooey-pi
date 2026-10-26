@@ -4,7 +4,7 @@ import {
   MAX_QUEUED_ACTIONS,
   emptySessionActionSnapshot,
   parseSessionActionSnapshot,
-} from '../../src/lib/session-actions'
+} from '../../apps/desktop/src/lib/session-actions'
 
 describe('session action snapshots', () => {
   it('parses queue previews and active action state', () => {

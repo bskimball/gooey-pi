@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { withModelVisibility } from '../../electron/main/model-visibility'
-import type { PrimeModelCatalog } from '../../src/types/api'
+import { withModelVisibility } from '../../apps/desktop/electron/main/model-visibility'
+import type { PrimeModelCatalog } from '../../apps/desktop/src/types/api'
 
 const catalog: PrimeModelCatalog = {
   primeVersion: 'test',

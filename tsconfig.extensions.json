@@ -9,5 +9,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["assets/extensions/**/*.ts"]
+  "include": ["apps/desktop/assets/extensions/**/*.ts"]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundLines, boundText, newestWindow } from '../../src/lib/render-bounds'
+import { boundLines, boundText, newestWindow } from '../../apps/desktop/src/lib/render-bounds'
 
 describe('renderer content bounds', () => {
   it('starts with the newest bounded message window', () => {

@@ -2,9 +2,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { I18nProvider } from '../../src/lib/i18n'
-import { AppearanceSettings } from '../../src/pages/settings/AppearanceSettings'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { I18nProvider } from '../../apps/desktop/src/lib/i18n'
+import { AppearanceSettings } from '../../apps/desktop/src/pages/settings/AppearanceSettings'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

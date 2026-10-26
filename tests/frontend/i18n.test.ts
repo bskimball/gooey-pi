@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveLocale, translate } from '../../src/lib/i18n'
+import { resolveLocale, translate } from '../../apps/desktop/src/lib/i18n'
 
 describe('i18n', () => {
   it('detects Simplified Chinese system locales without treating Traditional Chinese as Simplified', () => {

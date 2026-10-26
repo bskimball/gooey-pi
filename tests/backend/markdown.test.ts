@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { MarkdownText } from '../../src/components/MarkdownText'
+import { MarkdownText } from '../../apps/desktop/src/components/MarkdownText'
 
 describe('chat Markdown rendering', () => {
   it('renders common Markdown structures instead of exposing their markers', () => {

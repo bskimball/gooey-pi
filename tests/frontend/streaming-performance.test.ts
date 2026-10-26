@@ -1,23 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PendingAgentEvent } from '../../src/app/agent-events'
-import { createScopedRequestGuard } from '../../src/app/scoped-request'
-import { areSidebarPropsEqual, boundedSidebarSessions, indexSidebarSessions, type SidebarProps } from '../../src/components/Sidebar'
+import type { PendingAgentEvent } from '../../apps/desktop/src/app/agent-events'
+import { createScopedRequestGuard } from '../../apps/desktop/src/app/scoped-request'
+import { areSidebarPropsEqual, boundedSidebarSessions, indexSidebarSessions, type SidebarProps } from '../../apps/desktop/src/components/Sidebar'
 import {
   ACTIVITY_BATCH,
   growActivityBatch,
   updateActivityCriteria,
   type ActivityViewState,
-} from '../../src/pages/ActivityPage'
-import { applyPrimeEvent, createPrimeEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayPrimeEvents, resetTranscriptIdsForTests, type PrimeEventReplayStats } from '../../src/lib/events'
-import { reconcileTranscripts } from '../../src/app/transcript-reconcile'
-import { createSidebarActionProxy } from '../../src/hooks/useSidebarActions'
-import { mergeSessionCatalog } from '../../src/hooks/useBootstrap'
-import { shouldRefreshGitOnSessionTransition } from '../../src/lib/workspace'
-import type { ProjectRecord, SessionRecord, TranscriptMessage } from '../../src/types/api'
+} from '../../apps/desktop/src/pages/ActivityPage'
+import { applyPrimeEvent, createPrimeEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayPrimeEvents, resetTranscriptIdsForTests, type PrimeEventReplayStats } from '../../apps/desktop/src/lib/events'
+import { reconcileTranscripts } from '../../apps/desktop/src/app/transcript-reconcile'
+import { createSidebarActionProxy } from '../../apps/desktop/src/hooks/useSidebarActions'
+import { mergeSessionCatalog } from '../../apps/desktop/src/hooks/useBootstrap'
+import { shouldRefreshGitOnSessionTransition } from '../../apps/desktop/src/lib/workspace'
+import type { ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 Object.defineProperty(globalThis, 'self', { value: globalThis })
 afterEach(() => vi.restoreAllMocks())
-const { admitAgentEvent, eventsForWorkspace } = await import('../../src/app/agent-events')
+const { admitAgentEvent, eventsForWorkspace } = await import('../../apps/desktop/src/app/agent-events')
 
 const transcript = (): TranscriptMessage[] => [{
   id: 'assistant-1',
@@ -500,7 +500,7 @@ describe('catalog tick session identity', () => {
 
 describe('streaming markdown parse throttling', () => {
   it('parses at most once per interval while holding the previous committed snapshot', async () => {
-    const { advanceStreamingParse, STREAMING_PARSE_INTERVAL_MS } = await import('../../src/components/MarkdownText')
+    const { advanceStreamingParse, STREAMING_PARSE_INTERVAL_MS } = await import('../../apps/desktop/src/components/MarkdownText')
     const first = advanceStreamingParse({ boundary: 0, lastParseAt: 0 }, 10, 1_000)
     expect(first.state).toEqual({ boundary: 10, lastParseAt: 1_000 })
     expect(first.delayMs).toBeUndefined()
@@ -520,7 +520,7 @@ describe('streaming markdown parse throttling', () => {
   })
 
   it('summarizes the transcript with a single reverse walk that stops at the first text part', async () => {
-    const { summarizeTranscript, extractPiSessionWidgets } = await import('../../src/components/inspector/SummaryPanel')
+    const { summarizeTranscript, extractPiSessionWidgets } = await import('../../apps/desktop/src/components/inspector/SummaryPanel')
     const messages: TranscriptMessage[] = [
       { id: 'user-1', role: 'user', timestamp: 1, parts: [{ type: 'text', text: 'ask' }] },
       { id: 'assistant-1', role: 'assistant', timestamp: 2, parts: [
@@ -613,7 +613,7 @@ describe('streaming markdown parse throttling', () => {
       status: 'running',
     })
 
-    const { extractPiSpecialistSessions } = await import('../../src/components/inspector/SpecialistsPanel')
+    const { extractPiSpecialistSessions } = await import('../../apps/desktop/src/components/inspector/SpecialistsPanel')
     const detailedMessages: TranscriptMessage[] = [
       {
         id: 'assistant-detail',

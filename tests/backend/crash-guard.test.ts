@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { installCrashGuards, type CrashGuard } from '../../electron/main/crash-guard'
+import { installCrashGuards, type CrashGuard } from '../../apps/desktop/electron/main/crash-guard'
 import { waitUntil } from '../helpers/wait'
 
 const dirs: string[] = []

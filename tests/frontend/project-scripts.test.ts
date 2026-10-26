@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeProjectScriptKind, ProjectScriptBusyError, setupNeedsRun } from '../../src/lib/project-scripts'
+import { activeProjectScriptKind, ProjectScriptBusyError, setupNeedsRun } from '../../apps/desktop/src/lib/project-scripts'
 
 describe('project script helpers', () => {
   it('only exposes the active run kind for the selected project', () => {

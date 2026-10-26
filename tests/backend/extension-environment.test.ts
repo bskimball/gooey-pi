@@ -19,8 +19,8 @@ const electron = vi.hoisted(() => ({
 
 vi.mock('electron', () => electron)
 
-import { extensionRuntimeEnvironment, type CapabilityExtensionPaths } from '../../electron/main/index'
-import { PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
+import { extensionRuntimeEnvironment, type CapabilityExtensionPaths } from '../../apps/desktop/electron/main/index'
+import { PI_RPC_ADAPTER } from '../../apps/desktop/electron/main/agent-rpc'
 
 const extensionPaths: CapabilityExtensionPaths = {
   schedule: '/app/extensions/omp-work-schedules.ts',

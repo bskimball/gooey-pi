@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createAndSwitchGitBranch, createGitWorktree, GIT_DIFF_LINE_LIMIT, GIT_STATUS_ENTRY_LIMIT, GitService, inspectGitWorktreeClean, listGitWorktrees, listLocalGitBranches, switchGitBranch } from '../../electron/main/git'
-import { restrictedGitEnvironment } from '../../electron/main/process-utils'
+import { createAndSwitchGitBranch, createGitWorktree, GIT_DIFF_LINE_LIMIT, GIT_STATUS_ENTRY_LIMIT, GitService, inspectGitWorktreeClean, listGitWorktrees, listLocalGitBranches, switchGitBranch } from '../../apps/desktop/electron/main/git'
+import { restrictedGitEnvironment } from '../../apps/desktop/electron/main/process-utils'
 
 const dirs: string[] = []
 afterEach(() => { vi.unstubAllEnvs(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

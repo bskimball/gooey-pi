@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { activityNotificationSignature, applySessionLifecycleEvent, readClearedActivity, readClearedAttention, sessionAttentionSignature, sessionCompanionNotificationSignature, sessionShowsCompanionNotification, signatureCleared } from '../../src/app/session-attention'
-import { mergeSessionCatalog } from '../../src/hooks/useBootstrap'
-import type { SessionRecord } from '../../src/types/api'
+import { activityNotificationSignature, applySessionLifecycleEvent, readClearedActivity, readClearedAttention, sessionAttentionSignature, sessionCompanionNotificationSignature, sessionShowsCompanionNotification, signatureCleared } from '../../apps/desktop/src/app/session-attention'
+import { mergeSessionCatalog } from '../../apps/desktop/src/hooks/useBootstrap'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
 const session = (): SessionRecord => ({
   id: 'session',

@@ -1,11 +1,16 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, test } from 'vitest'
+import { SHIPPED_EXTENSION_FILENAMES } from '../apps/desktop/electron/main/extension-manifest'
+// after-pack.cjs is CommonJS; the interop layer exposes module.exports properties as named exports.
+import { executablePath } from '../scripts/release/after-pack.cjs'
+import { producedReleaseArtifactNames, RELEASE_BUILD_MATRIX, readElectronBuilderConfig } from '../scripts/release/artifact-names.mjs'
+import { collectAuditAdvisories, describeAuditEvaluation, evaluateAuditReport, parseAuditExceptions, readAuditExceptions } from '../scripts/release/audit-exceptions.mjs'
 import {
   bootstrapNpm,
   parsePinnedNpmArtifact,
@@ -22,14 +27,14 @@ import {
   assertAsarLayout,
   assertExactArchitectures,
   assertPackagedExtensions,
-  assertSupportedNpm,
   assertSupportedNode,
+  assertSupportedNpm,
   assertSupportedToolchain,
   assertUnpackedNativeLayout,
   expectedUnpackedNativeLayout,
-  parseToolchainMetadata,
   parseArchitectures,
   parseTeamIdentifier,
+  parseToolchainMetadata,
   readNpmOutput,
   readNpmVersion,
   readRepositoryToolchain,
@@ -39,8 +44,6 @@ import {
   validateWindowsReleaseCredentials,
   withoutReleaseCredentials,
 } from '../scripts/release/lib.mjs'
-import { SHIPPED_EXTENSION_FILENAMES } from '../electron/main/extension-manifest'
-import { producedReleaseArtifactNames, readElectronBuilderConfig, RELEASE_BUILD_MATRIX } from '../scripts/release/artifact-names.mjs'
 import {
   expectedDownloadedReleaseAssets,
   expectedGitHubReleaseAssets,
@@ -52,12 +55,9 @@ import {
 import { parseDraftAssetNames, staleDraftReleaseAssets } from '../scripts/release/prune-draft-release-assets.mjs'
 import { assertBundleSizeBudgets, assertPackageSizeBudgets, BUNDLE_SIZE_BUDGETS, collectBundleSizeMetrics, collectPackageSizeMetrics, PACKAGE_SIZE_BUDGETS } from '../scripts/release/size-budgets.mjs'
 import { assertReleaseTag } from '../scripts/release/validate-release-tag.mjs'
-// after-pack.cjs is CommonJS; the interop layer exposes module.exports properties as named exports.
-import { executablePath } from '../scripts/release/after-pack.cjs'
-import { collectAuditAdvisories, describeAuditEvaluation, evaluateAuditReport, parseAuditExceptions, readAuditExceptions } from '../scripts/release/audit-exceptions.mjs'
 import {
-  assertValidAuthenticode,
   assertUnpackedNativeLayout as assertCrossPlatformUnpackedNativeLayout,
+  assertValidAuthenticode,
   expectedArtifactExtensions,
   expectedAuthenticodeSigner,
   expectedNativeFiles,
@@ -1218,11 +1218,11 @@ describe('post-package verification helpers', () => {
     expect(packageJson.build.linux.synopsis).toBe(packageJson.description)
     expect(packageJson.build.linux.syncDesktopName).toBe(true)
     expect(packageJson.build.linux.desktop.entry.Name).toBe('Apex')
-    expect(packageJson.build.mac.icon).toBe('assets/icon.icns')
+    expect(packageJson.build.mac.icon).toBe('apps/desktop/assets/icon.icns')
     expect(packageJson.build.mac.extendInfo.LSUIElement).toBe(true)
-    expect(packageJson.build.linux.icon).toBe('assets/icon.png')
-    expect(packageJson.build.win.icon).toBe('assets/icon.png')
-    const macIcon = readFileSync('assets/icon.icns')
+    expect(packageJson.build.linux.icon).toBe('apps/desktop/assets/icon.png')
+    expect(packageJson.build.win.icon).toBe('apps/desktop/assets/icon.png')
+    const macIcon = readFileSync('apps/desktop/assets/icon.icns')
     expect(macIcon.subarray(0, 4).toString('ascii')).toBe('icns')
     const macIconChunks = new Map<string, Buffer>()
     for (let offset = 8; offset < macIcon.length; ) {
@@ -1234,7 +1234,7 @@ describe('post-package verification helpers', () => {
     }
     // The previous checked-in ICNS silently contained Prime artwork. Anchor
     // its full-size layer to Apex's canonical PNG and retain small layers.
-    expect(macIconChunks.get('ic10')?.equals(readFileSync('assets/icon.png'))).toBe(true)
+    expect(macIconChunks.get('ic10')?.equals(readFileSync('apps/desktop/assets/icon.png'))).toBe(true)
     // App-bundle rendering only reads ARGB, not PNG, in the 16px and 32px 1x slots.
     expect(macIconChunks.get('ic04')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
     expect(macIconChunks.get('ic05')?.subarray(0, 4).toString('ascii')).toBe('ARGB')
@@ -1637,6 +1637,9 @@ describe('vendored supply-chain pins', () => {
     // These workspace projects are not desktop runtime dependencies. Only their
     // exact npm workspace links are exempt from registry integrity pins.
     expect(entries.filter(([, entry]) => entry.link)).toEqual([
+      ['node_modules/apex-browser-extension', { resolved: 'packages/browser-extension', link: true }],
+      ['node_modules/apex-core', { resolved: 'packages/core', link: true }],
+      ['node_modules/apex-desktop', { resolved: 'apps/desktop', link: true }],
       ['node_modules/apex-vscode', { resolved: 'packages/vscode', link: true }],
       ['node_modules/apex-vscode-theme', { resolved: 'packages/vscode-theme', link: true }],
     ])

@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NoHarnessPrompt } from '../../src/components/NoHarnessPrompt'
+import { NoHarnessPrompt } from '../../apps/desktop/src/components/NoHarnessPrompt'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

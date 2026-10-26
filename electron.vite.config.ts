@@ -1,25 +1,26 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     // Fully minify production code: Electron never consumes readable output,
     // and less source is faster for V8 to read, parse, and compile at startup.
-    build: { lib: { entry: 'electron/main/index.ts' }, minify: 'esbuild' },
+    build: { lib: { entry: 'apps/desktop/electron/main/index.ts' }, minify: 'esbuild' },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: { entry: 'electron/preload/index.ts', formats: ['cjs'] },
+      lib: { entry: 'apps/desktop/electron/preload/index.ts', formats: ['cjs'] },
       rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.js' } },
     },
   },
   renderer: {
-    root: '.',
+    root: resolve('apps/desktop'),
     plugins: [react()],
-    resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
+    resolve: { alias: { '@': fileURLToPath(new URL('./apps/desktop/src', import.meta.url)) } },
     // Full minification, but function names survive so the React component
     // stacks ErrorBoundary logs stay readable; no sourcemap can restore those,
     // since React reads them from the function names at runtime. Costs ~4% of
@@ -27,8 +28,9 @@ export default defineConfig({
     esbuild: { keepNames: true },
     build: {
       minify: 'esbuild',
+      outDir: resolve('out/renderer'),
       rollupOptions: {
-        input: resolve('index.html'),
+        input: resolve('apps/desktop/index.html'),
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined

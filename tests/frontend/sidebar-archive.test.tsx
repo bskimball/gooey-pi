@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Sidebar, type SidebarProps } from '../../src/components/Sidebar'
-import { sessionAttentionSignature } from '../../src/app/session-attention'
-import type { ProjectRecord, SessionRecord } from '../../src/types/api'
+import { Sidebar, type SidebarProps } from '../../apps/desktop/src/components/Sidebar'
+import { sessionAttentionSignature } from '../../apps/desktop/src/app/session-attention'
+import type { ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

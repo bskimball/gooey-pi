@@ -5,11 +5,11 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isBroadProjectRoot, ProjectService } from '../../electron/main/projects'
-import { CheckoutService } from '../../electron/main/checkouts'
-import { RepositoryUseGate } from '../../electron/main/repository-use-gate'
-import { JsonStateStore } from '../../electron/main/store'
-import type { SessionRecord } from '../../src/types/api'
+import { isBroadProjectRoot, ProjectService } from '../../apps/desktop/electron/main/projects'
+import { CheckoutService } from '../../apps/desktop/electron/main/checkouts'
+import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
 const electronMocks = vi.hoisted(() => ({
   dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() },

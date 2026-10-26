@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { appendSessionRouting, findSessionMentions, routedSessionReferences, splitSessionRouting } from '../../src/lib/session-mentions'
-import type { SessionRecord } from '../../src/types/api'
+import { appendSessionRouting, findSessionMentions, routedSessionReferences, splitSessionRouting } from '../../apps/desktop/src/lib/session-mentions'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
 const session = (id: string, title: string): SessionRecord => ({
   id, title, harness: 'pi', filePath: `/sessions/${id}.jsonl`, projectPath: '/project',

@@ -3,12 +3,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSlotRect } from "../../src/components/AgentBrowserLayer";
-import { AgentBrowserLayer } from "../../src/components/AgentBrowserLayer";
-import { BrowserPanel } from "../../src/components/inspector/BrowserPanel";
-import type { ExtensionTabControls } from "../../src/hooks/useAgentBrowserTabs";
-import type { BrowserAnnotationsApi } from "../../src/hooks/useBrowserAnnotations";
-import type { AgentBrowserTabRecord } from "../../src/types/api";
+import type { AgentSlotRect } from "../../apps/desktop/src/components/AgentBrowserLayer";
+import { AgentBrowserLayer } from "../../apps/desktop/src/components/AgentBrowserLayer";
+import { BrowserPanel } from "../../apps/desktop/src/components/inspector/BrowserPanel";
+import type { ExtensionTabControls } from "../../apps/desktop/src/hooks/useAgentBrowserTabs";
+import type { BrowserAnnotationsApi } from "../../apps/desktop/src/hooks/useBrowserAnnotations";
+import type { AgentBrowserTabRecord } from "../../apps/desktop/src/types/api";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

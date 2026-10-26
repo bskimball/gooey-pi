@@ -3,10 +3,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import App from '../../src/App'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { composerDraftStorageKey } from '../../src/lib/composer-draft'
-import type { AppMeta, PrimeWorkApi, ProjectRecord, SessionRecord } from '../../src/types/api'
+import App from '../../apps/desktop/src/App'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { composerDraftStorageKey } from '../../apps/desktop/src/lib/composer-draft'
+import type { AppMeta, PrimeWorkApi, ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

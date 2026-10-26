@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redactedStderrTail } from '../../electron/main/lib/process-detail'
+import { redactedStderrTail } from '../../apps/desktop/electron/main/lib/process-detail'
 
 describe('process detail', () => {
   it('strips ANSI escapes, selects the last line, redacts token-like runs, and caps output', () => {

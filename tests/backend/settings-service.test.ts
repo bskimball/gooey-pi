@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ session: { fromPartition: vi.fn(), defaultSession: {} } }))
 
-import { SettingsService } from '../../electron/main/settings-schedules'
-import { JsonStateStore } from '../../electron/main/store'
+import { SettingsService } from '../../apps/desktop/electron/main/settings-schedules'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 function makeService(validateShell: (shell: unknown) => string = () => '/bin/zsh', onDidUpdate?: ConstructorParameters<typeof SettingsService>[3]) {

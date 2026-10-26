@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../src/hooks/useWorkspaceActions'
-import { readComposerDraft, saveComposerDraft } from '../../src/lib/composer-draft'
-import type { ProjectRecord, SessionRecord } from '../../src/types/api'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import { readComposerDraft, saveComposerDraft } from '../../apps/desktop/src/lib/composer-draft'
+import type { ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 const project: ProjectRecord = {
   id: 'project', harness: 'pi', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',

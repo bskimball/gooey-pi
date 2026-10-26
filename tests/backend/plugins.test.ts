@@ -3,11 +3,11 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PluginService, beginPluginDiscoveryShutdown } from '../../electron/main/plugins'
-import { removeMcpDefinition, updateMcpSettings, updateMcpState } from '../../electron/main/plugins/mcp'
-import { executePiPluginInstall, executePiPluginRemove } from '../../electron/main/plugins/package-execution'
-import { ProjectService } from '../../electron/main/projects'
-import { JsonStateStore } from '../../electron/main/store'
+import { PluginService, beginPluginDiscoveryShutdown } from '../../apps/desktop/electron/main/plugins'
+import { removeMcpDefinition, updateMcpSettings, updateMcpState } from '../../apps/desktop/electron/main/plugins/mcp'
+import { executePiPluginInstall, executePiPluginRemove } from '../../apps/desktop/electron/main/plugins/package-execution'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:os')>()
@@ -539,7 +539,7 @@ describe('PluginService discovery', () => {
 
     expect(records).toContainEqual(expect.objectContaining({ name: 'local', path: realpathSync(localSkill) }))
     expect(records.some((record) => record.path === realpathSync(ancestorSkill))).toBe(false)
-    expect(readFileSync('electron/main/plugins/catalog.ts', 'utf8')).not.toContain('collectAncestorSkills')
+    expect(readFileSync('apps/desktop/electron/main/plugins/catalog.ts', 'utf8')).not.toContain('collectAncestorSkills')
   })
 
   it('keeps user-configured discovery contained to the agent directory and home', async () => {
@@ -892,7 +892,7 @@ describe('PluginService MCP connections', () => {
   it('keeps project settings preparation free of synchronous fs syscalls', () => {
     // renameSync is the one deliberate exception (kept adjacent to its identity
     // checks); everything else in the settings path must be fs/promises.
-    const source = readFileSync('electron/main/plugins/mcp.ts', 'utf8')
+    const source = readFileSync('apps/desktop/electron/main/plugins/mcp.ts', 'utf8')
     expect(source).not.toMatch(/\b(?:existsSync|lstatSync|mkdirSync|realpathSync|readFileSync|writeFileSync|rmSync)\b/)
   })
 

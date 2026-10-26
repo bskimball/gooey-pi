@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ProjectRunControl } from '../../src/components/ProjectRunControl'
-import type { ProjectRecord } from '../../src/types/api'
+import { ProjectRunControl } from '../../apps/desktop/src/components/ProjectRunControl'
+import type { ProjectRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

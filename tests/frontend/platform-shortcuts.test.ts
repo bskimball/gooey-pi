@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectRendererPlatform, shortcutLabel } from '../../src/lib/platform-shortcuts'
+import { detectRendererPlatform, shortcutLabel } from '../../apps/desktop/src/lib/platform-shortcuts'
 
 describe('platform shortcut labels', () => {
   it('uses macOS keyboard symbols only on macOS', () => {

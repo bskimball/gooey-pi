@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TOAST_DURATION_MS, useToast } from '../../src/hooks/useToast'
+import { TOAST_DURATION_MS, useToast } from '../../apps/desktop/src/hooks/useToast'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

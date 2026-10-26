@@ -52,8 +52,8 @@ vi.mock('electron', () => ({
 }))
 
 import type { BrowserWindow } from 'electron'
-import { MacBackgroundController, shouldStartInBackground } from '../../electron/main/background'
-import { defaultSettings } from '../../electron/main/store'
+import { MacBackgroundController, shouldStartInBackground } from '../../apps/desktop/electron/main/background'
+import { defaultSettings } from '../../apps/desktop/electron/main/store'
 
 function makeController(overrides: Partial<ConstructorParameters<typeof MacBackgroundController>[0]> = {}) {
   let settings = defaultSettings()

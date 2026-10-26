@@ -1,13 +1,18 @@
 import { join } from 'node:path'
+import { ExtensionBrowserBridge } from 'apex-core/browser/extension-bridge'
+import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
 import { editorRequest } from '../editor'
-import { ExtensionBrowserBridge } from '../../../../electron/main/browser/extension-bridge'
-import { CapabilityBridge, type CapabilityClaim } from '../../../../electron/main/lib/capability-bridge'
 import { ExtensionBrowserService, type ScreenshotResizer } from './service'
 
 class BrowserCapability extends CapabilityBridge {
   protected readonly rateLimit = 240
   protected readonly rateLimitError = 'Browser API rate limit exceeded; slow down and retry shortly'
-  constructor(readonly service: ExtensionBrowserService, readonly extensionPath: string) { super() }
+  constructor(
+    readonly service: ExtensionBrowserService,
+    readonly extensionPath: string,
+  ) {
+    super()
+  }
   protected environmentEntries(url: string, token: string): NodeJS.ProcessEnv {
     return { PRIME_WORK_BROWSER_URL: url, PRIME_WORK_BROWSER_TOKEN: token, PRIME_WORK_BROWSER_EXTENSION_PATH: this.extensionPath }
   }
@@ -17,21 +22,36 @@ class BrowserCapability extends CapabilityBridge {
     await this.service.refreshExtensionState()
     const key = claim.sessionPath
     switch (method) {
-      case 'terminal.read': throw new Error('terminal_read is not available in VS Code')
-      case 'tabs.list': return this.service.listTabs(key)
-      case 'tabs.open': return this.service.openTab(key, params)
-      case 'tabs.close': return this.service.closeTabScoped(key, params)
-      case 'tabs.select': return this.service.selectTabScoped(key, params)
-      case 'navigate': return this.service.navigate(key, params)
-      case 'screenshot': return this.service.screenshot(key, params)
-      case 'click': return this.service.click(key, params)
-      case 'drag': return this.service.drag(key, params)
-      case 'type': return this.service.type(key, params)
-      case 'press_key': return this.service.pressKey(key, params)
-      case 'scroll': return this.service.scroll(key, params)
-      case 'read_page': return this.service.readPage(key, params)
-      case 'evaluate': return this.service.evaluate(key, params)
-      default: throw new TypeError(`Unsupported browser method ${method}`)
+      case 'terminal.read':
+        throw new Error('terminal_read is not available in VS Code')
+      case 'tabs.list':
+        return this.service.listTabs(key)
+      case 'tabs.open':
+        return this.service.openTab(key, params)
+      case 'tabs.close':
+        return this.service.closeTabScoped(key, params)
+      case 'tabs.select':
+        return this.service.selectTabScoped(key, params)
+      case 'navigate':
+        return this.service.navigate(key, params)
+      case 'screenshot':
+        return this.service.screenshot(key, params)
+      case 'click':
+        return this.service.click(key, params)
+      case 'drag':
+        return this.service.drag(key, params)
+      case 'type':
+        return this.service.type(key, params)
+      case 'press_key':
+        return this.service.pressKey(key, params)
+      case 'scroll':
+        return this.service.scroll(key, params)
+      case 'read_page':
+        return this.service.readPage(key, params)
+      case 'evaluate':
+        return this.service.evaluate(key, params)
+      default:
+        throw new TypeError(`Unsupported browser method ${method}`)
     }
   }
 }
@@ -49,7 +69,11 @@ export class BrowserHost {
     this.capability = new BrowserCapability(this.service, this.extensionPath)
   }
   start(): Promise<void> {
-    return this.starting ??= (async () => { await this.bridge.startOrConnect(); await this.capability.start() })()
+    this.starting ??= (async () => {
+      await this.bridge.startOrConnect()
+      await this.capability.start()
+    })()
+    return this.starting
   }
   async stop() {
     await this.starting?.catch(() => undefined)

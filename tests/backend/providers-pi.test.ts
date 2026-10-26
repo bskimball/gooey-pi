@@ -2,9 +2,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ModelCatalogProvider } from '../../electron/main/model-catalog'
-import { PI_NOT_INSTALLED_WARNING, PiModelCatalogService, MAX_CATALOG_PROVIDERS } from '../../electron/main/providers-pi'
-import type { PrimeModelCatalog } from '../../src/types/api'
+import type { ModelCatalogProvider } from '../../apps/desktop/electron/main/model-catalog'
+import { PI_NOT_INSTALLED_WARNING, PiModelCatalogService, MAX_CATALOG_PROVIDERS } from '../../apps/desktop/electron/main/providers-pi'
+import type { PrimeModelCatalog } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
 
 const dirs: string[] = []

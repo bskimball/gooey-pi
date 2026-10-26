@@ -21,23 +21,23 @@ const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const VITEST_ENTRYPOINT = resolve(createRequire(import.meta.url).resolve('vitest/package.json'), '..', 'vitest.mjs')
 
 const REQUIRED_SAFETY_MODULES = [
-  'electron/main/ipc.ts',
-  'electron/main/lib/capability-bridge.ts',
-  'electron/main/browser/agent-bridge.ts',
-  'electron/main/browser/extension-bridge.ts',
-  'electron/main/browser/extension-tab-driver.ts',
-  'electron/main/browser/service-support.ts',
-  'electron/main/collaboration/agent-bridge.ts',
-  'electron/main/collaboration/message-envelope.ts',
-  'electron/main/schedules/agent-bridge.ts',
-  'electron/main/schedules/executor.ts',
-  'electron/main/schedules/recurrence.ts',
-  'electron/main/schedules/service.ts',
-  'electron/main/projects.ts',
-  'electron/main/store.ts',
-  'electron/main/plugins/mcp.ts',
-  'electron/main/plugins/package-execution.ts',
-  'electron/preload/index.ts',
+  'apps/desktop/electron/main/ipc.ts',
+  'apps/desktop/electron/main/lib/capability-bridge.ts',
+  'apps/desktop/electron/main/browser/agent-bridge.ts',
+  'apps/desktop/electron/main/browser/extension-bridge.ts',
+  'apps/desktop/electron/main/browser/extension-tab-driver.ts',
+  'apps/desktop/electron/main/browser/service-support.ts',
+  'apps/desktop/electron/main/collaboration/agent-bridge.ts',
+  'apps/desktop/electron/main/collaboration/message-envelope.ts',
+  'apps/desktop/electron/main/schedules/agent-bridge.ts',
+  'apps/desktop/electron/main/schedules/executor.ts',
+  'apps/desktop/electron/main/schedules/recurrence.ts',
+  'apps/desktop/electron/main/schedules/service.ts',
+  'apps/desktop/electron/main/projects.ts',
+  'apps/desktop/electron/main/store.ts',
+  'apps/desktop/electron/main/plugins/mcp.ts',
+  'apps/desktop/electron/main/plugins/package-execution.ts',
+  'apps/desktop/electron/preload/index.ts',
   'scripts/release/verify-package.mjs',
   'scripts/release/verify-cross-platform-package.mjs',
 ] as const
@@ -67,7 +67,17 @@ describe('safety-critical coverage inventory', () => {
       }
     }
 
-    expect(COVERAGE_FAMILIES.map(({ root }) => root)).toEqual(['electron/main', 'electron/preload', 'src/app', 'src/lib', 'src/hooks', 'scripts/release', 'browser-agent', 'assets/extensions'])
+    expect(COVERAGE_FAMILIES.map(({ root }) => root)).toEqual([
+      'packages/core/src',
+      'apps/desktop/electron/main',
+      'apps/desktop/electron/preload',
+      'apps/desktop/src/app',
+      'apps/desktop/src/lib',
+      'apps/desktop/src/hooks',
+      'scripts/release',
+      'apps/desktop/browser-agent',
+      'apps/desktop/assets/extensions',
+    ])
     expect(COVERAGE_RUNTIME_EXTENSIONS).toEqual(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'])
     expect(COVERAGE_FAMILIES.every(({ runtimeExtensions }) => COVERAGE_RUNTIME_EXTENSIONS.every((extension) => runtimeExtensions.includes(extension)))).toBe(true)
     expect(config.test?.coverage?.include).toEqual(inventory.includePatterns)
@@ -98,26 +108,26 @@ describe('safety-critical coverage inventory', () => {
 
   it('automatically includes every shipped extension and every new runtime file in a covered family', () => {
     const inventory = createCoverageInventory(PROJECT_ROOT)
-    const shippedExtensions = inventory.includedFiles.filter((file) => file.startsWith('assets/extensions/'))
+    const shippedExtensions = inventory.includedFiles.filter((file) => file.startsWith('apps/desktop/assets/extensions/'))
     expect(shippedExtensions).toEqual([
-      'assets/extensions/apex-browser-agent.ts',
-      'assets/extensions/omp-work-ask-user.ts',
-      'assets/extensions/omp-work-browser.ts',
-      'assets/extensions/omp-work-collaboration.ts',
-      'assets/extensions/omp-work-schedules.ts',
-      'assets/extensions/pi-work-fast-mode.ts',
+      'apps/desktop/assets/extensions/apex-browser-agent.ts',
+      'apps/desktop/assets/extensions/omp-work-ask-user.ts',
+      'apps/desktop/assets/extensions/omp-work-browser.ts',
+      'apps/desktop/assets/extensions/omp-work-collaboration.ts',
+      'apps/desktop/assets/extensions/omp-work-schedules.ts',
+      'apps/desktop/assets/extensions/pi-work-fast-mode.ts',
     ])
 
     expect(inventory.filesByFamily['browser-agent-runtime']).toEqual([
-      'browser-agent/agent.ts',
-      'browser-agent/classifier.ts',
-      'browser-agent/host-provider.ts',
-      'browser-agent/index.ts',
-      'browser-agent/runner.ts',
-      'browser-agent/schema.ts',
-      'browser-agent/targets.ts',
-      'browser-agent/types.ts',
-      'browser-agent/validation.ts',
+      'apps/desktop/browser-agent/agent.ts',
+      'apps/desktop/browser-agent/classifier.ts',
+      'apps/desktop/browser-agent/host-provider.ts',
+      'apps/desktop/browser-agent/index.ts',
+      'apps/desktop/browser-agent/runner.ts',
+      'apps/desktop/browser-agent/schema.ts',
+      'apps/desktop/browser-agent/targets.ts',
+      'apps/desktop/browser-agent/types.ts',
+      'apps/desktop/browser-agent/validation.ts',
     ])
     expect(inventory.includedFiles).toEqual(expect.arrayContaining([...inventory.filesByFamily['browser-agent-runtime']]))
 

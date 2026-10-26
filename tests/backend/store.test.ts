@@ -13,9 +13,9 @@ import {
   StateCompatibilityError,
   StateMigrationError,
   UnsupportedStateVersionError,
-} from '../../electron/main/store'
-import type { JsonStateStoreFileHandle, JsonStateStoreFileSystem } from '../../electron/main/store'
-import { SessionService } from '../../electron/main/sessions'
+} from '../../apps/desktop/electron/main/store'
+import type { JsonStateStoreFileHandle, JsonStateStoreFileSystem } from '../../apps/desktop/electron/main/store'
+import { SessionService } from '../../apps/desktop/electron/main/sessions'
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()

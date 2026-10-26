@@ -3,11 +3,11 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AssistantMessage } from '../../src/components/transcript/messages'
-import { Transcript } from '../../src/components/Transcript'
-import { WorkTimeline } from '../../src/components/transcript/timeline'
-import { replayPrimeEvents } from '../../src/lib/events'
-import type { TranscriptMessage } from '../../src/types/api'
+import { AssistantMessage } from '../../apps/desktop/src/components/transcript/messages'
+import { Transcript } from '../../apps/desktop/src/components/Transcript'
+import { WorkTimeline } from '../../apps/desktop/src/components/transcript/timeline'
+import { replayPrimeEvents } from '../../apps/desktop/src/lib/events'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 let container: HTMLDivElement
 let root: Root

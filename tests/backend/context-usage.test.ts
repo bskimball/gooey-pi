@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LiveContextUsageTracker, withLiveContextUsage } from '../../electron/main/agent-rpc/context-usage'
+import { LiveContextUsageTracker, withLiveContextUsage } from '../../apps/desktop/electron/main/agent-rpc/context-usage'
 
 describe('live context usage tracking', () => {
   it('uses reported output usage and falls back to streaming character estimates', () => {

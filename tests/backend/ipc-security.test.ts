@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isTrustedRendererUrl } from '../../electron/main/ipc'
+import { isTrustedRendererUrl } from '../../apps/desktop/electron/main/ipc'
 
 describe('renderer URL trust', () => {
   it('allows only in-document fragments on the exact renderer URL', () => {

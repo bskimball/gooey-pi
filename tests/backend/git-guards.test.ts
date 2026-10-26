@@ -4,13 +4,13 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-vi.mock('../../electron/main/process-utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../electron/main/process-utils')>()
+vi.mock('../../apps/desktop/electron/main/process-utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apps/desktop/electron/main/process-utils')>()
   return { ...actual, runProcess: vi.fn(actual.runProcess) }
 })
 
-const { runProcess } = await import('../../electron/main/process-utils')
-const { GitService } = await import('../../electron/main/git')
+const { runProcess } = await import('../../apps/desktop/electron/main/process-utils')
+const { GitService } = await import('../../apps/desktop/electron/main/git')
 
 const spawnedGitArgs = (): string[][] => (runProcess as unknown as Mock).mock.calls
   .filter(([file]) => file === 'git')

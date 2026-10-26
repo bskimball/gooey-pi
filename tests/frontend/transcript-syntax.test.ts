@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { MAX_SYNTAX_HIGHLIGHTS, tokenizeSyntax } from '../../src/components/transcript/syntax'
+import { MAX_SYNTAX_HIGHLIGHTS, tokenizeSyntax } from '../../apps/desktop/src/components/transcript/syntax'
 
 describe('transcript syntax tokenizer', () => {
   it('classifies repeated text from its current position', () => {

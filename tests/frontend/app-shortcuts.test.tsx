@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import App from '../../src/App'
+import App from '../../apps/desktop/src/App'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

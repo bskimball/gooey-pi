@@ -1,31 +1,44 @@
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { editorPromptContext } from './editor'
-import { createPiSessionMetadataReader } from '../../../electron/main/sessions/pi'
+import { canonicalSessionPath } from 'apex-core/session-paths'
+import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
+import * as vscode from 'vscode'
 import { BrowserHost } from './browser/host'
 import type { ScreenshotResizer } from './browser/service'
-import { canonicalSessionPath } from '../../../electron/main/session-paths'
-import * as vscode from 'vscode'
+import { editorPromptContext } from './editor'
 import { PiRpc, resolvePi } from './pi-rpc'
-import { listSessions, sessionBucket, sessionTranscriptOps } from './session-catalog'
 import type { HostMessage, HostState, ModelDescriptor, PromptImage, ProviderDescriptor, QueuedPrompt, RuntimeCommand, ThinkingLevel, TranscriptOp, WebviewMessage } from './protocol'
+import { listSessions, sessionBucket, sessionTranscriptOps } from './session-catalog'
 
 type Json = Record<string, unknown>
 
 // Event types pi-desktop's transcript reducer (src/lib/events/reduce.ts) consumes; everything else stays host-side.
 const TRANSCRIPT_EVENTS = new Set([
-  'agent_start', 'agent_end', 'turn_start', 'message_update', 'message_end',
-  'tool_execution_start', 'tool_execution_update', 'tool_execution_end',
-  'compaction_start', 'compaction_end', 'auto_retry_start', 'auto_retry_end',
-  'retry_fallback_applied', 'model_change', 'custom_message', 'extension_error', 'error',
+  'agent_start',
+  'agent_end',
+  'turn_start',
+  'message_update',
+  'message_end',
+  'tool_execution_start',
+  'tool_execution_update',
+  'tool_execution_end',
+  'compaction_start',
+  'compaction_end',
+  'auto_retry_start',
+  'auto_retry_end',
+  'retry_fallback_applied',
+  'model_change',
+  'custom_message',
+  'extension_error',
+  'error',
 ])
 const DIALOG_METHODS = new Set(['select', 'confirm', 'input', 'editor'])
 // Events that keep streaming into the same assistant row; anything else may finalize it.
 const SAME_SEGMENT_EVENTS = new Set(['message_update', 'tool_execution_start', 'tool_execution_update', 'tool_execution_end', 'turn_start', 'apex_noop'])
 const REASONING_LEVELS: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high']
 
-const asRecord = (value: unknown): Json | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as Json : undefined
-const asString = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined
+const asRecord = (value: unknown): Json | undefined => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Json) : undefined)
+const asString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
 
 function describeModel(raw: Json): ModelDescriptor {
   const provider = String(raw.provider)
@@ -71,8 +84,15 @@ export class ApexSession implements vscode.Disposable {
   private currentPath: string | null = null
   private switching = false
   private state: HostState = {
-    status: 'starting', isStreaming: false, thinkingLevel: 'off', thinkingLevels: ['off'],
-    models: [], providers: [], commands: [], queued: [], messageEnterAction: 'queue',
+    status: 'starting',
+    isStreaming: false,
+    thinkingLevel: 'off',
+    thinkingLevels: ['off'],
+    models: [],
+    providers: [],
+    commands: [],
+    queued: [],
+    messageEnterAction: 'queue',
   }
 
   readonly browser: BrowserHost
@@ -81,7 +101,11 @@ export class ApexSession implements vscode.Disposable {
   private launchGeneration = 0
   private browserPortNotice = false
 
-  constructor(private readonly post: (message: HostMessage) => void, private readonly distDirectory: string, resizeScreenshot?: ScreenshotResizer) {
+  constructor(
+    private readonly post: (message: HostMessage) => void,
+    private readonly distDirectory: string,
+    resizeScreenshot?: ScreenshotResizer,
+  ) {
     this.statusItem.name = 'Apex'
     this.browser = new BrowserHost(distDirectory, resizeScreenshot)
     this.browser.service.onExtensionStatusChanged(() => this.postBrowser())
@@ -107,7 +131,16 @@ export class ApexSession implements vscode.Disposable {
     this.setCurrentPath(null)
     this.uiQueue = []
     this.post({ type: 'extensionUi', request: null })
-    this.update({ status: 'starting', error: undefined, isStreaming: false, queued: [], contextUsage: undefined, sessionUsage: undefined, cwd: this.cwd, messageEnterAction: config.get('messageEnterAction', 'queue') })
+    this.update({
+      status: 'starting',
+      error: undefined,
+      isStreaming: false,
+      queued: [],
+      contextUsage: undefined,
+      sessionUsage: undefined,
+      cwd: this.cwd,
+      messageEnterAction: config.get('messageEnterAction', 'queue'),
+    })
     let rpc: PiRpc
     let launchToken: string | undefined
     try {
@@ -124,16 +157,25 @@ export class ApexSession implements vscode.Disposable {
       const environment = this.browser.capability.environmentFor({ cwd: this.cwd, sessionPath: this.browserSessionKey })
       launchToken = environment.PRIME_WORK_BROWSER_TOKEN
       this.browserToken = launchToken
-      rpc = new PiRpc(resolvePi(config.get('piPath', '')), ['--mode', 'rpc', '--extension', this.browser.extensionPath, '--extension', join(this.distDirectory, 'extensions', 'editor-extension.ts')], this.cwd, (record) => { if (this.rpc === rpc) this.onRecord(record) }, (code, stderr) => {
-        this.browser.capability.revoke(launchToken)
-        if (this.browserToken === launchToken) this.browserToken = undefined
-        if (this.rpc !== rpc) return
-        this.rpc = undefined
-        this.addOp({ kind: 'event', event: { type: 'runtime_exit', code } })
-        this.uiQueue = []
-        this.post({ type: 'extensionUi', request: null })
-        this.update({ status: 'exited', isStreaming: false, error: `Pi stopped${code === null ? '' : ` (exit code ${code})`}.${stderr ? `\n${stderr.split('\n').slice(-6).join('\n')}` : ''}` })
-      }, environment)
+      rpc = new PiRpc(
+        resolvePi(config.get('piPath', '')),
+        ['--mode', 'rpc', '--extension', this.browser.extensionPath, '--extension', join(this.distDirectory, 'extensions', 'editor-extension.ts')],
+        this.cwd,
+        (record) => {
+          if (this.rpc === rpc) this.onRecord(record)
+        },
+        (code, stderr) => {
+          this.browser.capability.revoke(launchToken)
+          if (this.browserToken === launchToken) this.browserToken = undefined
+          if (this.rpc !== rpc) return
+          this.rpc = undefined
+          this.addOp({ kind: 'event', event: { type: 'runtime_exit', code } })
+          this.uiQueue = []
+          this.post({ type: 'extensionUi', request: null })
+          this.update({ status: 'exited', isStreaming: false, error: `Pi stopped${code === null ? '' : ` (exit code ${code})`}.${stderr ? `\n${stderr.split('\n').slice(-6).join('\n')}` : ''}` })
+        },
+        environment,
+      )
     } catch (error) {
       this.browser.capability.revoke(launchToken)
       if (this.browserToken === launchToken) this.browserToken = undefined
@@ -141,7 +183,12 @@ export class ApexSession implements vscode.Disposable {
       return
     }
     this.rpc = rpc
-    void this.refreshAll().then(() => { if (this.rpc === rpc) this.update({ status: 'ready' }) }, (error) => this.notice(`Could not read Pi's state: ${error instanceof Error ? error.message : String(error)}`))
+    void this.refreshAll().then(
+      () => {
+        if (this.rpc === rpc) this.update({ status: 'ready' })
+      },
+      (error) => this.notice(`Could not read Pi's state: ${error instanceof Error ? error.message : String(error)}`),
+    )
   }
 
   dispose() {
@@ -166,13 +213,20 @@ export class ApexSession implements vscode.Disposable {
   async handle(message: WebviewMessage) {
     switch (message.type) {
       case 'sessions:list': {
-        try { this.post({ type: 'sessions:list', requestId: message.requestId, sessions: await listSessions(this.cwd), currentPath: this.currentPath }) }
-        catch (error) { this.post({ type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: this.currentPath, error: error instanceof Error ? error.message : String(error) }) }
+        try {
+          this.post({ type: 'sessions:list', requestId: message.requestId, sessions: await listSessions(this.cwd), currentPath: this.currentPath })
+        } catch (error) {
+          this.post({ type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: this.currentPath, error: error instanceof Error ? error.message : String(error) })
+        }
         return
       }
       case 'sessions:switch': {
-        try { await this.switchSession(message.path); this.post({ type: 'sessions:switch', requestId: message.requestId }) }
-        catch (error) { this.post({ type: 'sessions:switch', requestId: message.requestId, error: error instanceof Error ? error.message : String(error) }) }
+        try {
+          await this.switchSession(message.path)
+          this.post({ type: 'sessions:switch', requestId: message.requestId })
+        } catch (error) {
+          this.post({ type: 'sessions:switch', requestId: message.requestId, error: error instanceof Error ? error.message : String(error) })
+        }
         return
       }
       case 'browserRequest': {
@@ -180,12 +234,22 @@ export class ApexSession implements vscode.Disposable {
           const service = this.browser.service
           let result: unknown
           switch (message.method) {
-            case 'state': result = service.state(); break
-            case 'getExtensionStatus': result = service.getExtensionStatus(); break
-            case 'setActiveSession': result = await service.setActiveSession(this.browserSessionKey); break
-            case 'setTabPaused': result = await service.setTabPaused(this.browserSessionKey, message.tabId ?? '', message.paused); break
+            case 'state':
+              result = service.state()
+              break
+            case 'getExtensionStatus':
+              result = service.getExtensionStatus()
+              break
+            case 'setActiveSession':
+              result = await service.setActiveSession(this.browserSessionKey)
+              break
+            case 'setTabPaused':
+              result = await service.setTabPaused(this.browserSessionKey, message.tabId ?? '', message.paused)
+              break
             case 'focusExtensionTab':
-            case 'popOutTab': result = await service.focusExtensionTab(this.browserSessionKey, message.tabId ?? ''); break
+            case 'popOutTab':
+              result = await service.focusExtensionTab(this.browserSessionKey, message.tabId ?? '')
+              break
           }
           this.post({ type: 'browserResponse', requestId: message.requestId, result })
         } catch (error) {
@@ -193,22 +257,34 @@ export class ApexSession implements vscode.Disposable {
         }
         return
       }
-      case 'ready': return this.replay()
-      case 'send': return this.send(message.text, message.images, message.intent)
-      case 'stop': return this.stop()
+      case 'ready':
+        return this.replay()
+      case 'send':
+        return this.send(message.text, message.images, message.intent)
+      case 'stop':
+        return this.stop()
       case 'sendQueued': {
         if (this.switching || !this.rpc) return this.notice('Cannot send a queued message while switching sessions or Pi is not running.')
-        const queued = this.state.queued.find(item => item.id === message.id)
+        const queued = this.state.queued.find((item) => item.id === message.id)
         if (!queued) return
-        this.update({ queued: this.state.queued.filter(item => item.id !== message.id) })
+        this.update({ queued: this.state.queued.filter((item) => item.id !== message.id) })
         return this.send(queued.text, queued.images ?? [], 'steer', queued.editorContext)
       }
-      case 'removeQueued': return this.update({ queued: this.state.queued.filter((item) => item.id !== message.id) })
-      case 'setModel': return this.setModel(message.key)
-      case 'setThinking': return this.guard(async () => { await this.rpc?.command('set_thinking_level', { level: message.level }); this.update({ thinkingLevel: message.level }) })
-      case 'extensionUiResponse': return this.respondToUi(message.id, message.response)
-      case 'command': return this.runCommand(message.action)
-      case 'listFiles': return this.listFiles(message.requestId)
+      case 'removeQueued':
+        return this.update({ queued: this.state.queued.filter((item) => item.id !== message.id) })
+      case 'setModel':
+        return this.setModel(message.key)
+      case 'setThinking':
+        return this.guard(async () => {
+          await this.rpc?.command('set_thinking_level', { level: message.level })
+          this.update({ thinkingLevel: message.level })
+        })
+      case 'extensionUiResponse':
+        return this.respondToUi(message.id, message.response)
+      case 'command':
+        return this.runCommand(message.action)
+      case 'listFiles':
+        return this.listFiles(message.requestId)
       case 'openExternal':
         if (/^(https?:|mailto:)/i.test(message.url)) void vscode.env.openExternal(vscode.Uri.parse(message.url))
         return
@@ -244,7 +320,10 @@ export class ApexSession implements vscode.Disposable {
       this.post({ type: 'extensionUi', request: null })
       this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
       await this.refreshAll()
-    } finally { this.switching = false; this.queuePaused = wasPaused }
+    } finally {
+      this.switching = false
+      this.queuePaused = wasPaused
+    }
   }
 
   private setCurrentPath(path: string | null) {
@@ -254,14 +333,20 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async newSession() {
-    if (this.switching) { this.notice('Cannot create a session while switching sessions.'); return }
+    if (this.switching) {
+      this.notice('Cannot create a session while switching sessions.')
+      return
+    }
     if (!this.rpc) return this.start()
     // Hold the local queue first: pi settles before abort responds, which would otherwise send the next queued prompt into the outgoing session.
     this.queuePaused = true
     await this.guard(async () => {
       if (this.state.isStreaming) await this.abortRun()
       const result = await this.rpc?.command<Json>('new_session')
-      if (result?.cancelled === true) { this.notice('An extension kept the current session open.'); return }
+      if (result?.cancelled === true) {
+        this.notice('An extension kept the current session open.')
+        return
+      }
       this.resetTranscript()
       this.queuePaused = false
       this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
@@ -282,14 +367,22 @@ export class ApexSession implements vscode.Disposable {
     if (!rpc) return
     const cleared = await rpc.command<Json>('clear_queue').catch(() => undefined)
     await rpc.command('abort')
-    const dropped = [...(Array.isArray(cleared?.steering) ? cleared.steering : []), ...(Array.isArray(cleared?.followUp) ? cleared.followUp : [])].filter((text): text is string => typeof text === 'string')
+    const dropped = [...(Array.isArray(cleared?.steering) ? cleared.steering : []), ...(Array.isArray(cleared?.followUp) ? cleared.followUp : [])].filter(
+      (text): text is string => typeof text === 'string',
+    )
     if (dropped.length) this.notice(`Stopped before delivering:\n${dropped.map((text) => `• ${text}`).join('\n')}`)
   }
 
   private async send(text: string, images: PromptImage[], intent: 'queue' | 'steer', editorContext = editorPromptContext()) {
-    if (this.switching) { this.notice('Cannot send a prompt while switching sessions.'); return }
+    if (this.switching) {
+      this.notice('Cannot send a prompt while switching sessions.')
+      return
+    }
     const rpc = this.rpc
-    if (!rpc) { this.notice('Pi is not running. Use Restart Pi to start it again.'); return }
+    if (!rpc) {
+      this.notice('Pi is not running. Use Restart Pi to start it again.')
+      return
+    }
     const imagePayload = images.length ? { images } : {}
     if (this.state.isStreaming) {
       if (this.isExtensionCommand(text)) {
@@ -347,24 +440,37 @@ export class ApexSession implements vscode.Disposable {
 
   private async runCommand(action: { type: string; [key: string]: unknown }) {
     switch (action.type) {
-      case 'new': return this.newSession()
-      case 'restart': return this.start()
+      case 'new':
+        return this.newSession()
+      case 'restart':
+        return this.start()
       case 'name': {
         const title = asString(action.title)?.trim()
-        if (title) await this.guard(async () => { await this.rpc?.command('set_session_name', { name: title }); this.update({ sessionName: title }) })
+        if (title)
+          await this.guard(async () => {
+            await this.rpc?.command('set_session_name', { name: title })
+            this.update({ sessionName: title })
+          })
         return
       }
-      case 'copy': return this.guard(async () => {
-        const data = await this.rpc?.command<Json>('get_last_assistant_text')
-        const text = asString(data?.text)
-        if (text) { await vscode.env.clipboard.writeText(text); void vscode.window.setStatusBarMessage('Apex: copied the last response', 2500) }
-      })
-      case 'session': return this.guard(async () => {
-        const stats = await this.rpc?.command<Json>('get_session_stats')
-        void vscode.window.showInformationMessage(`Apex session ${asString(stats?.sessionId) ?? ''}`, { modal: false, detail: asString(stats?.sessionFile) })
-      })
-      case 'settings': return void vscode.commands.executeCommand('workbench.action.openSettings', 'apex')
-      case 'resume': return this.notice('Resuming other sessions is not available in Apex for VS Code yet. Open the session in the Apex desktop app.')
+      case 'copy':
+        return this.guard(async () => {
+          const data = await this.rpc?.command<Json>('get_last_assistant_text')
+          const text = asString(data?.text)
+          if (text) {
+            await vscode.env.clipboard.writeText(text)
+            void vscode.window.setStatusBarMessage('Apex: copied the last response', 2500)
+          }
+        })
+      case 'session':
+        return this.guard(async () => {
+          const stats = await this.rpc?.command<Json>('get_session_stats')
+          void vscode.window.showInformationMessage(`Apex session ${asString(stats?.sessionId) ?? ''}`, { modal: false, detail: asString(stats?.sessionFile) })
+        })
+      case 'settings':
+        return void vscode.commands.executeCommand('workbench.action.openSettings', 'apex')
+      case 'resume':
+        return this.notice('Resuming other sessions is not available in Apex for VS Code yet. Open the session in the Apex desktop app.')
     }
   }
 
@@ -396,7 +502,10 @@ export class ApexSession implements vscode.Disposable {
   private onRecord(record: Json) {
     const type = asString(record.type)
     if (type === 'extension_ui_request') return this.onExtensionUi(record)
-    if (type === 'agent_start') { this.runStarted = true; this.update({ isStreaming: true }) }
+    if (type === 'agent_start') {
+      this.runStarted = true
+      this.update({ isStreaming: true })
+    }
     if (type === 'agent_settled') {
       this.update({ isStreaming: false })
       void this.refreshStats()
@@ -440,7 +549,11 @@ export class ApexSession implements vscode.Disposable {
         const text = asString(delta?.delta) ?? ''
         const last = this.pendingOps.at(-1)
         const lastDelta = last?.kind === 'event' && last.event.type === 'message_update' ? asRecord(last.event.assistantMessageEvent) : undefined
-        if (lastDelta?.type === deltaType) { lastDelta.delta = String(lastDelta.delta) + text; this.scheduleFlush(); return }
+        if (lastDelta?.type === deltaType) {
+          lastDelta.delta = String(lastDelta.delta) + text
+          this.scheduleFlush()
+          return
+        }
         return this.addOp({ kind: 'event', event: { type: 'message_update', assistantMessageEvent: { type: deltaType, delta: text } } })
       }
       if (deltaType === 'toolcall_end') return this.addOp({ kind: 'event', event: { type: 'message_update', assistantMessageEvent: { type: deltaType, toolCall: delta?.toolCall } } })
@@ -502,16 +615,17 @@ export class ApexSession implements vscode.Disposable {
   }
 
   private async guard(action: () => Promise<unknown>) {
-    try { await action() } catch (error) { this.notice(error instanceof Error ? error.message : String(error)) }
+    try {
+      await action()
+    } catch (error) {
+      this.notice(error instanceof Error ? error.message : String(error))
+    }
   }
 
   private async refreshAll() {
     const rpc = this.rpc
     if (!rpc) return
-    const [models, commands] = await Promise.all([
-      rpc.command<Json>('get_available_models'),
-      rpc.command<Json>('get_commands').catch(() => ({ commands: [] })),
-    ])
+    const [models, commands] = await Promise.all([rpc.command<Json>('get_available_models'), rpc.command<Json>('get_commands').catch(() => ({ commands: [] }))])
     const descriptors = (Array.isArray(models?.models) ? models.models : []).map((model) => describeModel(model as Json))
     const runtimeCommands: RuntimeCommand[] = (Array.isArray(commands?.commands) ? commands.commands : []).flatMap((value) => {
       const command = value as Json
@@ -536,8 +650,8 @@ export class ApexSession implements vscode.Disposable {
 
   private async refreshThinking() {
     const data = await this.rpc?.command<Json>('get_available_thinking_levels')
-    const levels = Array.isArray(data?.levels) ? data.levels as ThinkingLevel[] : ['off' as const]
-    const models = this.state.models.map((model) => model.key === this.state.model ? { ...model, availableThinkingLevels: levels } : model)
+    const levels = Array.isArray(data?.levels) ? (data.levels as ThinkingLevel[]) : ['off' as const]
+    const models = this.state.models.map((model) => (model.key === this.state.model ? { ...model, availableThinkingLevels: levels } : model))
     this.update({ thinkingLevels: levels, models })
   }
 
@@ -547,10 +661,22 @@ export class ApexSession implements vscode.Disposable {
     const usage = asRecord(stats.contextUsage)
     const tokens = asRecord(stats.tokens)
     this.update({
-      contextUsage: usage ? { tokens: typeof usage.tokens === 'number' ? usage.tokens : null, contextWindow: Number(usage.contextWindow) || 0, percent: typeof usage.percent === 'number' ? usage.percent : null } : undefined,
+      contextUsage: usage
+        ? { tokens: typeof usage.tokens === 'number' ? usage.tokens : null, contextWindow: Number(usage.contextWindow) || 0, percent: typeof usage.percent === 'number' ? usage.percent : null }
+        : undefined,
       sessionUsage: {
         cost: typeof stats.cost === 'number' ? stats.cost : null,
-        ...(tokens ? { tokens: { input: Number(tokens.input) || 0, output: Number(tokens.output) || 0, cacheRead: Number(tokens.cacheRead) || 0, cacheWrite: Number(tokens.cacheWrite) || 0, total: Number(tokens.total) || 0 } } : {}),
+        ...(tokens
+          ? {
+              tokens: {
+                input: Number(tokens.input) || 0,
+                output: Number(tokens.output) || 0,
+                cacheRead: Number(tokens.cacheRead) || 0,
+                cacheWrite: Number(tokens.cacheWrite) || 0,
+                total: Number(tokens.total) || 0,
+              },
+            }
+          : {}),
       },
     })
   }

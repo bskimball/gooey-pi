@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Composer } from '../../src/components/Composer'
+import { Composer } from '../../apps/desktop/src/components/Composer'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

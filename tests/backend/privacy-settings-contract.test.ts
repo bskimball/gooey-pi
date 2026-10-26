@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({ session: { fromPartition: vi.fn(), defaultSession: {} } }))
 
-import { SettingsService } from '../../electron/main/settings-schedules'
-import { defaultSettings, JsonStateStore } from '../../electron/main/store'
-import { HARNESS_IDS, type HarnessId } from '../../src/types/api'
+import { SettingsService } from '../../apps/desktop/electron/main/settings-schedules'
+import { defaultSettings, JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { HARNESS_IDS, type HarnessId } from '../../apps/desktop/src/types/api'
 
-const DIRECT_REFERENCE_ROOTS = ['assets/extensions', 'electron', 'src'] as const
+const DIRECT_REFERENCE_ROOTS = ['apps/desktop/assets/extensions', 'apps/desktop/electron', 'apps/desktop/src', 'packages/core/src'] as const
 const DIRECT_REFERENCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 const TELEMETRY_VALUES = [false, true] as const
 const HARNESS_TELEMETRY_CASES = HARNESS_IDS.flatMap((harness) => (
@@ -81,12 +81,12 @@ describe('legacy telemetry compatibility contract', () => {
     // It does not detect computed, indirect, or aliased consumers and must not be cited as
     // semantic proof that no telemetry consumer or transport exists.
     expect(references).toStrictEqual([
-      { file: 'electron/main/settings-schedules.ts', source: "telemetry: (value) => requireBoolean(value, 'telemetry')," },
-      { file: 'electron/main/store.ts', source: 'telemetry: false,' },
-      { file: 'electron/main/store.ts', source: "telemetry: typeof value.telemetry === 'boolean' ? value.telemetry : defaults.telemetry," },
-      { file: 'src/lib/data.ts', source: 'telemetry: false,' },
-      { file: 'src/pages/settings/contracts.ts', source: "telemetry: 'privacy'," },
-      { file: 'src/types/api.ts', source: 'telemetry: boolean' },
+      { file: 'apps/desktop/electron/main/settings-schedules.ts', source: "telemetry: (value) => requireBoolean(value, 'telemetry')," },
+      { file: 'apps/desktop/electron/main/store.ts', source: 'telemetry: false,' },
+      { file: 'apps/desktop/electron/main/store.ts', source: "telemetry: typeof value.telemetry === 'boolean' ? value.telemetry : defaults.telemetry," },
+      { file: 'apps/desktop/src/lib/data.ts', source: 'telemetry: false,' },
+      { file: 'apps/desktop/src/pages/settings/contracts.ts', source: "telemetry: 'privacy'," },
+      { file: 'packages/core/src/types/api.ts', source: 'telemetry: boolean' },
     ])
   })
 })

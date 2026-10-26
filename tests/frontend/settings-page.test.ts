@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../src/lib/data'
-import { confirmedPanelSettings } from '../../src/lib/settings-state'
-import { SETTINGS_FIELD_SECTIONS } from '../../src/pages/settings/contracts'
+import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
+import { confirmedPanelSettings } from '../../apps/desktop/src/lib/settings-state'
+import { SETTINGS_FIELD_SECTIONS } from '../../apps/desktop/src/pages/settings/contracts'
 import {
   browserHomeValidation,
   createDraftState,
   normalizeBrowserHome,
   reduceDraftState,
   terminalShellValidation,
-} from '../../src/pages/settings/draft-state'
+} from '../../apps/desktop/src/pages/settings/draft-state'
 
 describe('settings draft synchronization', () => {
   it('keeps edits local until an explicit commit action', () => {

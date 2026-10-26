@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applySessionLifecycleEvent } from '../../src/app/session-attention'
-import { indexStartedSession } from '../../src/hooks/useWorkspaceActions'
-import type { PrimeWorkApi, SessionRecord } from '../../src/types/api'
+import { applySessionLifecycleEvent } from '../../apps/desktop/src/app/session-attention'
+import { indexStartedSession } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import type { PrimeWorkApi, SessionRecord } from '../../apps/desktop/src/types/api'
 
 const existing: SessionRecord = {
   id: 'existing', harness: 'pi', filePath: '/sessions/existing.jsonl', projectPath: '/project', title: 'Existing chat',

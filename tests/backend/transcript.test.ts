@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readSessionMetadata } from '../../electron/main/sessions/metadata'
-import { readTranscript } from '../../electron/main/sessions/transcript'
-import { configureGooeyPiAgentMessageSigning, encodeGooeyPiAgentMessage, loadOrCreateGooeyPiAgentMessageKey, parseGooeyPiAgentMessage } from '../../electron/main/collaboration/message-envelope'
+import { readSessionMetadata } from '../../apps/desktop/electron/main/sessions/metadata'
+import { readTranscript } from '../../apps/desktop/electron/main/sessions/transcript'
+import { configureGooeyPiAgentMessageSigning, encodeGooeyPiAgentMessage, loadOrCreateGooeyPiAgentMessageKey, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
 
 const dirs: string[] = []
 configureGooeyPiAgentMessageSigning(Buffer.alloc(32, 7))
@@ -435,7 +435,7 @@ describe('transcript text budgets', () => {
 describe('assistant provider failures', () => {
   it.each([{ content: [] }, { content: [{ type: 'text', text: 'Partial response' }] }])('preserves the provider error separately from content $content', async ({ content }) => {
     const file = makeSessionFile()
-    writeFileSync(file, JSON.stringify({ type: 'message', id: 'a', parentId: null, message: { role: 'assistant', content, stopReason: 'error', errorMessage: '429 ResourceExhausted' } }) + '\n')
+    writeFileSync(file, `${JSON.stringify({ type: 'message', id: 'a', parentId: null, message: { role: 'assistant', content, stopReason: 'error', errorMessage: '429 ResourceExhausted' } })}\n`)
     const messages = await readTranscript(file, false)
     expect(messages[0]).toMatchObject({ errorMessage: '429 ResourceExhausted' })
     expect(messages[0].parts).toEqual(content.length ? content : [{ type: 'text', text: '' }])
@@ -444,9 +444,9 @@ describe('assistant provider failures', () => {
   it('clears the latest attempt error after recovery and bounds error metadata', async () => {
     const file = makeSessionFile()
     const failure = { type: 'message', id: 'a', parentId: null, message: { role: 'assistant', content: [], stopReason: 'error', errorMessage: 'x'.repeat(300_000) } }
-    writeFileSync(file, JSON.stringify(failure) + '\n')
+    writeFileSync(file, `${JSON.stringify(failure)}\n`)
     expect((await readTranscript(file, false))[0].errorMessage?.length).toBeLessThanOrEqual(256 * 1024)
-    writeFileSync(file, [failure, { type: 'message', id: 'b', parentId: 'a', message: { role: 'assistant', content: [{ type: 'text', text: 'Recovered' }], stopReason: 'stop' } }].map((entry) => JSON.stringify(entry)).join('\n') + '\n')
+    writeFileSync(file, `${[failure, { type: 'message', id: 'b', parentId: 'a', message: { role: 'assistant', content: [{ type: 'text', text: 'Recovered' }], stopReason: 'stop' } }].map((entry) => JSON.stringify(entry)).join('\n')}\n`)
     const messages = await readTranscript(file, false)
     expect(messages).toHaveLength(1)
     expect(messages[0].errorMessage).toBeUndefined()

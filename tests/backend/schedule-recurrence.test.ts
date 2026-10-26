@@ -8,7 +8,7 @@ import {
   previewScheduleOccurrences,
   validateScheduleTiming,
   type ScheduleTiming,
-} from '../../electron/main/schedules/recurrence'
+} from '../../apps/desktop/electron/main/schedules/recurrence'
 
 const dailyNewYork: ScheduleTiming = {
   kind: 'rrule',

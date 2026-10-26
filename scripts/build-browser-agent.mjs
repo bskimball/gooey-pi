@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 const directory = resolve('out/browser-agent')
 await mkdir(directory, { recursive: true })
 const result = await build({
-  entryPoints: ['browser-agent/index.ts'],
+  entryPoints: ['apps/desktop/browser-agent/index.ts'],
   outfile: resolve(directory, 'runtime.mjs'),
   bundle: true,
   platform: 'node',

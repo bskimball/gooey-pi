@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, posix } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { probeHarnessExecutable } from '../../electron/main/harness-discovery'
-import { HARNESSES } from '../../electron/main/harness'
-import { PROCESS_CONCURRENCY_LIMIT, executableChildEnvironment, harnessExecutableCandidates, isAbsolutePathForPlatform, killProcessTree, prepareExecutableSpawn, nvmHarnessExecutableCandidates, processFailureReason, processOutcome, runProcess, stopChildProcesses, waitForProcessExit, type ProcessResult } from '../../electron/main/process-utils'
+import { probeHarnessExecutable } from '../../apps/desktop/electron/main/harness-discovery'
+import { HARNESSES } from '../../apps/desktop/electron/main/harness'
+import { PROCESS_CONCURRENCY_LIMIT, executableChildEnvironment, harnessExecutableCandidates, isAbsolutePathForPlatform, killProcessTree, prepareExecutableSpawn, nvmHarnessExecutableCandidates, processFailureReason, processOutcome, runProcess, stopChildProcesses, waitForProcessExit, type ProcessResult } from '../../apps/desktop/electron/main/process-utils'
 import { waitUntil } from '../helpers/wait'
 
 const spawnOverride = vi.hoisted(() => ({ current: null as null | ((...args: unknown[]) => unknown) }))
@@ -403,7 +403,7 @@ describe('runProcess stdio pipe failures', () => {
   // so these cases run against a fresh module instance.
   async function freshRunProcess(): Promise<typeof runProcess> {
     vi.resetModules()
-    const module = await import('../../electron/main/process-utils')
+    const module = await import('../../apps/desktop/electron/main/process-utils')
     return module.runProcess
   }
 

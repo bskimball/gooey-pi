@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { applySessionLifecycleEvent, sessionLifecycleChange } from '../../src/app/session-attention'
-import { applyPrimeEvent, replayPrimeEvents } from '../../src/lib/events'
-import type { SessionRecord, TranscriptMessage } from '../../src/types/api'
+import { applySessionLifecycleEvent, sessionLifecycleChange } from '../../apps/desktop/src/app/session-attention'
+import { applyPrimeEvent, replayPrimeEvents } from '../../apps/desktop/src/lib/events'
+import type { SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const session = (): SessionRecord => ({
   id: 'session',

@@ -15,15 +15,15 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: mocks.showOpenDialog, showSaveDialog: mocks.showSaveDialog },
 }))
 
-vi.mock('../../electron/main/git', () => ({
+vi.mock('../../apps/desktop/electron/main/git', () => ({
   createGitWorktree: mocks.createGitWorktree,
   isNotARepositoryFailure: () => false,
   listGitWorktrees: mocks.listGitWorktrees,
   validateGitBranch: mocks.validateGitBranch,
 }))
 
-import { ProjectService } from '../../electron/main/projects'
-import { JsonStateStore } from '../../electron/main/store'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 

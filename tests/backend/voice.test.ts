@@ -2,9 +2,9 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defaultSettings } from '../../electron/main/store'
-import { VoiceService, voiceSecretStorageStatus, type VoiceServiceOptions } from '../../electron/main/voice'
-import type { HarnessId, RuntimeInfo } from '../../src/types/api'
+import { defaultSettings } from '../../apps/desktop/electron/main/store'
+import { VoiceService, voiceSecretStorageStatus, type VoiceServiceOptions } from '../../apps/desktop/electron/main/voice'
+import type { HarnessId, RuntimeInfo } from '../../apps/desktop/src/types/api'
 
 const directories: string[] = []
 

@@ -7,7 +7,7 @@ const coverageInventory = createCoverageInventory(projectRoot)
 
 export default defineConfig({
   root: projectRoot,
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  resolve: { alias: { '@': fileURLToPath(new URL('./apps/desktop/src', import.meta.url)) } },
   esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',

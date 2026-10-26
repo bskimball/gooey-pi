@@ -22,7 +22,7 @@ vi.mock('electron', () => ({
   ipcRenderer: electronMocks.ipcRenderer,
 }))
 
-await import('../../electron/preload/index')
+await import('../../apps/desktop/electron/preload/index')
 
 type BridgeApi = Record<string, Record<string, (...args: unknown[]) => unknown>>
 

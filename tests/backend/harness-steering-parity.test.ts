@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PI_RPC_ADAPTER } from '../../electron/main/agent-rpc'
-import { parseSessionActionSnapshot } from '../../src/lib/session-actions'
+import { PI_RPC_ADAPTER } from '../../apps/desktop/electron/main/agent-rpc'
+import { parseSessionActionSnapshot } from '../../apps/desktop/src/lib/session-actions'
 
 const adapters = [
   ['Pi', PI_RPC_ADAPTER],

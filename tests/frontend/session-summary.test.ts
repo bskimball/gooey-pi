@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSessionSummarySelector, extractPiSessionWidgets, summarizeTranscript } from '../../src/components/inspector/session-summary'
-import type { MessagePart, TranscriptMessage } from '../../src/types/api'
+import { createSessionSummarySelector, extractPiSessionWidgets, summarizeTranscript } from '../../apps/desktop/src/components/inspector/session-summary'
+import type { MessagePart, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const message = (id: string, parts: MessagePart[]): TranscriptMessage => ({ id, role: 'assistant', parts })
 const fullSummary = (messages: TranscriptMessage[]) => ({ ...summarizeTranscript(messages), ...extractPiSessionWidgets(messages) })

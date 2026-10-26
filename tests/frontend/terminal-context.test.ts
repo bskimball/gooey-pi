@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { appendTerminalContextToPrompt, boundTerminalText, splitTerminalContextBlock, TERMINAL_CONTEXT_END } from '../../src/lib/terminal-context'
-import type { TerminalPromptContext } from '../../src/types/api'
+import { appendTerminalContextToPrompt, boundTerminalText, splitTerminalContextBlock, TERMINAL_CONTEXT_END } from '../../apps/desktop/src/lib/terminal-context'
+import type { TerminalPromptContext } from '../../apps/desktop/src/types/api'
 
 const context = (overrides: Partial<TerminalPromptContext> = {}): TerminalPromptContext => ({
   tabId: 'terminal-2',

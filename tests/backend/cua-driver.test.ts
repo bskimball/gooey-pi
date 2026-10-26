@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CUA_DRIVER_INSTALL_URL, CuaDriverService, cuaDriverExecutableCandidates } from '../../electron/main/cua-driver'
+import { CUA_DRIVER_INSTALL_URL, CuaDriverService, cuaDriverExecutableCandidates } from '../../apps/desktop/electron/main/cua-driver'
 
 describe('cuaDriverExecutableCandidates', () => {
   it('covers PATH and standard macOS, Windows, and Linux installs', () => {

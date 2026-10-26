@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OmpExtensionApi } from '../../assets/extensions/apex-browser-agent'
+import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser-agent'
 
 type Tool = Parameters<OmpExtensionApi['registerTool']>[0]
 let root: string
@@ -22,7 +22,7 @@ afterEach(() => {
 })
 async function load() {
   const tools = new Map<string, Tool>()
-  const extension = await import('../../assets/extensions/apex-browser-agent')
+  const extension = await import('../../apps/desktop/assets/extensions/apex-browser-agent')
   await extension.default({ registerTool: (tool) => { tools.set(tool.name, tool) } })
   const get = (name: string) => {
     const tool = tools.get(`browser_${name}`)

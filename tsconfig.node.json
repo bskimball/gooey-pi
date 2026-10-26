@@ -16,10 +16,11 @@
   },
   "include": [
     "electron.vite.config.ts",
-    "electron/**/*.ts",
-    "src/types/**/*.ts"
+    "apps/desktop/electron/**/*.ts",
+    "apps/desktop/src/types/**/*.ts",
+    "packages/core/src/**/*.ts"
   ],
   "exclude": [
-    "src/types/nodejs.d.ts"
+    "apps/desktop/src/types/nodejs.d.ts"
   ]
 }

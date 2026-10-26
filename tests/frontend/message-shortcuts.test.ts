@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { messageActionForKey, type MessageShortcutEvent } from '../../src/lib/message-shortcuts'
+import { messageActionForKey, type MessageShortcutEvent } from '../../apps/desktop/src/lib/message-shortcuts'
 
 const event = (overrides: Partial<MessageShortcutEvent> = {}): MessageShortcutEvent => ({
   key: 'Enter', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, isComposing: false, ...overrides,

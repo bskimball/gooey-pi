@@ -5,12 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	AgentBrowserService,
 	isLocalPreviewUrl,
-} from "../../electron/main/browser/agent-service";
+} from "../../apps/desktop/electron/main/browser/agent-service";
 import {
 	ExtensionBrowserBridge,
 	type ExtensionCommand,
-} from "../../electron/main/browser/extension-bridge";
-import { readPageScript } from "../../electron/main/browser/page-scripts";
+} from "../../apps/desktop/electron/main/browser/extension-bridge";
+import { readPageScript } from "../../apps/desktop/electron/main/browser/page-scripts";
 
 const sessionA = resolve("/sessions/a.jsonl");
 
@@ -398,7 +398,7 @@ function workerFixture() {
 		alarms: { create: vi.fn(), onAlarm: eventSource() },
 	};
 	const source = readFileSync(
-		new URL("../../resources/browser-extension/background.js", import.meta.url),
+		new URL("../../packages/browser-extension/extension/background.js", import.meta.url),
 		"utf8",
 	);
 	const worker = runInNewContext(`${source}\n;({ execute, tabs })`, {
@@ -439,7 +439,7 @@ function workerFixture() {
 describe("extension manifest", () => {
 	it("declares toolbar and store icons that exist on disk", () => {
 		const extensionDir = new URL(
-			"../../resources/browser-extension/",
+			"../../packages/browser-extension/extension/",
 			import.meta.url,
 		);
 		const manifest = JSON.parse(
@@ -603,7 +603,7 @@ describe("extension worker input and physical-tab queues", () => {
 		runInNewContext(
 			readFileSync(
 				new URL(
-					"../../resources/browser-extension/content-overlay.js",
+					"../../packages/browser-extension/extension/content-overlay.js",
 					import.meta.url,
 				),
 				"utf8",

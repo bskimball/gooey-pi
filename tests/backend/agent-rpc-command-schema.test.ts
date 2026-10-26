@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { isThinkingLevel, validateRpcCommand } from '../../electron/main/agent-rpc/command-schema'
+import { isThinkingLevel, validateRpcCommand } from '../../apps/desktop/electron/main/agent-rpc/command-schema'
 
 const passthrough = async (path: string) => path
 

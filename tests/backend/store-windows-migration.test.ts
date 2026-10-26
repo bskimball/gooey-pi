@@ -9,8 +9,8 @@ import {
   JsonStateStore,
   LEGACY_DESKTOP_STATE_FILENAME,
   StateMigrationError,
-} from '../../electron/main/store'
-import type { JsonStateStoreFileSystem } from '../../electron/main/store'
+} from '../../apps/desktop/electron/main/store'
+import type { JsonStateStoreFileSystem } from '../../apps/desktop/electron/main/store'
 
 const directories: string[] = []
 

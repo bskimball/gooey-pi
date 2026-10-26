@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAppUpdates } from '../../src/hooks/useAppUpdates'
-import type { AppUpdateState, PrimeWorkApi } from '../../src/types/api'
+import { useAppUpdates } from '../../apps/desktop/src/hooks/useAppUpdates'
+import type { AppUpdateState, PrimeWorkApi } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ExtensionUiModal } from '../../src/components/ExtensionUiModal'
-import type { ExtensionUiRequest } from '../../src/lib/extension-ui'
+import { ExtensionUiModal } from '../../apps/desktop/src/components/ExtensionUiModal'
+import type { ExtensionUiRequest } from '../../apps/desktop/src/lib/extension-ui'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TerminalService } from '../../electron/main/terminal'
+import { TerminalService } from '../../apps/desktop/electron/main/terminal'
 
 const dirs: string[] = []
 const windows = process.platform === 'win32'

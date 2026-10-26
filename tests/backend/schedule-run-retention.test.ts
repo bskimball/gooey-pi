@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AutomationService } from '../../electron/main/schedules/service'
-import { JsonStateStore } from '../../electron/main/store'
-import type { AutomationScheduleRecord, ScheduleRunRecord, ScheduleRunStatus } from '../../src/types/api'
+import { AutomationService } from '../../apps/desktop/electron/main/schedules/service'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { AutomationScheduleRecord, ScheduleRunRecord, ScheduleRunStatus } from '../../apps/desktop/src/types/api'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

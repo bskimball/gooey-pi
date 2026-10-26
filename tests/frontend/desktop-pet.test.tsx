@@ -2,8 +2,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DesktopPet } from '../../src/components/DesktopPet'
-import type { PetDefinition, PrimeWorkApi } from '../../src/types/api'
+import { DesktopPet } from '../../apps/desktop/src/components/DesktopPet'
+import type { PetDefinition, PrimeWorkApi } from '../../apps/desktop/src/types/api'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { terminalLinkOpensExternally } from '../../src/lib/terminal-links'
+import { terminalLinkOpensExternally } from '../../apps/desktop/src/lib/terminal-links'
 
 describe('terminal link routing', () => {
   it('opens plain clicks in Apex and modified clicks externally', () => {

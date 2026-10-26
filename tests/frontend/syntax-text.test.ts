@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { tokenizeSyntaxText } from '../../src/lib/syntax-text'
+import { tokenizeSyntaxText } from '../../apps/desktop/src/lib/syntax-text'
 
 describe('tool syntax tokenization', () => {
   it('classifies duplicate strings from their offsets rather than searching the full input', () => {

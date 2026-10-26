@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { runSteps } from '../../browser-agent/runner'
-import { matches, pageDiff, parsePage } from '../../browser-agent/targets'
-import { validateInput } from '../../browser-agent/validation'
-import type { Broker, Classifier, Expectation } from '../../browser-agent/types'
+import { runSteps } from '../../apps/desktop/browser-agent/runner'
+import { matches, pageDiff, parsePage } from '../../apps/desktop/browser-agent/targets'
+import { validateInput } from '../../apps/desktop/browser-agent/validation'
+import type { Broker, Classifier, Expectation } from '../../apps/desktop/browser-agent/types'
 
 function browser() {
   let generation = 0

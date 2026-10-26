@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { defaultSettings, JsonStateStore } from '../../electron/main/store'
-import type { DesktopState } from '../../electron/main/store'
-import { reconcileActiveHarness } from '../../electron/main/harness-discovery'
+import { defaultSettings, JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { DesktopState } from '../../apps/desktop/electron/main/store'
+import { reconcileActiveHarness } from '../../apps/desktop/electron/main/harness-discovery'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

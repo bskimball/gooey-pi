@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AppUpdateState } from '../../src/types/api'
-import { createManualUpdateCheck, DEFAULT_CHECK_INTERVAL_MS, manualUpdateNotification, UpdateService, type UpdateAdapter } from '../../electron/main/updates'
+import type { AppUpdateState } from '../../apps/desktop/src/types/api'
+import { createManualUpdateCheck, DEFAULT_CHECK_INTERVAL_MS, manualUpdateNotification, UpdateService, type UpdateAdapter } from '../../apps/desktop/electron/main/updates'
 
 class FakeUpdater extends EventEmitter {
   autoDownload = true

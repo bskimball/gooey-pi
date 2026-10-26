@@ -3,7 +3,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { useWorkspaceRuntime } from '../../src/hooks/useWorkspaceRuntime'
+import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRuntime'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

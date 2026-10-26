@@ -4,8 +4,8 @@ import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Composer } from "../../src/components/Composer";
-import { groupModelsByProvider } from "../../src/hooks/useProviderCatalog";
+import { Composer } from "../../apps/desktop/src/components/Composer";
+import { groupModelsByProvider } from "../../apps/desktop/src/hooks/useProviderCatalog";
 import {
 	appendCapabilityRouting,
 	CAPABILITY_ROUTING_BEGIN,
@@ -14,12 +14,12 @@ import {
 	findCapabilityMentions,
 	findMentionQuery,
 	splitCapabilityRouting,
-} from "../../src/lib/capability-mentions";
+} from "../../apps/desktop/src/lib/capability-mentions";
 import {
 	type PiFusionPair,
 	publishActivePiBehaviorMode,
 	publishActivePiFusionPair,
-} from "../../src/lib/harness";
+} from "../../apps/desktop/src/lib/harness";
 import type {
 	BrowserAnnotation,
 	PrimeModelDescriptor,
@@ -30,7 +30,7 @@ import type {
 	SkillRecord,
 	TerminalPromptContext,
 	TerminalSelectionContext,
-} from "../../src/types/api";
+} from "../../apps/desktop/src/types/api";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

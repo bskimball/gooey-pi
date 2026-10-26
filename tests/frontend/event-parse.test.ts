@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentMessagePart, record, resultText, string } from '../../src/lib/events/parse'
+import { agentMessagePart, record, resultText, string } from '../../apps/desktop/src/lib/events/parse'
 
 describe('raw event coercion', () => {
   it('narrows records and strings', () => {

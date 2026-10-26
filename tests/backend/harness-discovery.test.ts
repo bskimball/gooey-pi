@@ -1,16 +1,16 @@
-import * as processes from '../../electron/main/process-utils'
+import * as processes from '../../apps/desktop/electron/main/process-utils'
 import * as filesystem from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HarnessDiscoveryService, detectedHarnesses, probeHarnessExecutable, reconcileActiveHarness, type HarnessProbeFailure } from '../../electron/main/harness-discovery'
-import { defaultSettings, type DesktopState } from '../../electron/main/store'
-import { HARNESSES, type HarnessDescriptor } from '../../electron/main/harness'
-import { findHarnessExecutable } from '../../electron/main/process-utils'
+import { HarnessDiscoveryService, detectedHarnesses, probeHarnessExecutable, reconcileActiveHarness, type HarnessProbeFailure } from '../../apps/desktop/electron/main/harness-discovery'
+import { defaultSettings, type DesktopState } from '../../apps/desktop/electron/main/store'
+import { HARNESSES, type HarnessDescriptor } from '../../apps/desktop/electron/main/harness'
+import { findHarnessExecutable } from '../../apps/desktop/electron/main/process-utils'
 
-vi.mock('../../electron/main/process-utils', async (importOriginal) => ({ ...await importOriginal<typeof import('../../electron/main/process-utils')>() }))
+vi.mock('../../apps/desktop/electron/main/process-utils', async (importOriginal) => ({ ...await importOriginal<typeof import('../../apps/desktop/electron/main/process-utils')>() }))
 vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
 function deferred<T>() {
@@ -21,7 +21,7 @@ function deferred<T>() {
 
 describe('HarnessDiscoveryService', () => {
   it('preserves bounded sanitized preparation errors and OS error classifications', async () => {
-    vi.spyOn(processes, 'runProcess').mockRejectedValueOnce(new Error('Missing official Pi installation\n' + 'x'.repeat(300)))
+    vi.spyOn(processes, 'runProcess').mockRejectedValueOnce(new Error(`Missing official Pi installation\n${'x'.repeat(300)}`))
     const result = await probeHarnessExecutable('C:\\Tools\\pi.cmd')
     expect(result.failure?.detail).toHaveLength(200)
     expect(result.failure?.detail).toContain('Missing official Pi installation')

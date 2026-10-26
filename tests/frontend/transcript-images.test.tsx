@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TranscriptImage } from '../../src/components/transcript/TranscriptImage'
+import { TranscriptImage } from '../../apps/desktop/src/components/transcript/TranscriptImage'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

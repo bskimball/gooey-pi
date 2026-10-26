@@ -3,9 +3,9 @@
 import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Composer } from '../../src/components/Composer'
-import { groupModelsByProvider } from '../../src/hooks/useProviderCatalog'
-import type { PrimeContextUsage, PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../src/types/api'
+import { Composer } from '../../apps/desktop/src/components/Composer'
+import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
+import type { PrimeContextUsage, PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

@@ -2,10 +2,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { assertNoMcpAuthenticationCommand, NETWORK_MCP_AUTH_UNAVAILABLE } from '../../src/lib/mcp-policy'
-import type { ScheduleExecution, ScheduleTarget } from '../../src/types/api'
-import { AutomationService } from '../../electron/main/schedules/service'
-import { JsonStateStore } from '../../electron/main/store'
+import { assertNoMcpAuthenticationCommand, NETWORK_MCP_AUTH_UNAVAILABLE } from '../../apps/desktop/src/lib/mcp-policy'
+import type { ScheduleExecution, ScheduleTarget } from '../../apps/desktop/src/types/api'
+import { AutomationService } from '../../apps/desktop/electron/main/schedules/service'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 function store(): JsonStateStore {

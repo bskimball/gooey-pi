@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TitleToolbar } from '../../src/components/TitleToolbar'
-import { VoiceOrb } from '../../src/components/VoiceOrb'
-import type { PetDefinition, PrimeWorkApi, ProjectRecord } from '../../src/types/api'
+import { TitleToolbar } from '../../apps/desktop/src/components/TitleToolbar'
+import { VoiceOrb } from '../../apps/desktop/src/components/VoiceOrb'
+import type { PetDefinition, PrimeWorkApi, ProjectRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

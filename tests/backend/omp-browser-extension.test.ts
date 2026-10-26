@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentBrowserBridge } from '../../electron/main/browser/agent-bridge'
-import type { AgentBrowserService } from '../../electron/main/browser/agent-service'
-import type { OmpExtensionApi } from '../../assets/extensions/omp-work-browser'
+import { AgentBrowserBridge } from '../../apps/desktop/electron/main/browser/agent-bridge'
+import type { AgentBrowserService } from '../../apps/desktop/electron/main/browser/agent-service'
+import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-browser'
 
 interface RegisteredTool {
   name: string
@@ -40,7 +40,7 @@ async function loadExtension(environment: NodeJS.ProcessEnv) {
   else vi.stubEnv('PRIME_WORK_BROWSER_URL', undefined as unknown as string)
   if (environment.PRIME_WORK_BROWSER_TOKEN !== undefined) vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', environment.PRIME_WORK_BROWSER_TOKEN)
   else vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', undefined as unknown as string)
-  const module = await import('../../assets/extensions/omp-work-browser')
+  const module = await import('../../apps/desktop/assets/extensions/omp-work-browser')
   return module.default
 }
 

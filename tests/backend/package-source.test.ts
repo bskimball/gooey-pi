@@ -2,8 +2,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PluginService } from '../../electron/main/plugins'
-import { validatePackageSource } from '../../electron/main/plugins/package-execution'
+import { PluginService } from '../../apps/desktop/electron/main/plugins'
+import { validatePackageSource } from '../../apps/desktop/electron/main/plugins/package-execution'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

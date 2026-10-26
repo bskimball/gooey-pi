@@ -1,6 +1,6 @@
 import { connect } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ExtensionBrowserBridge } from '../../electron/main/browser/extension-bridge'
+import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
 
 const bridges: ExtensionBrowserBridge[] = []
 afterEach(async () => {

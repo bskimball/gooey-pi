@@ -3,8 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AboutSettings, updateStatusCopy } from '../../src/pages/settings/AboutSettings'
-import type { AppMeta } from '../../src/types/api'
+import { AboutSettings, updateStatusCopy } from '../../apps/desktop/src/pages/settings/AboutSettings'
+import type { AppMeta } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

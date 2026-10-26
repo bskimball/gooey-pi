@@ -9,5 +9,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["browser-agent/**/*.ts"]
+  "include": ["apps/desktop/browser-agent/**/*.ts"]
 }

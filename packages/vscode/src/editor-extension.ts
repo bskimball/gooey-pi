@@ -1,4 +1,4 @@
-import type { OmpExtensionApi } from '../../../assets/extensions/omp-work-browser'
+import type { OmpExtensionApi } from '../../../apps/desktop/assets/extensions/omp-work-browser'
 
 export default function editorExtension(pi: OmpExtensionApi) {
   const url = process.env.PRIME_WORK_BROWSER_URL

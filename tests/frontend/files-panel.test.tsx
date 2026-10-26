@@ -10,8 +10,8 @@ import {
   filterFileTree,
   flattenVisibleTree,
   collectDirectoryIds,
-} from '../../src/components/inspector/FilesPanel'
-import type { GitStatus, ProjectFileEntry, ProjectRecord } from '../../src/types/api'
+} from '../../apps/desktop/src/components/inspector/FilesPanel'
+import type { GitStatus, ProjectFileEntry, ProjectRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
-import { StrictJsonlDecoder, strictJsonLines } from '../../electron/main/jsonl'
+import { StrictJsonlDecoder, strictJsonLines } from '../../apps/desktop/electron/main/jsonl'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

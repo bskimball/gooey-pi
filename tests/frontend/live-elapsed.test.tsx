@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LiveElapsed } from '../../src/components/transcript/timeline'
+import { LiveElapsed } from '../../apps/desktop/src/components/transcript/timeline'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 

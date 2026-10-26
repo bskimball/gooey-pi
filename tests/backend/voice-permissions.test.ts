@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { isAllowedRendererAudioPermission } from '../../electron/main/voice-permissions'
+import { isAllowedRendererAudioPermission } from '../../apps/desktop/electron/main/voice-permissions'
 
 describe('renderer microphone permission', () => {
   const expected = 'prime-work://app/index.html'
@@ -20,7 +20,7 @@ describe('renderer microphone permission', () => {
 
   it('configures the macOS app and helper processes for microphone input', () => {
     const entitlement = '<key>com.apple.security.device.audio-input</key>'
-    for (const path of ['build/entitlements.mac.plist', 'build/entitlements.mac.inherit.plist']) {
+    for (const path of ['apps/desktop/build/entitlements.mac.plist', 'apps/desktop/build/entitlements.mac.inherit.plist']) {
       const plist = readFileSync(path, 'utf8')
       expect(plist).toMatch(new RegExp(`${entitlement}\\s*<true\\s*/>`))
     }

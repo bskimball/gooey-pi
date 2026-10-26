@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { OmpExtensionApi } from '../../assets/extensions/omp-work-schedules'
-import { AgentScheduleBridge } from '../../electron/main/schedules/agent-bridge'
-import { AutomationService } from '../../electron/main/schedules/service'
-import { JsonStateStore } from '../../electron/main/store'
+import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-schedules'
+import { AgentScheduleBridge } from '../../apps/desktop/electron/main/schedules/agent-bridge'
+import { AutomationService } from '../../apps/desktop/electron/main/schedules/service'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -32,7 +32,7 @@ async function loadExtension(url?: string, token?: string) {
   vi.resetModules()
   vi.stubEnv('PRIME_WORK_SCHEDULE_URL', url ?? undefined as unknown as string)
   vi.stubEnv('PRIME_WORK_SCHEDULE_TOKEN', token ?? undefined as unknown as string)
-  return (await import('../../assets/extensions/omp-work-schedules')).default
+  return (await import('../../apps/desktop/assets/extensions/omp-work-schedules')).default
 }
 
 async function fixture() {

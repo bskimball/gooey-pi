@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // The webview renders pi-desktop's own components and styles, so it tracks the Apex desktop look.
-const piDesktop = resolve(process.env.PI_DESKTOP_DIR ?? resolve(__dirname, '../../'))
+const piDesktop = resolve(process.env.PI_DESKTOP_DIR ?? resolve(__dirname, '../../apps/desktop'))
 
 export default defineConfig({
   root: resolve(__dirname, 'webview'),

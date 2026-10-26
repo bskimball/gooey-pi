@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ExtensionBrowserBridge } from '../../electron/main/browser/extension-bridge'
+import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
 import { ExtensionBrowserService, type ScreenshotResizer } from '../../packages/vscode/src/browser/service'
 
 // Minimal SOF0 header: these tests exercise dimension decisions, not JPEG decoding.

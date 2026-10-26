@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ProjectService } from '../../electron/main/projects'
-import { JsonStateStore } from '../../electron/main/store'
-import type { SessionRecord } from '../../src/types/api'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
 const dirs: string[] = []
 const identities = (...paths: string[]) => Object.fromEntries(paths.map((path) => { const info = lstatSync(path, { bigint: true }); return [realpathSync(path), { dev: info.dev.toString(), ino: info.ino.toString() }] }))

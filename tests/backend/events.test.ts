@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyPrimeEvent, createPrimeEventBuffer, replayPrimeEvents, resetTranscriptIdsForTests } from '../../src/lib/events'
-import type { TranscriptMessage } from '../../src/types/api'
+import { applyPrimeEvent, createPrimeEventBuffer, replayPrimeEvents, resetTranscriptIdsForTests } from '../../apps/desktop/src/lib/events'
+import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const streamingMessage = (): TranscriptMessage => ({
   id: 'assistant-1', role: 'assistant', timestamp: 1, streaming: true, parts: [{ type: 'text', text: 'partial' }],

@@ -2,7 +2,10 @@
 	"name": "gooeypi",
 	"version": "1.1.17",
 	"private": true,
-	"workspaces": ["packages/*"],
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
 	"description": "A desktop workspace for Pi",
 	"main": "out/main/index.js",
 	"desktopName": "gooeypi.desktop",
@@ -24,7 +27,7 @@
 		"build:bundle": "electron-vite build && node scripts/build-browser-agent.mjs",
 		"preview": "electron-vite preview",
 		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json && tsc --noEmit -p tsconfig.browser-agent.json",
-		"lint": "biome lint --config-path=scripts/release/biome.json electron src tests scripts assets/extensions browser-agent electron.vite.config.ts playwright.config.ts vitest.config.ts",
+		"lint": "biome lint --config-path=scripts/release/biome.json apps/desktop/electron apps/desktop/src packages/core/src tests scripts apps/desktop/assets/extensions apps/desktop/browser-agent electron.vite.config.ts playwright.config.ts vitest.config.ts",
 		"format:check": "biome format --config-path=scripts/release/biome.json scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",
 		"check": "npm run lint && npm run format:check",
 		"test": "vitest run",
@@ -107,9 +110,9 @@
 				"zip"
 			],
 			"artifactName": "${productName}-${version}-${arch}.${ext}",
-			"icon": "assets/icon.icns",
-			"entitlements": "build/entitlements.mac.plist",
-			"entitlementsInherit": "build/entitlements.mac.inherit.plist",
+			"icon": "apps/desktop/assets/icon.icns",
+			"entitlements": "apps/desktop/build/entitlements.mac.plist",
+			"entitlementsInherit": "apps/desktop/build/entitlements.mac.inherit.plist",
 			"extendInfo": {
 				"LSUIElement": true,
 				"NSMicrophoneUsageDescription": "Apex uses the microphone for dictation and realtime voice sessions you start."
@@ -143,7 +146,7 @@
 				"pacman"
 			],
 			"artifactName": "${productName}-${version}-linux-${arch}.${ext}",
-			"icon": "assets/icon.png",
+			"icon": "apps/desktop/assets/icon.png",
 			"asarUnpack": [
 				"**/node_modules/node-pty/build/Release/pty.node"
 			],
@@ -162,7 +165,7 @@
 				"appx"
 			],
 			"artifactName": "${productName}-${version}-win-${arch}.${ext}",
-			"icon": "assets/icon.png",
+			"icon": "apps/desktop/assets/icon.png",
 			"asarUnpack": [
 				"**/node_modules/node-pty/prebuilds/win32-${arch}/pty.node",
 				"**/node_modules/node-pty/prebuilds/win32-${arch}/conpty.node",
@@ -195,23 +198,23 @@
 				"to": "browser-agent/runtime.mjs"
 			},
 			{
-				"from": "resources/browser-extension",
+				"from": "packages/browser-extension/extension",
 				"to": "browser-extension"
 			},
 			{
-				"from": "assets/icon.png",
+				"from": "apps/desktop/assets/icon.png",
 				"to": "icon.png"
 			},
 			{
-				"from": "assets/skills",
+				"from": "apps/desktop/assets/skills",
 				"to": "skills"
 			},
 			{
-				"from": "assets/extensions",
+				"from": "apps/desktop/assets/extensions",
 				"to": "extensions"
 			},
 			{
-				"from": "assets/pets",
+				"from": "apps/desktop/assets/pets",
 				"to": "pets"
 			}
 		],
