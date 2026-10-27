@@ -15,8 +15,8 @@
 	flex: 0 0 43px;
 	display: flex;
 	align-items: stretch;
-	gap: 3px;
-	padding: 0 10px 0 14px;
+	gap: 2px;
+	padding: 0 10px 0 12px;
 	border-bottom: 1px solid var(--border);
 	background: color-mix(in srgb, var(--canvas) 92%, var(--surface-subtle));
 }
@@ -28,7 +28,7 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	padding: 0 9px;
+	padding: 0 7px;
 	color: var(--text-tertiary);
 	background: transparent;
 	font-size: 11.5px;
@@ -119,25 +119,6 @@
 	height: 100%;
 	overflow: auto;
 }
-/* Overview: bounded summary sections on top; the specialists drill-down fills the rest and scrolls on its own. */
-.overview-panel {
-	height: 100%;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-}
-.overview-panel__summary {
-	flex: 0 1 auto;
-	min-height: 0;
-	overflow: auto;
-}
-.overview-panel:has(> .specialists-panel) > .overview-panel__summary {
-	max-height: 40%;
-}
-.overview-panel > .specialists-panel {
-	flex: 1;
-	height: auto;
-}
 .summary-panel {
 	padding: 4px 18px;
 }
@@ -187,6 +168,67 @@
 }
 .progress-list div.is-current svg {
 	color: var(--prime);
+}
+/* Flat agent rows: one line each, hover tint only; the full transcript lives in the Agents tab. */
+.summary-agent-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -8px;
+}
+.summary-agent-list > button {
+	min-width: 0;
+	min-height: 30px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px;
+	border-radius: 6px;
+	color: var(--text-secondary);
+	background: transparent;
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 120ms ease-out;
+}
+.summary-agent-list > button:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+.summary-agent-list > button:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+.summary-agent-list > button > svg {
+	flex: 0 0 auto;
+	color: var(--success);
+}
+.summary-agent-list > button.is-running > svg:first-child {
+	color: var(--prime);
+}
+.summary-agent-list > button.is-error > svg:first-child {
+	color: var(--danger);
+}
+.summary-agent-list > button > svg:last-child {
+	color: var(--text-tertiary);
+	opacity: 0;
+	transition: opacity 120ms ease-out;
+}
+.summary-agent-list > button:hover > svg:last-child,
+.summary-agent-list > button:focus-visible > svg:last-child {
+	opacity: 1;
+}
+.summary-agent-list strong {
+	flex: 0 0 auto;
+	color: var(--text);
+	font-weight: 560;
+}
+.summary-agent-list span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-tertiary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 /* Specialists */
 .specialists-panel {

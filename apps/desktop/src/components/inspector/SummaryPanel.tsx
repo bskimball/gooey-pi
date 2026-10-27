@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { CalendarDots, Check, CircleNotch, Record as RecordIcon } from '../icons'
+import { CalendarDots, CaretRight, Check, CircleNotch, Record as RecordIcon, WarningCircle } from '../icons'
 import type { AutomationScheduleRecord, GitStatus } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import type { SessionSummary } from './session-summary'
@@ -12,11 +12,12 @@ interface SummaryPanelProps {
   git: GitStatus
   automations: AutomationScheduleRecord[]
   onOpenAutomation(id: string): void
+  onOpenSpecialist(id: string): void
 }
 
-/** Overview sections that the chat, Composer, and toolbar do not already show: plan, progress, automations. */
-export const SummaryPanel = memo(function SummaryPanel({ summary, git, automations, onOpenAutomation }: SummaryPanelProps) {
-  const { toolCount, todos } = summary
+/** Overview sections that the chat, Composer, and toolbar do not already show: plan, agents, progress, automations. */
+export const SummaryPanel = memo(function SummaryPanel({ summary, git, automations, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
+  const { toolCount, todos, specialists } = summary
   return (
     <div className="summary-panel">
       {todos.length > 0 ? (
@@ -28,6 +29,21 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, git, automatio
                 {todo.status === 'completed' ? <Check size={13} /> : todo.status === 'in_progress' ? <CircleNotch className="spin" size={13} /> : <RecordIcon size={13} />}
                 <span>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
               </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {specialists.length > 0 ? (
+        <section className="summary-section">
+          <h3>Agents ({specialists.filter((s) => s.status === 'running').length} running)</h3>
+          <div className="summary-agent-list">
+            {specialists.map((specialist) => (
+              <button type="button" key={specialist.id} className={`is-${specialist.status}`} onClick={() => onOpenSpecialist(specialist.id)}>
+                {specialist.status === 'done' ? <Check size={13} /> : specialist.status === 'error' ? <WarningCircle size={13} /> : <CircleNotch className="spin" size={13} />}
+                <strong>{specialist.agent}</strong>
+                <span>{specialist.activity || specialist.mission}</span>
+                <CaretRight size={11} aria-hidden="true" />
+              </button>
             ))}
           </div>
         </section>
