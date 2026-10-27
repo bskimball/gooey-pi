@@ -82,7 +82,6 @@ describe('sidebar project working set', () => {
     expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 7', 'Project 6', 'Project 5', 'Project 4', 'Project 0'])
     expect(container.querySelector('[aria-label="Collapse Project 0"]')?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('[aria-expanded="false"].project-row__collapse')).toHaveLength(5)
-    expect(container.querySelector('.sidebar__project-count')?.textContent).toBe('9')
 
     await renderSidebar({ projects, activeProjectId: 'project-0', projectSortMode: 'alphabetical' })
     expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 0', 'Project 4', 'Project 5', 'Project 6', 'Project 7'])
@@ -159,8 +158,7 @@ describe('sidebar project working set', () => {
     expect(container.querySelector('.sidebar__other-activity')?.textContent).toBe('Elsewhere: 1 working · 1 to review')
     await press(container.querySelector('.sidebar__other-activity')!)
     expect(onNavigate).toHaveBeenCalledWith('activity')
-    await press(container.querySelector('.sidebar__library > button')!)
-    expect(onNavigate).toHaveBeenCalledWith('projects')
+    expect(container.textContent).not.toContain('All projects')
 
     await renderSidebar({ projects: library, sessions, clearedAttention: { waiting: sessionAttentionSignature(sessions[1])! } })
     expect(container.querySelector('.project-attention')).toBeNull()

@@ -11,7 +11,6 @@ import {
   Copy,
   DotsThree,
   Folder,
-  FolderOpen,
   FolderPlus,
   FunnelSimple,
   Gear,
@@ -143,7 +142,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -167,7 +166,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const unreadCount = activeSessions.reduce((count, session) => count + Number(needsAttention(session)), 0)
   const newSessionShortcut = shortcutLabel(platform, ['Primary', 'N'])
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
-  const commandsShortcut = shortcutLabel(platform, ['Primary', 'K'])
   const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
   useEffect(() => {
     if (!projectMenu) return
@@ -284,7 +282,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                       {isCollapsed ? <CaretRight size={13} /> : <CaretDown size={13} />}
                     </button> : null}
                     <button className="project-row__main" type="button" onClick={() => { setProjectMenu(null); setQuery(''); onSelectProject(project) }} title={project.path}>
-                      {activeProjectId === project.id ? <FolderOpen size={14} /> : <Folder size={14} />}
                       <span>{project.name}</span>
                       {project.pinned ? <PushPin className="project-row__pin" size={11} /> : null}
                     </button>
@@ -327,13 +324,11 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
           </section>
         ))}
       </div>
-      <div className="sidebar__library">
-        <button type="button" className={activeView === 'projects' ? 'is-active' : ''} onClick={() => { setQuery(''); onNavigate('projects') }}><Folder size={14} /><span>All projects</span><span className="sidebar__project-count">{projects.length}</span><CaretRight size={12} /></button>
-        {!normalized && otherActivity ? <button type="button" className="sidebar__other-activity" onClick={() => onNavigate('activity')} title="View activity across all projects"><Bell size={13} /><span>Elsewhere: {otherActivity}</span></button> : null}
-      </div>
+      {!normalized && otherActivity ? <div className="sidebar__library">
+        <button type="button" className="sidebar__other-activity" onClick={() => onNavigate('activity')} title="View activity across all projects"><Bell size={13} /><span>Elsewhere: {otherActivity}</span></button>
+      </div> : null}
 
       <div className="sidebar__footer">
-        <button type="button" title="Commands" onClick={onOpenPalette}><MagnifyingGlass size={15} /><span>Commands</span><kbd>{commandsShortcut}</kbd></button>
         <button type="button" title={t('nav.settings')} className={activeView === 'settings' ? 'is-active' : ''} onClick={() => onNavigate('settings')}><Gear size={15} /><span>{t('nav.settings')}</span><kbd>{settingsShortcut}</kbd></button>
       </div>
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</button></>}><label className="field"><span>Session name</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}

@@ -14,7 +14,7 @@ import type {
 	TranscriptMessage,
 } from "@/types/api";
 import type { AgentSlotRect } from "./AgentBrowserLayer";
-import { Folder, GitDiff, Globe, Info, Robot, SidebarRight } from "./icons";
+import { Folder, GitDiff, Globe, Info, SidebarRight } from "./icons";
 import { BrowserPanel } from "./inspector/BrowserPanel";
 import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
@@ -69,12 +69,12 @@ export interface InspectorProps {
 	overlay?: boolean;
 }
 
+/** Overview ("summary") also hosts the specialists drill-down, so "specialists" has no tab of its own. */
 const tabs: Array<{ id: InspectorTab; label: string; Icon: typeof Info }> = [
-	{ id: "summary", label: "Summary", Icon: Info },
-	{ id: "specialists", label: "Specialists", Icon: Robot },
 	{ id: "changes", label: "Changes", Icon: GitDiff },
-	{ id: "browser", label: "Browser", Icon: Globe },
+	{ id: "summary", label: "Overview", Icon: Info },
 	{ id: "files", label: "Files", Icon: Folder },
+	{ id: "browser", label: "Browser", Icon: Globe },
 ];
 
 /** Memoized so streaming transcript updates (which this component no longer consumes outside the Summary tab) do not re-render the inspector shell. */
@@ -82,11 +82,8 @@ export const Inspector = memo(function Inspector({
 	activeTab,
 	onTabChange,
 	onClose,
-	agentName,
-	shortName,
 	project,
 	cwd,
-	runtime,
 	messages,
 	git,
 	automations,
@@ -122,6 +119,8 @@ export const Inspector = memo(function Inspector({
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
 	const specialistCount = summary.specialists.length;
+	const visibleTab: InspectorTab =
+		activeTab === "specialists" ? "summary" : activeTab;
 	const moveTab = (current: number, key: string) => {
 		let next = current;
 		if (key === "ArrowRight") next = (current + 1) % tabs.length;
@@ -153,10 +152,10 @@ export const Inspector = memo(function Inspector({
 						id={`inspector-tab-${tab.id}`}
 						type="button"
 						role="tab"
-						aria-selected={activeTab === tab.id}
+						aria-selected={visibleTab === tab.id}
 						aria-controls={`inspector-panel-${tab.id}`}
-						tabIndex={activeTab === tab.id ? 0 : -1}
-						className={activeTab === tab.id ? "is-active" : ""}
+						tabIndex={visibleTab === tab.id ? 0 : -1}
+						className={visibleTab === tab.id ? "is-active" : ""}
 						key={tab.id}
 						onKeyDown={(event) => {
 							if (
@@ -173,7 +172,7 @@ export const Inspector = memo(function Inspector({
 						<span className="inspector__tab-label">{tab.label}</span>
 						{tab.id === "changes" && git.files.length ? (
 							<span className="inspector__tab-count">{git.files.length}</span>
-						) : tab.id === "specialists" && specialistCount ? (
+						) : tab.id === "summary" && specialistCount ? (
 							<span className="inspector__tab-count">{specialistCount}</span>
 						) : null}
 					</button>
@@ -184,37 +183,33 @@ export const Inspector = memo(function Inspector({
 				</IconButton>
 			</div>
 			<div
-				id={`inspector-panel-${activeTab}`}
+				id={`inspector-panel-${visibleTab}`}
 				className="inspector__body"
 				role="tabpanel"
-				aria-labelledby={`inspector-tab-${activeTab}`}
+				aria-labelledby={`inspector-tab-${visibleTab}`}
 				tabIndex={0}
 			>
-				{activeTab === "summary" ? (
-					<SummaryPanel
-						agentName={agentName}
-						shortName={shortName}
-						project={project}
-						runtime={runtime}
-						summary={summary}
-						git={git}
-						automations={automations}
-							onOpenAutomation={onOpenAutomation}
-						onOpenSpecialist={(id) => {
-							setSelectedSpecialistId(id);
-							onTabChange("specialists");
-						}}
-					/>
-				) : null}
-				{activeTab === "specialists" ? (
-					<SpecialistsPanel
-						key={agentSessionKey ?? "no-session"}
-						messages={messages}
-						selectedId={selectedSpecialistId}
-						onSelect={setSelectedSpecialistId}
-						homeDir={homeDir}
-						sessionKey={agentSessionKey}
-					/>
+				{visibleTab === "summary" ? (
+					<div className="overview-panel">
+						<div className="overview-panel__summary scroll-area">
+							<SummaryPanel
+								summary={summary}
+								git={git}
+								automations={automations}
+								onOpenAutomation={onOpenAutomation}
+							/>
+						</div>
+						{specialistCount ? (
+							<SpecialistsPanel
+								key={agentSessionKey ?? "no-session"}
+								messages={messages}
+								selectedId={selectedSpecialistId}
+								onSelect={setSelectedSpecialistId}
+								homeDir={homeDir}
+								sessionKey={agentSessionKey}
+							/>
+						) : null}
+					</div>
 				) : null}
 				{activeTab === "changes" ? (
 					<ChangesPanel

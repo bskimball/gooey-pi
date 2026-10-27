@@ -35,7 +35,7 @@ afterEach(async () => {
 const noop = () => undefined
 
 describe('sidebar footer', () => {
-  it('offers commands and settings without a release download control', async () => {
+  it('offers settings only, without a commands row or release download control', async () => {
     const onNavigate = vi.fn()
     const onOpenPalette = vi.fn()
     await act(async () => {
@@ -49,11 +49,9 @@ describe('sidebar footer', () => {
     })
 
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')]
-    expect(buttons.map((button) => button.title)).toEqual(['Commands', 'Settings'])
+    expect(buttons.map((button) => button.title)).toEqual(['Settings'])
     expect(container.querySelector('.sidebar-update')).toBeNull()
     await act(async () => buttons[0].click())
-    expect(onOpenPalette).toHaveBeenCalledOnce()
-    await act(async () => buttons[1].click())
     expect(onNavigate).toHaveBeenCalledWith('settings')
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
   })
