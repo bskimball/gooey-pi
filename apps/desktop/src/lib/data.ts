@@ -188,13 +188,13 @@ export const SAMPLE_SCHEDULES: AutomationScheduleRecord[] = [
   },
 ]
 
-export function formatRelative(value?: string | number): string {
+export function formatRelative(value?: string | number, style: 'long' | 'narrow' = 'long'): string {
   if (!value) return ''
   const timestamp = typeof value === 'number' ? value : new Date(value).getTime()
   const seconds = Math.round((timestamp - Date.now()) / 1000)
   const abs = Math.abs(seconds)
   if (abs < 60) return 'now'
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style })
   if (abs < 3600) return formatter.format(Math.round(seconds / 60), 'minute')
   if (abs < 86400) return formatter.format(Math.round(seconds / 3600), 'hour')
   if (abs < 604800) return formatter.format(Math.round(seconds / 86400), 'day')

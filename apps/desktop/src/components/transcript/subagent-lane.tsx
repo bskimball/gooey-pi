@@ -1,4 +1,6 @@
-import { memo, useId, useState } from 'react'
+import { createContext, memo, useContext, useId, useState } from 'react'
+import type { PiSpecialistSummary } from '../inspector/session-summary'
+import { specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
 import { CaretRight, Check, CircleNotch, Robot, WarningCircle } from '../icons'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
@@ -7,7 +9,9 @@ import { MarkdownText } from '../MarkdownText'
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 type ToolResult = Extract<MessagePart, { type: 'toolResult' }>
 
-const SUBAGENT_TOOLS = new Set(['task', 'task_start', 'task_wait', 'task_send', 'task_chain'])
+export const SubagentContext = createContext<{ specialists: PiSpecialistSummary[]; onOpen?(id: string): void }>({ specialists: [] })
+
+const SUBAGENT_TOOLS = new Set(['task', 'task_start', 'task_wait', 'task_chain'])
 export const isSubagentTool = (name: string) => SUBAGENT_TOOLS.has(name)
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -22,18 +26,18 @@ function settledReport(output: string): string | undefined {
   return body && body !== '(empty)' ? body : undefined
 }
 
-const VERBS: Record<string, string> = { task_wait: 'Waiting on', task_send: 'Steered', task_chain: 'Chain' }
+const VERBS: Record<string, string> = { task_wait: 'Waiting on', task_chain: 'Chain' }
 
 export interface SubagentFollowUp { call: ToolCall; result?: ToolResult }
 export interface SubagentPairs { followUps: Map<ToolCall, SubagentFollowUp[]>; absorbed: Set<MessagePart> }
 
 function startedTaskId(result?: ToolResult): string | undefined {
-  return text(record(result?.details)?.instanceId) ?? /\b(task_\d+)\b/.exec(result?.text ?? '')?.[1]
+  return text(workerDetails(result?.details)?.id) ?? /\b(task_\d+)\b/.exec(result?.text ?? '')?.[1]
 }
 
 /**
- * A `task_wait` or `task_send` naming a task started earlier in the same parts list folds into that start's lane,
- * so one delegated run reads as one row. Absorbed calls and their results are skipped by the timeline.
+ * Wait reports fold into the originating lane. Control receipts remain inspectable in the timeline,
+ * including operation errors that do not change the worker's outcome.
  */
 export function pairSubagentCalls(parts: MessagePart[]): SubagentPairs {
   const followUps = new Map<ToolCall, SubagentFollowUp[]>()
@@ -48,12 +52,14 @@ export function pairSubagentCalls(parts: MessagePart[]): SubagentPairs {
       if (id) starts.set(id, part)
       return
     }
-    if (part.name !== 'task_wait' && part.name !== 'task_send') return
+    if (!['task_wait', 'task_send', 'task_status', 'task_close', 'task_abort'].includes(part.name)) return
     const start = starts.get(text(record(part.args)?.id) ?? '')
     if (!start) return
     followUps.set(start, [...followUps.get(start) ?? [], { call: part, result }])
-    absorbed.add(part)
-    if (result) absorbed.add(result)
+    if (part.name === 'task_wait' && !result?.isError) {
+      absorbed.add(part)
+      if (result) absorbed.add(result)
+    }
   })
   return { followUps, absorbed }
 }
@@ -75,33 +81,31 @@ function reportHighlights(report: string): string[] {
 export const SubagentLane = memo(function SubagentLane({ part, result, followUps = [] }: { part: ToolCall; result?: ToolResult; followUps?: SubagentFollowUp[] }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
+  const { specialists, onOpen } = useContext(SubagentContext)
   const args = record(part.args) ?? {}
-  const details = record(result?.details)
-  const output = result?.text ?? ''
   const steps = Array.isArray(args.steps) ? args.steps.map(record).filter((step) => text(step?.agent)) : []
   const roles = part.name === 'task_chain' ? steps.map((step) => text(step?.agent)!) : text(args.agent) ? [text(args.agent)!] : []
-  const taskId = text(args.id) ?? text(details?.instanceId) ?? /\b(task_\d+)\b/.exec(output)?.[1]
+  const taskId = text(args.id) ?? (part.name === 'task_start' ? startedTaskId(result) : undefined) ?? part.id
+  const specialist = specialists.find((candidate) => candidate.id === taskId)
+  const targets = specialists.filter((candidate) => part.name === 'task_chain' ? candidate.id.startsWith(`${taskId}-step-`) : candidate.id === taskId)
   const mission = oneLine(text(args.prompt) ?? text(args.message) ?? text(steps[0]?.prompt))
-  // The newest paired wait carries the run's outcome; steering sends only change the label.
-  const latest = [...followUps].reverse().find((followUp) => followUp.call.name === 'task_wait') ?? { call: part, result }
+  // Failed operations stay in the timeline; keep the last received report in the lane.
+  const latest = [...followUps].reverse().find((followUp) => followUp.call.name === 'task_wait' && !followUp.result?.isError) ?? { call: part, result }
   const latestOutput = latest.result?.text ?? ''
-  const lifecycle = /\blifecycle[:=]\s*([a-z_]+)\b/i.exec(latestOutput)?.[1]?.toLowerCase()
   const pending = !latest.result || latest.result.streaming || followUps.some((followUp) => !followUp.result || followUp.result.streaming)
   const background = !pending && latest.call.name === 'task_start'
-  const state = pending ? 'running'
-    : latest.result?.isError || lifecycle === 'failed' || lifecycle === 'aborted' ? 'error'
-    : background || latest.call.name === 'task_send' ? 'sent' : 'done'
-  const stateLabel = state === 'running' ? (latest.call.name === 'task_wait' ? 'waiting' : 'running')
-    : state === 'error' ? 'failed'
-    : background ? 'running' : latest.call.name === 'task_send' ? `sent${text(args.mode) ? ` · ${text(args.mode)}` : ''}` : 'settled'
+  let outcome: SpecialistStatus = pending || background ? 'running' : latest.result?.isError ? 'error' : 'done'
+  for (const followUp of followUps) outcome = specialistOutcome({ previous: outcome, tool: followUp.call.name, result: followUp.result, startsGeneration: record(followUp.call.args)?.mode === 'prompt' })
+  const state = specialist?.status ?? outcome
+  const stateLabel = specialistStatusLabel[state]
   const report = text(record(latest.result?.details)?.finalReport) ?? settledReport(latestOutput) ?? (pending || background ? undefined : text(latestOutput))
   const highlights = report ? reportHighlights(report) : []
-  const rail = highlights.length ? highlights : state === 'running' || background ? ['Running in background…'] : []
+  const rail = highlights.length ? highlights : state === 'running' ? [specialist?.activity ? `Last observed: ${specialist.activity}` : 'Awaiting a recorded update…'] : []
   const verb = VERBS[part.name]
 
   return <div className={`subagent-lane is-${state}`}>
     <div className="subagent-lane__summary">
-      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch className="spin" size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
+      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
       {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
       {roles.length
         ? roles.map((role, index) => <span key={`${role}-${index}`} className="subagent-lane__role">{role}</span>)
@@ -110,6 +114,7 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
       {mission ? <span className="subagent-lane__mission" title={mission}>{mission}</span> : <span className="subagent-lane__mission" />}
       <span className="subagent-lane__state">{stateLabel}</span>
     </div>
+    {onOpen && targets.length > 0 ? <div className="subagent-lane__links">{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
     {rail.length || report ? <ul className="subagent-lane__tree">
       {rail.map((line, index) => <li key={`${index}-${line}`} className={highlights.length ? undefined : 'is-pending'}>
         <span className="subagent-lane__branch" aria-hidden="true">{index === rail.length - 1 && !report ? '╰─' : '├─'}</span>

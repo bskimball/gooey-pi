@@ -7,8 +7,20 @@ import type { SessionSummary, TranscriptOp } from './protocol'
 
 export const sessionBucket = piSessionBucketDir
 
+/**
+ * VS Code reports Windows drive letters lowercase (`c:\…`) while Pi and Apex record them uppercase,
+ * and `canonicalSessionPath` preserves drive case, so workspace paths are normalized before comparing.
+ */
+export function workspacePath(fsPath: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? fsPath.replace(/^[a-z](?=:)/, (drive) => drive.toUpperCase()) : fsPath
+}
+
+export function isWorkspaceProject(projectPath: string, cwd: string): boolean {
+  return canonicalSessionPath(workspacePath(projectPath)) === canonicalSessionPath(workspacePath(cwd))
+}
+
 export async function listSessions(cwd: string, root = piSessionRoot()): Promise<SessionSummary[]> {
-  const directory = sessionBucket(cwd, root)
+  const directory = sessionBucket(workspacePath(cwd), root)
   const readMetadata = createPiSessionMetadataReader()
   let entries: Dirent[]
   try {
@@ -23,7 +35,7 @@ export async function listSessions(cwd: string, root = piSessionRoot()): Promise
     const path = canonicalSessionPath(join(directory, entry.name))
     try {
       const metadata = await readMetadata(path, await stat(path))
-      if (!metadata.projectPath || canonicalSessionPath(metadata.projectPath) !== canonicalSessionPath(cwd)) continue
+      if (!metadata.projectPath || !isWorkspaceProject(metadata.projectPath, cwd)) continue
       summaries.push({
         path,
         id: metadata.id,

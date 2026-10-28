@@ -32,6 +32,72 @@ function render(messages: TranscriptMessage[], active = false, showTools = true)
 }
 
 describe('transcript rendering', () => {
+  it('opens the matching worker from an older delegation and keeps its failed outcome after close', async () => {
+    const messages: TranscriptMessage[] = Array.from({ length: 10 }, (_, index) => ({
+      id: `message-${index}`, role: 'assistant', parts: [
+        { type: 'toolCall', id: `start-${index}`, name: 'task_start', args: { agent: 'scout', prompt: `Mission ${index}` } },
+        { type: 'toolResult', name: 'task_start', text: `started task_${index}` },
+      ],
+    }))
+    messages.push({ id: 'outcome', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_0' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: failed\n--- result ---\nCould not finish' },
+      { type: 'toolCall', name: 'task_close', args: { id: 'task_0' } },
+      { type: 'toolResult', name: 'task_close', text: 'lifecycle: closed' },
+    ] })
+    const onOpenSpecialist = vi.fn()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop, onOpenSpecialist })))
+      const first = container.querySelector('.subagent-lane')!
+      expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('Failed')
+      await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
+      expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+      expect(container.querySelector('.subagent-lane.is-running .spin')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it.each(['task_close', 'task_abort', 'task_status', 'task_send', 'task_wait'])('preserves failed %s receipts alongside the worker report', async (tool) => {
+    const messages: TranscriptMessage[] = [{ id: 'worker', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1' },
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nCompleted report' },
+      { type: 'toolCall', name: tool, args: { id: 'task_1' } },
+      { type: 'toolResult', name: tool, text: 'Operation rejected: worker transport unavailable', isError: true },
+    ] }]
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop })))
+      const operation = container.querySelector('.activity-line--tool.is-error')!
+      expect(operation.textContent).toContain(tool)
+      await act(async () => operation.querySelector<HTMLButtonElement>('.activity-tool__summary')!.click())
+      expect(operation.textContent).toContain('Operation rejected: worker transport unavailable')
+      if (tool !== 'task_wait') expect(container.querySelector('.subagent-lane__state')?.textContent).toBe('Finished')
+      expect(container.querySelector('.subagent-lane')?.textContent).toContain('Completed report')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('does not offer a transcript link when historical delegation arguments cannot identify a worker', () => {
+    const html = renderToStaticMarkup(createElement(Transcript, {
+      messages: [{ id: 'history', role: 'assistant', parts: [
+        { type: 'toolCall', id: 'old-call', name: 'task_start' },
+        { type: 'toolResult', name: 'task_start', text: 'started task_1' },
+      ] }], git, onOpenChanges: noop, onSuggestion: noop, onOpenSpecialist: noop,
+    }))
+    expect(html).not.toContain('Open agent transcript')
+  })
+
   it('streams reasoning inside a distinct process rail with animated thinking dots', () => {
     const html = render([{
       id: 'active',
@@ -401,7 +467,7 @@ describe('transcript rendering', () => {
     // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
     expect(html).toContain('├─</span><span class="subagent-lane__leaf">Transcript lives in messages.tsx</span>')
     expect(html).toContain('View full report')
-    expect(html).toContain('╰─</span><span class="subagent-lane__leaf">Running in background…</span>')
+    expect(html).toContain('╰─</span><span class="subagent-lane__leaf">Awaiting a recorded update…</span>')
   })
 
   it('folds a task_wait into the lane of the task it started and shows the settled report highlights', () => {
@@ -421,7 +487,7 @@ describe('transcript rendering', () => {
 
     expect(html.match(/class="subagent-lane /g)).toHaveLength(1)
     expect(html).toContain('subagent-lane is-done')
-    expect(html).toContain('>settled</span>')
+    expect(html).toContain('>Finished</span>')
     expect(html).toContain('>Findings</span>')
     expect(html).toContain('>Lanes live in subagent-lane.tsx</span>')
     expect(html).not.toContain('Waiting on</span>')

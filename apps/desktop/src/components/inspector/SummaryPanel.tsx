@@ -3,6 +3,7 @@ import { CalendarDots, CaretRight, Check, CircleNotch, Record as RecordIcon, War
 import type { AutomationScheduleRecord, GitStatus } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import type { SessionSummary } from './session-summary'
+import { specialistStatusLabel } from '@/lib/specialist-status'
 
 export { extractPiSessionWidgets, summarizeTranscript } from './session-summary'
 export type { PiSpecialistSummary, PiTodoItemSummary, TranscriptSummary } from './session-summary'
@@ -17,7 +18,8 @@ interface SummaryPanelProps {
 
 /** Overview sections that the chat, Composer, and toolbar do not already show: plan, agents, progress, automations. */
 export const SummaryPanel = memo(function SummaryPanel({ summary, git, automations, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
-  const { toolCount, todos, specialists } = summary
+  const { toolCount, todos } = summary
+  const specialists = summary.specialists.slice(-8)
   return (
     <div className="summary-panel">
       {todos.length > 0 ? (
@@ -35,11 +37,11 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, git, automatio
       ) : null}
       {specialists.length > 0 ? (
         <section className="summary-section">
-          <h3>Agents ({specialists.filter((s) => s.status === 'running').length} running)</h3>
+          <h3>Agents ({specialists.filter((s) => s.status === 'running').length} reported running)</h3>
           <div className="summary-agent-list">
             {specialists.map((specialist) => (
-              <button type="button" key={specialist.id} className={`is-${specialist.status}`} onClick={() => onOpenSpecialist(specialist.id)}>
-                {specialist.status === 'done' ? <Check size={13} /> : specialist.status === 'error' ? <WarningCircle size={13} /> : <CircleNotch className="spin" size={13} />}
+              <button type="button" key={specialist.id} className={`is-${specialist.status}`} title={specialistStatusLabel[specialist.status]} onClick={() => onOpenSpecialist(specialist.id)}>
+                {specialist.status === 'done' ? <Check size={13} /> : specialist.status === 'error' ? <WarningCircle size={13} /> : <RecordIcon size={13} />}
                 <strong>{specialist.agent}</strong>
                 <span>{specialist.activity || specialist.mission}</span>
                 <CaretRight size={11} aria-hidden="true" />

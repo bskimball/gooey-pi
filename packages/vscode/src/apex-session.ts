@@ -8,7 +8,7 @@ import type { ScreenshotResizer } from './browser/service'
 import { editorPromptContext } from './editor'
 import { PiRpc, resolvePi } from './pi-rpc'
 import type { HostMessage, HostState, ModelDescriptor, PromptImage, ProviderDescriptor, QueuedPrompt, RuntimeCommand, ThinkingLevel, TranscriptOp, WebviewMessage } from './protocol'
-import { listSessions, sessionBucket, sessionTranscriptOps } from './session-catalog'
+import { isWorkspaceProject, listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from './session-catalog'
 
 type Json = Record<string, unknown>
 
@@ -116,7 +116,7 @@ export class ApexSession implements vscode.Disposable {
   }
 
   get cwd(): string {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir()
+    return workspacePath(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir())
   }
 
   async start() {
@@ -301,7 +301,7 @@ export class ApexSession implements vscode.Disposable {
       const target = canonicalSessionPath(path)
       if (!target.endsWith('.jsonl') || dirname(target) !== canonicalSessionPath(sessionBucket(this.cwd))) throw new Error('Session is not in the current workspace catalog.')
       const metadata = await createPiSessionMetadataReader()(target)
-      if (!metadata.projectPath || canonicalSessionPath(metadata.projectPath) !== canonicalSessionPath(this.cwd)) throw new Error('Session belongs to a different workspace.')
+      if (!metadata.projectPath || !isWorkspaceProject(metadata.projectPath, this.cwd)) throw new Error('Session belongs to a different workspace.')
       const ops = await sessionTranscriptOps(target)
       if (this.rpc !== rpc || this.state.isStreaming || this.state.status !== 'ready') throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
       const runtimeState = await rpc.command<Json>('get_state')
@@ -481,7 +481,7 @@ export class ApexSession implements vscode.Disposable {
     const dirs = new Set<string>()
     for (const uri of uris) {
       const relative = vscode.workspace.asRelativePath(uri, false).replaceAll('\\', '/')
-      if (relative.startsWith('/') || /^[a-z]:/i.test(relative) || !uri.fsPath.startsWith(root)) continue
+      if (relative.startsWith('/') || /^[a-z]:/i.test(relative) || !workspacePath(uri.fsPath).startsWith(root)) continue
       files.add(relative)
       const segments = relative.split('/')
       for (let depth = 1; depth < segments.length; depth += 1) dirs.add(segments.slice(0, depth).join('/'))

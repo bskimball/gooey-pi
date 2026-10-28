@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { CaretDown, CaretRight, Check, CircleNotch, Record as RecordIcon, WarningCircle } from '../icons'
+import { specialistOutcome, specialistStepStatus, specialistStatusLabel } from '@/lib/specialist-status'
+import { CaretDown, CaretRight, Check, Record as RecordIcon, WarningCircle } from '../icons'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
-import { coalesceAssistantTurns } from '../Transcript'
+import { coalesceAssistantTurns } from '../transcript/grouping'
 import { MarkdownText } from '../MarkdownText'
-import { WorkTimeline } from '../transcript/timeline'
+import { renderNarrativeWithActivity } from '../transcript/messages'
 import type { PiSpecialistSummary } from './SummaryPanel'
 
 export interface PiSpecialistSession extends PiSpecialistSummary {
@@ -16,6 +17,7 @@ export interface PiSpecialistSession extends PiSpecialistSummary {
   maxTurns?: number
   generation?: number
   killReason?: string
+  finalReport?: string
   messages: TranscriptMessage[]
 }
 
@@ -195,6 +197,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         ...(typeof details?.turns === 'number' ? { turns: details.turns } : {}),
         ...(typeof details?.maxTurns === 'number' && details.maxTurns <= 100_000 ? { maxTurns: details.maxTurns } : {}),
         ...(typeof details?.killReason === 'string' ? { killReason: details.killReason } : {}),
+        finalReport: finalResult ? responseText : undefined,
         messages: buildMessagesFromTurns([turn]),
       }
       specialists.push(entry)
@@ -215,12 +218,10 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         const fullPrompt = typeof step.prompt === 'string' ? step.prompt.trim() : ''
         const rawPrompt = fullPrompt.replace(/\s+/g, ' ')
         let status: PiSpecialistSession['status'] = 'running'
-        if (typeof stepDetail?.status === 'string') {
-          if (stepDetail.status === 'completed' || stepDetail.status === 'done' || stepDetail.status === 'ok') status = 'done'
-          else if (stepDetail.status === 'failed' || stepDetail.status === 'error' || stepDetail.status === 'aborted' || stepDetail.status === 'timeout') {
-            status = 'error'
-            failedEarlier = true
-          }
+        const stepStatus = specialistStepStatus(stepDetail?.status)
+        if (stepStatus) {
+          status = stepStatus
+          if (status === 'error' || status === 'stopped') failedEarlier = true
         } else if (finalResult) {
           const stepNumber = stepIndex + 1
           const stepOk = new RegExp(`^step\\s+${stepNumber}\\s+ok\\b`, 'm').test(finalResult.text)
@@ -255,6 +256,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
           prompt: fullPrompt,
           status,
           ...(status === 'running' && runningLabel ? { activity: runningLabel } : {}),
+          finalReport: status === 'done' ? stepReport : undefined,
           messages: buildMessagesFromTurns([turn]),
         }
         applyWorkerDetails(entry, stepDetail)
@@ -266,7 +268,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
       const workerView = asRecord(details?.worker)
       const fullPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
       const rawPrompt = fullPrompt.replace(/\s+/g, ' ')
-      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/.exec(result.text) : null
+      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/i.exec(result.text) : null
       const workerId = (typeof workerView?.id === 'string' ? workerView.id : undefined) ?? match?.[1]
       const { parts: activityParts, runningLabel } = activityPartsFromDetails(workerView?.activities)
       const existing = workerId ? workerById.get(workerId) : undefined
@@ -275,6 +277,8 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         if (rawPrompt) existing.mission = rawPrompt.slice(0, 120)
         if (fullPrompt) existing.prompt = fullPrompt
         existing.status = result?.isError ? 'error' : 'running'
+        delete existing.killReason
+        delete existing.finalReport
         delete existing.activity
         applyWorkerDetails(existing, details)
         const turns = turnsBySpecId.get(existing.id) ?? []
@@ -324,16 +328,9 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         target.mission = rawMessage.slice(0, 120)
         target.prompt = fullMessage
       }
-      if (result && /\blifecycle[:=]\s*(?:failed|aborted)\b/i.test(result.text)) {
-        target.status = 'error'
-        delete target.activity
-      } else if (result && /\blifecycle[:=]\s*(?:settled|closed)\b/i.test(result.text)) {
-        target.status = 'done'
-        delete target.activity
-      } else if (mode === 'prompt' || (result && /\blifecycle[:=]\s*(?:running|starting|retrying)\b/i.test(result.text))) {
-        target.status = 'running'
-        if (mode === 'prompt') delete target.activity
-      }
+      target.status = specialistOutcome({ previous: target.status, tool: part.name, result, startsGeneration: mode === 'prompt' })
+      if (target.status !== 'running' || mode === 'prompt') delete target.activity
+      if (target.status === 'running' && mode === 'prompt') { delete target.killReason; delete target.finalReport }
       if (fullMessage) {
         const turns = turnsBySpecId.get(target.id) ?? []
         turns.push({
@@ -356,33 +353,13 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
       applyWorkerDetails(target, details)
       const sessionFileMatch = /^session_file:\s*(.+)$/m.exec(result.text)?.[1]?.trim()
       if (sessionFileMatch) target.sessionFile = sessionFileMatch
+      const killReason = /^kill_reason:[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim()
+      if (killReason) target.killReason = killReason
 
-      const lifecycle = /\blifecycle[:=]\s*([a-z_]+)\b/i.exec(result.text)?.[1]?.toLowerCase()
-      if (!result.streaming && (result.isError || part.name === 'task_abort' || lifecycle === 'failed' || lifecycle === 'aborted')) {
-        target.status = 'error'
-        delete target.activity
-      } else if (
-        !result.streaming &&
-        (part.name === 'task_close' ||
-          lifecycle === 'settled' ||
-          lifecycle === 'closed' ||
-          (!lifecycle && /^task_\d+\s+(?:already\s+)?settled\b/im.test(result.text)))
-      ) {
-        target.status = 'done'
-        delete target.activity
-      } else {
-        if (lifecycle === 'running' || lifecycle === 'starting' || lifecycle === 'retrying') {
-          target.status = 'running'
-        }
-        if (target.status === 'running') {
-          const rawActivity = /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '')
-          if (rawActivity && rawActivity !== '(none)') {
-            target.activity = rawActivity.slice(0, 80)
-          } else {
-            delete target.activity
-          }
-        }
-      }
+      target.status = specialistOutcome({ previous: target.status, tool: part.name, result })
+      const rawActivity = target.status === 'running' ? /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '') : undefined
+      if (rawActivity && rawActivity !== '(none)') target.activity = rawActivity.slice(0, 80)
+      else delete target.activity
 
       const turns = turnsBySpecId.get(target.id)
       const currentTurn = turns?.at(-1)
@@ -402,9 +379,11 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         if (target.status === 'running' && runningLabel && !target.activity) {
           target.activity = runningLabel
         }
-        const settledBody = extractSettledResultBody(result.text)
+        const settledBody = typeof details?.finalReport === 'string' ? details.finalReport.trim() : extractSettledResultBody(result.text)
+        if (target.status === 'done' && settledBody && (part.name === 'task_wait' || !target.finalReport)) target.finalReport = settledBody
         const latestText = typeof workerView?.latestText === 'string' && workerView.latestText.trim() ? workerView.latestText.trim() : undefined
-        if (settledBody) currentTurn.responseText = settledBody
+        if (target.finalReport) currentTurn.responseText = target.finalReport
+        else if (settledBody) currentTurn.responseText = settledBody
         else if (latestText) currentTurn.responseText = latestText
         currentTurn.streaming = target.status === 'running'
         currentTurn.isError = target.status === 'error'
@@ -413,7 +392,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
     }
   }
 
-  return specialists.slice(-8)
+  return specialists
 }
 
 interface SpecialistsPanelProps {
@@ -462,6 +441,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     sessionKey: string | undefined
     specId: string
     path: string
+    status: PiSpecialistSession['status']
     messages: TranscriptMessage[]
   } | null>(null)
 
@@ -483,6 +463,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     const targetId = active.id
     const targetPath = candidateSessionPath
     const targetSessionKey = sessionKey
+    const targetStatus = active.status
     setDiskTranscript((current) =>
       current && current.sessionKey === targetSessionKey && current.specId === targetId && current.path === targetPath
         ? current
@@ -492,7 +473,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
       void window.prime.sessions.read(targetPath).then((loaded) => {
         if (cancelled) return
         if (Array.isArray(loaded) && loaded.length > 0) {
-          setDiskTranscript({ sessionKey: targetSessionKey, specId: targetId, path: targetPath, messages: loaded })
+          setDiskTranscript({ sessionKey: targetSessionKey, specId: targetId, path: targetPath, status: targetStatus, messages: loaded })
         } else {
           setDiskTranscript((current) =>
             current?.sessionKey === targetSessionKey && current?.specId === targetId && current?.path === targetPath
@@ -521,8 +502,12 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   }, [active?.id, active?.status, active?.activity, active?.turns, candidateSessionPath, sessionKey])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const resultRef = useRef<HTMLElement>(null)
   const pinnedToBottomRef = useRef(true)
-  const previousTargetRef = useRef<string | null>(null)
+  const awaitingReportRef = useRef(false)
+  const positionedScrollTopRef = useRef<number | null>(null)
+  const [following, setFollowing] = useState(true)
+  const previousTargetRef = useRef<{ key: string; status: PiSpecialistSession['status'] } | null>(null)
   const matchedDiskTranscript =
     active !== undefined &&
     candidateSessionPath !== undefined &&
@@ -535,31 +520,52 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
       : null
   const rawTranscript = active ? (matchedDiskTranscript ?? active.messages) : []
   const renderedMessages = useMemo(() => coalesceAssistantTurns(rawTranscript), [rawTranscript])
-  const scrollTargetKey = active ? `${sessionKey ?? ''}:${active.id}:${matchedDiskTranscript ? 'disk' : 'inline'}` : null
+  const scrollTargetKey = active ? `${sessionKey ?? ''}:${active.id}` : null
+  const finalReport = active?.status === 'done' ? active.finalReport : undefined
+  const report = useMemo(() => {
+    if (!finalReport) return null
+    for (let index = renderedMessages.length - 1; index >= 0; index--) {
+      const message = renderedMessages[index]
+      if (message.role !== 'assistant') continue
+      for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = message.parts[partIndex]
+        if (part.type === 'text' && part.text.trim() === finalReport.trim()) return { messageId: message.id, partIndex }
+      }
+    }
+    return null
+  }, [finalReport, renderedMessages])
 
   useEffect(() => {
-    if (!scrollTargetKey) {
-      previousTargetRef.current = null
-      return
+    if (!scrollTargetKey || !active) { previousTargetRef.current = null; return }
+    const previous = previousTargetRef.current
+    const switched = previous?.key !== scrollTargetKey
+    const finished = previous?.status === 'running' && active.status !== 'running'
+    previousTargetRef.current = { key: scrollTargetKey, status: active.status }
+    if (switched) {
+      pinnedToBottomRef.current = active.status === 'running'
+      awaitingReportRef.current = active.status === 'done'
+      setFollowing(pinnedToBottomRef.current)
     }
-    const switchedTarget = previousTargetRef.current !== scrollTargetKey
-    if (switchedTarget) {
-      previousTargetRef.current = scrollTargetKey
-      pinnedToBottomRef.current = true
-    }
-    if (!switchedTarget && !pinnedToBottomRef.current) return
-    const scrollToBottom = () => {
+    if (!switched && !awaitingReportRef.current && !(pinnedToBottomRef.current && (active.status === 'running' || finished))) return
+    const position = () => {
       const scroller = scrollRef.current
       if (!scroller) return
-      if (typeof scroller.scrollTo === 'function') {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'auto' })
-      }
-      scroller.scrollTop = scroller.scrollHeight
+      if (active.status === 'done' && resultRef.current) {
+        if (!awaitingReportRef.current && !pinnedToBottomRef.current) return
+        scroller.scrollTop += resultRef.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+        awaitingReportRef.current = Boolean(candidateSessionPath && (!matchedDiskTranscript || diskTranscript?.status !== active.status))
+        pinnedToBottomRef.current = false
+        setFollowing(false)
+      } else if (active.status === 'running') {
+        if (!pinnedToBottomRef.current) return
+        scroller.scrollTop = scroller.scrollHeight
+      } else scroller.scrollTop = 0
+      positionedScrollTopRef.current = scroller.scrollTop
     }
-    scrollToBottom()
-    const frame = requestAnimationFrame(scrollToBottom)
+    position()
+    const frame = requestAnimationFrame(position)
     return () => cancelAnimationFrame(frame)
-  }, [scrollTargetKey, renderedMessages, active?.activity, active?.status])
+  }, [scrollTargetKey, renderedMessages, active?.activity, active?.status, finalReport, candidateSessionPath, matchedDiskTranscript, diskTranscript?.status])
 
   if (!specialists.length || !active) {
     return (
@@ -572,6 +578,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     )
   }
 
+  const failure = active.status === 'error' ? active.killReason ?? [...rawTranscript].reverse().find((message) => message.errorMessage)?.errorMessage : active.killReason
   const metaBadges = [
     active.model,
     active.thinking ? `think:${active.thinking}` : undefined,
@@ -591,59 +598,58 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               type="button"
               role="tab"
               aria-selected={isSelected}
+              title={`${spec.mission} · ${specialistStatusLabel[spec.status]}`}
+              tabIndex={isSelected ? 0 : -1}
+              onKeyDown={(event) => {
+                const index = specialists.indexOf(spec)
+                const destinations: Record<string, number> = { ArrowRight: (index + 1) % specialists.length, ArrowLeft: (index - 1 + specialists.length) % specialists.length, Home: 0, End: specialists.length - 1 }
+                const next = destinations[event.key]
+                if (next === undefined) return
+                event.preventDefault()
+                onSelect(specialists[next].id)
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+              }}
               key={spec.id}
               className={`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.status}`}
               onClick={() => onSelect(spec.id)}
             >
-              {spec.status === 'running' ? <CircleNotch className="spin" size={12} /> : spec.status === 'done' ? <Check size={12} /> : <RecordIcon size={12} />}
+              {spec.status === 'done' ? <Check size={12} /> : spec.status === 'error' ? <WarningCircle size={12} /> : <RecordIcon size={12} />}
               <strong>{spec.agent}</strong>
               {/^task_\d+$/.test(spec.id) ? <span>({spec.id})</span> : null}
             </button>
           )
         })}
       </div>
+      <header className="specialist-header" key={active.id}>
+        <div className="specialist-header__top">
+          <div className="specialist-header__title"><strong>{active.agent}</strong><span className="mono">{active.id}</span></div>
+          <span className={`run-state is-${active.status}`}>{specialistStatusLabel[active.status]}</span>
+        </div>
+        <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
+        {failure ? <div className="specialist-header__error"><WarningCircle size={12} /><span>{failure}</span></div> : null}
+        {active.status === 'running' && active.activity ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
+        <details className="specialist-header__details">
+          <summary>Details <span>{matchedDiskTranscript ? 'Session transcript' : 'Parent summary'}</span></summary>
+          <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
+          {!matchedDiskTranscript ? <small className="specialist-header__source">Showing the parent session's recorded activity, not a live worker status.</small> : null}
+          <strong className="specialist-turn__label">Work order</strong><MarkdownText text={active.prompt} />
+        </details>
+      </header>
       <div
         ref={scrollRef}
         className="inspector-scroll scroll-area specialists-panel__body"
         onScroll={() => {
           const scroller = scrollRef.current
-          if (scroller) pinnedToBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120
+          if (scroller) {
+            const positioned = positionedScrollTopRef.current
+            positionedScrollTopRef.current = null
+            if (positioned !== null && Math.abs(scroller.scrollTop - positioned) < 1) return
+            pinnedToBottomRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40
+            awaitingReportRef.current = false
+            setFollowing(pinnedToBottomRef.current)
+          }
         }}
       >
-        <header className="specialist-header">
-          <div className="specialist-header__top">
-            <div className="specialist-header__title">
-              <strong>{active.agent}</strong>
-              {/^task_\d+$/.test(active.id) ? <span className="mono">({active.id})</span> : null}
-            </div>
-            <span className={`run-state ${active.status === 'running' ? 'is-running' : active.status === 'error' ? 'is-error' : ''}`}>
-              {active.status === 'running' ? <CircleNotch className="spin" size={12} /> : active.status === 'done' ? <Check size={12} /> : <WarningCircle size={12} />}
-              {active.status === 'running' ? 'Running' : active.status === 'done' ? 'Completed' : 'Failed'}
-            </span>
-          </div>
-          {metaBadges.length > 0 ? (
-            <div className="specialist-header__meta">
-              {metaBadges.map((badge) => <span key={badge}>{badge}</span>)}
-            </div>
-          ) : null}
-          {active.status === 'running' && active.activity ? (
-            <div className="specialist-header__activity">
-              <CircleNotch className="spin" size={12} />
-              <code className="mono">{active.activity}</code>
-            </div>
-          ) : null}
-          {active.killReason ? (
-            <div className="specialist-header__error">
-              <WarningCircle size={12} />
-              <span>{active.killReason}</span>
-            </div>
-          ) : null}
-          {!matchedDiskTranscript ? (
-            <small className="specialist-header__source">
-              Showing activity summary recorded in parent session (no standalone session transcript file for this run).
-            </small>
-          ) : null}
-        </header>
         <div className="specialist-transcript" aria-label={`${active.agent} session transcript`}>
           {renderedMessages.map((message) => {
             if (message.role === 'user') {
@@ -654,33 +660,30 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               if (!text) return null
               return <WorkOrderTurn key={`${active.id}:${message.id}`} text={text} />
             }
-            const activityParts = message.parts.filter((part) => part.type !== 'text' && part.type !== 'image')
-            const textParts = message.parts.filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text' && Boolean(part.text.trim()))
-            if (activityParts.length === 0 && textParts.length === 0 && !message.streaming) return null
+            if (message.parts.every((part) => part.type === 'text' && !part.text.trim()) && !message.streaming && !message.errorMessage) return null
+            const reportIndex = report?.messageId === message.id ? report.partIndex : -1
+            const reportPart = message.parts[reportIndex]
             return (
               <article key={message.id} className="specialist-turn specialist-turn--assistant">
                 <div className="specialist-turn__label">{active.agent}</div>
-                {activityParts.length > 0 ? (
-                  <WorkTimeline parts={activityParts} showReasoning showTools streaming={Boolean(message.streaming)} />
-                ) : null}
-                {textParts.length > 0 ? (
-                  <div className="specialist-turn__content">
-                    {textParts.map((part, index) => (
-                      <MarkdownText key={`${message.id}-text-${index}`} text={part.text} streaming={Boolean(message.streaming)} />
-                    ))}
-                  </div>
-                ) : null}
-                {message.streaming && activityParts.length === 0 && textParts.length === 0 ? (
+                {message.errorMessage ? <div className="specialist-header__error" role="alert">{message.errorMessage}</div> : null}
+                <div className="specialist-turn__content">
+                  {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, Boolean(matchedDiskTranscript && message.streaming))}
+                  {reportPart?.type === 'text' ? <section className="specialist-result" ref={resultRef}><h3>Result</h3><MarkdownText text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true)}</section> : null}
+                </div>
+                {message.streaming && !message.parts.length ? (
                   <div className="specialist-turn__working">
-                    <CircleNotch className="spin" size={13} />
-                    <span>{active.agent} is working…</span>
+                    <RecordIcon size={13} />
+                    <span>Awaiting a recorded update…</span>
                   </div>
                 ) : null}
               </article>
             )
           })}
+          {finalReport && !report ? <section className="specialist-result" ref={resultRef}><h3>Result</h3><MarkdownText text={finalReport} /></section> : null}
         </div>
       </div>
+      {active.status === 'running' && !following ? <button type="button" className="specialist-jump" onClick={() => { pinnedToBottomRef.current = true; setFollowing(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }}>Jump to latest</button> : null}
     </div>
   )
 })

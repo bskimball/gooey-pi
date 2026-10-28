@@ -156,6 +156,83 @@ describe('useBrowserAnnotations identity', () => {
 })
 
 describe('SpecialistsPanel transcript scoping and loading', () => {
+  it.each([false, true])('keeps the initial report landing through delayed disk hydration unless the reader scrolls (scrolled: %s)', async (scrolled) => {
+    let finishRead: ((messages: TranscriptMessage[]) => void) | undefined
+    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const body = this.closest<HTMLDivElement>('.specialists-panel__body')
+      const offset = body?.textContent?.includes('Earlier worker commentary') ? 900 : 120
+      return new DOMRect(0, this.classList.contains('specialist-result') ? offset - (body?.scrollTop ?? 0) : 0, 300, 1000)
+    })
+    const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect the project' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { sessionFile: '/worker.jsonl' } } },
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nFinal report' },
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    const scroller = container.querySelector<HTMLDivElement>('.specialists-panel__body')!
+    expect(scroller.scrollTop).toBe(120)
+    await act(async () => scroller.dispatchEvent(new Event('scroll', { bubbles: true })))
+    if (scrolled) {
+      Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 2000 })
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 200 })
+      await act(async () => { scroller.scrollTop = 40; scroller.dispatchEvent(new Event('scroll', { bubbles: true })) })
+    }
+    await act(async () => finishRead?.([{ id: 'disk', role: 'assistant', parts: [
+      { type: 'text', text: 'Earlier worker commentary' },
+      { type: 'text', text: 'Final report' },
+    ] }]))
+    expect(scroller.scrollTop).toBe(scrolled ? 40 : 900)
+    expect(container.querySelector('.specialist-result')?.textContent).toBe('ResultFinal report')
+    Reflect.deleteProperty(window, 'prime')
+  })
+
+  it('pauses following while reading, does not repin when a disk transcript arrives, and jumps explicitly', async () => {
+    let finishRead: ((messages: TranscriptMessage[]) => void) | undefined
+    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
+    const messages: TranscriptMessage[] = [{ id: 'start', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Investigate navigation' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { sessionFile: '/worker.jsonl' } } },
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    const scroller = container.querySelector<HTMLDivElement>('.specialists-panel__body')!
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 200 })
+    await act(async () => { scroller.scrollTop = 100; scroller.dispatchEvent(new Event('scroll', { bubbles: true })) })
+    expect(container.querySelector('.specialist-jump')?.textContent).toBe('Jump to latest')
+    await act(async () => finishRead?.([{ id: 'disk', role: 'assistant', parts: [{ type: 'text', text: 'Fresh worker commentary' }] }]))
+    expect(container.textContent).toContain('Fresh worker commentary')
+    expect(scroller.scrollTop).toBe(100)
+    await act(async () => container.querySelector<HTMLButtonElement>('.specialist-jump')!.click())
+    expect(scroller.scrollTop).toBe(1000)
+    expect(container.querySelector('.specialist-jump')).toBeNull()
+    Reflect.deleteProperty(window, 'prime')
+  })
+
+  it('keeps commentary and tool activity in order and marks only the recorded final report as Result', async () => {
+    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: async (): Promise<TranscriptMessage[]> => [{ id: 'disk', role: 'assistant', parts: [
+      { type: 'text', text: 'First commentary' },
+      { type: 'toolCall', name: 'bash', args: { command: 'echo inspected' } },
+      { type: 'toolResult', name: 'bash', text: 'inspected' },
+      { type: 'text', text: 'Second commentary' },
+      { type: 'text', text: 'Final report' },
+    ] }] } } })
+    const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect the project' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { sessionFile: '/worker.jsonl' } } },
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nFinal report' },
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    const text = container.querySelector('.specialist-transcript')!.textContent!
+    expect(text.indexOf('First commentary')).toBeLessThan(text.indexOf('echo inspected'))
+    expect(text.indexOf('echo inspected')).toBeLessThan(text.indexOf('Second commentary'))
+    expect(text.indexOf('Second commentary')).toBeLessThan(text.indexOf('Final report'))
+    expect(container.querySelector('.specialist-result')?.textContent).toBe('ResultFinal report')
+    Reflect.deleteProperty(window, 'prime')
+  })
+
   it('isolates cached worker transcripts across parent sessions and loads task / chain step session files', async () => {
     const readSession = vi.fn(async (filePath: string): Promise<TranscriptMessage[]> => {
       if (filePath.includes('inst-session-a')) {
@@ -250,7 +327,8 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     const workOrderToggle = container.querySelector<HTMLButtonElement>('.specialist-turn--user .specialist-turn__toggle')
     expect(workOrderToggle).not.toBeNull()
     expect(workOrderToggle?.getAttribute('aria-expanded')).toBe('false')
-    expect(container.textContent).not.toContain('Session B prompt')
+    expect(container.querySelector('.specialist-transcript')?.textContent).not.toContain('Session B prompt')
+    expect(container.querySelector('.specialist-header__mission')?.textContent).toBe('Session B prompt')
 
     await act(async () => { workOrderToggle?.click() })
     expect(workOrderToggle?.getAttribute('aria-expanded')).toBe('true')
@@ -289,13 +367,16 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
           {
             type: 'toolResult',
             name: 'task_wait',
-            text: 'task_1 settled sidekick · 1 turn\n\nNew specialist output at bottom',
+            text: 'task_1 settled sidekick · 1 turn\n--- result ---\nNew specialist output at bottom',
             details: { worker: { id: 'task_1', instanceId: 'inst-session-b', agent: 'sidekick', latestText: 'New specialist output at bottom' } },
           },
         ],
       },
     ]
     Object.defineProperty(bodyScroller!, 'scrollHeight', { configurable: true, value: 920 })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, this.classList.contains('specialist-result') ? 120 - bodyScroller!.scrollTop : 0, 300, 100)
+    })
 
     await act(async () => {
       root.render(
@@ -310,6 +391,7 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     })
     await act(async () => {})
     expect(container.textContent).toContain('New specialist output at bottom')
-    expect(bodyScroller!.scrollTop).toBe(920)
+    expect(container.querySelector('.specialist-result')?.textContent).toContain('ResultNew specialist output at bottom')
+    expect(bodyScroller!.scrollTop).toBe(120)
   })
 })

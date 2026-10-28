@@ -21,7 +21,7 @@ import {
   SidebarLeft,
   Trash,
 } from './icons'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
@@ -75,6 +75,10 @@ function readCollapsedProjects(): Record<string, boolean> {
   } catch { return {} }
 }
 
+function saveCollapsedProjects(collapsed: Record<string, boolean>): void {
+  try { window.localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify(collapsed)) } catch { /* Keep navigation usable when storage is unavailable. */ }
+}
+
 export interface SidebarIndexStats {
   projectPaths: number
   sessionScans: number
@@ -109,8 +113,8 @@ export function indexSidebarSessions(
   return { activeSessions, sessionsByProject }
 }
 
-export function boundedSidebarSessions(sessions: SessionRecord[]): SessionRecord[] {
-  return sessions.slice(0, SIDEBAR_SESSION_LIMIT)
+export function boundedSidebarSessions(sessions: SessionRecord[], { limit = SIDEBAR_SESSION_LIMIT, include = () => false }: { limit?: number; include?(session: SessionRecord): boolean } = {}): SessionRecord[] {
+  return sessions.filter((session, index) => index < limit || include(session))
 }
 
 
@@ -146,10 +150,23 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
+  const [sessionLimits, setSessionLimits] = useState<Record<string, number>>({})
   const [collapsed, setCollapsed] = useState(readCollapsedProjects)
+  const previousSelection = useRef({ activeProjectId, activeSessionId })
   useEffect(() => {
-    try { window.localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify(collapsed)) } catch { /* Keep navigation usable when storage is unavailable. */ }
-  }, [collapsed])
+    const previous = previousSelection.current
+    previousSelection.current = { activeProjectId, activeSessionId }
+    if (activeView === 'session' && activeProjectId && (previous.activeProjectId !== activeProjectId || previous.activeSessionId !== activeSessionId)) {
+      setCollapsed((value) => ({ ...value, [activeProjectId]: false }))
+    }
+  }, [activeProjectId, activeSessionId, activeView])
+  useEffect(() => saveCollapsedProjects(collapsed), [collapsed])
+  const revealProject = (projectId: string) => {
+    const next = { ...collapsed, [projectId]: false }
+    // Compact-layout selection unmounts the drawer before a state effect can persist this.
+    saveCollapsedProjects(next)
+    setCollapsed(next)
+  }
   const sidebarRef = useFocusTrap<HTMLElement>(overlay, onClose)
   const [projectMenu, setProjectMenu] = useState<string | null>(null)
   const [projectSortMenuOpen, setProjectSortMenuOpen] = useState(false)
@@ -269,6 +286,12 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
               const allSessions = sessionsByProject.get(project.id) ?? []
               const projectSessions = normalized ? matchingSessions.get(project.id) ?? [] : allSessions
               const isCollapsed = normalized ? section.id === 'project-matches' : collapsed[project.id] ?? project.id !== activeProjectId
+              const limit = (normalized ? searchLimits : sessionLimits)[project.id] ?? SIDEBAR_SESSION_LIMIT
+              const visibleSessions = normalized ? projectSessions.slice(0, limit) : boundedSidebarSessions(projectSessions, {
+                limit,
+                include: (session) => session.id === activeSessionId || session.status === 'running' || needsAttention(session),
+              })
+              const remaining = projectSessions.length - visibleSessions.length
               const running = allSessions.some((session) => session.status === 'running')
               const attentionCount = allSessions.filter(needsAttention).length
               const rowId = `${section.id}:${project.id}`
@@ -281,7 +304,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                     {!normalized ? <button className="project-row__collapse" type="button" aria-expanded={!isCollapsed} aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} title={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} onClick={() => { setProjectMenu(null); setCollapsed((value) => ({ ...value, [project.id]: !isCollapsed })) }}>
                       {isCollapsed ? <CaretRight size={13} /> : <CaretDown size={13} />}
                     </button> : null}
-                    <button className="project-row__main" type="button" onClick={() => { setProjectMenu(null); setQuery(''); onSelectProject(project) }} title={project.path}>
+                    <button className="project-row__main" type="button" onClick={() => { setProjectMenu(null); setQuery(''); revealProject(project.id); onSelectProject(project) }} title={project.path}>
                       <span>{project.name}</span>
                       {project.pinned ? <PushPin className="project-row__pin" size={11} /> : null}
                     </button>
@@ -292,11 +315,11 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                   </div>
                   {!isCollapsed ? (
                     <div className="session-list">
-                      {(normalized ? projectSessions.slice(0, searchLimits[project.id] ?? SIDEBAR_SESSION_LIMIT) : boundedSidebarSessions(projectSessions)).map((session) => (
+                      {visibleSessions.map((session) => (
                         <div key={session.id} className={`session-row-wrap session-row-wrap--${session.status} ${needsAttention(session) ? 'has-attention' : ''} ${activeSessionId === session.id && activeView === 'session' ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`}>
-                          <button type="button" title={session.title} className="session-row" onClick={() => { setSessionMenu(null); setQuery(''); onSelectSession(session) }} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
+                          <button type="button" title={session.title} className="session-row" onClick={() => { setSessionMenu(null); setQuery(''); revealProject(project.id); onSelectSession(session) }} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
                             <SessionStatusMark status={session.status} attention={needsAttention(session)} />
-                            <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta">{session.status === 'running' ? 'Working' : session.status === 'waiting' ? 'Needs attention' : session.status === 'complete' ? 'Finished' : formatRelative(session.updatedAt)}</span></span>
+                            <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{session.status === 'running' ? 'Working' : session.status === 'waiting' ? 'Needs input' : formatRelative(session.updatedAt, 'narrow')}</span></span>
                           </button>
                           <IconButton
                             size="small"
@@ -314,7 +337,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                           {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options"><button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button><button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button></div> : null}
                         </div>
                       ))}
-                      {normalized && projectSessions.length > (searchLimits[project.id] ?? SIDEBAR_SESSION_LIMIT) ? <button type="button" className="session-row session-row--empty" onClick={() => setSearchLimits((limits) => ({ ...limits, [project.id]: (limits[project.id] ?? SIDEBAR_SESSION_LIMIT) + SIDEBAR_SESSION_LIMIT }))}>Show more matches ({projectSessions.length - (searchLimits[project.id] ?? SIDEBAR_SESSION_LIMIT)} remaining)</button> : null}
+                      {remaining > 0 ? <button type="button" className="session-row session-row--empty" onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
                       {projectSessions.length === 0 ? <button type="button" title={`New session in ${project.name}`} className="session-row session-row--empty" onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button> : null}
                     </div>
                   ) : null}

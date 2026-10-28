@@ -1,4 +1,5 @@
 import type { MessagePart, TranscriptMessage } from '@/types/api'
+import { specialistOutcome, specialistStepStatus, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
 
 export interface TranscriptSummary {
   toolCount: number
@@ -16,7 +17,7 @@ export interface PiSpecialistSummary {
   id: string
   agent: string
   mission: string
-  status: 'running' | 'done' | 'error'
+  status: SpecialistStatus
   activity?: string
 }
 
@@ -24,7 +25,7 @@ export function extractPiSessionWidgets(messages: TranscriptMessage[]): {
   todos: PiTodoItemSummary[]
   specialists: PiSpecialistSummary[]
 } {
-  return extractWidgetsFromParts(messages.flatMap((message) => message.parts))
+  return extractWidgetsFromParts(messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []))
 }
 
 function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
@@ -98,7 +99,9 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
         ...(activity ? { activity } : {}),
       })
     } else if (part.name === 'task_chain' && Array.isArray(args?.steps)) {
-      const result = findNextFinalToolResult(index, 'task_chain')
+      const result = findNextToolResult(index, 'task_chain', true)
+      const steps = workerDetails(result?.details)?.steps
+      const detailSteps = Array.isArray(steps) ? steps : []
       const baseId = part.id ?? `chain-${specialists.length + 1}`
       const anyStepFailed = typeof result?.text === 'string' && /^step\s+\d+\s+(?:failed|aborted|timeout)\b/m.test(result.text)
       let failedEarlier = false
@@ -109,7 +112,11 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
         if (typeof step.agent !== 'string' || !step.agent.trim()) continue
         const rawPrompt = typeof step.prompt === 'string' ? step.prompt.replace(/\s+/g, ' ').trim() : ''
         let status: PiSpecialistSummary['status'] = 'running'
-        if (result) {
+        const stepStatus = specialistStepStatus(workerDetails(detailSteps[stepIndex])?.status)
+        if (stepStatus) {
+          status = stepStatus
+          if (status === 'error' || status === 'stopped') failedEarlier = true
+        } else if (result && !result.streaming) {
           const stepNumber = stepIndex + 1
           const stepOk = new RegExp(`^step\\s+${stepNumber}\\s+ok\\b`, 'm').test(result.text)
           const stepBad = new RegExp(`^step\\s+${stepNumber}\\s+(?:failed|aborted|timeout)\\b`, 'm').test(result.text)
@@ -132,8 +139,9 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
     } else if (part.name === 'task_start' && typeof args?.agent === 'string') {
       const result = findNextFinalToolResult(index, 'task_start')
       const rawPrompt = typeof args.prompt === 'string' ? args.prompt.replace(/\s+/g, ' ').trim() : ''
-      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/.exec(result.text) : null
-      const workerId = match?.[1]
+      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/i.exec(result.text) : null
+      const worker = workerDetails(result?.details)
+      const workerId = typeof worker?.id === 'string' ? worker.id : match?.[1]
       const existing = workerId ? workerById.get(workerId) : undefined
       if (existing) {
         existing.agent = args.agent
@@ -159,61 +167,31 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
       if (rawMessage && (args.mode === 'prompt' || !target.mission)) {
         target.mission = rawMessage.slice(0, 120)
       }
-      if (result && /\blifecycle[:=]\s*(?:failed|aborted)\b/i.test(result.text)) {
-        target.status = 'error'
-        delete target.activity
-      } else if (result && /\blifecycle[:=]\s*(?:settled|closed)\b/i.test(result.text)) {
-        target.status = 'done'
-        delete target.activity
-      } else if (args.mode === 'prompt' || (result && /\blifecycle[:=]\s*(?:running|starting|retrying)\b/i.test(result.text))) {
-        target.status = 'running'
-        if (args.mode === 'prompt') delete target.activity
-      }
+      target.status = specialistOutcome({ previous: target.status, tool: part.name, result, startsGeneration: args.mode === 'prompt' })
+      if (target.status !== 'running' || args.mode === 'prompt') delete target.activity
     } else if ((part.name === 'task_wait' || part.name === 'task_status' || part.name === 'task_close' || part.name === 'task_abort') && typeof args?.id === 'string') {
       const target = workerById.get(args.id)
       if (!target) continue
       const result = findNextToolResult(index, part.name, part.name === 'task_wait' || part.name === 'task_status')
       if (!result) continue
-      const lifecycle = /\blifecycle[:=]\s*([a-z_]+)\b/i.exec(result.text)?.[1]?.toLowerCase()
-      if (!result.streaming && (result.isError || part.name === 'task_abort' || lifecycle === 'failed' || lifecycle === 'aborted')) {
-        target.status = 'error'
-        delete target.activity
-      } else if (
-        !result.streaming &&
-        (part.name === 'task_close' ||
-          lifecycle === 'settled' ||
-          lifecycle === 'closed' ||
-          (!lifecycle && /^task_\d+\s+(?:already\s+)?settled\b/im.test(result.text)))
-      ) {
-        target.status = 'done'
-        delete target.activity
-      } else {
-        if (lifecycle === 'running' || lifecycle === 'starting' || lifecycle === 'retrying') {
-          target.status = 'running'
-        }
-        if (target.status === 'running') {
-          const rawActivity = /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '')
-          if (rawActivity && rawActivity !== '(none)') {
-            target.activity = rawActivity.slice(0, 80)
-          } else {
-            delete target.activity
-          }
-        }
-      }
+      target.status = specialistOutcome({ previous: target.status, tool: part.name, result })
+      const rawActivity = target.status === 'running' ? /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '') : undefined
+      if (rawActivity && rawActivity !== '(none)') target.activity = rawActivity.slice(0, 80)
+      else delete target.activity
     }
   }
-  return { todos, specialists: specialists.slice(-8) }
+  return { todos, specialists }
 }
 
 /** One pass for the tool count; one reverse walk that stops at the first text part. */
 export function summarizeTranscript(messages: TranscriptMessage[]): TranscriptSummary {
   let toolCount = 0
   for (const message of messages) {
-    for (const part of message.parts) if (part.type === 'toolCall') toolCount += 1
+    for (const part of Array.isArray(message.parts) ? message.parts : []) if (part.type === 'toolCall') toolCount += 1
   }
   let lastText: string | undefined
   for (let index = messages.length - 1; index >= 0 && lastText === undefined; index -= 1) {
-    const parts = messages[index].parts
+    const parts = Array.isArray(messages[index].parts) ? messages[index].parts : []
     for (let cursor = parts.length - 1; cursor >= 0; cursor -= 1) {
       const part = parts[cursor]
       if (part.type === 'text') {
@@ -244,7 +222,7 @@ function summarizeMessage(message: TranscriptMessage, previous?: MessageSummary)
   let toolCount = 0
   let lastText: string | undefined
   let widgetParts: MessagePart[] = []
-  for (const part of message.parts) {
+  for (const part of Array.isArray(message.parts) ? message.parts : EMPTY_PARTS) {
     if (part.type === 'text') lastText = part.text
     if (part.type === 'toolCall') {
       toolCount += 1

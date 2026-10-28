@@ -1,5 +1,6 @@
 /* Inspector */
 .inspector {
+	container: inspector / inline-size;
 	position: relative;
 	z-index: 10;
 	width: var(--inspector-width, clamp(340px, 42vw, 410px));
@@ -20,34 +21,36 @@
 	border-bottom: 1px solid var(--border);
 	background: color-mix(in srgb, var(--canvas) 92%, var(--surface-subtle));
 }
-/* Icon tabs; only the active tab shows its label, so the strip stays narrow at any inspector width. */
+/* Tab geometry stays fixed on selection; labels follow available panel width. */
 .inspector__tabs > button:not(.icon-button) {
 	position: relative;
 	min-width: 34px;
+	flex: 1 0 auto;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
-	padding: 0 7px;
+	gap: 4px;
+	padding: 0 4px;
 	color: var(--text-tertiary);
 	background: transparent;
 	font-size: 11.5px;
+	font-weight: 550;
 	transition: color 120ms ease-out;
 }
-/* The label stays in the accessibility tree; inactive tabs collapse it to zero width so it can expand in on selection. */
 .inspector__tab-label {
-	max-width: 96px;
+	position: absolute;
+	width: 1px;
+	height: 1px;
 	overflow: hidden;
+	clip-path: inset(50%);
 	white-space: nowrap;
-	transition:
-		max-width 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
-		opacity 180ms ease-out,
-		margin 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.inspector__tabs > button:not(.is-active) .inspector__tab-label {
-	max-width: 0;
-	margin-left: -6px;
-	opacity: 0;
+@container inspector (min-width: 390px) {
+	.inspector__tab-label { position: static; width: auto; height: auto; clip-path: none; }
+	.inspector__tabs > button:not(.icon-button) > svg { display: none; }
+}
+@container inspector (min-width: 520px) {
+	.inspector__tabs > button:not(.icon-button) > svg { display: block; }
 }
 .inspector__tabs > button:not(.icon-button) > svg {
 	flex: 0 0 auto;
@@ -56,21 +59,11 @@
 .inspector__tabs > button:not(.icon-button):active > svg {
 	transform: scale(0.9);
 }
-.inspector__tabs > button:not(.is-active) .inspector__tab-count {
-	position: absolute;
-	top: 7px;
-	left: calc(50% + 3px);
-	min-width: 14px;
-	height: 14px;
-	padding: 0 3px;
-	font-size: 8.5px;
-}
 .inspector__tabs > button:not(.icon-button):hover {
 	color: var(--text);
 }
 .inspector__tabs > button.is-active {
 	color: var(--text);
-	font-weight: 560;
 }
 .inspector__tabs > button:not(.icon-button)::after {
 	position: absolute;
@@ -304,16 +297,17 @@
 .specialists-panel__body {
 	flex: 1;
 	min-height: 0;
-	padding: 16px 18px 24px;
+	padding: 8px 14px 24px;
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
 }
 .specialist-header {
+	flex: 0 0 auto;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 0 0 12px;
+	gap: 6px;
+	padding: 10px 14px;
 	border: 0;
 	border-bottom: 1px solid var(--border-subtle);
 	border-radius: 0;
@@ -325,20 +319,23 @@
 	justify-content: space-between;
 	gap: 8px;
 }
-.specialist-header__title {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 13.5px;
-}
+.specialist-header__title { min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.specialist-header__title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.specialist-header__mission { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 12px; }
+.specialist-header__details { max-height: 180px; overflow: auto; font-size: 11px; }
+.specialist-header__details > summary { cursor: pointer; color: var(--text-secondary); }
+.specialist-header__details > summary span { margin-left: 8px; color: var(--text-tertiary); font-size: 10px; }
+.specialist-header__details[open] > summary { margin-bottom: 8px; }
+.specialist-header__details .prose { font-size: 11.5px; }
+.specialist-result > h3 { margin: 12px 0 8px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; }
+.specialist-jump { align-self: center; margin: 0 0 10px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--surface-raised); font-size: 11px; }
 .specialist-header__title span {
 	color: var(--text-tertiary);
 	font-size: 11.5px;
 }
-.run-state.is-error {
-	color: var(--danger);
-	background: var(--danger-soft);
-}
+.run-state.is-error { color: var(--danger); background: var(--danger-soft); }
+.run-state.is-stopped, .run-state.is-closed { color: var(--text-secondary); background: var(--surface-hover); }
+.specialist-tabstrip__item.is-stopped svg, .specialist-tabstrip__item.is-closed svg { color: var(--text-tertiary); }
 .specialist-header__meta {
 	display: flex;
 	flex-wrap: wrap;
@@ -364,10 +361,8 @@
 	border-radius: 6px;
 	font-size: 11px;
 }
-.specialist-header__activity {
-	color: var(--prime);
-	background: var(--prime-soft);
-}
+.specialist-header__activity { min-width: 0; color: var(--text-secondary); background: var(--surface-subtle); }
+.specialist-header__activity > span { flex: 0 0 auto; color: var(--text-tertiary); font-size: 10px; }
 .specialist-header__activity code {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -454,40 +449,35 @@
 	min-height: 0;
 }
 .changes-toolbar {
-	min-height: 45px;
+	min-height: 42px;
+	flex: 0 0 auto;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	justify-content: space-between;
-	padding: 0 10px 0 14px;
+	gap: 6px;
+	padding: 6px 10px;
 	border-bottom: 1px solid var(--border);
 }
-.changes-toolbar > div {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-.changes-toolbar strong {
+.changes-toolbar__branch {
+	flex: 1 1 60px;
+	min-width: 60px;
 	display: flex;
 	align-items: center;
 	gap: 5px;
+}
+.changes-toolbar__branch > svg, .changes-toolbar > .segmented, .changes-toolbar > .button { flex-shrink: 0; }
+.changes-toolbar strong {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-size: 11.5px;
 	font-weight: 550;
 }
 .changes-toolbar small {
-	padding-left: 8px;
-	border-left: 1px solid var(--border);
+	flex-shrink: 0;
 	color: var(--text-tertiary);
 	font-size: 10.5px;
-}
-.changes-scopes {
-	min-height: 43px;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	padding: 6px 10px;
-	border-bottom: 1px solid var(--border);
 }
 .changes-read-only {
 	display: flex;

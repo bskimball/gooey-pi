@@ -8,6 +8,8 @@ import { PiWelcomeMark } from './ui'
 import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
+import { createSessionSummarySelector } from './inspector/session-summary'
+import { SubagentContext } from './transcript/subagent-lane'
 import { TurnNavigator } from './transcript/turn-navigator'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
 
@@ -40,6 +42,7 @@ interface TranscriptProps {
   bottomDockHasChanges?: boolean
   queuedMessageCount?: number
   onOpenSessionReference?(sessionId: string, harness: HarnessId): void
+  onOpenSpecialist?(id: string): void
 }
 
 
@@ -62,7 +65,10 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
 
 
 
-export function Transcript({ messages, git, harness = 'pi', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference }: TranscriptProps) {
+export function Transcript({ messages, git, harness = 'pi', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference, onOpenSpecialist }: TranscriptProps) {
+  const [selectSummary] = useState(createSessionSummarySelector)
+  const { specialists } = selectSummary(messages)
+  const subagentContext = useMemo(() => ({ specialists, onOpen: onOpenSpecialist }), [specialists, onOpenSpecialist])
   const [coalesce] = useState(createAssistantTurnCoalescer)
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
   const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages)
@@ -83,7 +89,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
     queuedMessageCount > 0 ? 'has-queued-messages' : '',
   ].filter(Boolean).join(' ')
 
-  return <>
+  return <SubagentContext.Provider value={subagentContext}>
     <div ref={scrollRef} className={transcriptClasses} aria-busy={loading} onScroll={updatePinnedState}>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       <div className="transcript__inner">
@@ -144,5 +150,5 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
     </div>
     {!loading ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
     {showPinnedChanges && git.files.length ? <div className="transcript-changes-pin"><ChangesCard git={git} onOpenChanges={onOpenChanges} /></div> : null}
-  </>
+  </SubagentContext.Provider>
 }

@@ -29,6 +29,8 @@ export interface InspectorProps {
 	activeTab: InspectorTab;
 	onTabChange(tab: InspectorTab): void;
 	onClose(): void;
+	selectedSpecialistId: string | null;
+	onSelectSpecialist(id: string): void;
 	/** Agent name for runtime status. */
 	agentName?: string;
 	/** Agent short name for working copy. */
@@ -82,6 +84,8 @@ export const Inspector = memo(function Inspector({
 	activeTab,
 	onTabChange,
 	onClose,
+	selectedSpecialistId,
+	onSelectSpecialist,
 	project,
 	cwd,
 	messages,
@@ -113,9 +117,6 @@ export const Inspector = memo(function Inspector({
 	homeDir,
 }: InspectorProps) {
 	const inspectorRef = useFocusTrap<HTMLElement>(overlay, onClose);
-	const [selectedSpecialistId, setSelectedSpecialistId] = useState<
-		string | null
-	>(null);
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
 	const specialistCount = summary.specialists.length;
@@ -195,7 +196,7 @@ export const Inspector = memo(function Inspector({
 							automations={automations}
 							onOpenAutomation={onOpenAutomation}
 							onOpenSpecialist={(id) => {
-								setSelectedSpecialistId(id);
+								onSelectSpecialist(id);
 								onTabChange("specialists");
 							}}
 						/>
@@ -206,7 +207,7 @@ export const Inspector = memo(function Inspector({
 						key={agentSessionKey ?? "no-session"}
 						messages={messages}
 						selectedId={selectedSpecialistId}
-						onSelect={setSelectedSpecialistId}
+						onSelect={onSelectSpecialist}
 						homeDir={homeDir}
 						sessionKey={agentSessionKey}
 					/>

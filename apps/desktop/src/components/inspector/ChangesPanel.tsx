@@ -113,11 +113,12 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
   return (
     <div className="changes-panel">
       <div className="changes-toolbar">
-        <div><strong><GitBranch size={13} /> {git.branch ?? 'Repository'}</strong>{git.ahead ? <small>{git.ahead} ahead</small> : null}</div>
+        <div className="changes-toolbar__branch" title={`${git.branch ?? 'Repository'}${git.ahead ? ` · ${git.ahead} ahead` : ''}`}><GitBranch size={13} /><strong>{git.branch ?? 'Repository'}</strong>{git.ahead ? <small>{git.ahead} ahead</small> : null}</div>
+        <Segmented value={scope} label="Diff scope" options={[{ value: 'unstaged', label: 'Unstaged' }, { value: 'staged', label: 'Staged' }]} onChange={(value) => { if (value === 'unstaged' || value === 'staged') { setActionError(''); setScope(value) } }} />
+        <button type="button" className="button button--compact" disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => setCommitOpen(true)}>Commit</button>
         <IconButton label="Refresh changes" onClick={() => void onRefreshGit()}><ArrowsClockwise size={14} /></IconButton>
       </div>
       {readOnly ? <div className="changes-read-only" role="note"><span>This project is read-only because it was discovered from session history.</span>{onGrantProject ? <button type="button" className="button button--compact" onClick={() => void onGrantProject()}>Add project</button> : null}</div> : null}
-      <div className="changes-scopes"><Segmented value={scope} label="Diff scope" options={[{ value: 'unstaged', label: 'Unstaged' }, { value: 'staged', label: 'Staged' }]} onChange={(value) => { setActionError(''); setScope(value as 'unstaged' | 'staged') }} /><button type="button" className="button button--compact" disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => setCommitOpen(true)}>Commit</button></div>
       {actionError ? <p className="changes-error" role="alert">{actionError}</p> : null}
       <div className="changes-body">
         <div className="file-changes scroll-area">

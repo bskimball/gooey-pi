@@ -125,14 +125,14 @@
 .activity-line--tool, .activity-line--agent { border-radius: 6px; }
 .activity-line--tool:hover, .activity-line--agent:hover { background: var(--surface-subtle); }
 .activity-line--compaction { margin: 4px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; color: var(--text-secondary); background: var(--surface-raised); }
-.activity-line--compaction .activity-tool__summary { min-height: 32px; }
+.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }
 .activity-line--compaction.is-running { border-color: var(--border-strong); }
 .activity-line--compaction.is-done .activity-line__icon, .activity-line--compaction.is-done .activity-tool__state { color: var(--success); }
 .activity-line--compaction.is-failed .activity-line__icon, .activity-line--compaction.is-failed .activity-tool__state, .activity-line--compaction.is-cancelled .activity-line__icon, .activity-line--compaction.is-cancelled .activity-tool__state { color: var(--danger); }
 .activity-compaction__reason, .activity-compaction__tokens { min-width: 0; overflow: hidden; color: var(--text-tertiary); font-size: var(--chat-meta); text-overflow: ellipsis; white-space: nowrap; }
 .activity-compaction__tokens { margin-left: auto; }
 .activity-line--compaction .activity-tool__state { margin-left: 6px; }
-.activity-compaction__details { max-height: 260px; margin: 0 6px 8px 20px; padding: 8px 0; overflow: auto; color: var(--text-secondary); background: transparent; }
+.activity-compaction__details { max-height: 260px; margin: 0 10px 8px 30px; padding: 8px 0; overflow: auto; color: var(--text-secondary); background: transparent; }
 .activity-compaction__details.is-error { color: var(--danger); }
 .activity-compaction__details .prose, .activity-agent__details .prose { margin: 0; font-size: var(--chat-ui); line-height: 1.55; }
 .activity-agent__name { min-width: 0; flex: 1; overflow: hidden; color: var(--prime); font-size: var(--chat-meta); text-overflow: ellipsis; white-space: nowrap; }
@@ -214,6 +214,9 @@
 .subagent-lane.is-running .subagent-lane__state { color: var(--prime); background: var(--prime-soft); }
 .subagent-lane.is-sent .subagent-lane__state { color: var(--text-secondary); background: var(--surface-subtle); }
 .subagent-lane.is-error .subagent-lane__state { color: var(--danger); background: var(--danger-soft); }
+.subagent-lane__links { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 5px 32px; }
+.subagent-lane__links button { padding: 3px 0; color: var(--text-secondary); background: transparent; font-size: var(--chat-meta); text-decoration: underline; text-underline-offset: 3px; }
+.subagent-lane.is-stopped .subagent-lane__state, .subagent-lane.is-closed .subagent-lane__state { color: var(--text-secondary); background: var(--surface-hover); }
 .subagent-lane__body { max-height: 360px; overflow: auto; padding: 10px 12px 10px 32px; border-top: 1px solid var(--border); background: var(--canvas); animation: disclosure-in 200ms cubic-bezier(.2, .8, .2, 1) both; }
 .subagent-lane__body .prose { margin: 0; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.6; }
 /* Plan updates head the steps that follow them: the count and active step read as a section label, not a tool call. */

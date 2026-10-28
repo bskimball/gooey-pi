@@ -4,11 +4,11 @@ import { join } from 'node:path'
 import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PiRpc } from '../../packages/vscode/src/pi-rpc'
-import { listSessions, sessionBucket, sessionTranscriptOps } from '../../packages/vscode/src/session-catalog'
+import { listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
 
 vi.mock('vscode', () => ({
-  workspace: { workspaceFolders: [], openTextDocument: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
+  workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
   window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn() },
   languages: { getDiagnostics: vi.fn() },
   Uri: { parse: (value: string) => ({ scheme: value.split(':')[0], toString: () => value }) },
@@ -86,6 +86,18 @@ describe('VS Code saved sessions', () => {
     expect(await listSessions(cwd, root)).toEqual([{ path: paths[0], id: 'session-0', title: 'Named 0', preview: 'First prompt', updatedAt: '2026-01-01T00:00:00.000Z', messageCount: 2 }])
   })
 
+  it('uppercases only Windows drive letters from VS Code workspace paths', () => {
+    expect(workspacePath('c:\\Users\\dev\\project', 'win32')).toBe('C:\\Users\\dev\\project')
+    expect(workspacePath('C:\\Users\\dev\\project', 'win32')).toBe('C:\\Users\\dev\\project')
+    expect(workspacePath('/users/dev/project', 'darwin')).toBe('/users/dev/project')
+  })
+
+  it.runIf(process.platform === 'win32')('lists sessions recorded with a different drive-letter case than the workspace', async () => {
+    const { cwd, root, paths } = await fixture()
+    const lowerDrive = cwd.replace(/^[A-Z](?=:)/, (drive) => drive.toLowerCase())
+    expect((await listSessions(lowerDrive, root)).map((session) => session.path)).toEqual([paths[0]])
+  })
+
   it('sorts newest first before capping at 50', async () => {
     const { cwd, root } = await fixture(53)
     const sessions = await listSessions(cwd, root)
@@ -154,6 +166,28 @@ describe('VS Code saved sessions', () => {
 })
 
 describe('VS Code editor integration', () => {
+  it.runIf(process.platform === 'win32')('lists workspace files when VS Code supplies lowercase drive letters', async () => {
+    const workspaceFolders = vscode.workspace.workspaceFolders
+    Object.assign(vscode.workspace, { workspaceFolders: [{ uri: { fsPath: 'c:\\work\\project' } }] })
+    vi.mocked(vscode.workspace.findFiles).mockResolvedValue([
+      { fsPath: 'c:\\work\\project\\src\\file.ts' },
+      { fsPath: 'd:\\other\\src\\file.ts' },
+    ] as vscode.Uri[])
+    const post = vi.fn()
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { post })
+    try {
+      await session.handle({ type: 'listFiles', requestId: 1 })
+      expect(post).toHaveBeenCalledWith({ type: 'files', requestId: 1, entries: [
+        { path: 'src', type: 'directory' },
+        { path: 'src/file.ts', type: 'file' },
+      ] })
+    } finally {
+      Object.assign(vscode.workspace, { workspaceFolders })
+      vi.mocked(vscode.workspace.findFiles).mockReset()
+    }
+  })
+
   it('reports no active editor explicitly', () => {
     expect(editorContext()).toMatchObject({ active: null, tabs: [], workspaceFolders: [] })
     expect(editorFileContext()).toBeNull()

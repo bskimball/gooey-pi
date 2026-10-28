@@ -353,7 +353,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
       const result = next?.type === 'toolResult' ? next : undefined
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
-      if (isSubagentTool(part.name)) return <SubagentLane key={key} part={part} result={result} followUps={followUps.get(part)} />
+      if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <SubagentLane key={key} part={part} result={result} followUps={followUps.get(part)} />
       if (result && !result.streaming && isExploreTool(part.name)) runMembers.set(key, { failed: Boolean(result.isError), search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
       return <ToolPart key={key} part={part} result={result} />
     }

@@ -120,7 +120,7 @@ describe('sidebar project working set', () => {
     expect(container.querySelector<HTMLInputElement>('#session-search')?.value).toBe('')
   })
 
-  it('reveals matching sessions without changing saved collapse state and pages through all matches', async () => {
+  it('searches without changing collapse state, pages matches, and expands the chosen session project', async () => {
     const matches = Array.from({ length: 9 }, (_, index) => ({ ...session, id: `match-${index}`, title: `Needle ${index}` }))
     const onSelectSession = vi.fn()
     await renderSidebar({ sessions: [...matches, { ...session, id: 'unrelated', title: 'Unrelated' }, { ...session, id: 'archived', title: 'Needle archived', archived: true }], onSelectSession })
@@ -133,13 +133,87 @@ describe('sidebar project working set', () => {
     expect(container.textContent).not.toContain('Needle archived')
     await press(container.querySelector('.session-row--empty')!)
     expect(container.querySelectorAll('.session-row-wrap')).toHaveLength(9)
+    expect(JSON.parse(window.localStorage.getItem('prime-work.sidebar-collapsed-projects')!)).toEqual({ project: true })
     await press(container.querySelector('[title="Needle 0"]')!)
     expect(onSelectSession).toHaveBeenCalledWith(matches[0])
-    expect(container.querySelector('.session-list')).toBeNull()
+    expect(container.querySelector('.session-list')).not.toBeNull()
     await search('unmatched')
     expect(container.textContent).toContain('No matching projects or sessions')
     await press(container.querySelector('[aria-label="Clear search"]')!)
-    expect(container.querySelector('[aria-label="Expand Project"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Collapse Project"]')).not.toBeNull()
+  })
+
+  it('keeps selected, running, and attention sessions visible beyond the recent slice and pages older history', async () => {
+    const sessions: SessionRecord[] = Array.from({ length: 18 }, (_, index) => ({
+      ...session, id: `history-${index}`, title: `History ${index}`, filePath: `/sessions/${index}.jsonl`,
+      lastUserMessageAt: new Date(Date.UTC(2026, 0, 20 - index)).toISOString(),
+      status: index === 9 ? 'running' : index === 11 ? 'waiting' : index === 12 ? 'failed' : 'complete',
+      unread: index === 13,
+    }))
+    const props = { sessions, activeProjectId: project.id, activeSessionId: 'history-17' }
+    await renderSidebar(props)
+    const titles = () => [...container.querySelectorAll('.session-row__title')].map((row) => row.textContent)
+    expect(titles()).toEqual([...Array.from({ length: 7 }, (_, index) => `History ${index}`), 'History 9', 'History 11', 'History 12', 'History 13', 'History 17'])
+    expect(container.querySelector('.session-row--empty')?.textContent).toBe('Show older sessions (6)')
+    await press(container.querySelector('.session-row--empty')!)
+    expect(titles()).toHaveLength(15)
+    expect(new Set(titles()).size).toBe(15)
+    expect(container.querySelector('.session-row--empty')?.textContent).toBe('Show older sessions (3)')
+    await press(container.querySelector('.session-row--empty')!)
+    expect(titles()).toHaveLength(18)
+    expect(container.querySelector('.session-row--empty')).toBeNull()
+    await search('unmatched')
+    await press(container.querySelector('[aria-label="Clear search"]')!)
+    expect(titles()).toHaveLength(18)
+  })
+
+  it('does not promote cleared notifications into the recent slice', async () => {
+    const sessions: SessionRecord[] = Array.from({ length: 9 }, (_, index) => ({
+      ...session, id: `history-${index}`, title: `History ${index}`,
+      lastUserMessageAt: new Date(Date.UTC(2026, 0, 20 - index)).toISOString(),
+      status: index === 8 ? 'failed' : 'idle',
+    }))
+    await renderSidebar({ sessions, activeProjectId: project.id, clearedAttention: { 'history-8': sessionAttentionSignature(sessions[8])! } })
+    expect(container.querySelectorAll('.session-row-wrap')).toHaveLength(7)
+    expect(container.querySelector('[title="History 8"]')).toBeNull()
+    expect(container.querySelector('.session-row--empty')?.textContent).toBe('Show older sessions (2)')
+  })
+
+  it('reveals a selected project and a newly selected session without overriding manual collapse', async () => {
+    const sessions = [session, { ...session, id: 'second', title: 'Second session' }]
+    await renderSidebar({ sessions, activeProjectId: project.id, activeSessionId: session.id })
+    await press(container.querySelector('[aria-label="Collapse all projects"]')!)
+    expect(container.querySelector('.session-list')).toBeNull()
+    await press(container.querySelector('.project-row__main')!)
+    expect(container.querySelector('.session-list')).not.toBeNull()
+    await press(container.querySelector('[aria-label="Collapse Project"]')!)
+    await renderSidebar({ sessions, activeProjectId: project.id, activeSessionId: 'second' })
+    expect(container.querySelector('.session-row-wrap.is-selected')?.textContent).toContain('Second session')
+    await press(container.querySelector('[aria-label="Collapse Project"]')!)
+    await renderSidebar({ sessions, activeProjectId: project.id, activeSessionId: 'second' })
+    expect(container.querySelector('.session-list')).toBeNull()
+  })
+
+  it.each(['project', 'session'])('persists selection expansion when choosing a %s closes the sidebar drawer', async (target) => {
+    const closeDrawer = () => root.render(null)
+    await renderSidebar({ activeProjectId: project.id, onSelectProject: closeDrawer, onSelectSession: closeDrawer })
+    await press(container.querySelector('[aria-label="Collapse all projects"]')!)
+    if (target === 'session') await search('Session')
+    await press(container.querySelector(target === 'project' ? '.project-row__main' : '.session-row')!)
+    expect(container.childElementCount).toBe(0)
+    await renderSidebar({ activeProjectId: project.id, activeSessionId: session.id })
+    expect(container.querySelector('[aria-label="Collapse Project"]')).not.toBeNull()
+    expect(container.querySelector('.session-row-wrap.is-selected')?.textContent).toContain('Session')
+  })
+
+  it('shows concise recency for completed sessions and explicit input status for waiting sessions', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:10:00.000Z'))
+    await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'complete' }] })
+    expect(container.querySelector('.session-row__meta')?.textContent).not.toBe('Finished')
+    expect(container.querySelector('.session-row__meta')?.textContent).toContain('10')
+    expect(container.querySelector('.session-row__meta')?.getAttribute('title')).toBe('10 minutes ago')
+    await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'waiting' }] })
+    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Needs input')
   })
 
   it('keeps activity indicators visible while collapsed and links to work outside the recent list', async () => {
