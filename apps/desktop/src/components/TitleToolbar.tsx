@@ -6,10 +6,12 @@ import {
   Terminal,
   Waveform,
 } from './icons'
-import type { ApplicationMenuName, ProjectRecord, WorkspaceView } from '@/types/api'
+import type { ApplicationMenuName, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
+import type { SessionLiveMap } from '@/app/session-live'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, IconButton } from './ui'
+import { ActivityStatusPill } from './activity/ActivityStatusPill'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
 import type { MouseEvent } from 'react'
 
@@ -50,10 +52,14 @@ interface TitleToolbarProps {
   onRunProjectScript?(kind: ProjectScriptKind): Promise<void> | void
   onStopProjectScript?(): void
   onSaveProjectScripts?(scripts: { setup: string; run: string }): Promise<void>
+  sessions?: readonly SessionRecord[]
+  liveBySession?: SessionLiveMap
+  clearedActivity?: Readonly<Record<string, string>>
+  onOpenActivity?(): void
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
@@ -73,6 +79,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {(gitBranch ?? project?.gitBranch) && view === 'session' ? <span className="branch-pill"><GitBranch size={12} />{gitBranch ?? project?.gitBranch}</span> : null}
       </div>
       <div className="title-toolbar__actions no-drag">
+        {sessions ? <ActivityStatusPill sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} active={view === 'activity'} onOpen={onOpenActivity} /> : null}
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
           ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}

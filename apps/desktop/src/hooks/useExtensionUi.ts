@@ -20,6 +20,8 @@ export interface PendingExtensionUi {
   runtimeId: string
   request: ExtensionUiRequest
   requests?: QuestionnaireSelectRequest[]
+  receivedAt?: number
+  deadline?: number
 }
 
 export function pendingExtensionUiForRuntime(
@@ -45,6 +47,7 @@ export function useExtensionUi({
   reportError,
 }: UseExtensionUiOptions) {
   const [extensionUi, setExtensionUi] = useState<PendingExtensionUi | null>(null)
+  const [pendingByRuntime, setPendingByRuntime] = useState<ReadonlyMap<string, PendingExtensionUi>>(() => new Map())
   const extensionUiRef = useRef<PendingExtensionUi | null>(null)
   const pendingByRuntimeRef = useRef<Map<string, PendingExtensionUi>>(new Map())
   const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
@@ -83,7 +86,8 @@ export function useExtensionUi({
     const timer = timerByRuntimeRef.current.get(targetRuntimeId)
     if (timer !== undefined) window.clearTimeout(timer)
     timerByRuntimeRef.current.delete(targetRuntimeId)
-    pendingByRuntimeRef.current.delete(targetRuntimeId)
+    const deleted = pendingByRuntimeRef.current.delete(targetRuntimeId)
+    if (deleted) setPendingByRuntime(new Map(pendingByRuntimeRef.current))
     if (extensionUiRef.current?.runtimeId === targetRuntimeId) {
       extensionUiRef.current = null
       setExtensionUi(null)
@@ -101,13 +105,23 @@ export function useExtensionUi({
     }
   }, [bridge])
 
-  const respondToExtensionUi = useCallback(async (response: ExtensionUiResponse) => {
-    const pending = extensionUiRef.current
+  const respondToExtensionUi = useCallback(async (response: ExtensionUiResponse, runtimeId?: string) => {
+    const targetRuntimeId = runtimeId ?? extensionUiRef.current?.runtimeId
+    const pending = targetRuntimeId ? pendingByRuntimeRef.current.get(targetRuntimeId) : null
     if (!pending) return
+    const shouldReportError = runtimeId !== undefined
+      || activeRuntimeIdRef.current === pending.runtimeId
+      || extensionUiRef.current?.runtimeId === pending.runtimeId
+    const pendingSession = runtimeSessionsRef.current.get(pending.runtimeId)
     clearExtensionUi(pending.runtimeId)
     if ('cancelled' in response && response.cancelled) {
       if (!bridge) return
       if (pending.request.method !== 'questionnaire') {
+        if (pendingSession) {
+          setSessions((items) => items.map((session) => session.filePath === pendingSession && session.status === 'waiting'
+            ? { ...session, status: 'running', unread: false }
+            : session))
+        }
         cancelPending(pending)
         return
       }
@@ -119,18 +133,21 @@ export function useExtensionUi({
         // it cannot remain blocked behind a dialog that is no longer visible.
         cancelPending(pending)
         setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
-        if (activeRuntimeIdRef.current === pending.runtimeId) reportError(error)
+        if (shouldReportError) reportError(error)
       }
       return
     }
     if (pending.request.method === 'questionnaire') {
       setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: true } : current)
-      const pendingSession = runtimeSessionsRef.current.get(pending.runtimeId)
       if (pendingSession) {
         setSessions((items) => items.map((session) => session.filePath === pendingSession
           ? { ...session, status: 'running', unread: false }
           : session))
       }
+    } else if (pendingSession) {
+      setSessions((items) => items.map((session) => session.filePath === pendingSession && session.status === 'waiting'
+        ? { ...session, status: 'running', unread: false }
+        : session))
     }
     if (!bridge) return
     try {
@@ -161,9 +178,21 @@ export function useExtensionUi({
       })
     } catch (error) {
       setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
-      if (activeRuntimeIdRef.current === pending.runtimeId) reportError(error)
+      if (shouldReportError) reportError(error)
     }
   }, [bridge, cancelPending, clearExtensionUi, reportError, runtimeSessionsRef, setRuntime, setSessions])
+
+  const respondForRuntime = useCallback(
+    (runtimeId: string, response: ExtensionUiResponse) => respondToExtensionUi(response, runtimeId),
+    [respondToExtensionUi],
+  )
+
+  const openForRuntime = useCallback((runtimeId: string) => {
+    const pending = pendingByRuntimeRef.current.get(runtimeId)
+    if (!pending) return
+    extensionUiRef.current = pending
+    setExtensionUi(pending)
+  }, [])
 
   const scheduleTimeout = useCallback((pending: PendingExtensionUi) => {
     const timeout = 'timeout' in pending.request ? pending.request.timeout : undefined
@@ -252,6 +281,14 @@ export function useExtensionUi({
         }))
         .sort((a, b) => a.index - b.index)
       const total = request.questionnaire.total
+      const now = Date.now()
+      const timeout = previous?.request.method === 'questionnaire'
+        ? previous.request.timeout
+        : request.timeout ?? ASK_USER_TIMEOUT_MS
+      const receivedAt = sameQuestionnaire && previous?.receivedAt !== undefined ? previous.receivedAt : now
+      const deadline = sameQuestionnaire && previous?.deadline !== undefined
+        ? previous.deadline
+        : timeout !== undefined ? receivedAt + timeout : undefined
       const pending: PendingExtensionUi = {
         runtimeId,
         request: {
@@ -261,14 +298,15 @@ export function useExtensionUi({
           questions,
           total,
           complete: questions.length >= total,
-          timeout: previous?.request.method === 'questionnaire'
-            ? previous.request.timeout
-            : request.timeout ?? ASK_USER_TIMEOUT_MS,
+          timeout,
         },
         requests,
+        receivedAt,
+        ...(deadline !== undefined ? { deadline } : {}),
       }
       pendingByRuntimeRef.current.set(runtimeId, pending)
-      if (activeRuntimeIdRef.current === runtimeId) {
+      setPendingByRuntime(new Map(pendingByRuntimeRef.current))
+      if (activeRuntimeIdRef.current === runtimeId || extensionUiRef.current?.runtimeId === runtimeId) {
         extensionUiRef.current = pending
         setExtensionUi(pending)
       }
@@ -281,9 +319,18 @@ export function useExtensionUi({
       cancelPending(previous)
       clearExtensionUi(runtimeId)
     }
-    const pending = { runtimeId, request }
+    const receivedAt = Date.now()
+    const timeout = 'timeout' in request ? request.timeout : undefined
+    const deadline = timeout !== undefined ? receivedAt + timeout : undefined
+    const pending: PendingExtensionUi = {
+      runtimeId,
+      request,
+      receivedAt,
+      ...(deadline !== undefined ? { deadline } : {}),
+    }
     pendingByRuntimeRef.current.set(runtimeId, pending)
-    if (activeRuntimeIdRef.current === runtimeId) {
+    setPendingByRuntime(new Map(pendingByRuntimeRef.current))
+    if (activeRuntimeIdRef.current === runtimeId || extensionUiRef.current?.runtimeId === runtimeId) {
       extensionUiRef.current = pending
       setExtensionUi(pending)
     }
@@ -309,5 +356,14 @@ export function useExtensionUi({
     publishActivePiFusionPair(null)
   }, [cancelPending])
 
-  return { extensionUi, clearExtensionUi, respondToExtensionUi, showExtensionUi, hasOpenRequestForSession }
+  return {
+    extensionUi,
+    pendingByRuntime,
+    clearExtensionUi,
+    respondToExtensionUi,
+    respondForRuntime,
+    openForRuntime,
+    showExtensionUi,
+    hasOpenRequestForSession,
+  }
 }

@@ -236,9 +236,28 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     send({ type: 'response', id: command.id, command: command.type, success: true, data: { jobs: [] } })
   } else if (command.type === 'steer') {
     fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'steer-args.json'))}, JSON.stringify(command))
+    if (streaming && typeof command.message === 'string' && command.message.includes('switch to lint')) {
+      const steerAt = new Date().toISOString()
+      fs.appendFileSync(sessionFile, [
+        JSON.stringify({ type: 'message', id: 'bg-steer-user', parentId: 'primary-message', timestamp: steerAt, message: { role: 'user', content: command.message } }),
+        JSON.stringify({ type: 'message', id: 'bg-steer-assistant', parentId: 'bg-steer-user', timestamp: steerAt, message: { role: 'assistant', content: [{ type: 'text', text: 'Switching to lint pass as requested.' }, { type: 'toolCall', id: 'bg-tool-2', name: 'bash', arguments: { command: 'npm run lint' } }] } }),
+      ].join('\\n') + '\\n')
+      send({ type: 'tool_execution_end', toolCallId: 'bg-tool-1', toolName: 'bash', result: { ok: true } })
+      send({ type: 'tool_execution_start', toolCallId: 'bg-tool-2', toolName: 'bash', args: { command: 'npm run lint' } })
+      send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
+      return
+    }
     setTimeout(() => send({ type: 'response', id: command.id, command: command.type, success: true, data: {} }), 500)
   } else if (command.type === 'prompt' || command.type === 'follow_up') {
     pendingPrompt = command
+    if (typeof command.message === 'string' && command.message.includes('activity confirm question')) {
+      fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'prompt-args.json'))}, JSON.stringify(command))
+      streaming = true
+      send({ type: 'agent_start' })
+      send({ type: 'extension_ui_request', id: 'activity-confirm-1', method: 'confirm', title: 'Approve background deployment?', message: 'Deploy release v2.4 to staging', timeout: 90000 })
+      send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
+      return
+    }
     if (typeof command.message === 'string' && command.message.includes('barrier turn')) {
       fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'prompt-args.json'))}, JSON.stringify(command))
       fs.writeFileSync(barrierStarted, 'ready')
@@ -279,6 +298,9 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'prompt-args.json'))}, JSON.stringify(command))
       streaming = true
       send({ type: 'agent_start' })
+      if (command.message.includes('stay busy tool')) {
+        send({ type: 'tool_execution_start', toolCallId: 'busy-tool-1', toolName: 'bash', args: { command: 'npm test' } })
+      }
       send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
       return
     }
@@ -298,6 +320,14 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     ] } })
     send({ type: 'extension_ui_request', id: 'fixture-question-1', method: 'select', title: 'Which release channel?', options: ['__prime_ask_user__fixture-group:0:2', 'Stable', 'Beta', 'Other (type your own answer)'] })
     send({ type: 'extension_ui_request', id: 'fixture-question-2', method: 'select', title: 'What should I optimize for?', options: ['__prime_ask_user__fixture-group:1:2', 'Speed', 'Safety', 'Other (type your own answer)'] })
+  } else if (command.type === 'extension_ui_response' && command.id === 'activity-confirm-1') {
+    fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'activity-confirm-response.json'))}, JSON.stringify(command))
+    const confirmedAt = new Date().toISOString()
+    fs.appendFileSync(sessionFile, [
+      JSON.stringify({ type: 'message', id: 'bg-confirm-assistant', parentId: 'primary-message', timestamp: confirmedAt, message: { role: 'assistant', content: [{ type: 'text', text: 'Deployment approved. Running verification suite.' }, { type: 'toolCall', id: 'bg-tool-1', name: 'bash', arguments: { command: 'npm run verify' } }] } }),
+    ].join('\\n') + '\\n')
+    send({ type: 'tool_execution_start', toolCallId: 'bg-tool-1', toolName: 'bash', args: { command: 'npm run verify' } })
+    send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
   } else if (command.type === 'extension_ui_response' && pendingPrompt) {
     pendingPrompt.values = { ...(pendingPrompt.values || {}), [command.id]: command.value }
     if (Object.keys(pendingPrompt.values).length < 2) return
@@ -324,6 +354,12 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
         name: 'Post-completion catalog refresh',
       }) + '\\n')
     }, 250)
+  } else if (command.type === 'abort') {
+    fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'abort-args.json'))}, JSON.stringify(command))
+    const wasStreaming = streaming
+    streaming = false
+    send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
+    if (wasStreaming) send({ type: 'agent_end' })
   } else if (command.id) {
     send({ type: 'response', id: command.id, command: command.type, success: true, data: {} })
   }
@@ -928,7 +964,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(primaryActivity).toBeVisible()
     await expect(fixtureActivity).toBeVisible()
 
-    const clearPrimary = primaryActivity.getByRole('button', { name: 'Clear Primary workspace fixture activity' })
+    const clearPrimary = primaryActivity.getByRole('button', { name: 'Mark Primary workspace fixture reviewed' })
     await primaryActivity.hover()
     await expect(clearPrimary).toHaveCSS('opacity', '1')
     await clearPrimary.click()
@@ -943,7 +979,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.app-shell')).toHaveAttribute('data-ready', 'true')
     await page.getByRole('button', { name: 'Activity', exact: true }).click()
     await expect(page.locator('.activity-row').filter({ hasText: 'Primary workspace fixture' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Clear all' }).click()
+    await page.getByRole('button', { name: 'Mark all reviewed' }).click()
     await expect(page.getByRole('heading', { name: 'You’re all caught up' })).toBeVisible()
   })
 
@@ -959,6 +995,7 @@ test.describe('Prime Work desktop smoke', () => {
     const activityCount = page.locator('.sidebar__primary button[title="Activity"] .nav-count')
     await expect(activityCount).toHaveText('1')
 
+    await primaryRow.hover()
     await primaryRow.getByTitle('Archive Primary workspace fixture').click()
     await primaryRow.getByTitle('Confirm archive Primary workspace fixture').click()
     await expect(primaryRow).toHaveCount(0)
@@ -972,6 +1009,89 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
     await expect(page.getByText('Primary workspace fixture', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Archived', exact: true })).toHaveCount(0)
+  })
+
+  test('triages background questions, live tail, steer, stop confirm, and keyboard navigation in Activity peek', async () => {
+    const primaryFile = join(fixtureSessionFile, '..', 'primary.jsonl')
+    const primaryProject = currentFixture!.project
+    const statusPill = page.locator('.activity-status-pill')
+    await expect(statusPill).toHaveCount(0)
+
+    // Start a background runtime on primary.jsonl that asks a confirm question
+    await page.evaluate(async ({ cwd, sessionPath }) => {
+      const runtime = await window.prime!.agent.start({
+        cwd,
+        sessionPath,
+        harness: 'pi',
+      })
+      await window.prime!.agent.command(runtime.runtimeId, {
+        type: 'prompt',
+        message: 'activity confirm question',
+      })
+    }, { cwd: primaryProject, sessionPath: primaryFile })
+
+    // From SESSION view, the toolbar pill shows 1 needs you and clicking it opens Activity
+    await expect(statusPill).toBeVisible()
+    await expect(statusPill).toHaveAttribute('aria-label', '1 session needs your attention. Open Activity')
+    await statusPill.click()
+    await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
+
+    // Default selection chooses Needs you ("Primary workspace fixture") and displays the question card
+    const peek = page.locator('.activity-peek')
+    await expect(peek).toBeVisible()
+    await expect(peek.locator('.activity-question-card')).toContainText('Approve background deployment?')
+    await expect(page.locator('.activity-section--needs-you .activity-row')).toContainText('Primary workspace fixture')
+
+    // Answer the confirm question inline from the peek without opening the session
+    await peek.locator('.activity-question-card__yes').click()
+    await expect.poll(() => existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(true)
+    const confirmPayload = JSON.parse(readFileSync(join(fixtureRoot, 'activity-confirm-response.json'), 'utf8')) as { confirmed?: boolean }
+    expect(confirmPayload.confirmed).toBe(true)
+
+    // Session leaves Needs you and moves to Running; pill updates to 1 running; live tail updates with running tool
+    await expect(page.locator('.activity-section--needs-you')).toHaveCount(0)
+    await expect(page.locator('.activity-section--running .activity-row')).toContainText('Primary workspace fixture')
+    await expect(statusPill).toHaveAttribute('aria-label', '1 session running. Open Activity')
+    await expect(peek).toContainText('▶ bash · npm run verify')
+    await expect(peek.locator('.activity-peek__tail')).toContainText('Deployment approved. Running verification suite.')
+
+    // Send a steer from the peek reply box to the running background session
+    await page.keyboard.press('r')
+    const replyInput = peek.locator('.activity-reply__input')
+    await expect(replyInput).toBeFocused()
+    await replyInput.fill('switch to lint')
+    await replyInput.press('Enter')
+
+    await expect.poll(() => existsSync(join(fixtureRoot, 'steer-args.json'))).toBe(true)
+    const steerPayload = JSON.parse(readFileSync(join(fixtureRoot, 'steer-args.json'), 'utf8')) as { type?: string; message?: string }
+    expect(steerPayload).toMatchObject({ type: 'steer', message: 'switch to lint' })
+    await expect(peek).toContainText('▶ bash · npm run lint')
+    await expect(peek.locator('.activity-peek__tail')).toContainText('Switching to lint pass as requested.')
+
+    // Blur reply input with Escape, then test Stop confirmation in peek ('x' opens confirm, Escape cancels, then confirm stops)
+    await replyInput.press('Escape')
+    await page.keyboard.press('x')
+    await expect(peek.getByRole('group', { name: 'Confirm stopping run' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(peek.getByRole('group', { name: 'Confirm stopping run' })).toHaveCount(0)
+
+    await peek.getByRole('button', { name: 'Stop run' }).click()
+    await peek.locator('.activity-stop-confirm__confirm').click()
+    await expect.poll(() => existsSync(join(fixtureRoot, 'abort-args.json'))).toBe(true)
+    await expect(statusPill).toHaveCount(0)
+
+    // Keyboard navigation: j/k selects Ready to review session, 'e' marks reviewed, j + Enter opens recent session
+    await expect(page.locator('.activity-section--review .activity-row').first()).toBeVisible()
+    await page.keyboard.press('j')
+    await expect(peek.locator('.activity-peek__title')).toHaveText('Hermetic desktop fixture')
+    await page.keyboard.press('k')
+    await expect(peek.locator('.activity-peek__title')).toHaveText('Primary workspace fixture')
+    await page.keyboard.press('e')
+    await expect(page.locator('.activity-section--review')).toHaveCount(0)
+    await page.keyboard.press('j')
+    await expect(peek.locator('.activity-peek__title')).toHaveText('Hermetic desktop fixture')
+    await page.keyboard.press('Enter')
+    await expect(page.locator('.conversation-pane')).toBeVisible()
   })
 
   test('destroys an open session browser guest when its thread is archived', async () => {

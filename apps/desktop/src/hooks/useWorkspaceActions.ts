@@ -17,6 +17,7 @@ import type { usePluginSkills } from '@/hooks/usePluginSkills'
 import type { useProviderCatalog } from '@/hooks/useProviderCatalog'
 import type { useWorkspaceRuntime } from '@/hooks/useWorkspaceRuntime'
 import { mergeSessionCatalog } from '@/hooks/useBootstrap'
+import { resolveRuntimeIdForSession } from '@/hooks/useSessionLive'
 
 export interface WorkspaceActionsDeps {
   bridge: PrimeWorkApi | null
@@ -589,29 +590,29 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       throw error
     }
   }
-  const stopRuntime = async () => {
-    const { bridge, workspace, reportError } = getDeps()
-    const stoppedRuntime = workspace.runtime
-    if (!stoppedRuntime) return
-    if (!bridge) { workspace.setMessages((items) => items.map((item) => item.streaming ? { ...item, streaming: false } : item)); workspace.setRuntime(null); return }
-    const stoppedRuntimeId = stoppedRuntime.runtimeId
+  const stopRuntime = async (requestedRuntimeId?: string, sessionFile?: string) => {
+    const { bridge, workspace, setSessions, reportError } = getDeps()
+    if (!bridge) {
+      if (sessionFile) setSessions((items) => items.map((item) => item.filePath === sessionFile ? { ...item, status: 'complete', unread: true } : item))
+      if (!sessionFile || workspace.workspaceRef.current.sessionFile === sessionFile) {
+        workspace.setMessages((items) => items.map((item) => item.streaming ? { ...item, streaming: false } : item))
+        workspace.setRuntime(null)
+      }
+      return
+    }
     const stoppedGeneration = workspace.workspaceRef.current.generation
     const stoppedOwner = workspace.runtimeOwnerRef.current
-    const stoppedOwnerRuntimeId = stoppedOwner?.runtimeId
-    const stoppedOwnerGeneration = stoppedOwner?.generation
     try {
+      const stoppedRuntimeId = requestedRuntimeId || (!sessionFile ? workspace.runtime?.runtimeId : await resolveRuntimeIdForSession(bridge, workspace.runtimeSessionsRef?.current ?? new Map(), workspace.runtime, sessionFile, requestedRuntimeId))
+      if (!stoppedRuntimeId) return
       // A running `!` command is separate from the agent turn; aborting with no command running is a no-op.
       void bridge.agent.command(stoppedRuntimeId, { type: 'abort_bash' }).catch(() => undefined)
       await bridge.agent.command(stoppedRuntimeId, { type: 'abort' })
+      if (workspace.runtime?.runtimeId !== stoppedRuntimeId) return
       const currentOwner = workspace.runtimeOwnerRef.current
-      if (
-        workspace.workspaceRef.current.generation !== stoppedGeneration
-        || workspace.runtimeIdRef.current !== stoppedRuntimeId
-        || stoppedOwnerRuntimeId !== stoppedRuntimeId
-        || stoppedOwnerGeneration !== stoppedGeneration
-        || currentOwner?.runtimeId !== stoppedOwnerRuntimeId
-        || currentOwner?.generation !== stoppedOwnerGeneration
-      ) return
+      if (workspace.workspaceRef.current.generation !== stoppedGeneration || workspace.runtimeIdRef.current !== stoppedRuntimeId
+        || stoppedOwner?.runtimeId !== stoppedRuntimeId || stoppedOwner.generation !== stoppedGeneration
+        || currentOwner?.runtimeId !== stoppedOwner.runtimeId || currentOwner.generation !== stoppedOwner.generation) return
       workspace.setRuntime((current) => current?.runtimeId === stoppedRuntimeId ? { ...current, isStreaming: false } : current)
       workspace.setMessages((items) => items.map((item) => item.streaming ? { ...item, streaming: false } : item))
     } catch (error) { reportError(error) }
