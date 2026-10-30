@@ -5,6 +5,7 @@ import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost } from './host'
 import { SessionPicker } from './SessionPicker'
 import { applyOps } from './transcript'
+import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiHydraTier } from '@/lib/harness'
 
 const NO_GIT: GitStatus = { isRepo: false, files: [] }
 const NO_SKILLS: never[] = []
@@ -48,6 +49,15 @@ export function App() {
     postToHost({ type: 'ready' })
     return stop
   }, [])
+
+  useEffect(() => {
+    if (!state) return
+    const tier = parsePiHydraStatus(state.statuses[PI_HYDRA_STATUS_KEY])
+    const mode = tier ? 'hydra' : piModeFromStatusText(state.statuses.mode) ?? 'apex'
+    publishActivePiHydraTier(tier ?? readDefaultPiHydraTier())
+    publishActivePiBehaviorMode(mode)
+    publishActivePiFusionPair(mode === 'fusion' ? parsePiFusionPairStatus(state.statuses[PI_FUSION_PAIR_STATUS_KEY]) ?? null : null)
+  }, [state?.statuses])
 
   const modelsByProvider = useMemo(() => {
     const grouped = new Map<string, PrimeModelDescriptor[]>()

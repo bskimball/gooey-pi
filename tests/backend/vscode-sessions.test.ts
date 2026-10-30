@@ -80,6 +80,29 @@ describe('VS Code RPC framing', () => {
   })
 })
 
+describe('VS Code mode status', () => {
+  it('publishes runtime Hydra status changes and removals to the webview', () => {
+    const post = vi.fn()
+    const refreshState = vi.fn().mockResolvedValue(undefined)
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      post,
+      state: { statuses: {} },
+      statuses: new Map(),
+      statusItem: { show: vi.fn(), hide: vi.fn() },
+      refreshState,
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'mode', statusText: 'Apex' })
+    session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'hydra', statusText: 'hydra:max' })
+    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex', hydra: 'hydra:max' } } })
+    session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'hydra' })
+    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex' } } })
+    expect(refreshState).toHaveBeenCalledTimes(3)
+  })
+})
+
 describe('VS Code saved sessions', () => {
   it('reads header, first-user preview, name, timestamps and message count', async () => {
     const { cwd, root, paths } = await fixture()

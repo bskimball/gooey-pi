@@ -173,6 +173,16 @@ describe('Pi model catalog service', () => {
     expect(await service.capabilities(undefined, 'gemini-2.5-pro')).toBeUndefined()
   })
 
+  it('keeps Cloudflare namespaced model IDs selectable', async () => {
+    const id = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+    const service = new PiModelCatalogService(fakePiWithCatalog({ models: [piModel('cloudflare-workers-ai', id)] }))
+    const catalog = await service.catalog(true)
+
+    expect(catalog.warning).toBeUndefined()
+    expect(catalog.providers).toMatchObject([{ id: 'cloudflare-workers-ai', modelCount: 1 }])
+    await expect(service.requireAvailableModel(`cloudflare-workers-ai/${id}`)).resolves.toMatchObject({ id, available: true })
+  })
+
   it('returns an empty catalog with a clear status when pi is not installed', async () => {
     const service = new PiModelCatalogService(null)
     const catalog = await service.catalog(true)

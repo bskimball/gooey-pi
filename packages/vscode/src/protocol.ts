@@ -56,6 +56,7 @@ export interface HostState {
   models: ModelDescriptor[]
   providers: ProviderDescriptor[]
   commands: RuntimeCommand[]
+  statuses: Record<string, string>
   queued: QueuedPrompt[]
   contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null }
   sessionUsage?: { cost: number | null; tokens?: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number } }

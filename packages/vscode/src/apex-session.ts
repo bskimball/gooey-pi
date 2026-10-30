@@ -91,6 +91,7 @@ export class ApexSession implements vscode.Disposable {
     models: [],
     providers: [],
     commands: [],
+    statuses: {},
     queued: [],
     messageEnterAction: 'queue',
   }
@@ -130,9 +131,12 @@ export class ApexSession implements vscode.Disposable {
     this.resetTranscript()
     this.setCurrentPath(null)
     this.uiQueue = []
+    this.statuses.clear()
+    this.statusItem.hide()
     this.post({ type: 'extensionUi', request: null })
     this.update({
       status: 'starting',
+      statuses: {},
       error: undefined,
       isStreaming: false,
       queued: [],
@@ -537,6 +541,8 @@ export class ApexSession implements vscode.Disposable {
       this.statusItem.text = [...this.statuses.values()].join('  ')
       if (this.statuses.size) this.statusItem.show()
       else this.statusItem.hide()
+      this.update({ statuses: Object.fromEntries(this.statuses) })
+      if (key === 'hydra' || key === 'mode') void this.guard(() => this.refreshState())
     }
   }
 

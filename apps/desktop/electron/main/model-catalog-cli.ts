@@ -23,7 +23,7 @@ const VERSION_MAX_OUTPUT_BYTES = 4_096
 export function modelKey(provider: string, id: string): string { return `${provider}/${id}` }
 
 export function safeModelId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 256 && /^[a-zA-Z0-9._:/+-]+$/.test(value)
+  return typeof value === 'string' && value.length > 0 && value.length <= 256 && /^[a-zA-Z0-9@._:/+-]+$/.test(value)
 }
 
 export function safeProviderId(value: unknown): value is string {
