@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
-import { PI_FUSION_PAIR_STATUS_KEY, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, readDefaultPiBehaviorMode, savePiBehaviorMode } from '@/lib/harness'
+import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface UseExtensionUiOptions {
@@ -51,6 +51,7 @@ export function useExtensionUi({
   const extensionUiRef = useRef<PendingExtensionUi | null>(null)
   const pendingByRuntimeRef = useRef<Map<string, PendingExtensionUi>>(new Map())
   const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
+  const hydraByRuntimeRef = useRef<Map<string, ActivePiHydraTier>>(new Map())
   // Reported by the runtime only; never cached across runtimes or restarts.
   const fusionPairByRuntimeRef = useRef<Map<string, PiFusionPair>>(new Map())
   const timerByRuntimeRef = useRef<Map<string, number>>(new Map())
@@ -67,7 +68,12 @@ export function useExtensionUi({
     const visible = pendingExtensionUiForRuntime(pendingByRuntimeRef.current, currentRuntimeId)
     extensionUiRef.current = visible
     setExtensionUi(visible)
-    const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
+    const runtimeHydra = currentRuntimeId ? hydraByRuntimeRef.current.get(currentRuntimeId) : undefined
+    const sessionHydra = parsePiHydraStatus(activeSessionModeRef.current)
+    publishActivePiHydraTier(runtimeHydra ?? sessionHydra ?? readDefaultPiHydraTier())
+    const runtimeMode = currentRuntimeId
+      ? (runtimeHydra ? 'hydra' : modeByRuntimeRef.current.get(currentRuntimeId))
+      : undefined
     const sessionMode = piModeFromStatusText(activeSessionModeRef.current)
     publishActivePiBehaviorMode(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode())
     publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
@@ -81,7 +87,10 @@ export function useExtensionUi({
 
   const clearExtensionUi = useCallback((runtimeId?: string, clearMode = false) => {
     const targetRuntimeId = runtimeId ?? extensionUiRef.current?.runtimeId
-    if (clearMode && runtimeId) modeByRuntimeRef.current.delete(runtimeId)
+    if (clearMode && runtimeId) {
+      modeByRuntimeRef.current.delete(runtimeId)
+      hydraByRuntimeRef.current.delete(runtimeId)
+    }
     if (!targetRuntimeId) return
     const timer = timerByRuntimeRef.current.get(targetRuntimeId)
     if (timer !== undefined) window.clearTimeout(timer)
@@ -209,6 +218,7 @@ export function useExtensionUi({
   const showExtensionUi = useCallback((runtimeId: string, rawEvent: Record<string, unknown>) => {
     if (rawEvent.type === 'runtime_exit') {
       modeByRuntimeRef.current.delete(runtimeId)
+      hydraByRuntimeRef.current.delete(runtimeId)
       setFusionPair(runtimeId, undefined)
       return
     }
@@ -216,22 +226,68 @@ export function useExtensionUi({
       setFusionPair(runtimeId, parsePiFusionPairStatus(rawEvent.statusText))
       return
     }
+    if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === PI_HYDRA_STATUS_KEY) {
+      const tier = parsePiHydraStatus(rawEvent.statusText)
+      if (tier) hydraByRuntimeRef.current.set(runtimeId, tier)
+      else hydraByRuntimeRef.current.delete(runtimeId)
+      const baseMode = modeByRuntimeRef.current.get(runtimeId)
+      const effectiveMode: PiBehaviorMode = tier ? 'hydra' : (baseMode && baseMode !== 'hydra' ? baseMode : 'apex')
+      const sessionMode = tier ? `hydra:${tier}` : effectiveMode
+      const sessionFile = runtimeSessionsRef.current.get(runtimeId)
+      if (sessionFile) {
+        setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== sessionMode
+          ? { ...session, behaviorMode: sessionMode }
+          : session))
+      }
+      if (activeRuntimeIdRef.current === runtimeId) {
+        if (tier) savePiHydraTier(tier)
+        savePiBehaviorMode(effectiveMode)
+      } else if (effectiveMode !== 'apex-orchestrate') {
+        try {
+          if (typeof window !== 'undefined') {
+            if (tier) window.localStorage?.setItem('gooeypi:pi-hydra-tier', tier)
+            window.localStorage?.setItem('gooeypi:pi-behavior-mode', effectiveMode)
+          }
+        } catch { /* ignore storage errors */ }
+      }
+      if (tier && bridge) {
+        void bridge.agent.command(runtimeId, { type: 'get_state' })
+          .then((response) => {
+            if (!response || typeof response !== 'object') return
+            const data = typeof response.data === 'object' && response.data !== null ? response.data as Record<string, unknown> : undefined
+            const rawModel = data && typeof data.model === 'object' && data.model !== null ? data.model as Record<string, unknown> : undefined
+            const provider = typeof rawModel?.provider === 'string' ? rawModel.provider : undefined
+            const id = typeof rawModel?.id === 'string' ? rawModel.id : undefined
+            const name = typeof rawModel?.name === 'string' ? rawModel.name : undefined
+            const thinkingLevel = typeof data?.thinkingLevel === 'string' ? data.thinkingLevel : undefined
+            if (!provider || !id) return
+            setRuntime((current) => current?.runtimeId === runtimeId
+              ? { ...current, model: { provider, id, ...(name ? { name } : {}) }, ...(thinkingLevel ? { thinkingLevel } : {}) }
+              : current)
+          })
+          .catch(() => undefined)
+      }
+      return
+    }
     if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === 'mode') {
       const mode = piModeFromStatusText(rawEvent.statusText)
       if (mode) {
         modeByRuntimeRef.current.set(runtimeId, mode)
+        const activeHydra = hydraByRuntimeRef.current.get(runtimeId)
+        const effectiveMode: PiBehaviorMode = activeHydra ? 'hydra' : mode
+        const sessionMode = activeHydra ? `hydra:${activeHydra}` : mode
         const sessionFile = runtimeSessionsRef.current.get(runtimeId)
         if (sessionFile) {
-          setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== mode
-            ? { ...session, behaviorMode: mode }
+          setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== sessionMode
+            ? { ...session, behaviorMode: sessionMode }
             : session))
         }
         if (mode !== 'fusion') setFusionPair(runtimeId, undefined)
         if (activeRuntimeIdRef.current === runtimeId) {
-          savePiBehaviorMode(mode)
-        } else if (mode !== 'apex-orchestrate') {
+          savePiBehaviorMode(effectiveMode)
+        } else if (effectiveMode !== 'apex-orchestrate') {
           try {
-            if (typeof window !== 'undefined') window.localStorage?.setItem('gooeypi:pi-behavior-mode', mode)
+            if (typeof window !== 'undefined') window.localStorage?.setItem('gooeypi:pi-behavior-mode', effectiveMode)
           } catch { /* ignore storage errors */ }
         }
       }

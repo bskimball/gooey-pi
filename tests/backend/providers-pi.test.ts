@@ -291,6 +291,23 @@ setTimeout(() => {
     // After settling, a forced refresh spawns again (the in-flight slot was cleared).
     await service.catalog(true)
     expect(runs()).toBe(2)
+
+    // Updating a tracked Pi agent config file invalidates the unforced TTL cache automatically.
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR
+    const agentDir = tempDir()
+    process.env.PI_CODING_AGENT_DIR = agentDir
+    try {
+      await service.catalog(true)
+      expect(runs()).toBe(3)
+      await service.catalog()
+      expect(runs()).toBe(3)
+      writeFileSync(join(agentDir, 'models.json'), '{"providers":{}}')
+      await service.catalog()
+      expect(runs()).toBe(4)
+    } finally {
+      if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDir
+    }
   })
 
   it('serves the last good catalog with a warning when a refresh fails', async () => {

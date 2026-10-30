@@ -287,19 +287,32 @@ describe('Pi Fusion pair reporting', () => {
   const status = (statusKey: string, statusText?: string) => ({ type: 'extension_ui_request', id: `status-${statusKey}`, method: 'setStatus', statusKey, statusText })
 
   function setup() {
-    const command = vi.fn(async () => undefined)
+    const command = vi.fn(async (_runtimeId: string, payload?: Record<string, unknown>) => {
+      if (payload?.type === 'get_state') {
+        return {
+          type: 'response',
+          success: true,
+          data: {
+            model: { provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
+            thinkingLevel: 'xhigh',
+          },
+        }
+      }
+      return undefined
+    })
     const onCommand = vi.fn<(_: string) => Promise<void>>(async () => undefined)
+    const setRuntime = vi.fn()
     const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
     let show!: (runtimeId: string, event: Record<string, unknown>) => void
     function PairProbe({ activeRuntimeId, activeSessionMode }: { activeRuntimeId?: string; activeSessionMode?: string }) {
-      const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime: vi.fn(), reportError: vi.fn() })
+      const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime, reportError: vi.fn() })
       show = extension.showExtensionUi
       return <PiModeControl disabled={false} modelsByProvider={pairModels} providers={pairCatalog.providers} onCommand={onCommand} />
     }
     const render = (activeRuntimeId?: string, activeSessionMode?: string) => act(async () => { root.render(<PairProbe activeRuntimeId={activeRuntimeId} activeSessionMode={activeSessionMode} />) })
     const emit = (runtimeId: string, event: Record<string, unknown>) => act(() => { show(runtimeId, event) })
     const pairText = () => document.querySelector<HTMLButtonElement>('[aria-label^="Lead model:"]:not(:disabled)') ? document.querySelector('.pi-fusion-pair')?.textContent ?? null : null
-    return { command, onCommand, render, emit, pairText }
+    return { command, onCommand, setRuntime, render, emit, pairText }
   }
 
   it('shows only the active runtime pair, in Fusion mode, and clears it on leave or exit', async () => {
@@ -343,6 +356,55 @@ describe('Pi Fusion pair reporting', () => {
     expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Work')
     await render(undefined, 'apex-orchestrate')
     expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Apex Orchestrate')
+    await render(undefined, 'hydra:max')
+    expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Hydra')
+    expect(document.querySelector('[role="combobox"][aria-label="Hydra tier"]')?.textContent).toBe('Hydra: Max')
+  })
+
+  it('switches into Hydra mode, syncs routed runtime state, and switches cleanly to Apex or Work', async () => {
+    const { render, emit, command, onCommand, setRuntime } = setup()
+    await render('runtime-a')
+    emit('runtime-a', status('mode', 'Work'))
+    const modeTrigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Behavior mode"]')!
+    expect(modeTrigger().textContent).toBe('Work')
+
+    await click(modeTrigger())
+    const hydraOption = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.startsWith('Hydra'))!
+    await click(hydraOption)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode hydra high')
+
+    await act(async () => {
+      showHydra('runtime-a', 'hydra:high')
+      await Promise.resolve()
+    })
+    function showHydra(runtimeId: string, text: string) {
+      emit(runtimeId, status('hydra', text))
+    }
+    expect(modeTrigger().textContent).toBe('Hydra')
+    expect(command).toHaveBeenCalledWith('runtime-a', { type: 'get_state' })
+    const runtimeUpdater = setRuntime.mock.calls.at(-1)?.[0] as (current: RuntimeInfo) => RuntimeInfo
+    expect(runtimeUpdater({ ...piRuntime, runtimeId: 'runtime-a' })).toMatchObject({
+      runtimeId: 'runtime-a',
+      model: { provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
+      thinkingLevel: 'xhigh',
+    })
+
+    const tierTrigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Hydra tier"]')!
+    expect(tierTrigger().textContent).toBe('Hydra: High')
+
+    await click(tierTrigger())
+    const maxOption = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.startsWith('Hydra: Max'))!
+    await click(maxOption)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode hydra max')
+
+    emit('runtime-a', status('hydra', 'hydra:max'))
+    expect(tierTrigger().textContent).toBe('Hydra: Max')
+
+    // Work -> Hydra -> Apex sends explicit `/mode apex` as a single atomic command.
+    await click(modeTrigger())
+    const apexOption = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.startsWith('Apex'))!
+    await click(apexOption)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode apex')
   })
 
   it('resets pending role edits on runtime switches without letting old completions unlock new edits', async () => {
@@ -539,6 +601,12 @@ describe('Pi provider catalog authority', () => {
     expect(catalog).not.toHaveBeenCalled()
     await act(async () => { root.render(<CatalogProbe ready />); await Promise.resolve() })
     expect(catalog).toHaveBeenCalledWith(false, 'pi')
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+      await Promise.resolve()
+    })
+    expect(catalog).toHaveBeenCalledTimes(2)
   })
 
   it('restores a usable remembered model and replaces a stale preference with the first usable model', async () => {

@@ -29,7 +29,7 @@ export const BUILTIN_COMPOSER_COMMANDS: readonly ComposerCommand[] = [
 
 /** Apex's modes extension commands, listed before a runtime has reported its own commands. */
 const PI_MODE_COMMANDS: readonly ComposerCommand[] = [
-  { name: 'mode', description: 'Switch Pi, Apex, Apex Orchestrate, Fusion, or Work', source: 'extension' },
+  { name: 'mode', description: 'Switch Pi, Apex, Apex Orchestrate, Fusion, Hydra, or Work', source: 'extension' },
   { name: 'orchestrate', description: 'Toggle Apex Orchestrate mode', source: 'extension' },
 ]
 

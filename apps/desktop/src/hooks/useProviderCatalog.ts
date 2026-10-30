@@ -157,8 +157,21 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (!bridge || !ready) return
     let cancelled = false
     const target = harness
-    void bridge.providers.catalog(false, target).then((next) => { if (!cancelled) setCatalogFor(target, next) }).catch(reportError)
-    return () => { cancelled = true }
+    const load = () => {
+      void bridge.providers.catalog(false, target).then((next) => { if (!cancelled) setCatalogFor(target, next) }).catch(reportError)
+    }
+    load()
+    const onFocus = () => load()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [bridge, harness, ready, reportError, setCatalogFor])
 
   // The composer's selection belongs to one harness's catalog. Clear the old

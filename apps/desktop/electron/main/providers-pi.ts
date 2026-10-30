@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
-import { tmpdir } from 'node:os'
+import { statSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { PRIME_THINKING_LEVELS, type PrimeModelDescriptor, type PrimeThinkingLevel } from '../../src/types/api'
 import { CliModelCatalogService, validateModelEntry, type CliModelCatalogOptions } from './model-catalog-cli'
@@ -10,6 +12,31 @@ export { MAX_CATALOG_PROVIDERS } from './model-catalog-cli'
 const PROBE_REQUEST_ID = '1'
 const PROBE_COMMAND = 'get_available_models'
 export const PI_NOT_INSTALLED_WARNING = 'Pi is not installed. Install the pi CLI to load its model catalog.'
+
+const PI_CATALOG_STATE_FILES = [
+  'models.json',
+  'auth.json',
+  'settings.json',
+  'models-store.json',
+  'extensions/prompt-commands.ts',
+  'extensions/prompt-commands/hydra/scorer.ts',
+] as const
+
+function piAgentDir(): string {
+  const configured = process.env.PI_CODING_AGENT_DIR?.trim()
+  return configured ? configured : join(homedir(), '.pi', 'agent')
+}
+
+function readPiCatalogFingerprint(agentDir = piAgentDir()): string {
+  return PI_CATALOG_STATE_FILES.map((relativePath) => {
+    try {
+      const stat = statSync(join(agentDir, relativePath))
+      return `${relativePath}:${stat.size}:${Math.trunc(stat.mtimeMs)}`
+    } catch {
+      return `${relativePath}:missing`
+    }
+  }).join('|')
+}
 
 /**
  * Pi reports `reasoning: boolean` plus an optional `thinkingLevelMap` remap
@@ -160,6 +187,10 @@ export class PiModelCatalogService extends CliModelCatalogService {
   /** The CLI prints a bare semver such as `0.84.1`. */
   protected parseVersion(stdout: string): string | null {
     return stdout.match(/^v?([0-9][0-9A-Za-z.+-]{0,63})$/)?.[1] ?? null
+  }
+
+  protected override catalogFingerprint(): string {
+    return readPiCatalogFingerprint()
   }
 
   protected async fetchModelEntries(executable: string): Promise<unknown[]> {

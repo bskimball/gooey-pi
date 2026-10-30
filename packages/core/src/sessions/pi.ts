@@ -85,8 +85,10 @@ const piMetadataParser = createBucketedMetadataParser((state, value) => {
     state.displayName = value.name
   } else if (value.type === 'custom' && value.customType === 'behavior-mode' && isRecord(value.data)) {
     const mode = value.data.mode
-    if (mode === 'pi' || mode === 'apex' || mode === 'apex-orchestrate' || mode === 'fusion' || mode === 'work') {
-      state.behaviorMode = mode
+    const hydra = value.data.hydra
+    const hydraActive = hydra === 'standard' || hydra === 'high' || hydra === 'max'
+    if (mode === 'pi' || mode === 'apex' || mode === 'apex-orchestrate' || mode === 'fusion' || mode === 'hydra' || mode === 'work') {
+      state.behaviorMode = hydraActive ? `hydra:${hydra}` : mode
       const choice =
         mode === 'fusion'
           ? isRecord(value.data.fusion) && isRecord(value.data.fusion.lead)

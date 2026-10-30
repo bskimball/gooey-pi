@@ -4,7 +4,7 @@ import { requestFailureMessage } from '@/app/workspace'
 import { clearComposerDraft } from '@/lib/composer-draft'
 import { errorMessage } from '@/lib/errors'
 import { startWorkspaceRuntime } from '@/lib/runtime-start'
-import { HARNESS_AGENT_NAMES, hasPiExtensionCommand, parsePiModeCommand, piModeFromCommand, savePiBehaviorMode } from '@/lib/harness'
+import { HARNESS_AGENT_NAMES, hasPiExtensionCommand, parsePiModeCommand, piHydraTierFromCommand, piModeFromCommand, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
 import { parseBashCommand, parseCompactCommand, parseMcpCommand } from '@/lib/composer-commands'
 import { runBashCommand, runExtensionCommandNow } from '@/lib/runtime-commands'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/session-actions'
@@ -392,6 +392,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         }
         if (!bridge) {
           if (modeCommand) {
+            const nextTier = piHydraTierFromCommand(modeCommand)
+            if (nextTier) savePiHydraTier(nextTier)
             const nextMode = piModeFromCommand(modeCommand)
             if (nextMode) savePiBehaviorMode(nextMode)
             completeQueuedFlush()

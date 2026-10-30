@@ -101,7 +101,8 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
   private cachedCatalog: PrimeModelCatalog | null = null
   private cachedAt = 0
   private cachedExecutable: string | null = null
-  private catalogRefresh: { executable: string; promise: Promise<PrimeModelCatalog> } | null = null
+  private cachedFingerprint = ''
+  private catalogRefresh: { executable: string; fingerprint: string; promise: Promise<PrimeModelCatalog> } | null = null
   private cachedVersion: { executable: string; value: string } | null = null
 
   constructor(private readonly executable: ExecutableSource, options: CliModelCatalogOptions = {}) {
@@ -122,6 +123,8 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
   protected abstract parseVersion(stdout: string): string | null
   /** Environment for the `--version` probe; undefined inherits the runProcess default. */
   protected versionEnvironment(): NodeJS.ProcessEnv | undefined { return undefined }
+  /** Optional external config fingerprint; a change invalidates the TTL cache immediately. */
+  protected catalogFingerprint(): string { return '' }
 
   async catalog(force = false, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()): Promise<PrimeModelCatalog> {
     const executable = resolveExecutable(this.executable)
@@ -129,16 +132,17 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     if (!executable) {
       return { primeVersion: 'unknown', refreshedAt: new Date().toISOString(), models: [], providers: [], warning: this.notInstalledWarning }
     }
-    if (!force && this.cachedCatalog && Date.now() - this.cachedAt < CATALOG_TTL_MS) {
+    const fingerprint = this.catalogFingerprint()
+    if (!force && this.cachedCatalog && this.cachedFingerprint === fingerprint && Date.now() - this.cachedAt < CATALOG_TTL_MS) {
       return withModelVisibility(this.cachedCatalog, disabledProviders, disabledModels)
     }
     // Single-flight: concurrent callers share one CLI run instead of spawning
     // duplicate subprocesses; the in-flight promise is cleared in finally.
-    if (!this.catalogRefresh || this.catalogRefresh.executable !== executable) {
-      const promise = this.refreshCatalog(executable).finally(() => {
+    if (!this.catalogRefresh || this.catalogRefresh.executable !== executable || this.catalogRefresh.fingerprint !== fingerprint) {
+      const promise = this.refreshCatalog(executable, fingerprint).finally(() => {
         if (this.catalogRefresh?.promise === promise) this.catalogRefresh = null
       })
-      this.catalogRefresh = { executable, promise }
+      this.catalogRefresh = { executable, fingerprint, promise }
     }
     try {
       return withModelVisibility(await this.catalogRefresh.promise, disabledProviders, disabledModels)
@@ -180,7 +184,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     return (container as Record<string, unknown>).models as unknown[]
   }
 
-  private async refreshCatalog(executable: string): Promise<PrimeModelCatalog> {
+  private async refreshCatalog(executable: string, fingerprint: string): Promise<PrimeModelCatalog> {
     const [rawModels, version] = await Promise.all([
       this.fetchModelEntries(executable),
       this.resolveVersion(executable),
@@ -225,6 +229,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     if (this.cachedExecutable === executable) {
       this.cachedCatalog = catalog
       this.cachedAt = Date.now()
+      this.cachedFingerprint = fingerprint
     }
     return catalog
   }
@@ -256,6 +261,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     this.cachedExecutable = executable
     this.cachedCatalog = null
     this.cachedAt = 0
+    this.cachedFingerprint = ''
     this.cachedVersion = null
   }
 }

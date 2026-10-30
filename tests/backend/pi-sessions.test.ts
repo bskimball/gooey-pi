@@ -165,6 +165,29 @@ describe('pi metadata reader', () => {
     })
   })
 
+  it('parses Hydra routing state from behavior-mode entries into session metadata', async () => {
+    const { root, project, service } = setup()
+    mkdirSync(join(root, BUCKET))
+    const file = join(root, BUCKET, NAME_C)
+    writePiSession(file, {
+      id: 'pi-hydra-session',
+      cwd: project,
+      entries: [
+        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode: 'apex', hydra: 'high', models: { apex: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'high' } } } }, '2026-08-10T22:41:25.500Z'),
+        piEntry('message', 'aa11bb22', '8f00a1b2', { message: { role: 'user', content: 'hydra prompt' } }, '2026-08-10T22:42:01.000Z'),
+      ],
+    })
+
+    const [record] = await service.list()
+    expect(record).toMatchObject({
+      id: 'pi-hydra-session',
+      behaviorMode: 'hydra:high',
+      provider: 'claude-bridge',
+      model: 'claude-opus-5-5',
+      thinkingLevel: 'high',
+    })
+  })
+
   it('falls back to the first user message when there is no session_info or its name is empty', async () => {
     const { root, project, service } = setup()
     mkdirSync(join(root, BUCKET))
