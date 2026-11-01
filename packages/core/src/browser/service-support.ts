@@ -92,6 +92,8 @@ export interface AgentBrowserServiceOptions {
   attachTimeoutMs?: number
   loadTimeoutMs?: number
   actionTimeoutMs?: number
+  /** Names a session key for the browser extension popup, for example "Apex desktop · repo · Fix the build". */
+  describeSession?(sessionKey: string): Promise<string | undefined>
 }
 export function isAllowedTabUrl(raw: string): boolean {
   if (raw === 'about:blank') return true

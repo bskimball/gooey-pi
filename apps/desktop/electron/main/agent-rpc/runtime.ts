@@ -274,10 +274,9 @@ export class RpcRuntime {
       // usage refresh waits for message/tool boundaries below.
       void this.request({ type: 'get_state' }, 60_000).then((state) => this.updateFromState(state.data)).catch(() => undefined)
     } else if (response.success === true && ['new_session', 'switch_session', 'clone', 'fork', 'branch'].includes(String(command.type))) {
-      void this.request({ type: 'get_state' }, 60_000).then((state) => {
-        this.updateFromState(state.data)
-        return this.refreshContextUsage()
-      }).catch(() => undefined)
+      const state = await this.request({ type: 'get_state' }, 60_000)
+      this.updateFromState(state.data)
+      void this.refreshContextUsage()
     }
     return response
   }
@@ -798,6 +797,10 @@ export class RpcRuntime {
     this.contextUsageRefreshRequest = null
   }
 
+  private sessionFileListener: (path: string | null) => void = () => undefined
+
+  setSessionFileListener(listener: (path: string | null) => void): void { this.sessionFileListener = listener }
+
   private updateFromState(raw: unknown): void {
     if (!isRecord(raw)) return
     if (typeof raw.sessionId === 'string') {
@@ -813,7 +816,12 @@ export class RpcRuntime {
     }
     // Canonicalize once at the boundary (cached): every later comparison
     // against catalog and validator paths uses the canonical form.
-    if (typeof raw.sessionFile === 'string') this.info.sessionFile = canonicalSessionPath(raw.sessionFile)
+    if (typeof raw.sessionFile === 'string' || raw.sessionFile === null) {
+      const path = typeof raw.sessionFile === 'string' ? canonicalSessionPath(raw.sessionFile) : null
+      this.sessionFileListener(path)
+      if (path) this.info.sessionFile = path
+      else delete this.info.sessionFile
+    }
     if (typeof raw.isStreaming === 'boolean') this.info.isStreaming = raw.isStreaming
     if (typeof raw.isCompacting === 'boolean') this.info.isCompacting = raw.isCompacting
     if (typeof raw.thinkingLevel === 'string') this.info.thinkingLevel = raw.thinkingLevel

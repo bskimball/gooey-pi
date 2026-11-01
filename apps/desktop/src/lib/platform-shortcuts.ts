@@ -1,8 +1,10 @@
-export type ShortcutKey = 'Primary' | 'Shift' | 'Enter' | 'ArrowLeft' | 'ArrowRight' | 'B' | 'J' | 'K' | 'N' | 'Q' | ','
+export type ShortcutKey = 'Primary' | 'Control' | 'Shift' | 'Enter' | 'Tab' | 'ArrowLeft' | 'ArrowRight' | 'B' | 'J' | 'K' | 'N' | 'Q' | ',' | '1' | '2' | '3' | '4' | '5'
 
 const MAC_KEY_LABELS: Partial<Record<ShortcutKey, string>> = {
   Primary: '⌘',
+  Control: '⌃',
   Shift: '⇧',
+  Tab: '⇥',
   Enter: '↩',
   ArrowLeft: '←',
   ArrowRight: '→',
@@ -10,6 +12,7 @@ const MAC_KEY_LABELS: Partial<Record<ShortcutKey, string>> = {
 
 const STANDARD_KEY_LABELS: Partial<Record<ShortcutKey, string>> = {
   Primary: 'Ctrl',
+  Control: 'Ctrl',
   ArrowLeft: '←',
   ArrowRight: '→',
 }

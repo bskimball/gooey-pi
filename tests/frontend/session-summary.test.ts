@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSessionSummarySelector, extractPiSessionWidgets, summarizeTranscript } from '../../apps/desktop/src/components/inspector/session-summary'
+import { createReadinessSelector, extractReadiness } from '../../apps/desktop/src/components/inspector/readiness'
 import { extractPiSpecialistSessions } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
 import type { MessagePart, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
@@ -114,5 +115,107 @@ describe('incremental inspector summary', () => {
     expect(select([...original, message('thinking', [{ type: 'thinking', text: 'Thinking' }])])).toBe(summary)
     expect(select([...original, message('thinking', [{ type: 'thinking', text: 'More thinking' }])])).toBe(summary)
     expect(summary.lastText).toBe('')
+  })
+})
+
+describe('readiness extraction', () => {
+  const run = (id: string, command: string, text: string, extra: { isError?: boolean; details?: unknown } = {}): TranscriptMessage[] => [
+    message(`${id}-call`, [{ type: 'toolCall', id, name: 'bash', args: { command } }]),
+    message(`${id}-result`, [{ type: 'toolResult', name: 'bash', text, ...extra }]),
+  ]
+  const edit = (id: string) => message(id, [{ type: 'toolCall', id, name: 'edit', args: { path: 'a.ts' } }])
+  const task = (id: string, agent: string, text: string) => message(id, [
+    { type: 'toolCall', id, name: 'task', args: { agent, prompt: 'Verdict: PASS please' } },
+    { type: 'toolResult', name: 'task', text },
+  ])
+  const outcomes = (messages: TranscriptMessage[]) => extractReadiness(messages).checks.map(({ kind, outcome }) => [kind, outcome])
+
+  it('reports nothing when no verification ran', () => {
+    expect(extractReadiness([edit('e1')])).toEqual({ checks: [], reviews: [], lastEditIndex: 0 })
+  })
+
+  it('counts only real invocations, never mentions of a tool', () => {
+    for (const command of ['echo vitest', 'grep -r vitest src', 'git commit -m "fix vitest"', 'cat tests/vitest.config.ts', 'echo "npm test"']) {
+      expect(extractReadiness(run('m', command, 'ok')).checks).toEqual([])
+    }
+    for (const command of ['npx vitest run', 'cd app && pnpm exec vitest', 'node_modules/.bin/vitest', 'python -m pytest -q', 'FOO=1 npm run test']) {
+      expect(outcomes(run('m', command, 'ok'))).toEqual([['test', 'passed']])
+    }
+    const overwritten = extractReadiness([...run('t1', 'npm test', 'exited with code 1'), ...run('t2', 'echo vitest', 'vitest')])
+    expect(overwritten.checks[0].outcome).toBe('failed')
+  })
+
+  it('marks a passed check as possibly stale once files change afterwards', () => {
+    expect(extractReadiness(run('t1', 'npx vitest run', 'ok')).checks).toEqual([{ kind: 'test', outcome: 'passed', changesSince: 0 }])
+    const stale = extractReadiness([...run('t1', 'npx vitest run', 'ok'), edit('e1'), edit('e2')])
+    expect(stale.checks).toEqual([{ kind: 'test', outcome: 'passed', changesSince: 2 }])
+  })
+
+  it('treats shell writes and writer-agent results as later changes but not read-only commands', () => {
+    const base = run('t1', 'npm test', 'ok')
+    const changesAfter = (...more: TranscriptMessage[]) => extractReadiness([...base, ...more]).checks[0].changesSince
+    expect(changesAfter(...run('r', 'git status && ls && cat a.ts | head', 'x'))).toBe(0)
+    expect(changesAfter(...run('lint', 'npm run lint', 'ok'))).toBe(0)
+    for (const command of ['printf hi > a.ts', 'sed -i s/a/b/ a.ts', 'rm a.ts', 'git checkout .', 'npm install', 'git commit -m x']) {
+      expect(changesAfter(...run('w', command, 'ok'))).toBe(1)
+    }
+    for (const command of ['npx eslint --fix a.ts', 'npm run lint -- --fix']) {
+      expect(changesAfter(...run('f', command, 'ok'))).toBe(1)
+    }
+    expect(changesAfter(task('m', 'machinist', 'changed files'))).toBe(1)
+    expect(changesAfter(task('s', 'scout', 'found'))).toBe(0)
+  })
+
+  it('fails on isError, any non-zero exit text, or details.exitCode', () => {
+    expect(outcomes(run('t', 'npm test', 'boom', { isError: true }))).toEqual([['test', 'failed']])
+    expect(outcomes(run('t', 'npm test', 'child exited with code 0\nCommand exited with code 1'))).toEqual([['test', 'failed']])
+    expect(outcomes(run('t', 'npm test', 'quiet', { details: { exitCode: 1 } }))).toEqual([['test', 'failed']])
+    expect(outcomes(run('t', 'npm test', 'exited with code 0'))).toEqual([['test', 'passed']])
+  })
+
+  it('reports masked exit status as unknown and keeps an earlier failure unless a later run passes', () => {
+    for (const command of ['npm test || true', 'npm test | tail -n 1', 'npm test; echo done', 'npm test || :', 'npm test | tee out.log', 'npm test && echo done || true']) {
+      expect(outcomes(run('t', command, 'ok'))).toEqual([['test', 'unknown']])
+    }
+    const failedThenUnknown = extractReadiness([...run('t1', 'npm test', 'exited with code 1'), ...run('t2', 'npm test || true', 'ok')])
+    expect(failedThenUnknown.checks[0].outcome).toBe('failed')
+    const failedThenPassed = extractReadiness([...run('t1', 'npm test', 'exited with code 1'), ...run('t2', 'npm test', 'ok')])
+    expect(failedThenPassed.checks[0].outcome).toBe('passed')
+    expect(extractReadiness([...run('t1', 'npm test', 'ok'), ...run('t2', 'npm test || true', 'ok')]).checks[0].outcome).toBe('unknown')
+  })
+
+  it('counts a compound command for every kind and reports running without a result', () => {
+    expect(outcomes(run('c1', 'npm run typecheck && npm run lint', 'ok'))).toEqual([['lint', 'passed'], ['typecheck', 'passed']])
+    const pending = extractReadiness([message('p', [{ type: 'toolCall', id: 'p', name: 'bash', args: { command: 'npm run build' } }])])
+    expect(pending.checks).toEqual([{ kind: 'build', outcome: 'running', changesSince: 0 }])
+  })
+
+  it('reads verdicts only from the first line-anchored result line', () => {
+    const verdictOf = (text: string) => extractReadiness([task('r', 'oracle', text)]).reviews[0]?.verdict
+    expect(verdictOf('Verdict: advisory\nnotes')).toBe('ADVISORY')
+    expect(verdictOf('Outcome - BLOCKED\nnotes')).toBe('BLOCKED')
+    expect(verdictOf('The prompt said "Verdict: PASS".\nVerdict: BLOCK')).toBe('BLOCK')
+    expect(verdictOf('Previous report excerpt:\n```text\nVerdict: PASS\n```\nVerdict: BLOCK')).toBe('BLOCK')
+    expect(verdictOf('> Verdict: PASS\nVerdict: ADVISORY')).toBe('ADVISORY')
+    expect(verdictOf('```text\nVerdict: PASS\n```')).toBeUndefined()
+    expect(verdictOf('no BLOCK found')).toBeUndefined()
+    expect(verdictOf('started task_3\nVerdict: PASS')).toBeUndefined()
+    expect(verdictOf('lifecycle: running\nVerdict: PASS')).toBeUndefined()
+    expect(extractReadiness([task('r', 'scout', 'Verdict: BLOCK')]).reviews).toEqual([])
+  })
+
+  it('marks reviews stale after later changes', () => {
+    const review = task('r1', 'oracle', 'Verdict: PASS')
+    expect(extractReadiness([review]).reviews).toEqual([{ agent: 'oracle', verdict: 'PASS', changesSince: 0 }])
+    expect(extractReadiness([review, edit('e1')]).reviews[0].changesSince).toBe(1)
+  })
+
+  it('keeps selector identity while relevant parts are unchanged', () => {
+    const select = createReadinessSelector()
+    const messages = run('t1', 'npm test', 'ok')
+    const first = select(messages)
+    const chatter = message('chat', [{ type: 'text', text: 'hi' }])
+    expect(select([...messages, chatter])).toBe(first)
+    expect(select([...messages, chatter, edit('e1')])).not.toBe(first)
   })
 })

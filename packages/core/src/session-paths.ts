@@ -18,10 +18,10 @@ export function canonicalSessionPath(pathValue: string): string {
   if (cached !== undefined) return cached
   let canonical: string
   try {
-    canonical = realpathSync(resolved)
+    canonical = realpathSync.native(resolved)
   } catch {
     try {
-      return join(realpathSync(dirname(resolved)), basename(resolved))
+      return join(realpathSync.native(dirname(resolved)), basename(resolved))
     } catch {
       return resolved
     }

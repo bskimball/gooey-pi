@@ -50,6 +50,28 @@ export function compactText(value: string, max = 160): string {
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine
 }
 
+// The VS Code extension appends captured editor context to the prompt text.
+const EDITOR_CONTEXT_MARKER = '\n\nEditor context captured when this message was sent.'
+const TITLE_LEAD_INS = [
+  /^(?:(?:ok(?:ay)?|so|now|hey|hi|hello|alright|please|thanks|thank you)\b[,.!:]?\s+)+/i,
+  /^(?:(?:can|could|would|will) you(?: please)?|i(?: would|'d)? (?:like|want|need)(?: you)? to|we(?: will|'ll)? (?:need|have|want) to|we should|let'?s|help me(?: to)?|you need to)\s+/i,
+]
+
+/** A session title from its first prompt: one line, without conversational lead-ins or appended editor context. */
+export function promptTitle(prompt: string, max = 100): string {
+  const marker = prompt.indexOf(EDITOR_CONTEXT_MARKER)
+  const original = compactText(marker >= 0 ? prompt.slice(0, marker) : prompt, Number.MAX_SAFE_INTEGER)
+  let title = original
+  for (let pass = 0; pass < 3; pass += 1) {
+    const stripped = TITLE_LEAD_INS.reduce((text, pattern) => text.replace(pattern, ''), title)
+    if (stripped === title) break
+    title = stripped
+  }
+  if (title.length < 3) title = original
+  else if (title !== original) title = `${title.charAt(0).toUpperCase()}${title.slice(1)}`
+  return compactText(title, max)
+}
+
 function customActivityName(value: string): string {
   return (
     value

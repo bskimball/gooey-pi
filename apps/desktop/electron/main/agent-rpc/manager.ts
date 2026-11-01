@@ -3,6 +3,7 @@ import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import { resolveExecutable, type ExecutableSource } from '../process-utils'
 import { canonicalSessionPath } from 'apex-core/session-paths'
+import { RuntimeSessionClaims } from 'apex-core/sessions/runtime-owners'
 import { isPathWithin, isRecord, rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
 import { isThinkingLevel, validateRpcCommand } from './command-schema'
 import { PI_RPC_ADAPTER, type HarnessRpcAdapter } from './harness-adapter'
@@ -24,6 +25,9 @@ const IDLE_RUNTIME_TTL_MS = 5 * 60_000
 
 export class AgentRpcManager {
   private readonly runtimes = new Map<string, RpcRuntime>()
+  private readonly sessionClaims = new Map<string, RuntimeSessionClaims>()
+  private readonly sessionTransitions = new Set<string>()
+  private acquireSession: (path: string) => () => void = () => () => undefined
   private readonly startingRuntimes = new Set<string>()
   private readonly retiringRuntimes = new Set<string>()
   private readonly runtimeEnvironmentRevisions = new Map<string, number>()
@@ -37,6 +41,7 @@ export class AgentRpcManager {
   private runtimeStartListener: (environment: NodeJS.ProcessEnv, info: RuntimeInfo) => void = () => undefined
   private runtimeEndListener: (environment: NodeJS.ProcessEnv, info?: RuntimeInfo) => void = () => undefined
   private runtimeAdmission: Promise<void> = Promise.resolve()
+  private sessionAttachGuard: (sessionPath: string) => Promise<void> = async () => undefined
   private beginWorkspaceUse: (
     cwd: string,
     owner: WorkspaceUseOwner,
@@ -84,6 +89,11 @@ export class AgentRpcManager {
     this.runtimeEndListener = listener
   }
 
+  /** Checked before a runtime attaches to an existing session file; throws to refuse the attach. */
+  setSessionAttachGuard(guard: (sessionPath: string) => Promise<void>): void { this.sessionAttachGuard = guard }
+
+  setSessionClaimProvider(acquire: (path: string) => () => void): void { this.acquireSession = acquire }
+
   beginShutdown(): void { this.closed = true; clearInterval(this.idleSweep) }
 
   async start(raw: unknown): Promise<RuntimeInfo> {
@@ -106,6 +116,7 @@ export class AgentRpcManager {
     const sessionPath = options.sessionPath === undefined
       ? undefined
       : await this.validateSessionPath(requireString(options.sessionPath, 'sessionPath', { max: 4096 }))
+    if (sessionPath) await this.sessionAttachGuard(sessionPath)
     let selectedModel: PrimeModelDescriptor | undefined
     let modelId: string | undefined
     if (options.model !== undefined) {
@@ -136,6 +147,8 @@ export class AgentRpcManager {
         return retired
       },
     )
+    const claims = new RuntimeSessionClaims(this.acquireSession)
+    let finishReservation: (() => void) | undefined
     let environmentEnded = false
     const notifyRuntimeEnd = (info?: RuntimeInfo): void => {
       if (environmentEnded) return
@@ -144,6 +157,10 @@ export class AgentRpcManager {
       try { this.runtimeEndListener(runtimeEnvironment, info) } catch { /* capability cleanup must never fail runtime cleanup */ }
     }
     try {
+      if (sessionPath) {
+        finishReservation = claims.reserve(sessionPath)
+        claims.confirm(sessionPath)
+      }
       const args = this.adapter.buildStartArgs({
         cwd,
         sessionPath,
@@ -162,6 +179,8 @@ export class AgentRpcManager {
             this.eventSink(event)
           },
           (closed) => {
+            claims.dispose()
+            this.sessionClaims.delete(closed.runtimeId)
             this.startingRuntimes.delete(closed.runtimeId)
             this.runtimes.delete(closed.runtimeId)
             this.retiringRuntimes.delete(closed.runtimeId)
@@ -173,6 +192,13 @@ export class AgentRpcManager {
           {},
           this.adapter,
         )
+        this.sessionClaims.set(created.runtimeId, claims)
+        created.setSessionFileListener((path) => {
+          try { claims.confirm(path) } catch (error) {
+            void created.stop().catch(() => false)
+            throw error
+          }
+        })
         if (!sessionPath) created.persistFirstPrompt()
         // Record the environment generation before admission resolves so a
         // concurrent settings refresh cannot mistake this child for a new one.
@@ -181,6 +207,7 @@ export class AgentRpcManager {
       })
       if (runtimeEnvironmentRevision < this.runtimeEnvironmentRevision) void this.retireWhenIdle(runtime)
       await runtime.handshake()
+      finishReservation?.()
       if (
         selectedModel
         && runtime.snapshot().model
@@ -215,6 +242,7 @@ export class AgentRpcManager {
         this.lastUsedAt.delete(runtime.runtimeId)
         await runtime.stop().catch(() => false)
       }
+      if (!runtime) claims.dispose()
       // Admission/constructor failures have no close event; failed handshakes
       // can also leave an unreapable child. The once guard joins all paths.
       notifyRuntimeEnd(runtime?.snapshot())
@@ -233,6 +261,9 @@ export class AgentRpcManager {
 
   async command(runtimeId: unknown, rawCommand: unknown): Promise<RpcObject> {
     const id = requireId(runtimeId, 'runtimeId')
+    const transition = isRecord(rawCommand) && ['switch_session', 'new_session', 'clone', 'fork', 'branch'].includes(String(rawCommand.type))
+    if (transition && this.sessionTransitions.has(id)) throw new Error('A session change is already in progress')
+    if (transition) this.sessionTransitions.add(id)
     this.activeCommands.set(id, (this.activeCommands.get(id) ?? 0) + 1)
     try {
       return await this.dispatchCommand(runtimeId, rawCommand)
@@ -244,6 +275,7 @@ export class AgentRpcManager {
       console.error(`[agent-rpc] ${new Date().toISOString()} command ${type} failed:`, error instanceof Error ? error.message : error)
       throw error
     } finally {
+      if (transition) this.sessionTransitions.delete(id)
       const remaining = (this.activeCommands.get(id) ?? 1) - 1
       if (remaining) this.activeCommands.set(id, remaining)
       else this.activeCommands.delete(id)
@@ -255,6 +287,7 @@ export class AgentRpcManager {
     const runtime = this.requireRuntime(runtimeId)
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired for a branch checkout')
     const command = await validateRpcCommand(rawCommand, this.validateSessionPath)
+    if (command.type === 'switch_session' && typeof command.sessionPath === 'string') await this.sessionAttachGuard(command.sessionPath)
     this.requireOpen()
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired')
     this.lastUsedAt.set(runtime.runtimeId, Date.now())
@@ -278,7 +311,19 @@ export class AgentRpcManager {
     if (Array.isArray(command.images) && command.images.length > 0 && runtime.snapshot().imageInputSupported === false) {
       throw new Error('The active model does not accept images. Choose a vision model and try again.')
     }
-    const response = await runtime.command(translated)
+    const finishReservation = command.type === 'switch_session' && typeof command.sessionPath === 'string'
+      ? this.sessionClaims.get(runtime.runtimeId)?.reserve(command.sessionPath)
+      : undefined
+    let response: RpcObject
+    try {
+      response = await runtime.command(translated)
+      finishReservation?.()
+    } catch (error) {
+      // A lost response may mean the switch succeeded. Keep both claims until
+      // the child actually closes rather than guessing which file it writes.
+      if (finishReservation || ['new_session', 'clone', 'fork', 'branch'].includes(String(command.type))) await runtime.stop().catch(() => false)
+      throw error
+    }
     if (command.type === 'steer' || command.type === 'follow_up') {
       // Refresh the action snapshot after admission when the runtime exposes it.
       try {

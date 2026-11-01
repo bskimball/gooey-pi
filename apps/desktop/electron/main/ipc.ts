@@ -16,12 +16,15 @@ import type { AgentRpcManager } from "./agent-rpc";
 import type { AgentBrowserService } from "./browser/agent-service";
 import type { CheckoutService } from "./checkouts";
 import type { CuaDriverService } from "./cua-driver";
+import { describeEffectiveRunConfig } from "./effective-run-config";
+import type { ExtensionPathContext } from "./extension-manifest";
 import type { GitService } from "./git";
 import type { ModelCatalogProvider } from "./model-catalog";
 import type { PetService } from "./pets";
 import type { PluginService } from "./plugins";
 import type { ProjectService } from "./projects";
 import type { AutomationService } from "./schedules/service";
+import type { SessionHandoff } from "./session-handoff";
 import type { SessionService } from "./sessions";
 import type { SettingsService } from "./settings-schedules";
 import type { TerminalService } from "./terminal";
@@ -53,6 +56,8 @@ interface Services {
 	projects: ProjectService;
 	checkouts: { pi: CheckoutService };
 	sessions: SessionService;
+	sessionHandoff: SessionHandoff;
+	extensionPathContext: ExtensionPathContext;
 	agents: AgentRpcManager;
 	terminals: TerminalService;
 	git: GitService;
@@ -377,6 +382,11 @@ export function registerIpc(
 	});
 	handle("sessions:rename", async (_event, filePath, title) =>
 		(await sessionsForPath(filePath)).service.rename(filePath, title),
+	);
+	handle("sessions:runtime-owners", () => services.sessionHandoff.otherOwners());
+	handle("runtime:effective-config", async (_event, cwd) => describeEffectiveRunConfig({ cwd: await services.projects.authorizeReadOnlyCwd(requireString(cwd, "cwd", { min: 1, max: 4096 })), harness: "pi", extensionContext: services.extensionPathContext }));
+	handle("sessions:continue-in-vscode", (_event, filePath) =>
+		services.sessionHandoff.continueInVsCode(filePath),
 	);
 	handle("sessions:archive", async (_event, filePath, archived) => {
 		const routed = await sessionsForPath(filePath);

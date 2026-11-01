@@ -8,7 +8,10 @@ import { applyOps } from './transcript'
 import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiHydraTier } from '@/lib/harness'
 
 const NO_GIT: GitStatus = { isRepo: false, files: [] }
+const openChanges = () => postToHost({ type: 'openChanges' })
 const NO_SKILLS: never[] = []
+
+const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 
 function selectionLabel(selection: NonNullable<EditorFileContext['selection']>): string {
   if (selection.count > 1) return `${selection.count} selections`
@@ -28,6 +31,10 @@ export function App() {
   const extensionTabs = browserState.tabs.filter(tab => tab.backend === 'extension' && tab.sessionFile === browserStatus?.activeSessionKey)
   const extensionTab = extensionTabs[0]
   const [editorFile, setEditorFile] = useState<EditorFileContext | null>(null)
+  const [attachEditor, setAttachEditor] = useState(true)
+  const [git, setGit] = useState<GitStatus>(NO_GIT)
+  const [insertDraft, setInsertDraft] = useState<{ id: number; text: string }>()
+  const draftSeqRef = useRef(0)
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [state, setState] = useState<HostState | undefined>()
   const [uiRequest, setUiRequest] = useState<Record<string, unknown> | null>(null)
@@ -41,6 +48,8 @@ export function App() {
     const stop = onHostMessage((message) => {
       if (message.type === 'browserState') { setBrowserState(message.state); setBrowserStatus(message.status) }
       else if (message.type === 'editorContext') setEditorFile(message.file)
+      else if (message.type === 'git') setGit(message.git)
+      else if (message.type === 'insertDraft') setInsertDraft({ id: ++draftSeqRef.current, text: message.text })
       else if (message.type === 'reset') setMessages(applyOps([], message.ops))
       else if (message.type === 'ops') setMessages((current) => applyOps(current, message.ops))
       else if (message.type === 'state') setState(message.state)
@@ -92,6 +101,7 @@ export function App() {
           sessionName={state?.sessionName}
           onNotice={pushNotice}
         />
+        {state?.cwd ? <span className="apex-toolbar__workspace" title={state.cwd}>{folderName(state.cwd)}</span> : null}
       </header>
       <div className="workbench__content">
         <div className="session-workspace">
@@ -103,24 +113,27 @@ export function App() {
               </div> : null}
               <Transcript
                 messages={messages}
-                git={NO_GIT}
+                git={git}
                 harness="pi"
                 loading={!state}
                 active={busy}
-                onOpenChanges={() => undefined}
-                onSuggestion={(prompt) => postToHost({ type: 'send', text: prompt, images: [], intent: 'queue' })}
+                onOpenChanges={openChanges}
+                onSuggestion={(prompt) => postToHost({ type: 'send', text: prompt, images: [], intent: 'queue', attachEditor })}
                 suggestionsDisabled={!ready}
                 showPinnedChanges={false}
                 queuedMessageCount={queuedMessages.length}
               />
               <div className="conversation-bottom-dock">
-                <div className="apex-editor-context" role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
+                <div className="apex-editor-context" data-included={attachEditor ? 'true' : 'false'} role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
                   <span className="apex-editor-context__label">Editor</span>
                   <span className="apex-editor-context__file">{editorFile?.name ?? 'No active text file'}</span>
                   {editorFile?.dirty ? <span className="apex-editor-context__detail">Unsaved</span> : null}
                   {editorFile?.selection ? <span className="apex-editor-context__detail">
                     {selectionLabel(editorFile.selection)}
                   </span> : null}
+                  <button type="button" className="apex-editor-context__toggle" aria-pressed={attachEditor} aria-label="Include editor context" title={attachEditor ? 'Editor context will be sent' : 'Editor context will not be sent'} onClick={() => setAttachEditor(current => !current)}>
+                    {attachEditor ? 'On' : 'Off'}
+                  </button>
                 </div>
                 <Composer
                   extensionTab={extensionTab}
@@ -148,6 +161,7 @@ export function App() {
                   skills={NO_SKILLS}
                   fileRoot={state?.cwd}
                   runtimeCommands={runtimeCommands}
+                  insertDraft={insertDraft}
                   onCommand={(action) => postToHost({ type: 'command', action })}
                   queuedMessages={queuedMessages}
                   onSendQueuedMessage={(message) => postToHost({ type: 'sendQueued', id: message.id })}
@@ -156,7 +170,7 @@ export function App() {
                   onModelChange={(key) => postToHost({ type: 'setModel', key })}
                   onEffortChange={(level) => postToHost({ type: 'setThinking', level })}
                   onFastChange={() => undefined}
-                  onSend={(text, images, intent) => postToHost({ type: 'send', text, images, intent })}
+                  onSend={(text, images, intent) => postToHost({ type: 'send', text, images, intent, attachEditor })}
                   onStop={() => postToHost({ type: 'stop' })}
                 />
               </div>

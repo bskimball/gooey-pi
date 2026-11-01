@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { canonicalSessionPath } from 'apex-core/session-paths'
 import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
 import * as vscode from 'vscode'
@@ -8,6 +8,7 @@ import type { ScreenshotResizer } from './browser/service'
 import { editorPromptContext } from './editor'
 import { PiRpc, resolvePi } from './pi-rpc'
 import type { HostMessage, HostState, ModelDescriptor, PromptImage, ProviderDescriptor, QueuedPrompt, RuntimeCommand, ThinkingLevel, TranscriptOp, WebviewMessage } from './protocol'
+import { assertSessionFree, sessionOwnerLabels, VsCodeRuntimeOwner } from './runtime-owner'
 import { isWorkspaceProject, listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from './session-catalog'
 
 type Json = Record<string, unknown>
@@ -68,6 +69,8 @@ function describeProviders(models: ModelDescriptor[]): ProviderDescriptor[] {
 /** One pi RPC process plus the transcript log the webview replays. */
 export class ApexSession implements vscode.Disposable {
   private rpc: PiRpc | undefined
+  private stopping: Promise<void> = Promise.resolve()
+  private shutdown: Promise<void> | undefined
   private ops: TranscriptOp[] = []
   private pendingOps: TranscriptOp[] = []
   private flushTimer: NodeJS.Timeout | undefined
@@ -83,6 +86,7 @@ export class ApexSession implements vscode.Disposable {
   private seq = 0
   private currentPath: string | null = null
   private switching = false
+  private readonly owner = new VsCodeRuntimeOwner(() => this.cwd)
   private state: HostState = {
     status: 'starting',
     isStreaming: false,
@@ -108,7 +112,8 @@ export class ApexSession implements vscode.Disposable {
     resizeScreenshot?: ScreenshotResizer,
   ) {
     this.statusItem.name = 'Apex'
-    this.browser = new BrowserHost(distDirectory, resizeScreenshot)
+    // The browser key is this window's folder, so every session here shares its tabs.
+    this.browser = new BrowserHost(distDirectory, resizeScreenshot, async () => `VS Code · ${basename(this.cwd)}`)
     this.browser.service.onExtensionStatusChanged(() => this.postBrowser())
   }
 
@@ -126,7 +131,9 @@ export class ApexSession implements vscode.Disposable {
     this.browserToken = undefined
     const previous = this.rpc
     this.rpc = undefined
-    previous?.dispose()
+    this.stopping = this.stopping.then(() => previous?.dispose())
+    await this.stopping
+    if (generation !== this.launchGeneration) return
     const config = vscode.workspace.getConfiguration('apex')
     this.resetTranscript()
     this.setCurrentPath(null)
@@ -173,6 +180,7 @@ export class ApexSession implements vscode.Disposable {
           if (this.browserToken === launchToken) this.browserToken = undefined
           if (this.rpc !== rpc) return
           this.rpc = undefined
+          this.owner.set(null)
           this.addOp({ kind: 'event', event: { type: 'runtime_exit', code } })
           this.uiQueue = []
           this.post({ type: 'extensionUi', request: null })
@@ -195,13 +203,18 @@ export class ApexSession implements vscode.Disposable {
     )
   }
 
-  dispose() {
+  /** Resolves once Pi has exited and the session claims are released; `deactivate` returns it so VS Code waits. */
+  dispose(): Promise<void> {
+    if (this.shutdown) return this.shutdown
     ++this.launchGeneration
     void this.browser.stop()
-    this.rpc?.dispose()
+    const previous = this.rpc
     this.rpc = undefined
+    this.stopping = this.stopping.then(() => previous?.dispose())
+    this.shutdown = this.stopping.then(() => this.owner.dispose())
     this.statusItem.dispose()
     clearTimeout(this.flushTimer)
+    return this.shutdown
   }
 
   /** Sent when a webview (re)loads so it can rebuild the transcript from scratch. */
@@ -218,7 +231,9 @@ export class ApexSession implements vscode.Disposable {
     switch (message.type) {
       case 'sessions:list': {
         try {
-          this.post({ type: 'sessions:list', requestId: message.requestId, sessions: await listSessions(this.cwd), currentPath: this.currentPath })
+          const [sessions, owners] = await Promise.all([listSessions(this.cwd), sessionOwnerLabels().catch(() => new Map<string, string>())])
+          const labeled = sessions.map((session) => (owners.has(session.path) ? { ...session, owner: owners.get(session.path) } : session))
+          this.post({ type: 'sessions:list', requestId: message.requestId, sessions: labeled, currentPath: this.currentPath })
         } catch (error) {
           this.post({ type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: this.currentPath, error: error instanceof Error ? error.message : String(error) })
         }
@@ -264,7 +279,10 @@ export class ApexSession implements vscode.Disposable {
       case 'ready':
         return this.replay()
       case 'send':
-        return this.send(message.text, message.images, message.intent)
+        return this.send(message.text, message.images, message.intent, message.attachEditor === false ? '' : undefined)
+      case 'openChanges':
+        void vscode.commands.executeCommand('workbench.view.scm')
+        return
       case 'stop':
         return this.stop()
       case 'sendQueued': {
@@ -301,16 +319,23 @@ export class ApexSession implements vscode.Disposable {
     this.switching = true
     const wasPaused = this.queuePaused
     this.queuePaused = true
+    let finishReservation: (() => void) | undefined
+    let switchSent = false
     try {
       const target = canonicalSessionPath(path)
       if (!target.endsWith('.jsonl') || dirname(target) !== canonicalSessionPath(sessionBucket(this.cwd))) throw new Error('Session is not in the current workspace catalog.')
+      await assertSessionFree(target)
       const metadata = await createPiSessionMetadataReader()(target)
       if (!metadata.projectPath || !isWorkspaceProject(metadata.projectPath, this.cwd)) throw new Error('Session belongs to a different workspace.')
       const ops = await sessionTranscriptOps(target)
       if (this.rpc !== rpc || this.state.isStreaming || this.state.status !== 'ready') throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
       const runtimeState = await rpc.command<Json>('get_state')
       if (runtimeState.isStreaming === true || runtimeState.isCompacting === true) throw new Error('Cannot switch sessions while Pi is busy.')
+      finishReservation = this.owner.reserve(target)
+      switchSent = true
       const result = await rpc.command<Json>('switch_session', { sessionPath: target })
+      // A cancelled response confirms that the outgoing session is still held.
+      if (result.cancelled === true) switchSent = false
       if (this.rpc !== rpc) throw new Error('Pi restarted while switching sessions.')
       if (result.cancelled === true) throw new Error('An extension kept the current session open.')
       this.resetTranscript()
@@ -324,13 +349,45 @@ export class ApexSession implements vscode.Disposable {
       this.post({ type: 'extensionUi', request: null })
       this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
       await this.refreshAll()
+    } catch (error) {
+      // A failed/lost switch response cannot prove which session is attached.
+      if (switchSent) await rpc.dispose()
+      throw error
     } finally {
+      finishReservation?.()
       this.switching = false
       this.queuePaused = wasPaused
     }
   }
 
+  /** Opens a session handed over by Apex desktop once this window's Pi is ready. */
+  async openFromDesktop(path: string) {
+    if (this.state.status === 'exited') await this.start()
+    const deadline = Date.now() + 15_000
+    while ((this.state.status !== 'ready' || this.state.isStreaming || this.switching) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200))
+    try {
+      await this.switchSession(path)
+      vscode.window.setStatusBarMessage('Apex: continued the session from Apex desktop', 5000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.notice(message)
+      void vscode.window.showWarningMessage(`Apex: ${message}`)
+    }
+  }
+
+  /** Releases the current session to Apex desktop by moving this window's Pi to a new, empty session. */
+  async continueInDesktop() {
+    const path = this.currentPath
+    if (!path) return void vscode.window.showInformationMessage('Apex: this window has no saved session to hand over yet.')
+    if (this.state.isStreaming) return void vscode.window.showWarningMessage('Apex: stop the current run or wait for it to finish before continuing in Apex desktop.')
+    const title = (await listSessions(this.cwd).catch(() => [])).find((session) => session.path === path)?.title ?? this.state.sessionName ?? 'The session'
+    await this.newSession()
+    if (this.currentPath === path) return void vscode.window.showWarningMessage('Apex: the session is still open here, so it was not handed over.')
+    void vscode.window.showInformationMessage(`Apex: “${title}” is free to continue in Apex desktop.`)
+  }
+
   private setCurrentPath(path: string | null) {
+    this.owner.set(path)
     if (path === this.currentPath) return
     this.currentPath = path
     this.post({ type: 'sessions:current', path })
@@ -344,17 +401,27 @@ export class ApexSession implements vscode.Disposable {
     if (!this.rpc) return this.start()
     // Hold the local queue first: pi settles before abort responds, which would otherwise send the next queued prompt into the outgoing session.
     this.queuePaused = true
+    this.switching = true
+    const rpc = this.rpc
     await this.guard(async () => {
-      if (this.state.isStreaming) await this.abortRun()
-      const result = await this.rpc?.command<Json>('new_session')
-      if (result?.cancelled === true) {
-        this.notice('An extension kept the current session open.')
-        return
+      try {
+        if (this.state.isStreaming) await this.abortRun()
+        const result = await rpc.command<Json>('new_session')
+        if (this.rpc !== rpc) return
+        if (result?.cancelled === true) {
+          this.notice('An extension kept the current session open.')
+          return
+        }
+        this.resetTranscript()
+        this.queuePaused = false
+        this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
+        await this.refreshAll()
+      } catch (error) {
+        await rpc.dispose()
+        throw error
+      } finally {
+        this.switching = false
       }
-      this.resetTranscript()
-      this.queuePaused = false
-      this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
-      await this.refreshAll()
     })
   }
 
@@ -631,6 +698,8 @@ export class ApexSession implements vscode.Disposable {
   private async refreshAll() {
     const rpc = this.rpc
     if (!rpc) return
+    await this.refreshState()
+    if (this.rpc !== rpc) return
     const [models, commands] = await Promise.all([rpc.command<Json>('get_available_models'), rpc.command<Json>('get_commands').catch(() => ({ commands: [] }))])
     const descriptors = (Array.isArray(models?.models) ? models.models : []).map((model) => describeModel(model as Json))
     const runtimeCommands: RuntimeCommand[] = (Array.isArray(commands?.commands) ? commands.commands : []).flatMap((value) => {
@@ -640,13 +709,21 @@ export class ApexSession implements vscode.Disposable {
       return name && (source === 'extension' || source === 'prompt' || source === 'skill') ? [{ name, description: asString(command.description), source }] : []
     })
     this.update({ models: descriptors, providers: describeProviders(descriptors), commands: runtimeCommands })
-    await Promise.all([this.refreshState(), this.refreshThinking(), this.refreshStats()])
+    await Promise.all([this.refreshThinking(), this.refreshStats()])
   }
 
   private async refreshState() {
-    const state = await this.rpc?.command<Json>('get_state')
+    const rpc = this.rpc
+    if (!rpc) return
+    const state = await rpc.command<Json>('get_state')
+    if (this.rpc !== rpc) return
     const model = asRecord(state?.model)
-    this.setCurrentPath(asString(state?.sessionFile) ? canonicalSessionPath(String(state?.sessionFile)) : null)
+    try {
+      this.setCurrentPath(asString(state?.sessionFile) ? canonicalSessionPath(String(state?.sessionFile)) : null)
+    } catch (error) {
+      await rpc.dispose()
+      throw error
+    }
     this.update({
       model: model ? `${String(model.provider)}/${String(model.id)}` : undefined,
       thinkingLevel: (asString(state?.thinkingLevel) as ThinkingLevel | undefined) ?? 'off',

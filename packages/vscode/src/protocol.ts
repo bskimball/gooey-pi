@@ -1,4 +1,4 @@
-import type { AgentBrowserState, AgentBrowserExtensionStatus, TranscriptMessage } from 'apex-core/types/api'
+import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, TranscriptMessage } from 'apex-core/types/api'
 
 export type BrowserMethod = 'getExtensionStatus' | 'state' | 'setActiveSession' | 'setTabPaused' | 'focusExtensionTab' | 'popOutTab'
 
@@ -73,10 +73,21 @@ export type TranscriptOp =
   | { kind: 'user'; id: string; text: string; images?: PromptImage[]; timestamp: number; startAssistant: boolean }
   | { kind: 'notice'; id: string; text: string; timestamp: number }
 
-export interface SessionSummary { path: string; id: string; title: string; preview: string; updatedAt: string; messageCount: number }
+export interface SessionSummary {
+  path: string
+  id: string
+  title: string
+  preview: string
+  updatedAt: string
+  messageCount: number
+  /** Set when another Apex app's Pi runtime holds this session, for example "Apex desktop". */
+  owner?: string
+}
 
 export type HostMessage =
   | { type: 'editorContext'; file: EditorFileContext | null }
+  | { type: 'git'; git: GitStatus }
+  | { type: 'insertDraft'; text: string }
   | { type: 'sessions:list'; requestId: number; sessions: SessionSummary[]; currentPath: string | null; error?: string }
   | { type: 'sessions:switch'; requestId: number; error?: string }
   | { type: 'sessions:current'; path: string | null }
@@ -95,7 +106,8 @@ export type WebviewMessage =
   | { type: 'screenshotResized'; requestId: number; data?: string }
   | { type: 'browserRequest'; requestId: number; method: BrowserMethod; tabId?: string; paused?: boolean }
   | { type: 'ready' }
-  | { type: 'send'; text: string; images: PromptImage[]; intent: 'queue' | 'steer' }
+  | { type: 'send'; text: string; images: PromptImage[]; intent: 'queue' | 'steer'; /** Defaults to true. */ attachEditor?: boolean }
+  | { type: 'openChanges' }
   | { type: 'stop' }
   | { type: 'removeQueued'; id: string }
   | { type: 'sendQueued'; id: string }

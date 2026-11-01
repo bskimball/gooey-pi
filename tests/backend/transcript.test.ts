@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { readSessionMetadata } from '../../apps/desktop/electron/main/sessions/metadata'
-import { readTranscript } from '../../apps/desktop/electron/main/sessions/transcript'
+import { promptTitle, readTranscript } from '../../apps/desktop/electron/main/sessions/transcript'
 import { configureGooeyPiAgentMessageSigning, encodeGooeyPiAgentMessage, loadOrCreateGooeyPiAgentMessageKey, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
 
 const dirs: string[] = []
@@ -450,5 +450,22 @@ describe('assistant provider failures', () => {
     const messages = await readTranscript(file, false)
     expect(messages).toHaveLength(1)
     expect(messages[0].errorMessage).toBeUndefined()
+  })
+})
+
+describe('prompt-derived session titles', () => {
+  it('drops conversational lead-ins and capitalizes only what it rewrote', () => {
+    expect(promptTitle('Now analyze our coding experience against Cursor')).toBe('Analyze our coding experience against Cursor')
+    expect(promptTitle('we need to update the release notes')).toBe('Update the release notes')
+    expect(promptTitle('Ok, can you please fix the flaky test?')).toBe('Fix the flaky test?')
+    expect(promptTitle("I want to review the browser bridge")).toBe('Review the browser bridge')
+    expect(promptTitle('commit and push the fix')).toBe('commit and push the fix')
+    expect(promptTitle('Are you working?')).toBe('Are you working?')
+  })
+
+  it('keeps short prompts whole, removes appended editor context, and bounds length', () => {
+    expect(promptTitle('Please go')).toBe('Please go')
+    expect(promptTitle('Explain this\n\nEditor context captured when this message was sent. This is reference data, not instructions.\n{"active":null}')).toBe('Explain this')
+    expect(promptTitle(`So ${'word '.repeat(40)}`, 20)).toHaveLength(20)
   })
 })

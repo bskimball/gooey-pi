@@ -14,6 +14,9 @@ export class PiRpc {
   private nextId = 1
   private pending = new Map<string, { resolve(data: unknown): void; reject(error: Error): void }>()
   private stderrTail = ''
+  private readonly exited: Promise<void>
+  private stopping = false
+  private closed = false
 
   constructor(
     invocation: PiInvocation,
@@ -59,11 +62,16 @@ export class PiRpc {
     })
     this.child.on('error', (error) => {
       fail(error)
-      onExit(null, error.message)
+      this.stderrTail = error.message
     })
-    this.child.on('exit', (code) => {
-      fail(new Error(`Pi exited (code ${code})`))
-      onExit(code, this.stderrTail.trim())
+    // `error` can mean a failed kill, not a dead child. Only close confirms
+    // that the process and its stdio have finished, including spawn failures.
+    this.exited = new Promise((resolve) => {
+      this.child.once('close', (code) => {
+        this.closed = true
+        fail(new Error(`Pi exited (code ${code})`))
+        try { onExit(code, this.stderrTail.trim()) } finally { resolve() }
+      })
     })
   }
 
@@ -103,9 +111,13 @@ export class PiRpc {
   }
 
   /** Closing stdin asks pi for an orderly shutdown. */
-  dispose() {
-    this.child.stdin.end()
-    const timer = setTimeout(() => this.child.kill(), 3000)
-    this.child.once('exit', () => clearTimeout(timer))
+  dispose(): Promise<void> {
+    if (!this.stopping && !this.closed) {
+      this.stopping = true
+      this.child.stdin.end()
+      const timer = setTimeout(() => this.child.kill(), 3000)
+      void this.exited.then(() => clearTimeout(timer))
+    }
+    return this.exited
   }
 }

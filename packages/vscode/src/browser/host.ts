@@ -63,9 +63,9 @@ export class BrowserHost {
   readonly capability: BrowserCapability
   readonly extensionPath: string
   private starting: Promise<void> | undefined
-  constructor(distDirectory: string, resizeScreenshot?: ScreenshotResizer) {
+  constructor(distDirectory: string, resizeScreenshot?: ScreenshotResizer, describeSession?: (sessionKey: string) => Promise<string | undefined>) {
     this.extensionPath = join(distDirectory, 'extensions', 'omp-work-browser.ts')
-    this.service = new ExtensionBrowserService({ extensionBridge: this.bridge, extensionPath: join(distDirectory, 'browser-extension'), resizeScreenshot })
+    this.service = new ExtensionBrowserService({ extensionBridge: this.bridge, extensionPath: join(distDirectory, 'browser-extension'), resizeScreenshot, describeSession })
     this.capability = new BrowserCapability(this.service, this.extensionPath)
   }
   start(): Promise<void> {

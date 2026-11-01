@@ -6,7 +6,7 @@ import { fallbackModelFromRecord, fallbackNoticeText } from '../model-fallback'
 import { isPathWithin, isRecord } from '../validation'
 import type { SessionCatalogEntry, SessionCatalogIo } from './catalog'
 import { ingestMessageActivity, type JsonRecord, MAX_METADATA_RECORDS, type MetadataLineParser, type SessionMetadata, statusFrom } from './metadata'
-import { boundedString, compactText, createTranscriptReader, MAX_PART_TEXT_CHARS, type TranscriptFileReader, textFromContent, validTimestamp } from './transcript'
+import { boundedString, compactText, createTranscriptReader, MAX_PART_TEXT_CHARS, promptTitle, type TranscriptFileReader, textFromContent, validTimestamp } from './transcript'
 
 /**
  * Shared machinery for the bucketed JSONL session layouts the pi and OMP
@@ -114,7 +114,7 @@ function bucketedMetadataFromAccumulator(state: BucketedMetadataAccumulator, fil
     id: state.id,
     filePath,
     projectPath: state.projectPath,
-    title: compactText(state.displayName ?? '', 100) || compactText(state.firstUser, 100) || 'Untitled session',
+    title: compactText(state.displayName ?? '', 100) || promptTitle(state.firstUser) || 'Untitled session',
     createdAt: state.createdAt,
     updatedAt: state.sawRecordTimestamp ? state.updatedAt : fallbackUpdated,
     lastUserMessageAt: state.lastUserMessageAt ?? state.createdAt,

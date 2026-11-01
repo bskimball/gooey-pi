@@ -38,6 +38,7 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
   const diffId = useId()
   const files = git?.files ?? []
   const { additions, deletions } = changeTotals(files)
+  const lineCounts = git?.lineCounts !== false
   const facts: Array<{ key: string; node: ReactNode }> = [
     { key: 'outcome', node: <span className="turn-receipt__outcome">{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className="sr-only">{failed ? 'Turn failed after' : 'Turn finished in'}</span> {duration}</span> },
   ]
@@ -47,8 +48,10 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
     facts.push({ key: 'diff', node: <span className="turn-receipt__diff">
       <button type="button" className="turn-receipt__action turn-receipt__diff-summary" aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>
         {filesChangedLabel(files.length)}
-        <span className="diff-count diff-count--add">+{additions}</span>
-        <span className="diff-count diff-count--remove">−{deletions}</span>
+        {lineCounts ? <>
+          <span className="diff-count diff-count--add">+{additions}</span>
+          <span className="diff-count diff-count--remove">−{deletions}</span>
+        </> : null}
         <CaretRight className="disclosure-caret" size={11} />
       </button>
       {onReviewChanges ? <button type="button" className="turn-receipt__action turn-receipt__review" onClick={onReviewChanges}>Review</button> : null}
@@ -59,6 +62,6 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
     <div className="turn-receipt__line">
       {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className="turn-receipt__separator" aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
     </div>
-    {diffOpen ? <ChangedFilesList id={diffId} files={files} /> : null}
+    {diffOpen ? <ChangedFilesList id={diffId} files={files} lineCounts={lineCounts} /> : null}
   </div>
 }

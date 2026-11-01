@@ -352,6 +352,14 @@ export interface ExtensionInstallInput {
   projectPath?: string
 }
 
+export interface EffectiveCapability { capability: string; filename: string; present: boolean }
+export interface EffectiveInstructionSource { scope: 'project' | 'parent' | 'user'; kind: 'AGENTS.override.md' | 'AGENTS.md' | 'AGENTS.MD' | 'CLAUDE.md' | 'CLAUDE.MD' | 'SYSTEM.md'; path: string; bytes: number }
+export interface EffectiveSkillDir { path: string; count: number }
+/** Metadata about what a run in a project will load; never file contents. */
+export interface EffectiveRunConfig { injectedCapabilities: EffectiveCapability[]; instructionSources: EffectiveInstructionSource[]; skillDirs: EffectiveSkillDir[] }
+
+export interface RuntimeOwnerView { app: 'desktop' | 'vscode'; label: string; sessions: string[] }
+
 export interface ProjectFileEntry { path: string; type: 'file' | 'directory' }
 export interface ProjectFileListing { entries: ProjectFileEntry[]; skipped: number }
 
@@ -414,6 +422,8 @@ export interface GitStatus {
   behind?: number
   files: GitFileChange[]
   truncated?: boolean
+  /** False when the host cannot supply additions/deletions; omitted means the counts are real. */
+  lineCounts?: boolean
   error?: string
 }
 export interface GitDiff { path?: string; staged: boolean; text: string; truncated: boolean; error?: string }
@@ -770,6 +780,14 @@ export interface PrimeWorkApi {
     rename(filePath: string, title: string): Promise<boolean>
     archive(filePath: string, archived?: boolean): Promise<boolean>
     onChanged(callback: (event: SessionChangeEvent) => void): () => void
+    /** Other live Apex apps (VS Code windows, other desktop instances) and the sessions their Pi runtimes hold. */
+    runtimeOwners(): Promise<RuntimeOwnerView[]>
+    /** Stops this app's runtime for the session and opens it in Apex for VS Code. */
+    continueInVsCode(filePath: string): Promise<void>
+  }
+  runtime: {
+    /** Instruction files, skill directories, and injected extensions a run in an authorized project path will pick up. */
+    effectiveConfig(cwd: string): Promise<EffectiveRunConfig>
   }
   agent: {
     start(options: { cwd: string; sessionPath?: string; model?: string; thinking?: string; fast?: boolean; harness?: HarnessId }): Promise<RuntimeInfo>

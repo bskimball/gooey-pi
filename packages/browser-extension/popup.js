@@ -28,13 +28,16 @@ function render(state) {
   $('share').disabled = !connected || (!shared && (!shareable || !state.activeSessionKey))
   $('pause').textContent = paused ? 'Resume agent' : 'Pause agent'
   $('pause').disabled = !connected
+  const destination = connected && !shared && shareable && state.activeSessionKey ? state.activeSessionLabel || 'the open Apex thread' : ''
+  $('destination').replaceChildren(...(destination ? [Object.assign(document.createElement('span'), { textContent: 'Shares with ' }), destination] : []))
+  $('destination').title = destination
   $('hint').textContent = !connected
     ? 'Open Apex on this computer to connect.'
     : shared
       ? ''
       : !shareable
         ? 'Only web pages can be shared.'
-        : state.activeSessionKey ? 'The agent in the open Apex thread will be able to use this tab.' : 'Open a thread in Apex to share this tab with it.'
+        : state.activeSessionKey ? 'Its agent will be able to use this tab.' : 'Open a thread in Apex or VS Code to share this tab with it.'
 }
 
 async function refresh() {

@@ -64,11 +64,12 @@ export class ExtensionBrowserService {
   private readonly changeListeners = new Set<(state: AgentBrowserState) => void>()
   private nextGeneration = 1
   private activeSessionKey: string | null = null
+  private activeSessionLabel: string | null = null
   private closed = false
   private readonly actionTimeoutMs = ACTION_TIMEOUT_MS
   private readonly loadTimeoutMs = LOAD_TIMEOUT_MS
-  constructor(private readonly options: { extensionBridge: ExtensionBrowserBridge; extensionPath: string; resizeScreenshot?: ScreenshotResizer }) {
-    options.extensionBridge.setContext(() => ({ activeSessionKey: this.activeSessionKey, tabs: this.state().tabs }))
+  constructor(private readonly options: { extensionBridge: ExtensionBrowserBridge; extensionPath: string; resizeScreenshot?: ScreenshotResizer; describeSession?(sessionKey: string): Promise<string | undefined> }) {
+    options.extensionBridge.setContext(() => ({ activeSessionKey: this.activeSessionKey, activeSessionLabel: this.activeSessionLabel, tabs: this.state().tabs }))
     options.extensionBridge.onEvent((event) => this.extensionEvent(event))
   }
   beginShutdown() {
@@ -244,10 +245,16 @@ export class ExtensionBrowserService {
   }
   async setActiveSession(value: unknown): Promise<void> {
     this.activeSessionKey = value === null ? null : canonicalSessionPath(requireString(value, 'sessionKey', { min: 1, max: 4096 }))
+    const sessionKey = this.activeSessionKey
+    const label = sessionKey ? await this.options.describeSession?.(sessionKey).catch(() => undefined) : undefined
+    // A newer call owns the extension's destination.
+    if (this.activeSessionKey !== sessionKey) return
+    this.activeSessionLabel = label ?? null
     await this.options.extensionBridge.setActiveSession(this.activeSessionKey)
     if (this.options.extensionBridge?.isConnected())
       await this.options.extensionBridge.call('sync_tab_state', {
         activeSessionKey: this.activeSessionKey,
+        activeSessionLabel: this.activeSessionLabel,
         tabs: this.state().tabs,
       })
     this.push()

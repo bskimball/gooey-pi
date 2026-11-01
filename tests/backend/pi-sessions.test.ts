@@ -14,6 +14,7 @@ import {
   piTimestampFromSessionName,
 } from '../../apps/desktop/electron/main/sessions/pi'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { acquireRuntimeSession, RuntimeSessionClaims, assertSessionNotOwnedElsewhere, publishRuntimeOwner, readRuntimeOwners, removeRuntimeOwner, runtimeOwnerOf, runtimeOwnersDir, RUNTIME_OWNER_STALE_MS } from 'apex-core/sessions/runtime-owners'
 
 vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
@@ -544,5 +545,102 @@ describe('pi file-level rename fallback', () => {
     expect(appendPiSessionInfo(file, 'Renamed offline')).toBe(true)
     const appended = JSON.parse(readFileSync(file, 'utf8').slice(before.length).trim()) as { parentId: string }
     expect(appended.parentId).toBe('deadbeef')
+  })
+})
+
+describe('runtime owner registry', () => {
+  function registry() {
+    const dir = mkdtempSync(join(tmpdir(), 'apex-runtime-owners-')); dirs.push(dir)
+    const session = join(dir, 'held.jsonl')
+    writeFileSync(session, '')
+    return { dir, session: realpathSync(session) }
+  }
+
+  it.skipIf(process.platform !== 'win32')('rejects a second claim through a Windows filename case alias', () => {
+    const { dir, session } = registry()
+    const release = acquireRuntimeSession(session, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, dir)
+    try {
+      expect(() => acquireRuntimeSession(session.toUpperCase(), { app: 'vscode', pid: process.pid, label: 'VS Code' }, dir)).toThrow('This session is open')
+    } finally {
+      release()
+    }
+  })
+
+  it('admits exactly one concurrent claimant, even before either publishes a heartbeat', async () => {
+    const { dir, session } = registry()
+    const owners = [
+      { app: 'desktop' as const, pid: process.pid, label: 'Apex desktop' },
+      { app: 'vscode' as const, pid: process.pid, label: 'VS Code' },
+    ]
+    const results = await Promise.allSettled(owners.map((owner) => Promise.resolve().then(() => acquireRuntimeSession(session, owner, dir))))
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    expect(await readRuntimeOwners(undefined, dir, Date.now() + RUNTIME_OWNER_STALE_MS * 10)).toHaveLength(1)
+    expect(() => acquireRuntimeSession(session, owners[1], dir)).toThrow('This session is open')
+    const winner = results.find((result) => result.status === 'fulfilled')
+    if (!winner || winner.status !== 'fulfilled') throw new Error('Expected one claimant')
+    winner.value()
+    const next = acquireRuntimeSession(session, owners[1], dir)
+    winner.value() // An old release cannot delete its successor's claim.
+    expect(() => acquireRuntimeSession(session, owners[0], dir)).toThrow('This session is open')
+    next()
+  })
+
+  it('keeps outgoing and reserved sessions until confirmed switch, and rolls back cancelled reservations', () => {
+    const { dir, session } = registry()
+    const next = join(dir, 'next.jsonl')
+    const owner = { app: 'desktop' as const, pid: process.pid, label: 'Apex desktop' }
+    const acquire = (path: string) => acquireRuntimeSession(path, owner, dir)
+    const claims = new RuntimeSessionClaims(acquire)
+    claims.confirm(session)
+    const cancelled = claims.reserve(next)
+    claims.confirm(session) // A late outgoing get_state must not release the reservation.
+    expect(() => acquire(next)).toThrow('This session is open')
+    cancelled()
+    acquire(next)()
+    expect(() => acquire(session)).toThrow('This session is open')
+    const switched = claims.reserve(next)
+    claims.confirm(next)
+    switched()
+    acquire(session)()
+    expect(() => acquire(next)).toThrow('This session is open')
+    claims.confirm(null)
+    acquire(next)()
+    claims.dispose()
+    expect(() => claims.reserve(session)).toThrow('Runtime ownership has ended')
+  })
+
+  it('lives beside the Pi session root', () => {
+    expect(runtimeOwnersDir(join('/home/me/.pi/agent', 'sessions'))).toBe(join('/home/me/.pi/agent', 'apex-runtime-owners'))
+  })
+
+  it('reports sessions held by other live processes and never by the caller itself', async () => {
+    const { dir, session } = registry()
+    // The test process stands in for a live VS Code window.
+    await publishRuntimeOwner({ app: 'vscode', label: 'VS Code · repo', pid: process.pid, sessions: [session] }, dir)
+
+    const owners = await readRuntimeOwners({ app: 'desktop', pid: process.pid }, dir)
+    expect(owners.map(({ app, label, sessions }) => ({ app, label, sessions }))).toEqual([{ app: 'vscode', label: 'VS Code · repo', sessions: [session] }])
+    expect(runtimeOwnerOf(owners, session)?.label).toBe('VS Code · repo')
+    await expect(assertSessionNotOwnedElsewhere(session, { app: 'desktop', pid: process.pid }, dir)).rejects.toThrow('This session is open in VS Code · repo. Run "Apex: Continue in Apex Desktop"')
+    await expect(assertSessionNotOwnedElsewhere(session, { app: 'vscode', pid: process.pid }, dir)).resolves.toBeUndefined()
+
+    removeRuntimeOwner({ app: 'vscode', pid: process.pid }, dir)
+    await expect(assertSessionNotOwnedElsewhere(session, { app: 'desktop', pid: process.pid }, dir)).resolves.toBeUndefined()
+  })
+
+  it('retains live owners despite stale heartbeats, removes exited display records, and skips malformed files', async () => {
+    const { dir, session } = registry()
+    await publishRuntimeOwner({ app: 'vscode', label: 'VS Code · repo', pid: process.pid, sessions: [session] }, dir)
+    expect(await readRuntimeOwners({ app: 'desktop', pid: process.pid }, dir, Date.now() + RUNTIME_OWNER_STALE_MS + 1_000)).toHaveLength(1)
+
+    const exitedPid = 2_147_483_000
+    writeFileSync(join(dir, `desktop-${exitedPid}.json`), JSON.stringify({ app: 'desktop', label: 'Apex desktop', pid: exitedPid, updatedAt: new Date().toISOString(), sessions: [session] }))
+    writeFileSync(join(dir, 'desktop-7.json'), '{ not json')
+    writeFileSync(join(dir, 'desktop-8.json'), JSON.stringify({ app: 'vscode', label: 'Mismatched name', pid: 8, updatedAt: new Date().toISOString(), sessions: [session] }))
+
+    const owners = await readRuntimeOwners({ app: 'desktop', pid: process.pid }, dir)
+    expect(owners.map((owner) => owner.label)).toEqual(['VS Code · repo'])
+    expect(() => statSync(join(dir, `desktop-${exitedPid}.json`))).toThrow()
   })
 })

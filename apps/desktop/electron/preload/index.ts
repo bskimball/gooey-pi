@@ -117,6 +117,12 @@ const api: PrimeWorkApi = {
 			invoke("sessions:archive", filePath, archived),
 		onChanged: (callback) =>
 			subscribe<SessionChangeEvent>("sessions:changed", callback),
+		runtimeOwners: () => invoke("sessions:runtime-owners"),
+		continueInVsCode: (filePath) =>
+			invoke("sessions:continue-in-vscode", filePath),
+	},
+	runtime: {
+		effectiveConfig: (cwd) => invoke("runtime:effective-config", cwd),
 	},
 	agent: {
 		start: (options) => invoke("agent:start", options),

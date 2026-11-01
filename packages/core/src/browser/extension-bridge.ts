@@ -39,6 +39,7 @@ export class ExtensionBrowserBridge {
   private refresh: Promise<void> | null = null
   private disposed = false
   private latestSession: string | null | undefined
+  private latestSessionLabel: string | null = null
   port: number | null = null
 
   async startOrConnect(onlyKind?: 'vscode', base = 'http://127.0.0.1:29301'): Promise<void> {
@@ -237,7 +238,10 @@ export class ExtensionBrowserBridge {
       return true
     }
     if (method === 'sync_tab_state') {
-      if ('activeSessionKey' in params) this.latestSession = typeof params.activeSessionKey === 'string' ? params.activeSessionKey : null
+      if ('activeSessionKey' in params) {
+        this.latestSession = typeof params.activeSessionKey === 'string' ? params.activeSessionKey : null
+        this.latestSessionLabel = typeof params.activeSessionLabel === 'string' ? params.activeSessionLabel.slice(0, 400) : null
+      }
       if (Array.isArray(params.tabs)) {
         this.rememberTabs(params.tabs, remote)
         params = { ...params, tabs: this.snapshot() }
@@ -318,7 +322,9 @@ export class ExtensionBrowserBridge {
       }
       if ((url.pathname === '/v1/extension/hello' && request.method === 'GET') || (url.pathname === '/v1/extension/connect' && ['GET', 'POST'].includes(request.method ?? ''))) {
         if (!this.token) this.token = randomBytes(32).toString('hex')
-        json(200, { ...this.context(), token: this.token, tabs: this.snapshot() })
+        // Report the destination popup pairing actually uses: the latest session either app synced, else this host's.
+        const destination = typeof this.latestSession === 'string' ? { activeSessionKey: this.latestSession, activeSessionLabel: this.latestSessionLabel } : {}
+        json(200, { ...this.context(), ...destination, token: this.token, tabs: this.snapshot() })
         return
       }
       if (!this.token || request.headers.authorization !== `Bearer ${this.token}`) {

@@ -24,6 +24,7 @@ import {
 	protocol,
 	safeStorage,
 	session,
+	shell,
 	webContents,
 } from "electron";
 import { assertNoMcpAuthenticationCommand } from "../../src/lib/mcp-policy";
@@ -84,6 +85,7 @@ import { RepositoryUseGate } from "./repository-use-gate";
 import { AgentScheduleBridge } from "./schedules/agent-bridge";
 import { ScheduledRunExecutor } from "./schedules/executor";
 import { AutomationService } from "./schedules/service";
+import { describeDesktopSession, SessionHandoff } from "./session-handoff";
 import { SessionService } from "./sessions";
 import { piSessionServiceOptions } from "apex-core/sessions/pi";
 import { SettingsService } from "./settings-schedules";
@@ -886,6 +888,7 @@ async function bootstrap(): Promise<void> {
 		PI_RPC_ADAPTER,
 	);
 	piManager.setDisabledModelsProvider(piDisabledModels);
+	const sessionHandoff = new SessionHandoff({ agents: piManager, sessions: piSessions, projects: piProjects, openExternal: (url) => shell.openExternal(url, { activate: true }) });
 	piManager.setWorkspaceUseProvider((cwd, owner, retireIfIdle) =>
 		repositoryUseGate.beginWorkspaceUse(cwd, owner, retireIfIdle),
 	);
@@ -1129,6 +1132,7 @@ async function bootstrap(): Promise<void> {
 	extensionBrowserBridge = extensionBridge;
 	const browserService = new AgentBrowserService({
 		extensionBridge,
+		describeSession: describeDesktopSession(piSessions),
 		extensionPath: app.isPackaged
 			? join(process.resourcesPath, "browser-extension")
 			: join(app.getAppPath(), "packages", "browser-extension"),
@@ -1265,6 +1269,8 @@ async function bootstrap(): Promise<void> {
 			projects: piProjects,
 			checkouts,
 			sessions: piSessions,
+			sessionHandoff,
+			extensionPathContext,
 			agents: piManager,
 			terminals,
 			git,

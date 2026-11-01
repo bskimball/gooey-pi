@@ -13,7 +13,12 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { registerIpc, type IpcRegistration } from '../../apps/desktop/electron/main/ipc'
+import { SessionHandoff } from '../../apps/desktop/electron/main/session-handoff'
+import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
 
 const EXPECTED_URL = 'prime-work://app/'
 
@@ -186,6 +191,91 @@ describe('registerIpc verify gate', () => {
     await expect(handlers.get('sessions:archive')!(event, '/denied', true)).rejects.toThrow('denied')
     expect(archive).toHaveBeenCalledOnce()
     registration.dispose()
+  })
+
+  it('hands an idle, authorized session to VS Code and releases it before opening the editor', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const ownersDir = mkdtempSync(join(tmpdir(), 'apex-handoff-'))
+    const sessionPath = join(ownersDir, 'held session.jsonl')
+    let streaming = true
+    const runtimes = [{ runtimeId: 'r1', sessionFile: sessionPath, isStreaming: true, isCompacting: false }]
+    const order: string[] = []
+    const agents = {
+      list: vi.fn(() => runtimes.map((runtime) => ({ ...runtime, isStreaming: streaming }))),
+      getForSession: vi.fn(() => runtimes[0] && { ...runtimes[0], isStreaming: streaming }),
+      stopForSession: vi.fn(async () => { order.push('stop'); runtimes.length = 0 }),
+      setSessionAttachGuard: vi.fn(),
+      setSessionClaimProvider: vi.fn(),
+    }
+    const openExternal = vi.fn(async (url: string) => { order.push(url) })
+    const authorizePath = vi.fn(async (path: string) => { order.push(`authorize ${path}`); return '/work/repo' })
+    const handoff = new SessionHandoff({
+      agents: agents as never,
+      sessions: { requireSessionPath: vi.fn(async () => sessionPath), list: vi.fn(async () => [{ filePath: sessionPath, projectPath: '/work/repo' }]) } as never,
+      projects: { authorizePath },
+      openExternal,
+      ownersDir,
+      focusDelayMs: 0,
+    })
+    stubs.sessionHandoff = handoff
+    try {
+      expect(agents.setSessionAttachGuard).toHaveBeenCalledOnce()
+      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).rejects.toThrow('Stop the current run')
+      expect(agents.stopForSession).not.toHaveBeenCalled()
+
+      streaming = false
+      await handlers.get('sessions:continue-in-vscode')!(event, sessionPath)
+      expect(order).toEqual([
+        'authorize /work/repo',
+        'stop',
+        expect.stringMatching(/^vscode:\/\/file\/.*work\/repo$/),
+        `vscode://bdkinc.apex-vscode/open?session=${encodeURIComponent(sessionPath)}`,
+      ])
+      const record = JSON.parse(readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')) as { sessions: string[] }
+      expect(record.sessions).toEqual([])
+      await expect(handlers.get('sessions:runtime-owners')!(event)).resolves.toEqual([])
+    } finally {
+      await handoff.dispose()
+      await handoff.publish(true)
+      expect(() => readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')).toThrow()
+      registration.dispose()
+      rmSync(ownersDir, { recursive: true, force: true })
+    }
+  })
+
+  it('drains an in-flight desktop owner publication before disposal removes its record', async () => {
+    const ownersDir = mkdtempSync(join(tmpdir(), 'apex-handoff-dispose-'))
+    let finish!: () => void
+    const pending = new Promise<void>((resolve) => { finish = resolve })
+    const originalPublish = runtimeOwners.publishRuntimeOwner
+    const publish = vi.spyOn(runtimeOwners, 'publishRuntimeOwner').mockImplementation(async (owner, dir) => {
+      await pending
+      await originalPublish(owner, dir)
+    })
+    const handoff = new SessionHandoff({
+      agents: { list: () => [], setSessionAttachGuard: vi.fn(), setSessionClaimProvider: vi.fn() } as never,
+      sessions: {} as never,
+      projects: {} as never,
+      openExternal: vi.fn(),
+      ownersDir,
+    })
+    try {
+      await Promise.resolve()
+      expect(publish).toHaveBeenCalledOnce()
+      const queued = handoff.publish(true)
+      const disposed = handoff.dispose()
+      finish()
+      await Promise.all([queued, disposed])
+      await handoff.publish(true)
+      expect(publish).toHaveBeenCalledOnce()
+      expect(() => readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')).toThrow()
+    } finally {
+      finish()
+      await handoff.dispose()
+      publish.mockRestore()
+      rmSync(ownersDir, { recursive: true, force: true })
+    }
   })
 
   it('allows an authorized main-frame sender at the trusted URL', () => {

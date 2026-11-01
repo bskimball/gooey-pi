@@ -5,7 +5,7 @@ import { appShortcutForKey, createAppKeydownHandler, isOverlayOpen, type AppShor
 function installHandler() {
   const calls: AppShortcutAction[] = []
   const actions = Object.fromEntries(
-    (['open-palette', 'new-session', 'open-browser', 'toggle-sidebar', 'toggle-terminal', 'open-settings', 'close-palette', 'close-settings'] as const).map((action) => [
+    (['open-palette', 'new-session', 'open-browser', 'toggle-sidebar', 'toggle-terminal', 'open-settings', 'close-palette', 'close-settings', 'previous-session', 'inspector-changes', 'inspector-summary', 'inspector-specialists', 'inspector-files', 'inspector-browser'] as const).map((action) => [
       action,
       () => { calls.push(action) },
     ]),
@@ -133,6 +133,18 @@ describe('app shortcut key mapping', () => {
     expect(appShortcutForKey(event({ key: ',', ctrlKey: true }), false)).toBe('open-settings')
     expect(appShortcutForKey(event({ key: 'Escape' }), false)).toBe('close-palette')
     expect(appShortcutForKey(event({ key: 'v', metaKey: true }), false)).toBeNull()
+  })
+
+  it('switches to the previous session with Control+Tab and selects inspector tabs with primary digits', () => {
+    expect(appShortcutForKey(event({ key: 'Tab', ctrlKey: true }), false)).toBe('previous-session')
+    expect(appShortcutForKey(event({ key: 'Tab', ctrlKey: true, shiftKey: true }), false)).toBeNull()
+    expect(appShortcutForKey(event({ key: 'Tab', metaKey: true }), false)).toBeNull()
+    expect(['1', '2', '3', '4', '5'].map((key) => appShortcutForKey(event({ key, metaKey: true }), false)))
+      .toEqual(['inspector-changes', 'inspector-summary', 'inspector-specialists', 'inspector-files', 'inspector-browser'])
+    expect(appShortcutForKey(event({ key: '2', ctrlKey: true }), false)).toBe('inspector-summary')
+    expect(appShortcutForKey(event({ key: '6', ctrlKey: true }), false)).toBeNull()
+    expect(appShortcutForKey(event({ key: '1' }), false)).toBeNull()
+    expect(appShortcutForKey(event({ key: 'Tab', ctrlKey: true }), true)).toBeNull()
   })
 
   it('closes settings with Escape or the primary W shortcut', () => {

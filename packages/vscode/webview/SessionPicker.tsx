@@ -158,9 +158,11 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
               const title = session.title.trim() || session.preview.trim() || 'Untitled session'
               const preview = session.preview.trim()
               const relativeTime = formatRelative(session.updatedAt)
-              const subtitle = preview && preview !== title
-                ? preview
-                : preview || `${session.messageCount} ${session.messageCount === 1 ? 'message' : 'messages'}`
+              const subtitle = session.owner
+                ? `Open in ${session.owner}`
+                : preview && preview !== title
+                  ? preview
+                  : preview || `${session.messageCount} ${session.messageCount === 1 ? 'message' : 'messages'}`
               return (
                 <div
                   key={session.id || session.path}

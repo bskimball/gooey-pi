@@ -31,6 +31,23 @@ body { padding: 0; }
   white-space: nowrap;
   color: var(--text);
 }
+.apex-editor-context[data-included='false'] .apex-editor-context__file {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+.apex-editor-context__toggle {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.apex-editor-context__toggle[aria-pressed='true'] {
+  color: var(--text);
+}
 .apex-editor-context__detail {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
@@ -41,6 +58,16 @@ body { padding: 0; }
   z-index: 30;
   flex: 0 0 38px;
   padding: 0 10px;
+}
+
+.apex-toolbar__workspace {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .apex-session-picker {

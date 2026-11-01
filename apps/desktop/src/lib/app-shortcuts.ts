@@ -5,7 +5,11 @@ export interface AppShortcutEvent {
   shiftKey: boolean
 }
 
-export type AppShortcutAction = 'open-palette' | 'new-session' | 'open-browser' | 'toggle-sidebar' | 'toggle-terminal' | 'open-settings' | 'close-palette' | 'close-settings'
+export type InspectorShortcutAction = 'inspector-changes' | 'inspector-summary' | 'inspector-specialists' | 'inspector-files' | 'inspector-browser'
+export type AppShortcutAction = 'open-palette' | 'new-session' | 'open-browser' | 'toggle-sidebar' | 'toggle-terminal' | 'open-settings' | 'close-palette' | 'close-settings' | 'previous-session' | InspectorShortcutAction
+
+/** Primary+1…5 selects an inspector tab, in the inspector's tab order. */
+export const INSPECTOR_SHORTCUTS: readonly InspectorShortcutAction[] = ['inspector-changes', 'inspector-summary', 'inspector-specialists', 'inspector-files', 'inspector-browser']
 
 const OVERLAY_SELECTOR = '.modal[role="dialog"][aria-modal="true"], .command-palette[role="dialog"]'
 
@@ -25,6 +29,8 @@ export function appShortcutForKey(event: AppShortcutEvent, overlayOpen: boolean,
   const command = event.metaKey || event.ctrlKey
   const key = event.key.toLowerCase()
   if (settingsOpen && (event.key === 'Escape' || (command && key === 'w'))) return 'close-settings'
+  if (event.ctrlKey && !event.metaKey && !event.shiftKey && event.key === 'Tab') return 'previous-session'
+  if (command && !event.shiftKey && /^[1-5]$/.test(event.key)) return INSPECTOR_SHORTCUTS[Number(event.key) - 1]
   if (command && key === 'k') return 'open-palette'
   if (command && key === 'n') return 'new-session'
   if (command && key === 'b' && event.shiftKey) return 'open-browser'

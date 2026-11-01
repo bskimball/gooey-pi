@@ -73,6 +73,11 @@ describe('extension broker HTTP contract', () => {
       bridge.onEvent(event => events.push(event))
       await fetch(`${base}/v1/extension/event`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'tab_updated', chromeTabId: clientId, title: 'Client' }) })
       expect(events[0].sessionKey).toBe('client-session')
+
+      // The popup's destination follows the latest session either app synced, with that app's label.
+      await client.call('sync_tab_state', { activeSessionKey: 'client-session', activeSessionLabel: 'Apex desktop · repo · Fix the build', tabs: [] })
+      expect(extension.commands.at(-1)!.params).toMatchObject({ activeSessionKey: 'client-session', activeSessionLabel: 'Apex desktop · repo · Fix the build' })
+      expect(await (await fetch(`${base}/v1/extension/hello`)).json()).toMatchObject({ activeSessionKey: 'client-session', activeSessionLabel: 'Apex desktop · repo · Fix the build' })
     } finally { await extension.stop() }
   })
 

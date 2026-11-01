@@ -180,3 +180,44 @@ describe('shipped extension contracts', () => {
     expect(SHIPPED_EXTENSION_FILENAMES).toEqual(actual)
   })
 })
+
+describe('describeEffectiveRunConfig', () => {
+  it('reports instruction sources and capability presence without touching Pi credential files', async () => {
+    const { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { describeEffectiveRunConfig } = await import('../../apps/desktop/electron/main/effective-run-config')
+    const root = mkdtempSync(join(tmpdir(), 'effective-config-'))
+    try {
+      const project = join(root, 'repo', 'pkg')
+      const agentDir = join(root, 'agent')
+      const assets = join(root, 'resources', 'extensions')
+      for (const dir of [project, join(project, '.agents', 'skills', 'one'), agentDir, assets, join(root, 'repo', '.git')]) mkdirSync(dir, { recursive: true })
+      writeFileSync(join(project, 'AGENTS.md'), 'project')
+      writeFileSync(join(project, 'CLAUDE.md'), 'shadowed by AGENTS.md')
+      writeFileSync(join(root, 'repo', 'AGENTS.md'), 'target!')
+      writeFileSync(join(root, 'repo', 'AGENTS.override.md'), 'override')
+      writeFileSync(join(root, 'AGENTS.md'), 'above the git root')
+      writeFileSync(join(agentDir, 'AGENTS.md'), 'global')
+      writeFileSync(join(agentDir, 'SYSTEM.md'), 'sys')
+      writeFileSync(join(agentDir, 'auth.json'), '{"secret":true}')
+      writeFileSync(join(assets, 'omp-work-ask-user.ts'), '')
+      const result = describeEffectiveRunConfig({ cwd: project, harness: 'pi', home: join(root, 'home'), agentDir, extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
+      expect(result.instructionSources.map(({ scope, kind, bytes }) => [scope, kind, bytes])).toEqual([['user', 'AGENTS.md', 6], ['project', 'AGENTS.md', 7], ['parent', 'AGENTS.override.md', 8], ['user', 'SYSTEM.md', 3]])
+      const linked = join(root, 'linked')
+      mkdirSync(linked)
+      try {
+        symlinkSync(join(root, 'repo', 'AGENTS.md'), join(linked, 'CLAUDE.md'))
+      } catch {
+        return // symlinks need privileges on Windows
+      }
+      const viaSymlink = describeEffectiveRunConfig({ cwd: linked, harness: 'pi', home: join(root, 'home'), agentDir: join(root, 'none'), extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
+      expect(viaSymlink.instructionSources.map(({ kind, bytes }) => [kind, bytes]).slice(0, 1)).toEqual([['CLAUDE.md', 7]])
+      expect(result.skillDirs).toEqual([{ path: join(project, '.agents', 'skills'), count: 1 }])
+      expect(result.injectedCapabilities.find(({ capability }) => capability === 'askUser')?.present).toBe(true)
+      expect(result.injectedCapabilities.find(({ capability }) => capability === 'schedule')?.present).toBe(false)
+      expect(JSON.stringify(result)).not.toContain('auth.json')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

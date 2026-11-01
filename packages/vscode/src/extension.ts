@@ -2,12 +2,17 @@ import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import { ApexSession } from './apex-session'
 import { editorFileContext } from './editor'
+import { DiagnosticActions, FIX_DIAGNOSTIC_COMMAND, selectionDraft } from './editor-commands'
+import { GitStatusSource } from './git-source'
 import type { HostMessage, WebviewMessage } from './protocol'
 
 class ApexViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined
   readonly session: ApexSession
   private started = false
+  private ready = false
+  private readonly pendingDrafts: string[] = []
+  readonly git = new GitStatusSource((git) => this.post({ type: 'git', git }))
   private resizeRequestId = 0
   private readonly resizeRequests = new Map<number, (data?: string) => void>()
 
@@ -18,19 +23,26 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(view: vscode.WebviewView) {
     this.view = view
+    this.ready = false
     const root = vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview')
     view.webview.options = { enableScripts: true, localResourceRoots: [root] }
     view.webview.html = this.html(view.webview, root)
     view.webview.onDidReceiveMessage((message: WebviewMessage) => {
       if (message.type === 'screenshotResized') this.resizeRequests.get(message.requestId)?.(message.data)
       else {
-        if (message.type === 'ready') this.postEditorContext()
+        if (message.type === 'ready') {
+          this.ready = true
+          this.postEditorContext()
+          this.post({ type: 'git', git: this.git.current })
+          if (this.pendingDrafts.length) this.post({ type: 'insertDraft', text: this.pendingDrafts.splice(0).join('\n\n') })
+        }
         void this.session.handle(message)
       }
     })
     view.onDidDispose(() => {
       if (this.view === view) {
         this.view = undefined
+        this.ready = false
         for (const finish of this.resizeRequests.values()) finish()
       }
     })
@@ -42,6 +54,13 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
 
   postEditorContext() {
     this.post({ type: 'editorContext', file: editorFileContext() })
+  }
+
+  /** Adds text to the composer draft without sending; held until the webview has loaded. */
+  insertDraft(text: string) {
+    this.reveal()
+    if (this.ready) this.post({ type: 'insertDraft', text })
+    else this.pendingDrafts.push(text)
   }
 
   reveal() {
@@ -98,10 +117,20 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
+/** VS Code already decoded the query. This URI has one parameter, whose value may contain '&' or '+'. */
+export function sessionPathFromUri(uri: Pick<vscode.Uri, 'path' | 'query'>): string | null {
+  return uri.path === '/open' && uri.query.startsWith('session=') ? uri.query.slice('session='.length) : null
+}
+
+let activeProvider: ApexViewProvider | undefined
+
 export function activate(context: vscode.ExtensionContext) {
   const provider = new ApexViewProvider(context.extensionUri)
+  activeProvider = provider
+  void provider.git.start()
   context.subscriptions.push(
     provider.session,
+    provider.git,
     vscode.window.onDidChangeActiveTextEditor(() => provider.postEditorContext()),
     vscode.window.onDidChangeTextEditorSelection(() => provider.postEditorContext()),
     vscode.workspace.onDidChangeTextDocument(() => provider.postEditorContext()),
@@ -112,10 +141,29 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('apex.newSession', () => provider.session.newSession()),
     vscode.commands.registerCommand('apex.stop', () => provider.session.stop()),
     vscode.commands.registerCommand('apex.restart', () => provider.session.start()),
+    vscode.commands.registerCommand('apex.continueInDesktop', () => provider.session.continueInDesktop()),
+    vscode.commands.registerCommand('apex.askAboutSelection', () => {
+      const draft = selectionDraft()
+      if (draft) provider.insertDraft(draft)
+      else void vscode.window.showInformationMessage('Apex: select some text in the editor first.')
+    }),
+    vscode.commands.registerCommand(FIX_DIAGNOSTIC_COMMAND, (draft: unknown) => { if (typeof draft === 'string') provider.insertDraft(draft) }),
+    vscode.languages.registerCodeActionsProvider([{ scheme: 'file' }, { scheme: 'untitled' }], new DiagnosticActions(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
+    // Apex desktop's "Continue in VS Code" opens vscode://bdkinc.apex-vscode/open?session=<path>.
+    vscode.window.registerUriHandler({
+      handleUri(uri) {
+        const session = sessionPathFromUri(uri)
+        if (!session) return
+        provider.reveal()
+        void provider.session.openFromDesktop(session)
+      },
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('apex.piPath')) void vscode.window.showInformationMessage('Apex: restart Pi to use the new pi path.', 'Restart Pi').then((choice) => { if (choice) provider.session.start() })
     }),
   )
 }
 
-export function deactivate() {}
+export function deactivate() {
+  return activeProvider?.session.dispose()
+}

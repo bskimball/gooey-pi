@@ -23,6 +23,9 @@
   [data-paused="true"] .agent-state .dot { background: var(--warn); }
   .hint { margin: 8px 0 0; color: var(--muted); font-size: 11.5px; }
   .hint:empty { display: none; }
+  .destination { margin: 10px 0 0; overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+  .destination:empty { display: none; }
+  .destination span { color: var(--muted); }
   .actions { display: grid; gap: 6px; margin-top: 14px; }
   button { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; color: var(--text); background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); font: inherit; font-size: 12.5px; font-weight: 580; cursor: pointer; transition: background 130ms ease-out, transform 100ms ease-out; }
   button:hover:not(:disabled) { background: #2a2e36; }
@@ -53,6 +56,7 @@
     <p class="tab-title" id="tab-title">This tab</p>
     <p class="tab-host" id="tab-host"></p>
     <p class="agent-state" role="status"><span class="dot" aria-hidden="true"></span><span id="agent-state"></span></p>
+    <p class="destination" id="destination"></p>
     <p class="hint" id="hint"></p>
   </section>
   <div class="actions">

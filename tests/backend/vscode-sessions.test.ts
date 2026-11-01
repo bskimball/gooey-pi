@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { diagnosticPrompt, selectionPrompt, SELECTION_CHAR_LIMIT } from '../../packages/vscode/src/editor-prompts'
+import { gitStatusFromRepository, GIT_ENTRY_LIMIT, type GitRepository } from '../../packages/vscode/src/git-status'
 import { PiRpc } from '../../packages/vscode/src/pi-rpc'
+import { sessionPathFromUri } from '../../packages/vscode/src/extension'
+import { VsCodeRuntimeOwner } from '../../packages/vscode/src/runtime-owner'
+import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
 import { listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
 
@@ -55,6 +60,120 @@ async function fixture(count = 1) {
   }
   return { cwd, root, paths }
 }
+
+describe('VS Code handoff lifecycle', () => {
+  it.each(['C:\\Users\\a+b&c%20#名\\session.jsonl', '/work/a+b&c=%25 #名/session.jsonl'])('decodes the handoff path once: %s', (path) => {
+    const wireQuery = `session=${encodeURIComponent(path)}`
+    // vscode.Uri exposes an already percent-decoded query, not a WHATWG query.
+    expect(sessionPathFromUri({ path: '/open', query: decodeURIComponent(wireQuery) })).toBe(path)
+    expect(sessionPathFromUri({ path: '/other', query: decodeURIComponent(wireQuery) })).toBeNull()
+  })
+
+  it('removes the owner only after an in-flight publication finishes and never republishes after disposal', async () => {
+    let finish!: () => void
+    const publish = vi.spyOn(runtimeOwners, 'publishRuntimeOwner').mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+    const remove = vi.spyOn(runtimeOwners, 'removeRuntimeOwner').mockImplementation(() => undefined)
+    const acquire = vi.spyOn(runtimeOwners, 'acquireRuntimeSession').mockReturnValue(() => undefined)
+    const owner = new VsCodeRuntimeOwner(() => '/repo')
+    try {
+      owner.set('/repo/session.jsonl')
+      await Promise.resolve()
+      expect(publish).toHaveBeenCalledOnce()
+      const disposed = owner.dispose()
+      owner.set('/repo/late.jsonl')
+      expect(remove).not.toHaveBeenCalled()
+      finish()
+      await disposed
+      await Promise.resolve()
+      expect(remove).toHaveBeenCalledOnce()
+      expect(publish).toHaveBeenCalledOnce()
+    } finally {
+      await owner.dispose()
+      publish.mockRestore()
+      remove.mockRestore()
+      acquire.mockRestore()
+    }
+  })
+
+  it('reserves before a VS Code attach and releases only the confirmed outgoing session', async () => {
+    const released: string[] = []
+    const acquire = vi.spyOn(runtimeOwners, 'acquireRuntimeSession').mockImplementation((path) => () => { released.push(path) })
+    const publish = vi.spyOn(runtimeOwners, 'publishRuntimeOwner').mockResolvedValue(undefined)
+    const remove = vi.spyOn(runtimeOwners, 'removeRuntimeOwner').mockImplementation(() => undefined)
+    const owner = new VsCodeRuntimeOwner(() => '/repo')
+    try {
+      owner.set('/repo/old.jsonl')
+      const finish = owner.reserve('/repo/next.jsonl')
+      expect(acquire).toHaveBeenCalledTimes(2)
+      owner.set('/repo/old.jsonl')
+      expect(released).toEqual([])
+      owner.set('/repo/next.jsonl')
+      expect(released).toHaveLength(1)
+      finish()
+      expect(released).toHaveLength(1)
+      owner.set(null) // Only the exit/detach callback is allowed to do this.
+      expect(released).toHaveLength(2)
+    } finally {
+      await owner.dispose()
+      acquire.mockRestore()
+      publish.mockRestore()
+      remove.mockRestore()
+    }
+  })
+
+  it('keeps ownership through a child shutdown flush', async () => {
+    const exited = vi.fn()
+    const rpc = new PiRpc(
+      { file: process.execPath, args: ['-e', `
+        process.stdin.resume();
+        process.stdin.once('data', data => {
+          const request = JSON.parse(data);
+          process.stdout.write(JSON.stringify({ type: 'response', id: request.id, success: true }) + '\\n');
+        });
+        process.stdin.on('end', () => setTimeout(() => process.exit(0), 150));
+      `] },
+      [], process.cwd(), () => undefined, exited,
+    )
+    await rpc.command('get_state')
+    const owner = { dispose: vi.fn(async () => { expect(exited).toHaveBeenCalledOnce() }) }
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc, owner, stopping: Promise.resolve(), launchGeneration: 0,
+      browser: { stop: vi.fn() }, statusItem: { dispose: vi.fn() },
+    })
+    session.dispose()
+    await Promise.resolve()
+    expect(owner.dispose).not.toHaveBeenCalled()
+    expect(exited).not.toHaveBeenCalled()
+    await session.stopping
+    await Promise.resolve()
+    expect(owner.dispose).toHaveBeenCalledOnce()
+    await rpc.dispose()
+    expect(exited).toHaveBeenCalledOnce()
+  })
+
+  it('does not clear ownership or restart while a previous child is stopping', async () => {
+    let finish!: () => void
+    const previous = { dispose: vi.fn(() => new Promise<void>((resolve) => { finish = resolve })) }
+    const owner = { set: vi.fn() }
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: previous, owner, stopping: Promise.resolve(), launchGeneration: 0,
+      browser: { capability: { revoke: vi.fn() }, start: vi.fn() },
+    })
+    const starting = session.start()
+    await Promise.resolve()
+    expect(previous.dispose).toHaveBeenCalledOnce()
+    expect(owner.set).not.toHaveBeenCalled()
+    expect(session.browser.start).not.toHaveBeenCalled()
+    // Supersede this launch while the old child is still exiting.
+    session.launchGeneration++
+    finish()
+    await starting
+    expect(owner.set).not.toHaveBeenCalled()
+    expect(session.browser.start).not.toHaveBeenCalled()
+  })
+})
 
 describe('VS Code RPC framing', () => {
   it('rejects pending commands and terminates Pi on an oversized unterminated frame', async () => {
@@ -332,5 +451,49 @@ describe('VS Code editor integration', () => {
       vi.unstubAllEnvs()
       vi.unstubAllGlobals()
     }
+  })
+
+  it('quotes a bounded selection in a fence its own backticks cannot close', () => {
+    const prompt = selectionPrompt({ path: 'src/a.ts', startLine: 3, endLine: 5, languageId: 'ts', text: '```\nx' })
+    expect(prompt).toBe('src/a.ts, lines 3-5:\n````ts\n```\nx\n````\n\n')
+    const long = selectionPrompt({ path: 'a', startLine: 1, endLine: 1, languageId: 'ts', text: 'y'.repeat(SELECTION_CHAR_LIMIT + 5) })
+    expect(long).toContain(`first ${SELECTION_CHAR_LIMIT} of ${SELECTION_CHAR_LIMIT + 5} characters`)
+  })
+
+  it('describes a diagnostic with its origin and surrounding line', () => {
+    const prompt = diagnosticPrompt({ path: 'a.ts', startLine: 2, endLine: 2, severity: 'error', source: 'ts', code: 2304, message: 'Cannot find name', lineText: 'foo()' })
+    expect(prompt).toContain('Fix this error in a.ts, line 2 (ts 2304)')
+    expect(prompt).toContain('Cannot find name')
+    expect(prompt).toContain('foo()')
+  })
+
+  it('maps vscode.git changes without inventing counts and bounds the list', () => {
+    const change = (status: number, name: string) => ({ uri: { fsPath: name }, status })
+    const repository: GitRepository = {
+      rootUri: { fsPath: '/r' },
+      state: {
+        HEAD: { name: 'main' },
+        indexChanges: [change(1, 'new.ts')],
+        workingTreeChanges: [change(5, 'a.ts'), change(7, 'u.ts'), change(8, 'ignored.ts')],
+        mergeChanges: [],
+        untrackedChanges: [change(7, 'u2.ts')],
+        onDidChange: () => ({ dispose() {} }),
+      },
+    }
+    expect(gitStatusFromRepository(repository, path => path)).toEqual({
+      isRepo: true,
+      branch: 'main',
+      lineCounts: false,
+      files: [
+        { path: 'new.ts', status: 'A', staged: true, additions: 0, deletions: 0 },
+        { path: 'a.ts', status: 'M', staged: false, additions: 0, deletions: 0 },
+        { path: 'u.ts', status: '??', staged: false, additions: 0, deletions: 0 },
+        { path: 'u2.ts', status: '??', staged: false, additions: 0, deletions: 0 },
+      ],
+    })
+    repository.state.workingTreeChanges = Array.from({ length: GIT_ENTRY_LIMIT + 1 }, (_, index) => change(5, `f${index}`))
+    const bounded = gitStatusFromRepository(repository, path => path)
+    expect(bounded.files).toHaveLength(GIT_ENTRY_LIMIT)
+    expect(bounded.truncated).toBe(true)
   })
 })

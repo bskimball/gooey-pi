@@ -1,5 +1,6 @@
 /* Modal and palette */
 .modal-backdrop, .palette-backdrop { position: fixed; z-index: 200; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6, 11, 18, .46); backdrop-filter: blur(4px); animation: fade-in 130ms ease-out; }
+.palette-backdrop { animation: none; }
 .modal { width: min(100%, 500px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: modal-in 150ms ease-out; }
 .modal__header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); }
 .modal__header h2 { margin: 0; font-size: 14px; font-weight: 560; }
@@ -34,7 +35,7 @@
 .extension-questionnaire__submit > button:not(:disabled):hover, .extension-questionnaire__submit > button:not(:disabled):focus-visible { color: var(--text); border-color: var(--success); background: var(--success-soft); }
 .extension-questionnaire__submit > button:disabled { cursor: not-allowed; opacity: .55; }
 .extension-questionnaire__submit p { margin: 0; color: var(--text-secondary); font-size: 11px; }
-.command-palette { width: min(100%, 580px); align-self: flex-start; margin-top: min(14vh, 110px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: palette-in 150ms ease-out; }
+.command-palette { width: min(100%, 580px); align-self: flex-start; margin-top: min(14vh, 110px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); }
 .command-search { height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--text-tertiary); }
 .command-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; }
 .command-search > button { padding: 0; background: transparent; }
@@ -45,7 +46,7 @@
 .command-results > button.is-active { color: var(--text); background: var(--surface-hover); }
 .command-results > button > span:first-child { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); }
 .command-results > button > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
-.command-results strong { font-size: 11.5px; font-weight: 540; }
+.command-results strong { overflow: hidden; font-size: 11.5px; font-weight: 540; white-space: nowrap; text-overflow: ellipsis; }
 .command-results small { overflow: hidden; color: var(--text-tertiary); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
 .command-results > p { padding: 26px; color: var(--text-tertiary); text-align: center; }
 .command-palette footer { height: 33px; display: flex; align-items: center; gap: 13px; padding: 0 12px; border-top: 1px solid var(--border); color: var(--text-tertiary); background: var(--surface-subtle); font-size: 9.5px; }
@@ -62,5 +63,4 @@
 @keyframes drawer-in { from { opacity: .7; transform: translateY(8px); } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(5px) scale(.99); } }
-@keyframes palette-in { from { opacity: 0; transform: translateY(-5px) scale(.995); } }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }

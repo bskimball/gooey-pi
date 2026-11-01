@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle,
   CircleNotch,
+  Code,
   Copy,
   DotsThree,
   Folder,
@@ -22,7 +23,7 @@ import {
   Trash,
 } from './icons'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type SessionRecord, type WorkspaceView } from '@/types/api'
+import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
@@ -55,12 +56,24 @@ export interface SidebarProps {
   onOpenPalette(): void
   onRenameSession(session: SessionRecord, title: string): Promise<void>
   onArchiveSession(session: SessionRecord): Promise<void>
+  /** Sessions held by another live Apex app, keyed by session file path. */
+  runtimeOwners?: ReadonlyMap<string, RuntimeOwnerView>
+  onContinueInVsCode?(session: SessionRecord): void
   overlay?: boolean
   platform?: NodeJS.Platform
 }
 
 const statusLabel: Record<SessionRecord['status'], string> = {
   idle: 'Idle', running: 'Running', waiting: 'Waiting for input', complete: 'Finished', failed: 'Failed', unknown: 'Unknown',
+}
+
+/** Short state text for a session row: what needs doing beats when it last changed. */
+function sessionRowState(session: SessionRecord, attention: boolean, owner?: RuntimeOwnerView): string {
+  if (session.status === 'running') return 'Working'
+  if (session.status === 'waiting') return 'Needs input'
+  if (owner) return owner.app === 'vscode' ? 'In VS Code' : 'In Apex'
+  if (attention) return session.status === 'failed' ? 'Failed' : 'Review'
+  return formatRelative(session.updatedAt, 'narrow')
 }
 
 export const SIDEBAR_SESSION_LIMIT = 7
@@ -146,7 +159,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -319,7 +332,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                         <div key={session.id} className={`session-row-wrap session-row-wrap--${session.status} ${needsAttention(session) ? 'has-attention' : ''} ${activeSessionId === session.id && activeView === 'session' ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`}>
                           <button type="button" title={session.title} className="session-row" onClick={() => { setSessionMenu(null); setQuery(''); revealProject(project.id); onSelectSession(session) }} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
                             <SessionStatusMark status={session.status} attention={needsAttention(session)} />
-                            <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{session.status === 'running' ? 'Working' : session.status === 'waiting' ? 'Needs input' : formatRelative(session.updatedAt, 'narrow')}</span></span>
+                            <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowState(session, needsAttention(session), runtimeOwners?.get(session.filePath))}</span></span>
                           </button>
                           <IconButton
                             size="small"
@@ -334,7 +347,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                             }}
                           >{archiveTarget?.id === session.id ? <Check size={13} /> : <Archive size={13}/>}</IconButton>
                           <IconButton size="small" className="session-row__more" aria-expanded={sessionMenu === session.id} label={`Session options for ${session.title}`} onClick={() => setSessionMenu((current) => current === session.id ? null : session.id)}><DotsThree size={13}/></IconButton>
-                          {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options"><button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button><button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button></div> : null}
+                          {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options"><button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button><button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button>{onContinueInVsCode && !runtimeOwners?.has(session.filePath) ? <button type="button" disabled={session.status === 'running'} title={session.status === 'running' ? 'Stop the current run before continuing in VS Code' : 'Stop this session here and open it in Apex for VS Code'} onClick={() => { setSessionMenu(null); onContinueInVsCode(session) }}><Code size={12}/> Continue in VS Code</button> : null}</div> : null}
                         </div>
                       ))}
                       {remaining > 0 ? <button type="button" className="session-row session-row--empty" onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
@@ -381,6 +394,8 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onOpenPalette === next.onOpenPalette
     && previous.onRenameSession === next.onRenameSession
     && previous.onArchiveSession === next.onArchiveSession
+    && previous.runtimeOwners === next.runtimeOwners
+    && previous.onContinueInVsCode === next.onContinueInVsCode
     && previous.overlay === next.overlay
     && previous.platform === next.platform
 }

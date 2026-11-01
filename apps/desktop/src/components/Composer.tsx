@@ -150,6 +150,8 @@ interface ComposerProps {
 	runtimeCommands?: readonly ComposerCommand[];
 	/** Runs app-level slash commands such as `/new` or `/name`. */
 	onCommand?(action: ComposerCommandAction): void;
+	/** A new `id` appends `text` to the draft without sending it. */
+	insertDraft?: { id: number; text: string };
 }
 
 const reasoningLabels: Record<PrimeThinkingLevel, string> = {
@@ -224,6 +226,7 @@ export const Composer = memo(function Composer({
 	fileRoot,
 	runtimeCommands,
 	onCommand,
+	insertDraft,
 }: ComposerProps) {
 	const modelControls = (
 		<>
@@ -299,6 +302,17 @@ export const Composer = memo(function Composer({
 		() => skills.filter((skill) => skill.enabled),
 		[skills],
 	);
+
+	const insertedDraftId = useRef(insertDraft?.id);
+	useEffect(() => {
+		if (!insertDraft || insertDraft.id === insertedDraftId.current) return;
+		insertedDraftId.current = insertDraft.id;
+		const current = textareaRef.current?.value ?? "";
+		const next = current ? `${current}\n\n${insertDraft.text}` : insertDraft.text;
+		setValue(next);
+		setCaret(next.length);
+		requestAnimationFrame(() => textareaRef.current?.focus());
+	}, [insertDraft]);
 
 	useEffect(() => {
 		if (!draftKey || restoredDraftRef.current) return;

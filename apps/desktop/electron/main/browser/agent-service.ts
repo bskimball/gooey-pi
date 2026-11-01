@@ -111,12 +111,14 @@ export class AgentBrowserService {
 		this.actionTimeoutMs = options.actionTimeoutMs ?? ACTION_TIMEOUT_MS;
 		options.extensionBridge?.setContext(() => ({
 			activeSessionKey: this.activeSessionKey,
+			activeSessionLabel: this.activeSessionLabel,
 			tabs: this.state().tabs.filter((tab) => tab.backend === "extension"),
 		}));
 		options.extensionBridge?.onEvent((event) => this.extensionEvent(event));
 	}
 
 	private activeSessionKey: string | null = null;
+	private activeSessionLabel: string | null = null;
 	getExtensionStatus() {
 		return {
 			connected: this.options.extensionBridge?.isConnected() ?? false,
@@ -151,10 +153,18 @@ export class AgentBrowserService {
 				: canonicalSessionPath(
 						requireString(value, "sessionKey", { min: 1, max: 4096 }),
 					);
+		const sessionKey = this.activeSessionKey;
+		const label = sessionKey
+			? await this.options.describeSession?.(sessionKey).catch(() => undefined)
+			: undefined;
+		// A newer call owns the extension's destination.
+		if (this.activeSessionKey !== sessionKey) return;
+		this.activeSessionLabel = label ?? null;
 		await this.options.extensionBridge?.setActiveSession(this.activeSessionKey);
 		if (this.options.extensionBridge?.isConnected())
 			await this.options.extensionBridge.call("sync_tab_state", {
 				activeSessionKey: this.activeSessionKey,
+				activeSessionLabel: this.activeSessionLabel,
 				tabs: this.state().tabs,
 			});
 		this.push();

@@ -15,7 +15,10 @@
     "Chat"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onUri",
+    "onStartupFinished"
+  ],
   "scripts": {
     "build:host": "vite build --config vite.host.config.ts && node scripts/copy-browser.mjs",
     "build:webview": "vite build",
@@ -65,9 +68,32 @@
         "title": "Restart Pi",
         "category": "Apex",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "apex.continueInDesktop",
+        "title": "Continue in Apex Desktop",
+        "category": "Apex"
+      },
+      {
+        "command": "apex.askAboutSelection",
+        "title": "Ask About Selection",
+        "category": "Apex"
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "apex.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@100"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "apex.askAboutSelection",
+          "when": "editorHasSelection"
+        }
+      ],
       "view/title": [
         {
           "command": "apex.newSession",
@@ -78,6 +104,11 @@
           "command": "apex.restart",
           "when": "view == apex.chat",
           "group": "navigation@2"
+        },
+        {
+          "command": "apex.continueInDesktop",
+          "when": "view == apex.chat",
+          "group": "1_handoff@1"
         }
       ]
     },

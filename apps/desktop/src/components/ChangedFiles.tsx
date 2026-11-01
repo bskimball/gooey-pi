@@ -23,15 +23,17 @@ function statusBadge(status: string): { code: string; name: string } {
 }
 
 /** Compact changed-file rows shared by the session header popover and the inline turn receipt. */
-export function ChangedFilesList({ files, id }: { files: GitFileChange[]; id?: string }) {
+export function ChangedFilesList({ files, id, lineCounts = true }: { files: GitFileChange[]; id?: string; lineCounts?: boolean }) {
   return <ul className="changed-files" id={id}>
     {files.map((file) => {
       const badge = statusBadge(file.status)
       return <li key={`${file.path}:${file.staged ? 's' : 'w'}`} className="changed-files__row">
         <span className={`changed-files__status is-${badge.name}`} title={badge.name} aria-label={badge.name}>{badge.code}</span>
         <span className="changed-files__path" title={file.path}>{file.path}</span>
-        <span className="diff-count diff-count--add">+{file.additions}</span>
-        <span className="diff-count diff-count--remove">−{file.deletions}</span>
+        {lineCounts ? <>
+          <span className="diff-count diff-count--add">+{file.additions}</span>
+          <span className="diff-count diff-count--remove">−{file.deletions}</span>
+        </> : null}
       </li>
     })}
   </ul>

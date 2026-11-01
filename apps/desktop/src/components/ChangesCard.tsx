@@ -14,7 +14,7 @@ export function ChangesCard({ git, onOpenChanges, onClose }: ChangesCardProps) {
     <button type="button" className="changes-card__open" onClick={onOpenChanges}>
       <span className="changes-card__icon"><FileCode size={16} /></span>
       <span className="changes-card__text"><strong>{git.files.length} {git.files.length === 1 ? 'file' : 'files'} changed</strong><small>Review changes in the inspector</small></span>
-      <span className="diff-count diff-count--add">+{additions}</span><span className="diff-count diff-count--remove">−{deletions}</span><CaretRight size={14} />
+      {git.lineCounts === false ? null : <><span className="diff-count diff-count--add">+{additions}</span><span className="diff-count diff-count--remove">−{deletions}</span></>}<CaretRight size={14} />
     </button>
     {onClose ? <button type="button" className="changes-card__close" aria-label="Dismiss file changes" title="Dismiss file changes" onClick={onClose}><X size={15} /></button> : null}
   </div>

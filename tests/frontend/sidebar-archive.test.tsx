@@ -214,6 +214,10 @@ describe('sidebar project working set', () => {
     expect(container.querySelector('.session-row__meta')?.getAttribute('title')).toBe('10 minutes ago')
     await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'waiting' }] })
     expect(container.querySelector('.session-row__meta')?.textContent).toBe('Needs input')
+    await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'complete', unread: true }] })
+    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Review')
+    await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'failed' }] })
+    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Failed')
   })
 
   it('keeps activity indicators visible while collapsed and links to work outside the recent list', async () => {

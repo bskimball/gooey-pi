@@ -15,6 +15,7 @@ import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc
 import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
 import type { RuntimeInfo } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
+import { acquireRuntimeSession } from 'apex-core/sessions/runtime-owners'
 
 const dirs: string[] = []
 const managers: AgentRpcManager[] = []
@@ -93,6 +94,8 @@ function fakeAgent(promptResponse: string, stateResponse?: string, exitDelayMs =
 const readline = require('node:readline')
 const input = readline.createInterface({ input: process.stdin })
 let stateCalls = 0
+const sessionArg = process.argv.indexOf('--session')
+let sessionFile = sessionArg < 0 ? require('node:path').join(process.cwd(), 'generated.jsonl') : process.argv[sessionArg + 1]
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
 input.on('line', (line) => {
   const command = JSON.parse(line)
@@ -106,6 +109,11 @@ input.on('line', (line) => {
     send({ id: command.id, type: 'response', command: 'abort', success: true })
   } else if (command.type === 'set_service_tier') {
     send({ id: command.id, type: 'response', command: 'set_service_tier', success: true })
+  } else if (command.type === 'switch_session' || command.type === 'new_session') {
+    const cancelled = command.sessionPath?.includes('cancelled')
+    const rejected = command.sessionPath?.includes('rejected')
+    if (!cancelled && !rejected) sessionFile = command.sessionPath || require('node:path').join(process.cwd(), 'new-session.jsonl')
+    send({ id: command.id, type: 'response', command: command.type, success: !rejected, error: rejected ? 'switch rejected' : undefined, data: { cancelled } })
   }
 })
 input.on('close', () => {
@@ -1018,6 +1026,77 @@ setInterval(() => {}, 1000)
 
     await shutdownManager.stopAll()
     expect(shutdownEnded).toHaveBeenCalledOnce()
+  })
+
+  it('atomically admits one of two competing starts and retains its claim until child close', async () => {
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", "{ id: command.id, type: 'response', command: command.type, success: true, data: { sessionFile, isStreaming: false } }", 150)
+    const path = join(fake.cwd, 'held.jsonl')
+    const acquire = (file: string) => acquireRuntimeSession(file, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, fake.cwd)
+    const contenders = [managerFor(fake.executable), managerFor(fake.executable)]
+    for (const manager of contenders) manager.setSessionClaimProvider(acquire)
+    const results = await Promise.allSettled(contenders.map((manager) => manager.start({ cwd: fake.cwd, sessionPath: path })))
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    const index = results.findIndex((result) => result.status === 'fulfilled')
+    const stopping = contenders[index].stopAll()
+    expect(() => acquire(path)).toThrow('This session is open')
+    await stopping
+    acquire(path)()
+  })
+
+  it('claims discovered sessions immediately, releases detached paths, and rolls back cancelled switches', async () => {
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", "{ id: command.id, type: 'response', command: command.type, success: true, data: { sessionFile, isStreaming: false } }")
+    const acquire = (file: string) => acquireRuntimeSession(file, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, fake.cwd)
+    const manager = managerFor(fake.executable)
+    manager.setSessionClaimProvider(acquire)
+    const runtime = await manager.start({ cwd: fake.cwd })
+    const generated = join(fake.cwd, 'generated.jsonl')
+    expect(() => acquire(generated)).toThrow('This session is open')
+    const cancelled = join(fake.cwd, 'cancelled.jsonl')
+    await manager.command(runtime.runtimeId, { type: 'switch_session', sessionPath: cancelled })
+    acquire(cancelled)()
+    expect(() => acquire(generated)).toThrow('This session is open')
+    const switched = join(fake.cwd, 'switched.jsonl')
+    await manager.command(runtime.runtimeId, { type: 'switch_session', sessionPath: switched })
+    acquire(generated)()
+    expect(() => acquire(switched)).toThrow('This session is open')
+    await manager.command(runtime.runtimeId, { type: 'new_session' })
+    acquire(switched)()
+    const fresh = join(fake.cwd, 'new-session.jsonl')
+    expect(() => acquire(fresh)).toThrow('This session is open')
+    const rejected = join(fake.cwd, 'rejected.jsonl')
+    await expect(manager.command(runtime.runtimeId, { type: 'switch_session', sessionPath: rejected })).rejects.toThrow('switch rejected')
+    acquire(rejected)()
+    acquire(fresh)()
+  })
+
+  it('releases pre-attach claims after a failed handshake has stopped its child', async () => {
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", "{ id: command.id, type: 'response', command: command.type, success: false, error: 'handshake rejected' }")
+    const acquire = (file: string) => acquireRuntimeSession(file, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, fake.cwd)
+    const manager = managerFor(fake.executable)
+    manager.setSessionClaimProvider(acquire)
+    const path = join(fake.cwd, 'failed.jsonl')
+    await expect(manager.start({ cwd: fake.cwd, sessionPath: path })).rejects.toThrow('handshake rejected')
+    acquire(path)()
+  })
+
+  it('refuses to attach a runtime to a session the attach guard rejects, before spawning', async () => {
+    const sessionFile = '/sessions/held-elsewhere.jsonl'
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
+    const manager = managerFor(fake.executable)
+    const guard = vi.fn(async (path: string) => { if (path === sessionFile) throw new Error('This session is open in VS Code · repo.') })
+    const ended = vi.fn()
+    manager.setSessionAttachGuard(guard)
+    manager.setRuntimeEndListener(ended)
+
+    await expect(manager.start({ cwd: fake.cwd, sessionPath: sessionFile })).rejects.toThrow('open in VS Code')
+    expect(manager.list()).toEqual([])
+    expect(ended).not.toHaveBeenCalled()
+
+    const fresh = await manager.start({ cwd: fake.cwd })
+    expect(guard).toHaveBeenCalledTimes(1)
+    await expect(manager.command(fresh.runtimeId, { type: 'switch_session', sessionPath: sessionFile })).rejects.toThrow('open in VS Code')
+    await manager.stopAll()
   })
 
 })

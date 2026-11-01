@@ -52,6 +52,9 @@
 .transcript-changes-pin, .composer-wrap { position: absolute; inset: auto 24px 13px; z-index: 10; }
 .conversation-bottom-dock { position: relative; inset: auto; z-index: 10; flex: 0 0 auto; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 24px 12px; pointer-events: auto; }
 .conversation-bottom-dock .composer-wrap { position: relative; inset: auto; width: 100%; margin: 0; }
+.runtime-owner-notice { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); background: var(--surface-subtle); font-size: 11.5px; line-height: 1.4; }
+.runtime-owner-notice svg { flex: 0 0 auto; color: var(--accent); }
+.runtime-owner-notice strong { color: var(--text); font-weight: 560; }
 
 .changed-files { margin: 0; padding: 0; list-style: none; }
 .changed-files__row { min-height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 6px; border-radius: 5px; font-size: 11px; }

@@ -5,7 +5,8 @@ import { isRecord } from '../validation'
 import type { SessionMetadata } from './metadata'
 
 const MAX_CACHE_BYTES = 32 * 1024 * 1024
-const CACHE_SCHEMA_VERSION = 2
+// Bumped when derived fields change meaning (3: prompt-derived titles drop conversational lead-ins).
+const CACHE_SCHEMA_VERSION = 3
 
 function parseMetadata(value: unknown): SessionMetadata | undefined {
   if (!isRecord(value)) return undefined

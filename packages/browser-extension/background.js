@@ -2,6 +2,7 @@ const DEFAULT_BRIDGE = 'http://127.0.0.1:29301'
 let base = DEFAULT_BRIDGE
 let token = null
 let activeSessionKey = null
+let activeSessionLabel = null
 let connected = false
 let connecting = false
 let retryMs = 1000
@@ -76,7 +77,10 @@ function execute(command) {
 async function executeNow({ method, params }) {
   const id = params.chromeTabId
   if (method === 'sync_tab_state') {
-    if ('activeSessionKey' in params) activeSessionKey = params.activeSessionKey
+    if ('activeSessionKey' in params) {
+      activeSessionKey = params.activeSessionKey
+      activeSessionLabel = typeof params.activeSessionLabel === 'string' ? params.activeSessionLabel : null
+    }
     if (Array.isArray(params.tabs)) {
       tabs.clear()
       for (const tab of params.tabs) if (Number.isInteger(tab.chromeTabId)) tabs.set(tab.chromeTabId, tab)
@@ -149,6 +153,7 @@ async function connect() {
     const state = await hello.json()
     token = state.token
     activeSessionKey = state.activeSessionKey
+    activeSessionLabel = typeof state.activeSessionLabel === 'string' ? state.activeSessionLabel : null
     const previous = new Map(tabs)
     tabs.clear()
     for (const tab of state.tabs || []) {
@@ -199,7 +204,7 @@ async function connect() {
 
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   void (async () => {
-    if (message.type === 'GET_STATE') return { connected, activeSessionKey, tabs: [...tabs.values()], senderTabId: sender.tab?.id }
+    if (message.type === 'GET_STATE') return { connected, activeSessionKey, activeSessionLabel, tabs: [...tabs.values()], senderTabId: sender.tab?.id }
     const tab = sender.tab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
     const id = message.chromeTabId ?? tab?.id
     if (!Number.isInteger(id)) throw new Error('No browser tab selected')

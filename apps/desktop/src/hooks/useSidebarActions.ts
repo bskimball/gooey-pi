@@ -14,6 +14,7 @@ type SidebarActions = Pick<SidebarProps,
   | 'onOpenPalette'
   | 'onRenameSession'
   | 'onArchiveSession'
+  | 'onContinueInVsCode'
 >
 
 export interface SidebarActionProxy {
@@ -38,6 +39,7 @@ export function createSidebarActionProxy(initialActions: SidebarActions): Sideba
       onOpenPalette: () => current.onOpenPalette(),
       onRenameSession: (session, title) => current.onRenameSession(session, title),
       onArchiveSession: (session) => current.onArchiveSession(session),
+      onContinueInVsCode: (session) => current.onContinueInVsCode?.(session),
     },
     update(actions) { current = actions },
   }

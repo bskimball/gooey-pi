@@ -20,6 +20,7 @@ import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
 import { SpecialistsPanel } from "./inspector/SpecialistsPanel";
 import { SummaryPanel } from "./inspector/SummaryPanel";
+import { createReadinessSelector } from "./inspector/readiness";
 import { createSessionSummarySelector } from "./inspector/session-summary";
 import { IconButton, useFocusTrap } from "./ui";
 
@@ -38,6 +39,8 @@ export interface InspectorProps {
 	project?: ProjectRecord;
 	cwd?: string;
 	runtime?: RuntimeInfo | null;
+	/** Behavior mode reported for the active session, if any. */
+	behaviorMode?: string;
 	messages: TranscriptMessage[];
 	git: GitStatus;
 	automations: AutomationScheduleRecord[];
@@ -88,6 +91,8 @@ export const Inspector = memo(function Inspector({
 	onSelectSpecialist,
 	project,
 	cwd,
+	runtime,
+	behaviorMode,
 	messages,
 	git,
 	automations,
@@ -119,6 +124,8 @@ export const Inspector = memo(function Inspector({
 	const inspectorRef = useFocusTrap<HTMLElement>(overlay, onClose);
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
+	const [selectReadiness] = useState(createReadinessSelector);
+	const readiness = useMemo(() => selectReadiness(messages), [messages, selectReadiness]);
 	const specialistCount = summary.specialists.length;
 	const moveTab = (current: number, key: string) => {
 		let next = current;
@@ -191,7 +198,12 @@ export const Inspector = memo(function Inspector({
 				{activeTab === "summary" ? (
 					<div className="inspector-scroll scroll-area">
 						<SummaryPanel
+							runtime={runtime}
+							behaviorMode={behaviorMode}
+							cwd={cwd}
+							sessionKey={agentSessionKey}
 							summary={summary}
+							readiness={readiness}
 							git={git}
 							automations={automations}
 							onOpenAutomation={onOpenAutomation}
