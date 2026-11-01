@@ -91,7 +91,8 @@ function parseCommand(command: string): { simple: SimpleCommand[]; opaque: boole
   }
   return {
     simple,
-    opaque: /`|\$\(/.test(stripped),
+    // Command substitution and background jobs (a lone `&`) hide the exit status of what they run.
+    opaque: /`|\$\(|(?:^|[^&>])&(?![&>])/.test(stripped),
     redirects: stripped.replace(/\d?>&\d|>\s*(?:\/dev\/null|nul)\b/gi, '').includes('>'),
   }
 }

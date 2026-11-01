@@ -174,7 +174,7 @@ describe('readiness extraction', () => {
   })
 
   it('reports masked exit status as unknown and keeps an earlier failure unless a later run passes', () => {
-    for (const command of ['npm test || true', 'npm test | tail -n 1', 'npm test; echo done', 'npm test || :', 'npm test | tee out.log', 'npm test && echo done || true', 'npm test && echo done; echo done', 'npm test && echo done', 'npm test && npx eslint a.ts > a.ts', 'npm test && npx eslint "--fix" a.ts']) {
+    for (const command of ['npm test || true', 'npm test | tail -n 1', 'npm test; echo done', 'npm test || :', 'npm test | tee out.log', 'npm test && echo done || true', 'npm test && echo done; echo done', 'npm test && echo done', 'npm test && npx eslint a.ts > a.ts', 'npm test && npx eslint "--fix" a.ts', 'npm test & npm run lint & wait']) {
       expect(outcomes(run('t', command, 'ok'))[0]).toEqual(['test', 'unknown'])
     }
     expect(outcomes(run('t', 'npm test && npx eslint --fix a.ts', 'ok'))).toEqual([['test', 'unknown'], ['lint', 'passed']])
