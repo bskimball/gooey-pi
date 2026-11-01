@@ -48,7 +48,7 @@ export async function killProcessTree(child, platform = process.platform) {
         const killer = spawn(taskkill.command, taskkill.args, { stdio: 'ignore', windowsHide: true, timeout: 5_000 })
         killer.once('error', resolveKill)
         killer.once('close', resolveKill)
-      } catch { resolveKill() }
+      } catch { resolveKill(undefined) }
     })
     if (child.exitCode === null && child.signalCode === null) {
       try { child.kill('SIGKILL') } catch { /* already exited */ }
