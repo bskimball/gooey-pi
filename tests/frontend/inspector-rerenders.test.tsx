@@ -6,8 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../apps/desktop/src/App'
 import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../apps/desktop/src/hooks/useBrowserAnnotations'
 import type { InspectorProps } from '../../apps/desktop/src/components/Inspector'
+import { RunConfigSection } from '../../apps/desktop/src/components/inspector/RunConfigSection'
 import { SpecialistsPanel } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
-import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { EffectiveRunConfig, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -393,5 +394,70 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     expect(container.textContent).toContain('New specialist output at bottom')
     expect(container.querySelector('.specialist-result')?.textContent).toContain('ResultNew specialist output at bottom')
     expect(bodyScroller!.scrollTop).toBe(120)
+  })
+})
+
+describe('RunConfigSection disclosure and formatting', () => {
+  it('starts collapsed with a compact summary and expands to show formatted instructions, skills, and extension chips', async () => {
+    const effectiveConfig: EffectiveRunConfig = {
+      instructionSources: [
+        { scope: 'user', kind: 'AGENTS.md', path: '/home/user/.pi/agent/AGENTS.md', bytes: 512 },
+        { scope: 'project', kind: 'AGENTS.md', path: '/repo/project/AGENTS.md', bytes: 2458 },
+      ],
+      skillDirs: [
+        { path: '/repo/project/.agents/skills', count: 4 },
+      ],
+      injectedCapabilities: [
+        { capability: 'piFastMode', filename: 'pi-work-fast-mode.ts', present: true },
+        { capability: 'schedule', filename: 'omp-work-schedules.ts', present: false },
+      ],
+    }
+    Object.defineProperty(window, 'prime', {
+      configurable: true,
+      value: { runtime: { effectiveConfig: vi.fn(async () => effectiveConfig) } },
+    })
+
+    const runtime: RuntimeInfo = {
+      runtimeId: 'rt-1',
+      harness: 'pi',
+      cwd: '/repo/project',
+      isStreaming: false,
+      thinkingLevel: 'high',
+      model: { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic' },
+    }
+
+    await act(async () => {
+      root.render(
+        <RunConfigSection
+          runtime={runtime}
+          behaviorMode="Regular"
+          cwd="/repo/project"
+          sessionKey="session-1"
+        />,
+      )
+    })
+    await act(async () => {})
+
+    const toggle = container.querySelector<HTMLButtonElement>('.run-config__toggle')
+    expect(toggle).not.toBeNull()
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('.run-config__summary')?.textContent).toBe('Claude Sonnet 4.6 · high · Regular')
+    expect(container.querySelector('.run-config__alert')?.getAttribute('title')).toBe('1 bundled extension missing')
+    expect(container.querySelector('.run-config__body')).toBeNull()
+
+    await act(async () => { toggle?.click() })
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    const body = container.querySelector('.run-config__body')
+    expect(body).not.toBeNull()
+    expect(body?.textContent).toContain('2 files · 4 skills')
+    expect(body?.textContent).toContain('512 B')
+    expect(body?.textContent).toContain('2.4 KB')
+    expect(body?.textContent).toContain('.agents/skills')
+    expect(body?.textContent).toContain('1/2 bundled')
+    expect(body?.textContent).toContain('Fast mode')
+    expect(body?.textContent).toContain('Schedules')
+    expect(container.querySelector('.run-config__chips li.is-missing')?.textContent).toBe('Schedules')
+
+    Reflect.deleteProperty(window, 'prime')
   })
 })
