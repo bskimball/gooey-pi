@@ -75,7 +75,7 @@ const isExploreTool = (name: string) => READ_TOOLS.test(name) || SEARCH_TOOLS.te
 
 const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`
 
-interface RunMember { failed: boolean; search: boolean; label: string }
+interface RunMember { failed: boolean; running: boolean; search: boolean; label: string }
 
 function exploreLabel(part: Extract<MessagePart, { type: 'toolCall' }>): string {
   const preview = toolPreview(part)
@@ -86,14 +86,15 @@ function ToolRun({ members, children }: { members: RunMember[]; children: ReactE
   const [open, setOpen] = useState(false)
   const bodyId = useId()
   const failed = members.filter((member) => member.failed).length
+  const running = members.some((member) => member.running)
   const searches = members.filter((member) => member.search).length
   const reads = members.length - searches
   const label = reads ? `Read ${plural(reads, 'file')}${searches ? `, ${plural(searches, 'search', 'searches')}` : ''}` : `Ran ${plural(searches, 'search', 'searches')}`
   const names = members.map((member) => member.label).filter(Boolean)
   return (
-    <div className={`activity-run activity-line--file ${failed ? 'is-error' : 'is-done'}`}>
+    <div className={`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`}>
       <button type="button" className="activity-run__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-        <span className="activity-line__icon">{toolIcon('file')}</span>
+        <span className="activity-line__icon">{running ? <CircleNotch className="spin" size={14} /> : toolIcon('file')}</span>
         <span className="activity-run__label">{label}</span>
         {names.length ? <span className="activity-run__names">{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
         {failed ? <span className="activity-run__failed"><WarningCircle size={12} /> {failed} failed</span> : null}
@@ -116,10 +117,11 @@ export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): s
 }
 
 /** Reasoning stays readable while its turn runs; once the turn settles it folds to one quiet line. */
-function ReasoningPart({ part, live = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean }) {
+function ReasoningPart({ part, live = false, streaming = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
-  const body = <MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={live} />
+  if (live && !part.text.trim()) return null
+  const body = <MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} />
   if (live) return <div className="activity-line activity-line--reasoning">{body}</div>
   return <div className="activity-line activity-line--reasoning is-collapsed">
     <button type="button" className="activity-thought__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
@@ -340,12 +342,13 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
   const runMembers = new Map<string, RunMember>()
   const items = parts.map((part, index) => {
     const key = partKey(part, index)
+    const isTailPart = streaming && index === parts.length - 1
     if (absorbed.has(part) || part.type === 'toolResult' && pairedResults.has(index)) return null
     if (part.type === 'compaction') {
       if (part.status === 'running') pendingKeys.add(key)
       return <CompactionPart key={key} part={part} />
     }
-    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} /> : null
+    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} streaming={isTailPart} /> : null
     if (part.type === 'toolCall') {
       if (!showTools) return null
       const next = parts[index + 1]
@@ -354,22 +357,27 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       const result = next?.type === 'toolResult' ? next : undefined
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
       if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <SubagentLane key={key} part={part} result={result} followUps={followUps.get(part)} />
-      if (result && !result.streaming && isExploreTool(part.name)) runMembers.set(key, { failed: Boolean(result.isError), search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
+      if (isExploreTool(part.name)) {
+        const running = streaming && (!result || Boolean(result.streaming))
+        runMembers.set(key, { failed: Boolean(result?.isError), running, search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
+      }
       return <ToolPart key={key} part={part} result={result} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
-    if (part.type === 'text') return <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={streaming} /></div>
+    if (part.type === 'text') return part.text.trim() || !streaming ? <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={isTailPart} /></div> : null
     return null
   }).filter((row) => row !== null)
-  // Back-to-back settled reads and searches fold into a single row; edits, commands, plans, and agents stay in the stream.
+  // Back-to-back reads and searches fold into a single row; edits, commands, plans, and agents stay in the stream.
   const rows: ReactElement[] = []
   for (let index = 0; index < items.length;) {
     let end = index
     while (end < items.length && runMembers.has(String(items[end].key))) end += 1
     if (end - index >= 2) {
       const members = items.slice(index, end)
-      rows.push(<ToolRun key={`run:${String(items[index].key)}`} members={members.map((row) => runMembers.get(String(row.key))!)}>{members}</ToolRun>)
+      const runKey = `run:${String(items[index].key)}`
+      if (members.some((row) => row.key !== null && pendingKeys.has(String(row.key)))) pendingKeys.add(runKey)
+      rows.push(<ToolRun key={runKey} members={members.map((row) => runMembers.get(String(row.key))!)}>{members}</ToolRun>)
     } else {
       end = Math.max(end, index + 1)
       rows.push(...items.slice(index, end))
@@ -382,7 +390,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     const start = index * TIMELINE_PAGE_SIZE
     const page = rows.slice(start, start + TIMELINE_PAGE_SIZE)
     const recent = index >= pageCount - RECENT_TIMELINE_PAGES || page.some((row) => row.key !== null && pendingKeys.has(String(row.key)))
-    pages.push(<TimelinePage key={page[0].key} recent={recent} start={start + 1} count={page.length}>{page}</TimelinePage>)
+    pages.push(<TimelinePage key={`page:${start}`} recent={recent} start={start + 1} count={page.length}>{page}</TimelinePage>)
   }
   return <div className="work-timeline" id={id}>{pages}</div>
 }

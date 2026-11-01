@@ -103,6 +103,97 @@ describe('timeline part identity', () => {
     expect(container.querySelectorAll('.activity-run__items .activity-line--tool')).toHaveLength(2)
   })
 
+  it('folds running explore tools in place without remounting the timeline page when they settle', () => {
+    act(() => {
+      root.render(createElement(WorkTimeline, {
+        parts: [
+          { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'a.ts' } },
+          { type: 'toolCall', id: 'grep-1', name: 'ffgrep', args: { pattern: 'b' } },
+        ],
+        showReasoning: true,
+        showTools: true,
+        streaming: true,
+      }))
+    })
+    const pageBody = container.querySelector('.timeline-page__body')
+    const runRow = container.querySelector('.activity-run')
+    expect(pageBody).not.toBeNull()
+    expect(runRow?.classList.contains('is-running')).toBe(true)
+    expect(container.querySelectorAll('.timeline-page__body > *')).toHaveLength(1)
+
+    act(() => {
+      root.render(createElement(WorkTimeline, {
+        parts: [
+          { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'a.ts' } },
+          { type: 'toolResult', name: 'read', text: 'a' },
+          { type: 'toolCall', id: 'grep-1', name: 'ffgrep', args: { pattern: 'b' } },
+          { type: 'toolResult', name: 'ffgrep', text: 'b' },
+        ],
+        showReasoning: true,
+        showTools: true,
+        streaming: true,
+      }))
+    })
+    expect(container.querySelector('.timeline-page__body')).toBe(pageBody)
+    expect(container.querySelector('.activity-run')).toBe(runRow)
+    expect(runRow?.classList.contains('is-done')).toBe(true)
+    expect(container.querySelectorAll('.timeline-page__body > *')).toHaveLength(1)
+  })
+
+  it('observes .transcript__inner during streaming and pins delayed growth only while pinned to bottom', () => {
+    const observed: Element[] = []
+    let innerResizeCallback: ResizeObserverCallback | undefined
+    const OriginalResizeObserver = globalThis.ResizeObserver
+    class MockResizeObserver {
+      private readonly cb: ResizeObserverCallback
+      constructor(cb: ResizeObserverCallback) { this.cb = cb }
+      observe(target: Element) {
+        observed.push(target)
+        if (target.classList.contains('transcript__inner')) innerResizeCallback = this.cb
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
+    try {
+      const git = { isRepo: false, files: [] }
+      const noop = () => undefined
+      act(() => {
+        root.render(createElement(Transcript, {
+          messages: [{ id: 'live', role: 'assistant', streaming: true, parts: [{ type: 'thinking', text: 'Initial thought.' }] }],
+          git,
+          active: true,
+          onOpenChanges: noop,
+          onSuggestion: noop,
+        }))
+      })
+
+      const scroller = container.querySelector<HTMLDivElement>('.transcript')!
+      const inner = container.querySelector<HTMLDivElement>('.transcript__inner')!
+      expect(observed).toContain(inner)
+      expect(observed.some((element) => element.classList.contains('sr-only'))).toBe(false)
+
+      let scrollHeight = 600
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 200 })
+      Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => scrollHeight })
+
+      // Delayed Markdown flush increases content height without re-rendering Transcript:
+      scrollHeight = 760
+      act(() => { innerResizeCallback?.([], {} as ResizeObserver) })
+      expect(scroller.scrollTop).toBe(560)
+
+      // User scrolls up to read earlier history:
+      scroller.scrollTop = 100
+      act(() => { scroller.dispatchEvent(new Event('scroll')) })
+
+      scrollHeight = 900
+      act(() => { innerResizeCallback?.([], {} as ResizeObserver) })
+      expect(scroller.scrollTop).toBe(100)
+    } finally {
+      globalThis.ResizeObserver = OriginalResizeObserver
+    }
+  })
+
   it('shows edit diffs inline by default and labels ranged reads', () => {
     renderTimeline({
       id: 'edits', role: 'assistant', parts: [

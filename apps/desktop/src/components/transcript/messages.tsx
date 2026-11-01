@@ -34,7 +34,10 @@ function renderImage(part: Extract<MessagePart, { type: 'image' }>, key: string)
 
 export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false) {
   return parts.map((part, index) => {
-    if (part.type === 'text') return <MarkdownText key={`${keyPrefix}-${index}`} text={part.text} streaming={streaming} />
+    if (part.type === 'text') {
+      if (streaming && !part.text.trim()) return null
+      return <MarkdownText key={`${keyPrefix}-${index}`} text={part.text} streaming={streaming && index === parts.length - 1} />
+    }
     if (part.type === 'image') return renderImage(part, `${keyPrefix}-${index}`)
     return null
   })

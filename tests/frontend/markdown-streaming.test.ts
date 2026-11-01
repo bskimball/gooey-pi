@@ -68,4 +68,29 @@ describe('streaming Markdown rendering', () => {
     expect(container.textContent).toBe('Let me do some web searches|.')
     expect(container.querySelectorAll('.prose > p')).toHaveLength(1)
   })
+
+  it('holds back incomplete trailing Setext underlines, bare markers, and partial code fences while streaming', () => {
+    const render = (text: string, streaming = true) => act(() => root.render(createElement(MarkdownText, { text, streaming })))
+
+    render('First paragraph\n-')
+    expect(container.querySelector('h2')).toBeNull()
+    expect(container.querySelector('p')?.textContent).toBe('First paragraph')
+
+    act(() => vi.advanceTimersByTime(STREAMING_PARSE_INTERVAL_MS))
+    render('First paragraph\n- First item\n-')
+    expect(container.querySelector('h2')).toBeNull()
+    expect(container.querySelectorAll('li')).toHaveLength(1)
+
+    act(() => vi.advanceTimersByTime(STREAMING_PARSE_INTERVAL_MS))
+    render('First paragraph\n- First item\n- Second item\n\n```ts')
+    expect(container.querySelectorAll('li')).toHaveLength(2)
+    expect(container.querySelector('pre')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(STREAMING_PARSE_INTERVAL_MS))
+    render('First paragraph\n- First item\n- Second item\n\n```ts\nconst x = 1\n``')
+    expect(container.querySelector('pre')?.textContent?.trim()).toBe('const x = 1')
+
+    render('First paragraph\n- First item\n- Second item\n\n```ts\nconst x = 1\n```', false)
+    expect(container.querySelector('pre')?.textContent?.trim()).toBe('const x = 1')
+  })
 })

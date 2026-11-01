@@ -60,6 +60,24 @@ const markdownComponents: Components = {
 
 export const STREAMING_PARSE_INTERVAL_MS = 100
 
+const INCOMPLETE_BLOCK_MARKER_LINE =
+  /[ \t]*(?:(?:[-=*+_][ \t]*)+|(?:\d+[.)]|#{1,6}|(?:>[ \t]*)+)[ \t]*|`{3}[ \t]*[^\n`]*|`{1,2}[ \t]*|~{3}[ \t]*[^\n~]*|~{1,2}[ \t]*)[ \t]*\r?\n?$/
+const INCOMPLETE_TRAILING_BLOCK_LINE = new RegExp(`(?:\\r?\\n${INCOMPLETE_BLOCK_MARKER_LINE.source})+$`)
+const INCOMPLETE_INITIAL_BLOCK_LINE = new RegExp(`^${INCOMPLETE_BLOCK_MARKER_LINE.source}`)
+
+/**
+ * Holds back an incomplete trailing block-syntax line (such as a bare `-` Setext
+ * underline / list marker, `### ` heading prefix, or half-typed code fence)
+ * while streaming so CommonMark does not briefly promote the previous paragraph
+ * into an `<h2>`, flash an `<hr>`, or add/remove a phantom code-fence line.
+ */
+export function stabilizeStreamingMarkdown(text: string): string {
+  if (!text) return text
+  const trimmed = text.replace(INCOMPLETE_TRAILING_BLOCK_LINE, '')
+  if (trimmed !== text) return trimmed
+  return INCOMPLETE_INITIAL_BLOCK_LINE.test(text) ? '' : text
+}
+
 export interface StreamingParseState {
   /** How much of the text is committed to the Markdown parser. */
   boundary: number
@@ -92,6 +110,15 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
   const parseStateRef = useRef<StreamingParseState>({ boundary: text.length, lastParseAt: Date.now() })
   const [, setParseRevision] = useState(0)
 
+  if (!streaming) {
+    parseStateRef.current = { boundary: text.length, lastParseAt: Date.now() }
+  } else {
+    const immediate = advanceStreamingParse(parseStateRef.current, text.length, Date.now())
+    if (immediate.state !== parseStateRef.current) {
+      parseStateRef.current = immediate.state
+    }
+  }
+
   useEffect(() => {
     if (!streaming) {
       parseStateRef.current = { boundary: text.length, lastParseAt: Date.now() }
@@ -113,7 +140,8 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
   }, [streaming, text])
 
   const boundary = streaming ? Math.min(parseStateRef.current.boundary, text.length) : text.length
-  const parsedText = boundary === text.length ? text : text.slice(0, boundary)
+  const committedText = boundary === text.length ? text : text.slice(0, boundary)
+  const parsedText = streaming ? stabilizeStreamingMarkdown(committedText) : committedText
   // Keep the committed Markdown subtree intact between parses. Rendering the
   // unparsed suffix as a sibling block makes punctuation and partial words
   // jump onto separate lines while tokens are still arriving.

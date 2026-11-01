@@ -71,7 +71,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
   const subagentContext = useMemo(() => ({ specialists, onOpen: onOpenSpecialist }), [specialists, onOpenSpecialist])
   const [coalesce] = useState(createAssistantTurnCoalescer)
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
-  const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages)
+  const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages, active)
   const activeAssistantId = useMemo(() => active && groupedMessages.at(-1)?.role === 'assistant' ? groupedMessages.at(-1)?.id : undefined, [active, groupedMessages])
   // Workspace changes belong to the newest settled turn; older turns cannot claim the current working tree.
   const latestSettledAssistantId = useMemo(() => {
