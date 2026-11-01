@@ -822,7 +822,9 @@ export function registerIpc(
 		},
 		revoke(webContentsId) {
 			authorized.delete(webContentsId);
-			void services.terminals.killOwner(webContentsId);
+			void services.terminals.killOwner(webContentsId).catch((error) => {
+				console.warn("Failed to stop revoked renderer terminals:", error);
+			});
 		},
 		dispose() {
 			if (closed) return;

@@ -265,7 +265,7 @@ export class TerminalService {
       owned.pendingOutput += '\r\n[Apex stopped this terminal because output exceeded 16 MiB/s.]\r\n'
       owned.pendingOutputBytes = Buffer.byteLength(owned.pendingOutput)
       this.flushOutput(id, owned)
-      void this.terminate(id, owned)
+      void this.terminate(id, owned).catch((error) => { console.warn('Failed to stop terminal after excessive output:', error) })
       return
     }
     if (owned.pendingOutputBytes + bytes > MAX_TERMINAL_IPC_CHUNK_BYTES) this.flushOutput(id, owned)
@@ -285,9 +285,12 @@ export class TerminalService {
     owned.terminating = true
     this.terminals.delete(id)
     this.removeActive(id, owned)
-    const operation = this.terminateProcess(id, owned)
+    const operation = this.terminateProcess(id, owned).catch((error) => {
+      if (!owned.exited) this.terminals.set(id, owned)
+      throw error
+    })
     this.terminationPromises.set(owned, operation)
-    void operation.finally(() => { if (this.terminationPromises.get(owned) === operation) this.terminationPromises.delete(owned) })
+    void operation.finally(() => { if (this.terminationPromises.get(owned) === operation) this.terminationPromises.delete(owned) }).catch(() => undefined)
     return operation
   }
 
@@ -299,15 +302,18 @@ export class TerminalService {
     // the descendant tree alongside the group at every rung.
     const descendants = await processTree(owned.terminal.pid)
     const graceful = await killProcessTree(owned.terminal.pid, {
-      ladder: [
-        { signal: 'SIGHUP', waitMs: 150 },
-        { signal: 'SIGTERM', waitMs: 350 },
-      ],
+      ladder: process.platform === 'win32'
+        ? [{ signal: 'SIGKILL', waitMs: 2_000 }]
+        : [{ signal: 'SIGHUP', waitMs: 150 }, { signal: 'SIGTERM', waitMs: 350 }],
       hasExited: () => owned.exited,
+      waitForExit: (timeoutMs) => this.waitForExit(owned, timeoutMs),
       descendants,
       signalDirect: (signal) => owned.terminal.kill(process.platform === 'win32' ? undefined : signal),
     })
-    if (process.platform === 'win32') return
+    if (process.platform === 'win32') {
+      if (!graceful) throw new Error('Terminal did not exit after process-tree termination')
+      return
+    }
     // Re-snapshot before the SIGKILL rung: only descendants still parented
     // under this pty may be force-killed, which narrows the window in which a
     // recycled PID could be hit with the stale snapshot.
@@ -321,6 +327,20 @@ export class TerminalService {
       ladder: [{ signal: 'SIGKILL', waitMs: 0 }],
       descendants: remaining,
       signalDirect: (signal) => owned.terminal.kill(signal),
+    })
+  }
+
+  private waitForExit(owned: OwnedTerminal, timeoutMs: number): Promise<boolean> {
+    if (owned.exited) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      const finish = (): void => {
+        clearTimeout(timer)
+        subscription.dispose()
+        resolve(owned.exited)
+      }
+      const subscription = owned.terminal.onExit(finish)
+      const timer = setTimeout(finish, timeoutMs)
+      timer.unref()
     })
   }
 

@@ -7,6 +7,8 @@ import { TerminalService } from '../../apps/desktop/electron/main/terminal'
 
 const dirs: string[] = []
 const windows = process.platform === 'win32'
+// Two serial Windows kills each allow 5s for taskkill and 2s for PTY closure.
+const shutdownTestTimeout = windows ? 15_000 : 5_000
 const testShell = (windows
   ? [process.env.ComSpec, process.env.SystemRoot && join(process.env.SystemRoot, 'System32', 'cmd.exe')].filter((shell): shell is string => Boolean(shell))
   : ['/bin/zsh', '/bin/bash', '/bin/sh']).find((shell) => {
@@ -59,7 +61,7 @@ describe('TerminalService', () => {
     expect(service.readActive('/sessions/one.jsonl')).toBeUndefined()
     await expect(service.bindSession(owner, first.terminalId, '/sessions/two.jsonl')).rejects.toThrow('another task')
     await service.kill(owner, first.terminalId)
-  })
+  }, shutdownTestTimeout)
   it('runs configured commands without npm prefix overrides while preserving PREFIX', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'gooeypi-project-run-')); dirs.push(cwd)
     const events: Array<{ channel: string; payload: { terminalId?: string; data?: string; exitCode?: number } }> = []
@@ -156,7 +158,7 @@ describe('TerminalService', () => {
 
     expect(await service.kill(owner, projectTerminal.terminalId)).toBe(false)
     expect(await service.kill(owner, outsideTerminal.terminalId)).toBe(true)
-  })
+  }, shutdownTestTimeout)
 
 
   it('short-circuits termination without signalling anything when the pty already exited', async () => {
@@ -186,19 +188,20 @@ describe('TerminalService', () => {
 
   it('makes concurrent app shutdown await an owner teardown already in progress', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-pty-shutdown-')); dirs.push(cwd)
-    const owner = { id: 44, isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
-    const service = new TerminalService(async () => cwd, () => testShell)
+    const send = vi.fn()
+    const owner = { id: 44, isDestroyed: () => false, send } as unknown as WebContents
+    const release = vi.fn()
+    const service = new TerminalService(async () => cwd, () => testShell, async (path) => path, async () => ({ release }))
     const created = await service.create(owner, { cwd, shell: testShell, cols: 80, rows: 24 })
 
     const ownerTeardown = service.killOwner(owner.id)
-    let shutdownFinished = false
-    const shutdown = service.killAll().then(() => { shutdownFinished = true })
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    expect(shutdownFinished).toBe(false)
+    const shutdown = service.killAll().then(() => {
+      expect(release).toHaveBeenCalledOnce()
+      expect(send).toHaveBeenCalledWith('terminal:exit', expect.objectContaining({ terminalId: created.terminalId }))
+    })
     await Promise.all([ownerTeardown, shutdown])
     expect(await service.kill(owner, created.terminalId)).toBe(false)
-  })
+  }, shutdownTestTimeout)
 
   it('short-circuits kill for a terminal that already exited on its own', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-pty-exited-')); dirs.push(cwd)
