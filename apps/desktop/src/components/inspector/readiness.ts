@@ -70,7 +70,8 @@ function withoutQuotedText(text: string): string {
   for (const line of text.split(/\r?\n/)) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1]
     if (fence) {
-      if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = undefined
+      const closer = /^\s*(`{3,}|~{3,})\s*$/.exec(line)?.[1]
+      if (closer && closer[0] === fence[0] && closer.length >= fence.length) fence = undefined
     } else if (marker) {
       fence = marker
     } else if (!/^\s*>/.test(line)) {
@@ -123,7 +124,8 @@ function isReadOnly(words: readonly string[]): boolean {
   const call = invocation(words)
   const [first, second] = call
   if (!first) return true
-  if (checkKindsOf(words).length) return !call.some((word) => /^(?:--fix\b.*|--write|-w|--update|-u|--update-snapshots?)$/.test(word))
+  // Quoted arguments are blanked before matching, so a quoted flag such as "--fix" cannot be ruled out.
+  if (checkKindsOf(words).length) return !call.some((word) => word.includes('""') || /^(?:--fix\b.*|--write|-w|--update|-u|--update-snapshots?)$/.test(word))
   if (first === 'find') return !call.some((word) => word === '-delete' || word.startsWith('-exec'))
   if (first === 'git') return READ_ONLY_GIT.has(second) || (second === 'branch' && call.slice(2).every((word) => word.startsWith('-')))
   if (first === 'node' || first === 'npm') return second === '-v' || second === '--version'
@@ -163,7 +165,7 @@ function exitCodes(result: ToolResultPart): number[] {
  * the check's exit status or change files after it ran, so the result is unknown.
  */
 function checkOutcomes(command: string, result: ToolResultPart | undefined): Map<CheckKind, CheckOutcome> {
-  const { simple, opaque } = parseCommand(command)
+  const { simple, opaque, redirects } = parseCommand(command)
   const maskable = opaque || simple.some(({ next, previous }) => next === '||' || next === '|' || previous === '|' || previous === '||')
   const outcomes = new Map<CheckKind, CheckOutcome>()
   simple.forEach(({ words }, position) => {
@@ -175,7 +177,7 @@ function checkOutcomes(command: string, result: ToolResultPart | undefined): Map
     else {
       const chainedWithAnd = simple.slice(position, -1).every(({ next }) => next === '&&')
       const onlyChecksFollow = simple.slice(position + 1).every((later) => checkKindsOf(later.words).length > 0 && isReadOnly(later.words))
-      outcome = !maskable && chainedWithAnd && onlyChecksFollow ? 'passed' : 'unknown'
+      outcome = !maskable && !redirects && chainedWithAnd && onlyChecksFollow ? 'passed' : 'unknown'
     }
     for (const kind of kinds) outcomes.set(kind, outcome)
   })
