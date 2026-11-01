@@ -105,6 +105,7 @@ describe('packaged smoke launch', () => {
   const workingDirectory = process.cwd()
   let sandbox: string
   let unpacked: string
+  let application: ReturnType<typeof spawn> | undefined
 
   const writeFakeApplication = (script: string): void => {
     writeFileSync(join(unpacked, 'gooeypi'), script, { encoding: 'utf8' })
@@ -112,7 +113,8 @@ describe('packaged smoke launch', () => {
 
   const spawnProcess: launcher.SpawnProcess = (command, args, options) => {
     if (command !== join(unpacked, 'gooeypi')) throw new Error(`Unexpected fixture executable: ${command}`)
-    return spawn(process.execPath, [command, ...args], options)
+    application = spawn(process.execPath, [command, ...args], options)
+    return application
   }
   const markerArgument = `const marker = process.argv.slice(2).find(argument => argument.startsWith('${PACKAGED_SMOKE_FLAG}')).slice('${PACKAGED_SMOKE_FLAG}'.length);`
 
@@ -166,9 +168,12 @@ describe('packaged smoke launch', () => {
     const survived = join(sandbox, 'survived-the-deadline')
     writeFakeApplication(`setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(survived)}, ''), 30_000)`)
     const before = temporaryWorkspaces()
+    const started = Date.now()
 
     await expect(launcher.smokePackagedApp('linux', 'x64', { timeoutMs: 750, spawnProcess })).rejects.toThrow('did not report renderer readiness within 750ms')
 
+    expect(Date.now() - started).toBeLessThan(8_000)
+    expect(application && (application.exitCode !== null || application.signalCode !== null)).toBe(true)
     expect(readdirSync(sandbox)).not.toContain('survived-the-deadline')
     expect(temporaryWorkspaces()).toEqual(before)
   })

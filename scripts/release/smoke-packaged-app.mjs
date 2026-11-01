@@ -39,11 +39,20 @@ export function killTreeCommand(pid, platform = process.platform) {
   return platform === 'win32' ? { command: 'taskkill', args: ['/T', '/F', '/PID', String(pid)] } : null
 }
 
-export function killProcessTree(child, platform = process.platform) {
+export async function killProcessTree(child, platform = process.platform) {
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return
   const taskkill = killTreeCommand(child.pid, platform)
   if (taskkill) {
-    spawn(taskkill.command, taskkill.args, { stdio: 'ignore' }).unref()
+    await new Promise((resolveKill) => {
+      try {
+        const killer = spawn(taskkill.command, taskkill.args, { stdio: 'ignore', windowsHide: true, timeout: 5_000 })
+        killer.once('error', resolveKill)
+        killer.once('close', resolveKill)
+      } catch { resolveKill() }
+    })
+    if (child.exitCode === null && child.signalCode === null) {
+      try { child.kill('SIGKILL') } catch { /* already exited */ }
+    }
     return
   }
   try {
@@ -133,19 +142,19 @@ function runPackagedApp(executable, args, options) {
     child.stdout.on('data', collect)
     child.stderr.on('data', collect)
     let timedOut = false
+    let termination = Promise.resolve()
     const deadline = setTimeout(() => {
       timedOut = true
-      killProcessTree(child, platform)
+      termination = killProcessTree(child, platform)
     }, timeoutMs)
     child.on('error', (error) => {
       clearTimeout(deadline)
-      killProcessTree(child, platform)
-      rejectPromise(error)
+      termination = killProcessTree(child, platform)
+      void termination.then(() => rejectPromise(error))
     })
     child.on('close', (code, signal) => {
       clearTimeout(deadline)
-      killProcessTree(child, platform)
-      resolvePromise({ code, signal, timedOut, diagnostics: boundedDiagnostics(chunks), command, args: launchArgs })
+      void termination.then(() => resolvePromise({ code, signal, timedOut, diagnostics: boundedDiagnostics(chunks), command, args: launchArgs }))
     })
   })
 }
