@@ -78,8 +78,9 @@ setInterval(() => {}, 1000)
     expect(result.stdoutBytes).toBe(800)
     expect(result.stderrBytes).toBe(800)
     expect(Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr)).toBeLessThanOrEqual(1_024)
-    expect(Date.now() - started).toBeLessThan(3_000)
-  })
+    // Windows taskkill has a 5s bound; both limits must still beat the 10s operation timeout.
+    expect(Date.now() - started).toBeLessThan(process.platform === 'win32' ? 7_000 : 3_000)
+  }, 10_000)
 
   it('globally bounds normal one-shot process concurrency', async () => {
     const dir = temp()
