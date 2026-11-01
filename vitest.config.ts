@@ -11,7 +11,8 @@ export default defineConfig({
   esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',
-    ...(process.platform === 'win32' ? { maxWorkers: 2 } : {}),
+    // Windows fixtures can perform two serial tree kills (5s taskkill + 2s exit observation each).
+    ...(process.platform === 'win32' ? { maxWorkers: 2, testTimeout: 15_000 } : {}),
     include: ['tests/**/*.test.{ts,tsx}'],
     // Vitest 5 defaults clearMocks to true; suites assert on import-time mock calls.
     clearMocks: false,

@@ -8,6 +8,8 @@ import type { PrimeModelCatalog } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
 
 const dirs: string[] = []
+// Windows taskkill may use its full 5s deadline before the direct-kill fallback.
+const processExitTimeout = process.platform === 'win32' ? 7_000 : 5_000
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 
 function tempDir(): string {
@@ -207,7 +209,7 @@ setInterval(() => {}, 1000)
 
     const pid = Number(readFileSync(pidFile, 'utf8'))
     expect(Number.isInteger(pid) && pid > 0).toBe(true)
-    await waitUntil(() => !processExists(pid))
+    await waitUntil(() => !processExists(pid), processExitTimeout)
   })
 
   it('rejects a probe that pi answers with success:false, bounding the untrusted error text', async () => {
@@ -269,7 +271,7 @@ setTimeout(() => {
     await pending
     const pid = Number(readFileSync(pidFile, 'utf8'))
     expect(Number.isInteger(pid) && pid > 0).toBe(true)
-    await waitUntil(() => !processExists(pid))
+    await waitUntil(() => !processExists(pid), processExitTimeout)
   }, 10_000)
 
   it('caches within the TTL and single-flights concurrent refreshes', async () => {
