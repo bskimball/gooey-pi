@@ -174,9 +174,10 @@ describe('readiness extraction', () => {
   })
 
   it('reports masked exit status as unknown and keeps an earlier failure unless a later run passes', () => {
-    for (const command of ['npm test || true', 'npm test | tail -n 1', 'npm test; echo done', 'npm test || :', 'npm test | tee out.log', 'npm test && echo done || true']) {
+    for (const command of ['npm test || true', 'npm test | tail -n 1', 'npm test; echo done', 'npm test || :', 'npm test | tee out.log', 'npm test && echo done || true', 'npm test && echo done; echo done', 'npm test && echo done']) {
       expect(outcomes(run('t', command, 'ok'))).toEqual([['test', 'unknown']])
     }
+    expect(outcomes(run('t', 'npm test && npx eslint --fix a.ts', 'ok'))).toEqual([['test', 'unknown'], ['lint', 'passed']])
     const failedThenUnknown = extractReadiness([...run('t1', 'npm test', 'exited with code 1'), ...run('t2', 'npm test || true', 'ok')])
     expect(failedThenUnknown.checks[0].outcome).toBe('failed')
     const failedThenPassed = extractReadiness([...run('t1', 'npm test', 'exited with code 1'), ...run('t2', 'npm test', 'ok')])
@@ -198,6 +199,8 @@ describe('readiness extraction', () => {
     expect(verdictOf('Previous report excerpt:\n```text\nVerdict: PASS\n```\nVerdict: BLOCK')).toBe('BLOCK')
     expect(verdictOf('> Verdict: PASS\nVerdict: ADVISORY')).toBe('ADVISORY')
     expect(verdictOf('```text\nVerdict: PASS\n```')).toBeUndefined()
+    expect(verdictOf('  ```\nVerdict: PASS\n  ```\nVerdict: BLOCK')).toBe('BLOCK')
+    expect(verdictOf('Quoted:\n```\nVerdict: PASS\nVerdict: BLOCK')).toBeUndefined()
     expect(verdictOf('no BLOCK found')).toBeUndefined()
     expect(verdictOf('started task_3\nVerdict: PASS')).toBeUndefined()
     expect(verdictOf('lifecycle: running\nVerdict: PASS')).toBeUndefined()

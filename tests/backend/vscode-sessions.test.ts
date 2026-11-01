@@ -139,14 +139,14 @@ describe('VS Code handoff lifecycle', () => {
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
       rpc, owner, stopping: Promise.resolve(), launchGeneration: 0,
-      browser: { stop: vi.fn() }, statusItem: { dispose: vi.fn() },
+      browser: { stop: vi.fn(async () => undefined) }, statusItem: { dispose: vi.fn() },
     })
-    session.dispose()
+    const shutdown = session.dispose()
+    expect(session.dispose()).toBe(shutdown)
     await Promise.resolve()
     expect(owner.dispose).not.toHaveBeenCalled()
     expect(exited).not.toHaveBeenCalled()
-    await session.stopping
-    await Promise.resolve()
+    await shutdown
     expect(owner.dispose).toHaveBeenCalledOnce()
     await rpc.dispose()
     expect(exited).toHaveBeenCalledOnce()

@@ -207,7 +207,7 @@ export class ApexSession implements vscode.Disposable {
   dispose(): Promise<void> {
     if (this.shutdown) return this.shutdown
     ++this.launchGeneration
-    void this.browser.stop()
+    void this.browser.stop().catch(() => undefined)
     const previous = this.rpc
     this.rpc = undefined
     this.stopping = this.stopping.then(() => previous?.dispose())

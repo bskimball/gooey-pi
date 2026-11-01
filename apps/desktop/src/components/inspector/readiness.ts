@@ -60,8 +60,25 @@ interface SimpleCommand {
 
 const toolName = (name: string | undefined) => name?.toLowerCase()
 
-/** A verdict inside a fenced block or blockquote is a quotation of an earlier report, not this result's verdict. */
-const withoutQuotedText = (text: string) => text.replace(/^(?:```|~~~)[\s\S]*?^(?:```|~~~)[^\n]*$/gm, '').replace(/^\s*>.*$/gm, '')
+/**
+ * A verdict inside a fenced block or blockquote is a quotation of an earlier report, not this result's verdict.
+ * An unclosed fence hides everything after it, so a cut-off quotation reads as no verdict rather than a stale one.
+ */
+function withoutQuotedText(text: string): string {
+  const kept: string[] = []
+  let fence: string | undefined
+  for (const line of text.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1]
+    if (fence) {
+      if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = undefined
+    } else if (marker) {
+      fence = marker
+    } else if (!/^\s*>/.test(line)) {
+      kept.push(line)
+    }
+  }
+  return kept.join('\n')
+}
 
 function parseCommand(command: string): { simple: SimpleCommand[]; opaque: boolean; redirects: boolean } {
   const stripped = command.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, '""')
@@ -140,20 +157,25 @@ function exitCodes(result: ToolResultPart): number[] {
   return codes
 }
 
-/** Outcome per check kind the command invokes as a plain simple command; echo/grep/path mentions never count. */
+/**
+ * Outcome per check kind the command invokes as a plain simple command; echo/grep/path mentions never count.
+ * A pass counts only when every later command is a non-mutating check joined by `&&`; anything else could mask
+ * the check's exit status or change files after it ran, so the result is unknown.
+ */
 function checkOutcomes(command: string, result: ToolResultPart | undefined): Map<CheckKind, CheckOutcome> {
   const { simple, opaque } = parseCommand(command)
   const maskable = opaque || simple.some(({ next, previous }) => next === '||' || next === '|' || previous === '|' || previous === '||')
   const outcomes = new Map<CheckKind, CheckOutcome>()
-  simple.forEach(({ words, next }, position) => {
+  simple.forEach(({ words }, position) => {
     const kinds = checkKindsOf(words)
     if (!kinds.length) return
     let outcome: CheckOutcome
     if (!result || result.streaming) outcome = 'running'
     else if (result.isError || exitCodes(result).some((code) => code !== 0)) outcome = 'failed'
     else {
-      const followedByOther = position < simple.length - 1 && next !== '&&'
-      outcome = maskable || followedByOther ? 'unknown' : 'passed'
+      const chainedWithAnd = simple.slice(position, -1).every(({ next }) => next === '&&')
+      const onlyChecksFollow = simple.slice(position + 1).every((later) => checkKindsOf(later.words).length > 0 && isReadOnly(later.words))
+      outcome = !maskable && chainedWithAnd && onlyChecksFollow ? 'passed' : 'unknown'
     }
     for (const kind of kinds) outcomes.set(kind, outcome)
   })
