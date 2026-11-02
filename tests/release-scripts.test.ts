@@ -20,7 +20,7 @@ import {
   resolveNpmGlobalLayout,
   verifyPinnedNpmArtifact,
 } from '../scripts/release/bootstrap-npm.mjs'
-import { installAppDependencies, qualifyWinptyBatchPaths } from '../scripts/release/install-app-deps.mjs'
+import { installAppDependencies, patchPiDurableSubmissionWait, qualifyWinptyBatchPaths } from '../scripts/release/install-app-deps.mjs'
 import {
   artifactArchitectures,
   assertArchitectureCoverage,
@@ -1537,6 +1537,31 @@ describe('cross-platform packaging repair', () => {
       expect(qualified).toContain('&& .\\\\UpdateGenVersion.bat <(WINPTY_COMMIT_HASH)')
       qualifyWinptyBatchPaths(path)
       expect(readFileSync(path, 'utf8')).toBe(qualified)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('patches only Durable 1.5.0 submission waits idempotently and rejects unexpected source', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'durable-abort-patch-'))
+    const packageUrl = pathToFileURL(`${directory}/`)
+    const manifest = new URL('package.json', packageUrl)
+    const sourcePath = new URL('dist/harness/submissions.js', packageUrl)
+    const original = readFileSync('node_modules/@earendil-works/pi-durable/dist/harness/submissions.js', 'utf8').replace('            context.abortSignal?.throwIfAborted();\n', '')
+    try {
+      mkdirSync(new URL('dist/harness/', packageUrl), { recursive: true })
+      writeFileSync(manifest, JSON.stringify({ version: '1.5.0' }))
+      writeFileSync(sourcePath, original)
+      patchPiDurableSubmissionWait(packageUrl)
+      const patched = readFileSync(sourcePath, 'utf8')
+      expect(patched).not.toBe(original)
+      patchPiDurableSubmissionWait(packageUrl)
+      expect(readFileSync(sourcePath, 'utf8')).toBe(patched)
+      writeFileSync(sourcePath, 'unexpected source')
+      expect(() => patchPiDurableSubmissionWait(packageUrl)).toThrow('Unexpected Pi Durable 1.5.0')
+      writeFileSync(manifest, JSON.stringify({ version: '1.5.1' }))
+      expect(() => patchPiDurableSubmissionWait(packageUrl)).not.toThrow()
+      expect(readFileSync(sourcePath, 'utf8')).toBe('unexpected source')
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }

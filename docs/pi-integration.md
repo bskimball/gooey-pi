@@ -4,6 +4,18 @@
 
 This document is the working spec for adding base Pi (`pi`, [pi.dev](https://pi.dev/), the pi-mono coding agent) as an agent harness. It follows the architecture established by `docs/omp-integration.md`: the shared transport, event, and UI machinery is reused wherever the protocols agree, and a per-harness adapter covers what differs. Read that document first; this one records only pi-specific facts and decisions.
 
+## Pi 1.5.0 compatibility
+
+The external CLI release is [Pi 1.5.0](https://github.com/earendil-works/pi/releases/tag/v1.5.0). Root dependencies `@earendil-works/chord`, `pi-ai`, `pi-durable`, and `pi-schema` are pinned to `1.5.0`. The browser sub-agent uses `pi-schema` builders because the upgraded libraries no longer supply its transitive `typebox` dependency. Injected extensions continue resolving schemas through Pi's host loader.
+
+`postinstall` applies a local, version-scoped Pi Durable 1.5.0 submission-wait cancellation fix. It checks for an aborted context before registering a waiter inside the Session read, preventing an already-rejected promise from being delivered late and reported as unhandled. The patch is idempotent, rejects unexpected 1.5.0 source, and leaves other versions untouched.
+
+Desktop and VS Code reuse `PiModeControl` through `apex-ui`. The shared mode parser accepts decorated labels such as `Utopia · +Sidekick` and `Apex · Inline`. Utopia remains distinct when Hydra is active. It shows ordinary model/thinking controls and the Hydra tier selector, not Fusion pair controls, because its sidekick model is selected dynamically. Mode selection sends `/mode utopia`; Hydra controls send `/mode hydra standard|high|max|off|sync`.
+
+Session metadata retains Utopia as `behaviorMode: 'utopia:<tier>'`, or `'utopia'` without Hydra, and reads its model choice from `models.utopia`. The disposable metadata cache is invalidated so previously misparsed sessions are rescanned. Pi 1.5.0 retains the RPC commands used by the app and session JSONL v3. Credentials and trust decisions remain host-owned; the app does not read or write `auth.json` or `trust.json`.
+
+The sections below preserve the original integration design and its older validation baseline.
+
 ## Product behavior
 
 - The sidebar brand switcher gains a third entry: **Pi Work** (π mark, `PiMark` in `src/components/ui.tsx`).

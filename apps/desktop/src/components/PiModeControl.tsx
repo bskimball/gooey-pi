@@ -4,9 +4,9 @@ import { SelectControl } from './ui'
 import { ModelPicker } from './ModelPicker'
 import type { PrimeModelDescriptor, PrimeProviderDescriptor, PrimeThinkingLevel } from '@/types/api'
 import {
-  type ActivePiHydraTier,
+  type PiHydraTier,
   fusionModelIdentity,
-  isActivePiHydraTier,
+  isPiHydraTier,
   isPiBehaviorMode,
   PI_BEHAVIOR_MODE_EVENT,
   PI_BEHAVIOR_MODE_OPTIONS,
@@ -18,6 +18,7 @@ import {
   readActivePiFusionPair,
   readSavedPiBehaviorMode,
   readSavedPiHydraTier,
+  readDefaultPiHydraTier,
 } from '@/lib/harness'
 
 interface PiModeControlProps {
@@ -37,7 +38,7 @@ const thinkingLabels: Record<PrimeThinkingLevel, string> = {
 /** Pi mode followed by either ordinary controls or the runtime-reported Fusion pair. */
 export function PiModeControl({ disabled, modelsByProvider, providers, children, onCommand }: PiModeControlProps) {
   const [mode, setMode] = useState<PiBehaviorMode>(readSavedPiBehaviorMode)
-  const [hydraTier, setHydraTier] = useState<ActivePiHydraTier>(readSavedPiHydraTier)
+  const [hydraTier, setHydraTier] = useState<PiHydraTier>(readSavedPiHydraTier)
   const [pair, setPair] = useState<PiFusionPair | null>(readActivePiFusionPair)
   const [pending, setPending] = useState<string | null>(null)
   const pendingRef = useRef<symbol | null>(null)
@@ -56,7 +57,7 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
     }
     const onHydraTierChange = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail
-      if (isActivePiHydraTier(detail)) {
+      if (isPiHydraTier(detail)) {
         setHydraTier(detail)
         resetPending()
       }
@@ -94,7 +95,7 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
 
   const handleModeSelect = (nextValue: string) => {
     if (nextValue === 'hydra') {
-      sendCommand(`/mode hydra ${hydraTier}`)
+      sendCommand(`/mode hydra ${hydraTier === 'off' ? readDefaultPiHydraTier() : hydraTier}`)
       return
     }
     sendCommand(`/mode ${nextValue}`)
@@ -106,11 +107,11 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
         {PI_BEHAVIOR_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
         <option value="configure" title="Choose lead and sidekick models">Configure Fusion…</option>
       </SelectControl>
-      {mode === 'hydra' ? (
+      {mode === 'hydra' || mode === 'utopia' ? (
         <SelectControl label="Hydra tier" compact icon={<Gauge size={12} />} value={hydraTier} disabled={controlsDisabled} onChange={(event) => sendCommand(`/mode hydra ${event.target.value}`)}>
           {PI_HYDRA_TIER_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
           <option value="sync" title="Refresh Artificial Analysis metrics and quota snapshot">Sync metrics…</option>
-          <option value="off" title="Disable automatic stats routing">Turn off Hydra</option>
+          <option value="off" title="Disable automatic stats routing">{mode === 'utopia' ? 'Hydra: Off' : 'Turn off Hydra'}</option>
         </SelectControl>
       ) : null}
       <span className="pi-mode-status" role="status">{pending === '/mode configure' ? 'Opening Fusion setup…' : pending === '/mode hydra sync' ? 'Syncing Hydra metrics…' : pending ? 'Updating Pi mode…' : ''}</span>

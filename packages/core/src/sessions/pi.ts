@@ -87,8 +87,8 @@ const piMetadataParser = createBucketedMetadataParser((state, value) => {
     const mode = value.data.mode
     const hydra = value.data.hydra
     const hydraActive = hydra === 'standard' || hydra === 'high' || hydra === 'max'
-    if (mode === 'pi' || mode === 'apex' || mode === 'apex-orchestrate' || mode === 'fusion' || mode === 'hydra' || mode === 'work') {
-      state.behaviorMode = hydraActive ? `hydra:${hydra}` : mode
+    if (mode === 'pi' || mode === 'apex' || mode === 'apex-orchestrate' || mode === 'fusion' || mode === 'utopia' || mode === 'hydra' || mode === 'work') {
+      state.behaviorMode = hydraActive ? `${mode === 'utopia' ? 'utopia' : 'hydra'}:${hydra}` : mode
       const choice =
         mode === 'fusion'
           ? isRecord(value.data.fusion) && isRecord(value.data.fusion.lead)

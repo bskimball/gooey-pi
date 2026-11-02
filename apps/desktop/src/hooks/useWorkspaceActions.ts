@@ -394,7 +394,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           if (modeCommand) {
             const nextTier = piHydraTierFromCommand(modeCommand)
             if (nextTier) savePiHydraTier(nextTier)
+            if (/^\/mode\s+hydra\s+off$/i.test(modeCommand)) savePiHydraTier('off')
             const nextMode = piModeFromCommand(modeCommand)
+            if (nextMode === 'utopia' && /^\/mode\s+utopia$/i.test(modeCommand)) savePiHydraTier('high')
             if (nextMode) savePiBehaviorMode(nextMode)
             completeQueuedFlush()
             return

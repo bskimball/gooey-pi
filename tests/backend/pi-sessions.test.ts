@@ -118,7 +118,7 @@ describe('pi metadata reader', () => {
     })
   })
 
-  it('invalidates legacy v1 metadata cache entries so saved behaviorMode and model choices are parsed', async () => {
+  it.each([1, 3])('invalidates v%s metadata cache entries so saved Utopia mode and model choices are parsed', async (version) => {
     const dir = mkdtempSync(join(tmpdir(), 'prime-work-pi-cache-')); dirs.push(dir)
     const root = join(dir, 'sessions'); mkdirSync(join(root, BUCKET), { recursive: true })
     const project = join(dir, 'project'); mkdirSync(project)
@@ -127,7 +127,7 @@ describe('pi metadata reader', () => {
       id: 'pi-cached-session',
       cwd: project,
       entries: [
-        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode: 'work', models: { work: { provider: 'openai-codex', modelId: 'gpt-5.4-argon', thinking: 'low' } } } }, '2026-08-10T22:41:25.500Z'),
+        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode: 'utopia', hydra: 'high', models: { utopia: { provider: 'openai-codex', modelId: 'gpt-5.4-argon', thinking: 'low' } } } }, '2026-08-10T22:41:25.500Z'),
         piEntry('message', 'aa11bb22', '8f00a1b2', { message: { role: 'user', content: 'cached prompt' } }, '2026-08-10T22:42:01.000Z'),
       ],
     })
@@ -135,7 +135,7 @@ describe('pi metadata reader', () => {
     const fileStat = statSync(canonicalFile)
     const cachePath = join(dir, 'metadata-cache.json')
     writeFileSync(cachePath, JSON.stringify({
-      version: 1,
+      version,
       entries: [{
         fingerprint: `${canonicalFile}\0${fileStat.dev}\0${fileStat.ino}\0${fileStat.ctimeMs}\0${fileStat.mtimeMs}\0${fileStat.size}`,
         metadata: {
@@ -159,14 +159,14 @@ describe('pi metadata reader', () => {
     const [record] = await service.list()
     expect(record).toMatchObject({
       id: 'pi-cached-session',
-      behaviorMode: 'work',
+      behaviorMode: 'utopia:high',
       provider: 'openai-codex',
       model: 'gpt-5.4-argon',
       thinkingLevel: 'low',
     })
   })
 
-  it('parses Hydra routing state from behavior-mode entries into session metadata', async () => {
+  it.each(['apex', 'utopia'])('parses %s Hydra routing state into session metadata', async (mode) => {
     const { root, project, service } = setup()
     mkdirSync(join(root, BUCKET))
     const file = join(root, BUCKET, NAME_C)
@@ -174,7 +174,7 @@ describe('pi metadata reader', () => {
       id: 'pi-hydra-session',
       cwd: project,
       entries: [
-        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode: 'apex', hydra: 'high', models: { apex: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'high' } } } }, '2026-08-10T22:41:25.500Z'),
+        piEntry('custom', '8f00a1b2', null, { customType: 'behavior-mode', data: { mode, hydra: 'high', models: { [mode]: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'high' } } } }, '2026-08-10T22:41:25.500Z'),
         piEntry('message', 'aa11bb22', '8f00a1b2', { message: { role: 'user', content: 'hydra prompt' } }, '2026-08-10T22:42:01.000Z'),
       ],
     })
@@ -182,7 +182,7 @@ describe('pi metadata reader', () => {
     const [record] = await service.list()
     expect(record).toMatchObject({
       id: 'pi-hydra-session',
-      behaviorMode: 'hydra:high',
+      behaviorMode: mode === 'utopia' ? 'utopia:high' : 'hydra:high',
       provider: 'claude-bridge',
       model: 'claude-opus-5-5',
       thinkingLevel: 'high',

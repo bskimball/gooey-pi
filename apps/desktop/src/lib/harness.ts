@@ -11,7 +11,7 @@ export const HARNESS_AGENT_NAMES: Record<HarnessId, string> = { pi: 'Pi' }
 /** Short conversational name ("Prime is working"). */
 export const HARNESS_SHORT_NAMES: Record<HarnessId, string> = { pi: 'Pi' }
 
-export type PiBehaviorMode = 'pi' | 'apex' | 'apex-orchestrate' | 'fusion' | 'hydra' | 'work'
+export type PiBehaviorMode = 'pi' | 'apex' | 'apex-orchestrate' | 'fusion' | 'utopia' | 'hydra' | 'work'
 export type ActivePiHydraTier = 'standard' | 'high' | 'max'
 export type PiHydraTier = 'off' | ActivePiHydraTier
 
@@ -19,6 +19,7 @@ export const PI_BEHAVIOR_MODE_OPTIONS: ReadonlyArray<{ value: PiBehaviorMode; la
   { value: 'apex', label: 'Apex', detail: 'Inline-first lead with specialist delegation' },
   { value: 'apex-orchestrate', label: 'Apex Orchestrate', detail: 'Delegate discovery, implementation, and gates' },
   { value: 'fusion', label: 'Fusion', detail: 'Lead + persistent sidekick pair' },
+  { value: 'utopia', label: 'Utopia', detail: 'Inline-first lead, warm sidekick, specialists, and sticky-lead Hydra routing' },
   { value: 'hydra', label: 'Hydra', detail: 'Stats-driven model and effort router' },
   { value: 'work', label: 'Work', detail: 'Operations-first collaboration crew' },
   { value: 'pi', label: 'Pi', detail: 'Standard Pi prompt and tools' },
@@ -36,27 +37,32 @@ export const PI_BEHAVIOR_MODE_EVENT = 'gooeypi:pi-mode-change'
 export const PI_HYDRA_STATUS_KEY = 'hydra'
 export const PI_HYDRA_TIER_EVENT = 'gooeypi:pi-hydra-tier-change'
 let activePiBehaviorMode: PiBehaviorMode | undefined
-let activePiHydraTier: ActivePiHydraTier | undefined
+let activePiHydraTier: PiHydraTier | undefined
 
 export function isActivePiHydraTier(value: unknown): value is ActivePiHydraTier {
   return value === 'standard' || value === 'high' || value === 'max'
 }
 
+export function isPiHydraTier(value: unknown): value is PiHydraTier {
+  return value === 'off' || isActivePiHydraTier(value)
+}
+
 export function parsePiHydraStatus(statusText: unknown): ActivePiHydraTier | undefined {
   if (typeof statusText !== 'string') return undefined
-  const normalized = statusText.trim().toLowerCase()
-  const tier = normalized.startsWith('hydra:') ? normalized.slice('hydra:'.length).trim() : normalized
+  const normalized = statusText.split('·', 1)[0].trim().toLowerCase()
+  const tier = normalized.replace(/^(?:hydra|utopia):\s*/, '')
   return isActivePiHydraTier(tier) ? tier : undefined
 }
 
 export function isPiBehaviorMode(value: unknown): value is PiBehaviorMode {
-  return value === 'pi' || value === 'apex' || value === 'apex-orchestrate' || value === 'fusion' || value === 'hydra' || value === 'work'
+  return value === 'pi' || value === 'apex' || value === 'apex-orchestrate' || value === 'fusion' || value === 'utopia' || value === 'hydra' || value === 'work'
 }
 
 export function piModeFromStatusText(statusText: unknown): PiBehaviorMode | undefined {
   if (typeof statusText !== 'string') return undefined
+  const normalized = statusText.split('·', 1)[0].trim().toLowerCase()
+  if (normalized === 'utopia' || /^utopia:(standard|high|max)$/.test(normalized)) return 'utopia'
   if (parsePiHydraStatus(statusText)) return 'hydra'
-  const normalized = statusText.trim().toLowerCase()
   if (normalized === 'pi') return 'pi'
   if (normalized === 'apex') return 'apex'
   if (normalized === 'apex orchestrate' || normalized === 'apex-orchestrate') return 'apex-orchestrate'
@@ -64,6 +70,16 @@ export function piModeFromStatusText(statusText: unknown): PiBehaviorMode | unde
   if (normalized === 'hydra') return 'hydra'
   if (normalized === 'work') return 'work'
   return undefined
+}
+
+/** Utopia keeps its own identity while Hydra routes its models and effort. */
+export function piModeWithHydra(mode: PiBehaviorMode | undefined, tier: ActivePiHydraTier | undefined): PiBehaviorMode {
+  if (mode === 'utopia') return mode
+  return tier ? 'hydra' : mode && mode !== 'hydra' ? mode : 'apex'
+}
+
+export function piSessionMode(mode: PiBehaviorMode, tier: ActivePiHydraTier | undefined): string {
+  return tier ? `${mode === 'utopia' ? 'utopia' : 'hydra'}:${tier}` : mode
 }
 
 export function parsePiModeCommand(prompt: string, harness: HarnessId): string | undefined {
@@ -85,7 +101,7 @@ export function piHydraTierFromCommand(command: string): ActivePiHydraTier | und
   if (!match) return undefined
   const sub = match[1]?.toLowerCase()
   if (isActivePiHydraTier(sub)) return sub
-  if (!sub || sub === 'on') return readSavedPiHydraTier()
+  if (!sub || sub === 'on') return readDefaultPiHydraTier()
   return undefined
 }
 
@@ -93,6 +109,9 @@ export function piModeFromCommand(command: string): PiBehaviorMode | undefined {
   const hydraMatch = /^\/mode\s+hydra(?:\s+(\S+))?$/i.exec(command.trim())
   if (hydraMatch) {
     const sub = hydraMatch[1]?.toLowerCase()
+    if (!sub || sub === 'on' || sub === 'off' || isActivePiHydraTier(sub)) {
+      if (readSavedPiBehaviorMode() === 'utopia') return 'utopia'
+    }
     if (!sub || sub === 'on' || isActivePiHydraTier(sub)) return 'hydra'
     if (sub === 'off') {
       const fallback = readDefaultPiBehaviorMode()
@@ -122,20 +141,20 @@ export function readDefaultPiHydraTier(): ActivePiHydraTier {
   return 'high'
 }
 
-export function readSavedPiHydraTier(): ActivePiHydraTier {
+export function readSavedPiHydraTier(): PiHydraTier {
   return activePiHydraTier ?? readDefaultPiHydraTier()
 }
 
-export function publishActivePiHydraTier(tier: ActivePiHydraTier): void {
+export function publishActivePiHydraTier(tier: PiHydraTier): void {
   activePiHydraTier = tier
   try {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(PI_HYDRA_TIER_EVENT, { detail: tier }))
   } catch { /* ignore event errors */ }
 }
 
-export function savePiHydraTier(tier: ActivePiHydraTier): void {
+export function savePiHydraTier(tier: PiHydraTier): void {
   try {
-    if (typeof window !== 'undefined') window.localStorage?.setItem(PI_HYDRA_TIER_STORAGE_KEY, tier)
+    if (tier !== 'off' && typeof window !== 'undefined') window.localStorage?.setItem(PI_HYDRA_TIER_STORAGE_KEY, tier)
   } catch { /* ignore storage errors */ }
   publishActivePiHydraTier(tier)
 }

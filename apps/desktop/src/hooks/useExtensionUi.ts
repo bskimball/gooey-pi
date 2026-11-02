@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
-import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
+import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, piSessionMode, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface UseExtensionUiOptions {
@@ -70,12 +70,11 @@ export function useExtensionUi({
     setExtensionUi(visible)
     const runtimeHydra = currentRuntimeId ? hydraByRuntimeRef.current.get(currentRuntimeId) : undefined
     const sessionHydra = parsePiHydraStatus(activeSessionModeRef.current)
-    publishActivePiHydraTier(runtimeHydra ?? sessionHydra ?? readDefaultPiHydraTier())
-    const runtimeMode = currentRuntimeId
-      ? (runtimeHydra ? 'hydra' : modeByRuntimeRef.current.get(currentRuntimeId))
-      : undefined
+    const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
     const sessionMode = piModeFromStatusText(activeSessionModeRef.current)
-    publishActivePiBehaviorMode(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode())
+    const mode = piModeWithHydra(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode(), runtimeHydra ?? sessionHydra)
+    publishActivePiHydraTier(runtimeHydra ?? sessionHydra ?? (mode === 'utopia' ? 'off' : readDefaultPiHydraTier()))
+    publishActivePiBehaviorMode(mode)
     publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
   }, [])
 
@@ -231,8 +230,8 @@ export function useExtensionUi({
       if (tier) hydraByRuntimeRef.current.set(runtimeId, tier)
       else hydraByRuntimeRef.current.delete(runtimeId)
       const baseMode = modeByRuntimeRef.current.get(runtimeId)
-      const effectiveMode: PiBehaviorMode = tier ? 'hydra' : (baseMode && baseMode !== 'hydra' ? baseMode : 'apex')
-      const sessionMode = tier ? `hydra:${tier}` : effectiveMode
+      const effectiveMode = piModeWithHydra(baseMode, tier)
+      const sessionMode = piSessionMode(effectiveMode, tier)
       const sessionFile = runtimeSessionsRef.current.get(runtimeId)
       if (sessionFile) {
         setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== sessionMode
@@ -240,7 +239,7 @@ export function useExtensionUi({
           : session))
       }
       if (activeRuntimeIdRef.current === runtimeId) {
-        if (tier) savePiHydraTier(tier)
+        savePiHydraTier(tier ?? 'off')
         savePiBehaviorMode(effectiveMode)
       } else if (effectiveMode !== 'apex-orchestrate') {
         try {
@@ -274,8 +273,8 @@ export function useExtensionUi({
       if (mode) {
         modeByRuntimeRef.current.set(runtimeId, mode)
         const activeHydra = hydraByRuntimeRef.current.get(runtimeId)
-        const effectiveMode: PiBehaviorMode = activeHydra ? 'hydra' : mode
-        const sessionMode = activeHydra ? `hydra:${activeHydra}` : mode
+        const effectiveMode = piModeWithHydra(mode, activeHydra)
+        const sessionMode = piSessionMode(effectiveMode, activeHydra)
         const sessionFile = runtimeSessionsRef.current.get(runtimeId)
         if (sessionFile) {
           setSessions((items) => items.map((session) => session.filePath === sessionFile && session.behaviorMode !== sessionMode
@@ -284,6 +283,7 @@ export function useExtensionUi({
         }
         if (mode !== 'fusion') setFusionPair(runtimeId, undefined)
         if (activeRuntimeIdRef.current === runtimeId) {
+          if (mode === 'utopia') publishActivePiHydraTier(activeHydra ?? 'off')
           savePiBehaviorMode(effectiveMode)
         } else if (effectiveMode !== 'apex-orchestrate') {
           try {

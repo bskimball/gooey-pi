@@ -5,7 +5,7 @@ import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost } from './host'
 import { SessionPicker } from './SessionPicker'
 import { applyOps } from './transcript'
-import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiHydraTier } from '@/lib/harness'
+import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiHydraTier } from '@/lib/harness'
 
 const NO_GIT: GitStatus = { isRepo: false, files: [] }
 const openChanges = () => postToHost({ type: 'openChanges' })
@@ -62,8 +62,8 @@ export function App() {
   useEffect(() => {
     if (!state) return
     const tier = parsePiHydraStatus(state.statuses[PI_HYDRA_STATUS_KEY])
-    const mode = tier ? 'hydra' : piModeFromStatusText(state.statuses.mode) ?? 'apex'
-    publishActivePiHydraTier(tier ?? readDefaultPiHydraTier())
+    const mode = piModeWithHydra(piModeFromStatusText(state.statuses.mode), tier)
+    publishActivePiHydraTier(tier ?? (mode === 'utopia' ? 'off' : readDefaultPiHydraTier()))
     publishActivePiBehaviorMode(mode)
     publishActivePiFusionPair(mode === 'fusion' ? parsePiFusionPairStatus(state.statuses[PI_FUSION_PAIR_STATUS_KEY]) ?? null : null)
   }, [state?.statuses])

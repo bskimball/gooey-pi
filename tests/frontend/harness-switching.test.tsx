@@ -407,6 +407,42 @@ describe('Pi Fusion pair reporting', () => {
     expect(onCommand).toHaveBeenLastCalledWith('/mode apex')
   })
 
+  it('keeps Utopia distinct from its Hydra overlay across status order, tier changes, and runtime switches', async () => {
+    const { render, emit, onCommand } = setup()
+    await render('runtime-a')
+    emit('runtime-a', status('hydra', 'hydra:high'))
+    emit('runtime-a', status('mode', 'Utopia · +Sidekick'))
+    const modeTrigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Behavior mode"]')!
+    const tierTrigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Hydra tier"]')!
+    expect(modeTrigger().textContent).toBe('Utopia')
+    expect(tierTrigger().textContent).toBe('Hydra: High')
+    expect(document.querySelector('.pi-fusion-pair')).toBeNull()
+
+    await click(tierTrigger())
+    await click([...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.startsWith('Hydra: Max'))!)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode hydra max')
+    emit('runtime-a', status('hydra', 'hydra:max·jippity'))
+    expect(modeTrigger().textContent).toBe('Utopia')
+    expect(tierTrigger().textContent).toBe('Hydra: Max')
+
+    emit('runtime-b', status('mode', 'Work · Crew'))
+    await render('runtime-b')
+    expect(modeTrigger().textContent).toBe('Work')
+    await render('runtime-a')
+    expect(modeTrigger().textContent).toBe('Utopia')
+    expect(tierTrigger().textContent).toBe('Hydra: Max')
+    emit('runtime-a', status('hydra'))
+    expect(modeTrigger().textContent).toBe('Utopia')
+    expect(tierTrigger().textContent).toBe('Hydra: Off')
+
+    await render(undefined, 'utopia:standard')
+    expect(modeTrigger().textContent).toBe('Utopia')
+    expect(tierTrigger().textContent).toBe('Hydra: Standard')
+    await click(modeTrigger())
+    await click([...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((item) => item.textContent?.startsWith('Utopia'))!)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode utopia')
+  })
+
   it('resets pending role edits on runtime switches without letting old completions unlock new edits', async () => {
     const { render, emit, onCommand } = setup()
     await render('runtime-a')
