@@ -3,8 +3,6 @@ body { padding: 0; }
 .apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
 .apex-shell .conversation-pane { min-width: 0; }
 .apex-shell .conversation-bottom-dock { padding: 0 10px 10px; }
-.apex-shell .transcript { padding-bottom: 208px; }
-.apex-shell .transcript.has-queued-messages { padding-bottom: 363px; }
 
 .apex-editor-context {
   display: flex;
