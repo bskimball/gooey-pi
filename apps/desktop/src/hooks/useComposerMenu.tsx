@@ -36,6 +36,8 @@ export interface ComposerMenuOptions {
   harness: HarnessId
   fileRoot?: string
   sessions: readonly SessionRecord[]
+  /** Sessions completed by `/resume`. */
+  resumeSessions: readonly SessionRecord[]
   /** Enabled capabilities: `$` skills and `@` capabilities. */
   enabledSkills: readonly SkillRecord[]
   /** The full catalog, used for `/` prompt templates and skills before the runtime reports its own. */
@@ -194,7 +196,7 @@ export function useComposerMenu(options: ComposerMenuOptions) {
         choose: () => { options.onEffortChange(level); options.setDraft('') },
       }))
     }
-    return fuzzyFilter(sessions, query, (session) => session.title).slice(0, ARGUMENT_MENU_LIMIT).map((session) => ({
+    return fuzzyFilter(options.resumeSessions, query, (session) => session.title).slice(0, ARGUMENT_MENU_LIMIT).map((session) => ({
       key: `resume:${session.harness}:${session.id}`,
       label: session.title,
       detail: `${session.harness.toUpperCase()} session · ${session.status}`,

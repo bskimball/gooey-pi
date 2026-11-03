@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Composer, ExtensionUiModal, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
-import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, PrimeModelDescriptor, PrimeThinkingLevel, QueuedPrompt, TranscriptMessage } from 'apex-core/types/api'
+import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, PrimeModelDescriptor, PrimeThinkingLevel, QueuedPrompt, SessionRecord, TranscriptMessage } from 'apex-core/types/api'
 import type { EditorFileContext, HostState } from '../src/protocol'
-import { browser, onHostMessage, postToHost } from './host'
+import { browser, onHostMessage, postToHost, sessions } from './host'
 import { SessionPicker } from './SessionPicker'
 import { applyOps } from './transcript'
 import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiHydraTier } from '@/lib/harness'
@@ -80,6 +80,24 @@ export function App() {
   const runtimeCommands = useMemo<ComposerCommand[] | undefined>(() => state?.commands.map((command) => ({ ...command })), [state?.commands])
   const queuedMessages = useMemo<QueuedPrompt[]>(() => (state?.queued ?? []).map(({ id, text, intent, timestamp }) => ({ id, text, intent, timestamp })), [state?.queued])
   const parsedUiRequest = useMemo(() => uiRequest ? parseExtensionUiRequest(uiRequest) : undefined, [uiRequest])
+  // `/resume` offers this workspace's other free saved sessions; they are not @-referenceable because VS Code has no session tools.
+  const [resumeSessions, setResumeSessions] = useState<SessionRecord[]>([])
+  useEffect(() => {
+    const refresh = () => void sessions.list().then(({ sessions: saved, currentPath }) => setResumeSessions(saved.filter((session) => session.path !== currentPath && !session.owner).map((session) => ({
+      id: session.id,
+      harness: 'pi',
+      filePath: session.path,
+      projectPath: state?.cwd ?? '',
+      title: session.title,
+      createdAt: session.updatedAt,
+      updatedAt: session.updatedAt,
+      status: 'idle',
+      depth: 0,
+      preview: session.preview,
+    }))), () => undefined)
+    refresh()
+    return sessions.onCurrent(refresh)
+  }, [state?.cwd])
 
   // A dialog Apex can't render must still be answered, or the extension waits forever.
   useEffect(() => {
@@ -160,6 +178,7 @@ export function App() {
                   sessionUsage={state?.sessionUsage}
                   skills={NO_SKILLS}
                   fileRoot={state?.cwd}
+                  resumeSessions={resumeSessions}
                   runtimeCommands={runtimeCommands}
                   insertDraft={insertDraft}
                   onCommand={(action) => postToHost({ type: 'command', action })}

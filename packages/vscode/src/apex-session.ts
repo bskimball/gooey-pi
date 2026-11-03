@@ -321,6 +321,9 @@ export class ApexSession implements vscode.Disposable {
     this.queuePaused = true
     let finishReservation: (() => void) | undefined
     let switchSent = false
+    // Pi's session hooks can hold switch_session for several seconds; show that the request is in flight.
+    let finishProgress!: () => void
+    vscode.window.setStatusBarMessage('$(sync~spin) Apex: opening session…', new Promise<void>((resolve) => { finishProgress = resolve }))
     try {
       const target = canonicalSessionPath(path)
       if (!target.endsWith('.jsonl') || dirname(target) !== canonicalSessionPath(sessionBucket(this.cwd))) throw new Error('Session is not in the current workspace catalog.')
@@ -354,6 +357,7 @@ export class ApexSession implements vscode.Disposable {
       if (switchSent) await rpc.dispose()
       throw error
     } finally {
+      finishProgress()
       finishReservation?.()
       this.switching = false
       this.queuePaused = wasPaused
@@ -363,8 +367,13 @@ export class ApexSession implements vscode.Disposable {
   /** Opens a session handed over by Apex desktop once this window's Pi is ready. */
   async openFromDesktop(path: string) {
     if (this.state.status === 'exited') await this.start()
-    const deadline = Date.now() + 15_000
-    while ((this.state.status !== 'ready' || this.state.isStreaming || this.switching) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200))
+    // A cold VS Code window resolves the view, starts the browser bridge, and boots Pi first, which can take well over 15s.
+    const deadline = Date.now() + 120_000
+    const waiting = (async () => {
+      while ((this.state.status === 'starting' || this.state.isStreaming || this.switching) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200))
+    })()
+    vscode.window.setStatusBarMessage('$(sync~spin) Apex: opening the session from Apex desktop…', waiting)
+    await waiting
     try {
       await this.switchSession(path)
       vscode.window.setStatusBarMessage('Apex: continued the session from Apex desktop', 5000)
@@ -541,7 +550,11 @@ export class ApexSession implements vscode.Disposable {
       case 'settings':
         return void vscode.commands.executeCommand('workbench.action.openSettings', 'apex')
       case 'resume':
-        return this.notice('Resuming other sessions is not available in Apex for VS Code yet. Open the session in the Apex desktop app.')
+        return this.guard(async () => {
+          const session = (await listSessions(this.cwd)).find((candidate) => candidate.id === action.sessionId)
+          if (!session) throw new Error('That session is no longer in this workspace.')
+          await this.switchSession(session.path)
+        })
     }
   }
 

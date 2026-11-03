@@ -108,6 +108,8 @@ interface ComposerProps {
 	skills: SkillRecord[];
 	/** Other sidebar sessions in the active project, available as @title references. */
 	sessions?: SessionRecord[];
+	/** Sessions `/resume` offers when they differ from the @-referenceable ones; defaults to `sessions`. */
+	resumeSessions?: readonly SessionRecord[];
 	/** Browser annotations auto-attach as a composer attachment while any exist. */
 	annotations?: BrowserAnnotation[];
 	/** The active thread's tab driven through the browser extension, with its pause and focus controls. */
@@ -197,6 +199,7 @@ export const Composer = memo(function Composer({
 	transcriptionProvider = "openai-live",
 	skills,
 	sessions = [],
+	resumeSessions = sessions,
 	annotations = EMPTY_ANNOTATIONS,
 	extensionTab,
 	browserExtension,
@@ -419,6 +422,7 @@ export const Composer = memo(function Composer({
 		harness,
 		fileRoot,
 		sessions,
+		resumeSessions,
 		enabledSkills,
 		skills,
 		runtimeCommands,
@@ -523,7 +527,7 @@ export const Composer = memo(function Composer({
 			const outcome = resolveLocalCommand(slash.name, slash.args, {
 				models: selectableModels(modelsByProvider, providers),
 				reasoningLevels,
-				sessions,
+				sessions: resumeSessions,
 			});
 			if (outcome.type === "error") return setAttachmentError(outcome.message);
 			if (outcome.type === "complete") return setDraft(outcome.draft);
