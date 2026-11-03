@@ -26,7 +26,12 @@ export function useRuntimePrewarm({ bridge, ready, harness, generation, workspac
     const key = JSON.stringify([generation, sessionFile])
     const stillSelected = () => workspaceRef.current.generation === generation
       && workspaceRef.current.cwd === selected.cwd && workspaceRef.current.sessionFile === selected.sessionFile
-    if (!bridge || !ready || !model || runtimeId || !selected.cwd || !selected.project || selected.project.inferred
+    // A selection warms at most once. When its runtime exits (for example a VS Code handoff), Send restarts it.
+    if (runtimeId) {
+      attempted.current = key
+      return
+    }
+    if (!bridge || !ready || !model || !selected.cwd || !selected.project || selected.project.inferred
       || selected.generation !== generation || selected.sessionFile !== sessionFile || sessionStatus === 'running' || attempted.current === key) return
     let cancelled = false
     const timer = window.setTimeout(() => {

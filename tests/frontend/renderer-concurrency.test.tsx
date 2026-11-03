@@ -617,6 +617,25 @@ describe('bootstrap critical path', () => {
     } finally { vi.useRealTimers() }
   })
 
+  it('does not restart a runtime for the selection after its attached runtime exits', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const start = vi.fn(async () => runtime)
+      const bridge = { agent: { list: async () => [], start } } as unknown as PrimeWorkApi
+      const workspaceRef = { current: { generation: 1, project, cwd: project.path, sessionFile: session.filePath } }
+      function PrewarmProbe({ runtimeId }: { runtimeId: string | undefined }) {
+        useRuntimePrewarm({ bridge, ready: true, harness: 'pi', generation: 1, workspaceRef,
+          runtimeId, sessionStatus: 'idle', sessionFile: session.filePath, model: 'fixture/model', thinking: 'medium', fast: false, attachRuntime: vi.fn() })
+        return null
+      }
+      await act(async () => { root.render(<PrewarmProbe runtimeId="existing" />) })
+      // "Continue in VS Code" stops the runtime; the session must stay free for VS Code.
+      await act(async () => { root.render(<PrewarmProbe runtimeId={undefined} />) })
+      await act(async () => { vi.advanceTimersByTime(300); await Promise.resolve() })
+      expect(start).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
   it('keeps live query-cache updates when projects resolve after sessions', async () => {
     const pendingProjects = deferred<ProjectRecord[]>()
     const bridge = {
