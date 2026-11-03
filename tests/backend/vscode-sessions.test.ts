@@ -7,7 +7,7 @@ import { diagnosticPrompt, selectionPrompt, SELECTION_CHAR_LIMIT } from '../../p
 import { gitStatusFromRepository, GIT_ENTRY_LIMIT, type GitRepository } from '../../packages/vscode/src/git-status'
 import { PiRpc } from '../../packages/vscode/src/pi-rpc'
 import { sessionPathFromUri } from '../../packages/vscode/src/extension'
-import { VsCodeRuntimeOwner } from '../../packages/vscode/src/runtime-owner'
+import { assertSessionFree, VsCodeRuntimeOwner } from '../../packages/vscode/src/runtime-owner'
 import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
 import { listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
@@ -118,6 +118,26 @@ describe('VS Code handoff lifecycle', () => {
       acquire.mockRestore()
       publish.mockRestore()
       remove.mockRestore()
+    }
+  })
+
+  it('asks Apex desktop to release a session it holds and opens it once released', async () => {
+    const session = join(tmpdir(), 'held.jsonl')
+    const desktop = { app: 'desktop' as const, label: 'Apex desktop', pid: 1, updatedAt: new Date().toISOString(), sessions: [session] }
+    const withdraw = vi.fn()
+    const request = vi.spyOn(runtimeOwners, 'requestSessionRelease').mockResolvedValue(withdraw)
+    const read = vi.spyOn(runtimeOwners, 'readRuntimeOwners')
+      .mockResolvedValueOnce([desktop])
+      .mockResolvedValueOnce([desktop])
+      .mockResolvedValue([])
+    try {
+      await expect(assertSessionFree(session)).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledWith(session)
+      expect(withdraw).toHaveBeenCalledOnce()
+      expect(read).toHaveBeenCalledTimes(3)
+    } finally {
+      request.mockRestore()
+      read.mockRestore()
     }
   })
 

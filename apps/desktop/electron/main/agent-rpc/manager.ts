@@ -399,6 +399,16 @@ export class AgentRpcManager {
     await Promise.all(matches.map((runtime) => runtime.stop()))
   }
 
+  /** Stops the runtime on `filePath` only while it is idle. False when it is busy or failed to stop. */
+  async releaseIdleSession(filePath: string): Promise<boolean> {
+    const wanted = canonicalSessionPath(filePath)
+    const runtime = [...this.runtimes.values()].find((candidate) => {
+      const path = candidate.snapshot().sessionFile
+      return path !== undefined && canonicalSessionPath(path) === wanted
+    })
+    return runtime ? this.retireForCheckout(runtime) : true
+  }
+
   async stopForProjectRoots(roots: string[]): Promise<void> {
     const matches = [...this.runtimes.values()].filter((runtime) => roots.some((root) => isPathWithin(root, runtime.snapshot().cwd)))
     await Promise.all(matches.map((runtime) => runtime.stop()))

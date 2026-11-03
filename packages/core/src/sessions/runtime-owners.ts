@@ -29,8 +29,12 @@ export interface RuntimeOwnerIdentity { app: RuntimeOwnerApp; pid: number }
 
 export const RUNTIME_OWNER_HEARTBEAT_MS = 30_000
 export const RUNTIME_OWNER_STALE_MS = 90_000
+export const SESSION_RELEASE_REQUEST_TTL_MS = 30_000
 const MAX_SESSIONS = 64
 const RECORD_NAME = /^(desktop|vscode)-(\d+)\.json$/
+const RELEASE_REQUEST_NAME = /^[a-f0-9]{64}\.release\.json$/
+
+const sessionKey = (canonicalSession: string) => createHash('sha256').update(canonicalSession).digest('hex')
 
 export function runtimeOwnersDir(sessionRoot = piSessionRoot()): string {
   return join(dirname(sessionRoot), 'apex-runtime-owners')
@@ -120,7 +124,7 @@ export async function readRuntimeOwners(self?: RuntimeOwnerIdentity, dir = runti
  */
 export function acquireRuntimeSession(sessionPath: string, owner: RuntimeOwnerIdentity & { label: string }, dir = runtimeOwnersDir()): () => void {
   const session = canonicalSessionPath(sessionPath)
-  const target = join(dir, `${createHash('sha256').update(session).digest('hex')}.claim.json`)
+  const target = join(dir, `${sessionKey(session)}.claim.json`)
   mkdirSync(dir, { recursive: true })
   let fd: number
   try {
@@ -203,6 +207,62 @@ export class RuntimeSessionClaims {
 export function runtimeOwnerOf(owners: readonly RuntimeOwner[], sessionPath: string): RuntimeOwner | undefined {
   const wanted = canonicalSessionPath(sessionPath)
   return owners.find((owner) => owner.sessions.includes(wanted))
+}
+
+/**
+ * Asks Apex desktop to stop its idle runtime on `sessionPath`. Desktop keeps
+ * runtimes for recently viewed sessions as a warm cache; a busy runtime keeps
+ * its session. The returned function withdraws the request.
+ */
+export async function requestSessionRelease(sessionPath: string, dir = runtimeOwnersDir()): Promise<() => void> {
+  const session = canonicalSessionPath(sessionPath)
+  const target = join(dir, `${sessionKey(session)}.release.json`)
+  await mkdir(dir, { recursive: true })
+  const temporary = `${target}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, JSON.stringify({ session, requestedAt: new Date().toISOString() }), { encoding: 'utf8', mode: 0o600 })
+    await rename(temporary, target)
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined)
+  }
+  return () => { try { rmSync(target, { force: true }) } catch { /* The request expires on its own. */ } }
+}
+
+export interface SessionReleaseRequest {
+  session: string
+  /** Removes the request once it has been honored. */
+  remove(): void
+}
+
+/** Pending release requests. Expired or malformed requests are removed. */
+export async function readSessionReleaseRequests(dir = runtimeOwnersDir(), now = Date.now()): Promise<SessionReleaseRequest[]> {
+  let names: string[]
+  try {
+    names = await readdir(dir)
+  } catch {
+    return []
+  }
+  const requests: SessionReleaseRequest[] = []
+  for (const name of names) {
+    if (!RELEASE_REQUEST_NAME.test(name)) continue
+    const path = join(dir, name)
+    const remove = () => { try { rmSync(path, { force: true }) } catch { /* expires on its own */ } }
+    let value: unknown
+    try {
+      value = JSON.parse(await readFile(path, 'utf8'))
+    } catch (error) {
+      if (error instanceof SyntaxError) remove()
+      continue
+    }
+    const session = isRecord(value) && typeof value.session === 'string' ? value.session : undefined
+    const requestedAt = isRecord(value) && typeof value.requestedAt === 'string' ? Date.parse(value.requestedAt) : Number.NaN
+    if (!session || `${sessionKey(session)}.release.json` !== name || !(Math.abs(now - requestedAt) < SESSION_RELEASE_REQUEST_TTL_MS)) {
+      remove()
+      continue
+    }
+    requests.push({ session, remove })
+  }
+  return requests
 }
 
 /** Throws when another live app holds `sessionPath`, naming that app and how to hand the session over. */

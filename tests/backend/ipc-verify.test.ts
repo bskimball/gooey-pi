@@ -13,7 +13,7 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { registerIpc, type IpcRegistration } from '../../apps/desktop/electron/main/ipc'
@@ -240,6 +240,42 @@ describe('registerIpc verify gate', () => {
       await handoff.publish(true)
       expect(() => readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')).toThrow()
       registration.dispose()
+      rmSync(ownersDir, { recursive: true, force: true })
+    }
+  })
+
+  it('releases an idle session Apex for VS Code requests and keeps a busy one', async () => {
+    const ownersDir = mkdtempSync(join(tmpdir(), 'apex-handoff-release-'))
+    const sessionPath = join(ownersDir, 'held.jsonl')
+    writeFileSync(sessionPath, '')
+    let busy = true
+    let runtime: { sessionFile: string } | undefined = { sessionFile: sessionPath }
+    const agents = {
+      list: vi.fn(() => (runtime ? [runtime] : [])),
+      getForSession: vi.fn(() => runtime),
+      releaseIdleSession: vi.fn(async () => {
+        if (busy) return false
+        runtime = undefined
+        return true
+      }),
+      setSessionAttachGuard: vi.fn(),
+      setSessionClaimProvider: vi.fn(),
+    }
+    const handoff = new SessionHandoff({ agents: agents as never, sessions: {} as never, projects: {} as never, openExternal: vi.fn(), ownersDir })
+    try {
+      await runtimeOwners.requestSessionRelease(sessionPath, ownersDir)
+      await handoff.releaseRequestedSessions()
+      expect(runtime).toBeDefined()
+      expect(await runtimeOwners.readSessionReleaseRequests(ownersDir)).toHaveLength(1)
+
+      busy = false
+      await handoff.releaseRequestedSessions()
+      expect(agents.releaseIdleSession).toHaveBeenLastCalledWith(realpathSync(sessionPath))
+      expect(await runtimeOwners.readSessionReleaseRequests(ownersDir)).toEqual([])
+      const record = JSON.parse(readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')) as { sessions: string[] }
+      expect(record.sessions).toEqual([])
+    } finally {
+      await handoff.dispose()
       rmSync(ownersDir, { recursive: true, force: true })
     }
   })

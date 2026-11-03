@@ -1028,6 +1028,26 @@ setInterval(() => {}, 1000)
     expect(shutdownEnded).toHaveBeenCalledOnce()
   })
 
+  it('releases an idle session runtime on request but keeps one with an unanswered prompt', async () => {
+    const sessionFile = '/sessions/release.jsonl'
+    const state = `{ id: command.id, type: 'response', command: 'get_state', success: true, data: { sessionId: 'release', sessionFile: ${JSON.stringify(sessionFile)}, isStreaming: false } }`
+    // The prompt never gets a response, as when an extension dialog awaits the user.
+    const fake = fakeAgent("{ type: 'extension_ui_request', id: 'dialog', method: 'confirm', title: 'Continue?' }", state)
+    const manager = managerFor(fake.executable)
+    const runtime = await manager.start({ cwd: fake.cwd, sessionPath: sessionFile })
+    const prompt = manager.command(runtime.runtimeId, { type: 'prompt', message: 'needs a dialog' }).catch(() => undefined)
+
+    await expect(manager.releaseIdleSession(sessionFile)).resolves.toBe(false)
+    expect(manager.getForSession(sessionFile)).toBeDefined()
+
+    await manager.stopForSession(sessionFile)
+    await prompt
+    const idle = await manager.start({ cwd: fake.cwd, sessionPath: sessionFile })
+    await expect(manager.releaseIdleSession(sessionFile)).resolves.toBe(true)
+    expect(manager.has(idle.runtimeId)).toBe(false)
+    await expect(manager.releaseIdleSession(sessionFile)).resolves.toBe(true)
+  })
+
   it('atomically admits one of two competing starts and retains its claim until child close', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", "{ id: command.id, type: 'response', command: command.type, success: true, data: { sessionFile, isStreaming: false } }", 150)
     const path = join(fake.cwd, 'held.jsonl')

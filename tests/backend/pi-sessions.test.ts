@@ -14,7 +14,7 @@ import {
   piTimestampFromSessionName,
 } from '../../apps/desktop/electron/main/sessions/pi'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
-import { acquireRuntimeSession, RuntimeSessionClaims, assertSessionNotOwnedElsewhere, publishRuntimeOwner, readRuntimeOwners, removeRuntimeOwner, runtimeOwnerOf, runtimeOwnersDir, RUNTIME_OWNER_STALE_MS } from 'apex-core/sessions/runtime-owners'
+import { acquireRuntimeSession, RuntimeSessionClaims, assertSessionNotOwnedElsewhere, publishRuntimeOwner, readRuntimeOwners, readSessionReleaseRequests, removeRuntimeOwner, requestSessionRelease, runtimeOwnerOf, runtimeOwnersDir, RUNTIME_OWNER_STALE_MS, SESSION_RELEASE_REQUEST_TTL_MS } from 'apex-core/sessions/runtime-owners'
 
 vi.mock('node:fs/promises', async (importOriginal) => ({ ...await importOriginal<typeof import('node:fs/promises')>() }))
 
@@ -608,6 +608,31 @@ describe('runtime owner registry', () => {
     acquire(next)()
     claims.dispose()
     expect(() => claims.reserve(session)).toThrow('Runtime ownership has ended')
+  })
+
+  it('delivers session release requests until withdrawn, honored, or expired', async () => {
+    const { dir, session } = registry()
+    const withdraw = await requestSessionRelease(session, dir)
+    expect((await readSessionReleaseRequests(dir)).map((request) => request.session)).toEqual([session])
+    expect(await readRuntimeOwners(undefined, dir)).toEqual([])
+    withdraw()
+    expect(await readSessionReleaseRequests(dir)).toEqual([])
+
+    await requestSessionRelease(session, dir)
+    const [honored] = await readSessionReleaseRequests(dir)
+    honored!.remove()
+    expect(await readSessionReleaseRequests(dir)).toEqual([])
+
+    await requestSessionRelease(session, dir)
+    expect(await readSessionReleaseRequests(dir, Date.now() + SESSION_RELEASE_REQUEST_TTL_MS + 1_000)).toEqual([])
+    expect(await readSessionReleaseRequests(dir)).toEqual([])
+
+    await requestSessionRelease(session, dir)
+    expect(await readSessionReleaseRequests(dir, Date.now() - SESSION_RELEASE_REQUEST_TTL_MS - 1_000)).toEqual([])
+    const malformed = join(dir, `${'a'.repeat(64)}.release.json`)
+    writeFileSync(malformed, '{ not json')
+    expect(await readSessionReleaseRequests(dir)).toEqual([])
+    expect(() => statSync(malformed)).toThrow()
   })
 
   it('lives beside the Pi session root', () => {

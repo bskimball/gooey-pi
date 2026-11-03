@@ -7,6 +7,7 @@ import {
   acquireRuntimeSession,
   publishRuntimeOwner,
   readRuntimeOwners,
+  readSessionReleaseRequests,
   removeRuntimeOwner,
   RUNTIME_OWNER_HEARTBEAT_MS,
   runtimeOwnersDir,
@@ -24,7 +25,7 @@ const VSCODE_SESSION_URI = 'vscode://bdkinc.apex-vscode/open'
 const VSCODE_FOCUS_DELAY_MS = 1_200
 
 interface SessionHandoffDeps {
-  agents: Pick<AgentRpcManager, 'list' | 'getForSession' | 'stopForSession' | 'setSessionAttachGuard' | 'setSessionClaimProvider'>
+  agents: Pick<AgentRpcManager, 'list' | 'getForSession' | 'stopForSession' | 'releaseIdleSession' | 'setSessionAttachGuard' | 'setSessionClaimProvider'>
   sessions: Pick<SessionService, 'requireSessionPath' | 'list'>
   projects: Pick<ProjectService, 'authorizePath'>
   openExternal(url: string): Promise<void>
@@ -42,11 +43,12 @@ export function describeDesktopSession(sessions: Pick<SessionService, 'list'>) {
 
 /**
  * Publishes which sessions this app's Pi runtimes hold, refuses to attach a
- * runtime to a session another live Apex app holds, and hands a session to
- * Apex for VS Code.
+ * runtime to a session another live Apex app holds, hands a session to Apex
+ * for VS Code, and releases idle sessions VS Code asks for.
  */
 export class SessionHandoff {
   private disposed = false
+  private releasing: Promise<void> | null = null
   private published = ''
   private publishedAt = 0
   // Writes run one at a time so an older snapshot can never land after a newer one.
@@ -59,7 +61,10 @@ export class SessionHandoff {
     this.ownersDir = ownersDir
     deps.agents.setSessionAttachGuard((sessionPath) => assertSessionNotOwnedElsewhere(sessionPath, SELF, ownersDir))
     deps.agents.setSessionClaimProvider((sessionPath) => acquireRuntimeSession(sessionPath, { ...SELF, label: 'Apex desktop' }, ownersDir))
-    this.timer = setInterval(() => { void this.publish() }, CHANGE_POLL_MS)
+    this.timer = setInterval(() => {
+      void this.publish()
+      void this.releaseRequestedSessions().catch(() => undefined)
+    }, CHANGE_POLL_MS)
     this.timer.unref()
     process.once('exit', () => removeRuntimeOwner(SELF, ownersDir))
     void this.publish(true)
@@ -80,6 +85,24 @@ export class SessionHandoff {
     this.published = key
     this.publishedAt = now
     await publishRuntimeOwner({ ...SELF, label: 'Apex desktop', sessions }, this.ownersDir).catch(() => undefined)
+  }
+
+  /** Stops idle runtimes on sessions Apex for VS Code asked for. A busy runtime keeps its session. */
+  releaseRequestedSessions(): Promise<void> {
+    this.releasing ??= this.releaseIdle().finally(() => { this.releasing = null })
+    return this.releasing
+  }
+
+  private async releaseIdle(): Promise<void> {
+    let released = false
+    for (const request of await readSessionReleaseRequests(this.ownersDir)) {
+      if (this.disposed) return
+      if (!this.deps.agents.getForSession(request.session)) continue
+      if (!(await this.deps.agents.releaseIdleSession(request.session))) continue
+      request.remove()
+      released = true
+    }
+    if (released) await this.publish(true)
   }
 
   async otherOwners(): Promise<RuntimeOwnerView[]> {
