@@ -105,7 +105,7 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
 
   return <div className={`subagent-lane is-${state}`}>
     <div className="subagent-lane__summary">
-      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
+      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch className="spin" size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
       {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
       {roles.length
         ? roles.map((role, index) => <span key={`${role}-${index}`} className="subagent-lane__role">{role}</span>)

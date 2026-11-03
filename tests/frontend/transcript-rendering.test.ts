@@ -55,7 +55,8 @@ describe('transcript rendering', () => {
       expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('Failed')
       await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
-      expect(container.querySelector('.subagent-lane.is-running .spin')).toBeNull()
+      expect(first.querySelector('.spin')).toBeNull()
+      expect(container.querySelector('.subagent-lane.is-running .spin')).not.toBeNull()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -464,6 +465,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
+    expect(html).toContain('ph-circle-notch spin')
     // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
     expect(html).toContain('├─</span><span class="subagent-lane__leaf">Transcript lives in messages.tsx</span>')
     expect(html).toContain('View full report')
