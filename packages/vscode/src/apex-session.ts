@@ -66,6 +66,16 @@ function describeProviders(models: ModelDescriptor[]): ProviderDescriptor[] {
   return [...counts].map(([id, count]) => ({ id, name: id, authMethod: 'external', configured: true, modelCount: count, availableModelCount: count, enabled: true }))
 }
 
+function parseCompactCommand(text: string): { customInstructions?: string } | undefined {
+  const trimmed = text.trim()
+  if (trimmed === '/compact') return {}
+  if (trimmed.startsWith('/compact ')) {
+    const customInstructions = trimmed.slice(9).trim()
+    return customInstructions ? { customInstructions } : {}
+  }
+  return undefined
+}
+
 /** One pi RPC process plus the transcript log the webview replays. */
 export class ApexSession implements vscode.Disposable {
   private rpc: PiRpc | undefined
@@ -81,6 +91,9 @@ export class ApexSession implements vscode.Disposable {
   private queuePaused = false
   /** Set when pi reports agent_start after our latest prompt, so a late "handled" response can't end a real run. */
   private runStarted = false
+  private compacting = false
+  private inFlightCompact = false
+  private onCompactionEnd: (() => void) | undefined
   /** Bumped per idle prompt and on transcript reset; only the current prompt's response may end its optimistic run. */
   private promptToken = 0
   private seq = 0
@@ -289,6 +302,14 @@ export class ApexSession implements vscode.Disposable {
         if (this.switching || !this.rpc) return this.notice('Cannot send a queued message while switching sessions or Pi is not running.')
         const queued = this.state.queued.find((item) => item.id === message.id)
         if (!queued) return
+        if (this.compacting) {
+          vscode.window.setStatusBarMessage('Apex: Waiting for compaction to finish…', 6000)
+          return
+        }
+        if (this.state.isStreaming && parseCompactCommand(queued.text)) {
+          vscode.window.setStatusBarMessage('Apex: Compaction will run when the current turn finishes.', 6000)
+          return
+        }
         this.update({ queued: this.state.queued.filter((item) => item.id !== message.id) })
         return this.send(queued.text, queued.images ?? [], 'steer', queued.editorContext)
       }
@@ -463,10 +484,29 @@ export class ApexSession implements vscode.Disposable {
       this.notice('Pi is not running. Use Restart Pi to start it again.')
       return
     }
+    const compactCommand = parseCompactCommand(text)
+    if (compactCommand && images.length) {
+      this.notice('/compact does not accept attachments. Remove the attachment and try again.')
+      return
+    }
     const imagePayload = images.length ? { images } : {}
     if (this.state.isStreaming) {
+      if (compactCommand) {
+        // Compacting mid-turn would abort the running turn, so it waits for the turn to settle.
+        const queued: QueuedPrompt = { id: `queued-${++this.seq}`, text, intent: 'queue', timestamp: Date.now() }
+        this.update({ queued: [...this.state.queued, queued] })
+        if (intent === 'steer') vscode.window.setStatusBarMessage('Apex: Compaction will run when the current turn finishes.', 6000)
+        return
+      }
       if (this.isExtensionCommand(text)) {
         await this.guard(() => rpc.command('prompt', { message: text }))
+        return
+      }
+      if (this.compacting) {
+        // Pi rejects non-extension prompts while manual compaction is running, so hold them for the post-compaction flush.
+        const queued: QueuedPrompt = { id: `queued-${++this.seq}`, text, intent: 'queue', timestamp: Date.now(), ...imagePayload, editorContext }
+        this.update({ queued: [...this.state.queued, queued] })
+        if (intent === 'steer') vscode.window.setStatusBarMessage('Apex: Waiting for compaction to finish…', 6000)
         return
       }
       // The Composer's queue actions resend text only, so prompts with images go to pi's own follow-up queue.
@@ -482,6 +522,31 @@ export class ApexSession implements vscode.Disposable {
     this.queuePaused = false
     this.runStarted = false
     const token = ++this.promptToken
+    if (compactCommand) {
+      let compactionEnded = false
+      this.compacting = true
+      this.inFlightCompact = true
+      this.onCompactionEnd = () => { compactionEnded = true }
+      this.update({ isStreaming: true })
+      try {
+        await rpc.command('compact', compactCommand.customInstructions ? { customInstructions: compactCommand.customInstructions } : {})
+      } catch (error) {
+        if (token === this.promptToken && !compactionEnded && this.rpc === rpc) {
+          this.notice(error instanceof Error ? error.message : String(error))
+        }
+      } finally {
+        this.inFlightCompact = false
+        this.compacting = false
+        this.onCompactionEnd = undefined
+        if (token === this.promptToken && this.rpc === rpc) {
+          this.update({ isStreaming: false })
+          void this.refreshStats()
+          void this.guard(() => this.refreshState())
+          this.flushQueue()
+        }
+      }
+      return
+    }
     this.addOp({ kind: 'user', id: `user-${++this.seq}`, text, ...imagePayload, timestamp: Date.now(), startAssistant: true })
     this.update({ isStreaming: true })
     try {
@@ -498,6 +563,7 @@ export class ApexSession implements vscode.Disposable {
   private endOptimisticRun() {
     if (this.runStarted) return
     this.addOp({ kind: 'event', event: { type: 'apex_drop_empty_assistant' } })
+    if (this.compacting) return
     this.update({ isStreaming: false })
     this.flushQueue()
   }
@@ -588,13 +654,33 @@ export class ApexSession implements vscode.Disposable {
     if (type === 'extension_ui_request') return this.onExtensionUi(record)
     if (type === 'agent_start') {
       this.runStarted = true
+      this.compacting = false
       this.update({ isStreaming: true })
     }
-    if (type === 'agent_settled') {
-      this.update({ isStreaming: false })
+    if (type === 'compaction_start') {
+      if (record.reason === 'manual' || !this.state.isStreaming) this.compacting = true
+      this.update({ isStreaming: true })
+    }
+    if (type === 'compaction_end') {
+      this.onCompactionEnd?.()
       void this.refreshStats()
-      void this.guard(() => this.refreshState())
-      this.flushQueue()
+      if (this.compacting && !this.inFlightCompact) {
+        this.compacting = false
+        if (!this.runStarted) {
+          this.update({ isStreaming: false })
+          void this.guard(() => this.refreshState())
+          this.flushQueue()
+        }
+      }
+    }
+    if (type === 'agent_settled') {
+      this.runStarted = false
+      if (!this.compacting) {
+        this.update({ isStreaming: false })
+        void this.refreshStats()
+        void this.guard(() => this.refreshState())
+        this.flushQueue()
+      }
     }
     if (type === 'model_change') void this.guard(() => this.refreshState())
     if (type && TRANSCRIPT_EVENTS.has(type)) this.appendEvent(record)
@@ -681,6 +767,10 @@ export class ApexSession implements vscode.Disposable {
 
   private resetTranscript() {
     this.promptToken += 1
+    this.runStarted = false
+    this.compacting = false
+    this.inFlightCompact = false
+    this.onCompactionEnd = undefined
     clearTimeout(this.flushTimer)
     this.flushTimer = undefined
     this.ops = []

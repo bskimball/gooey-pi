@@ -14,7 +14,7 @@ import { applyOps } from '../../packages/vscode/webview/transcript'
 
 vi.mock('vscode', () => ({
   workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
-  window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn() },
+  window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn(), setStatusBarMessage: vi.fn() },
   languages: { getDiagnostics: vi.fn() },
   Uri: { parse: (value: string) => ({ scheme: value.split(':')[0], toString: () => value }) },
   Range: class {
@@ -515,5 +515,203 @@ describe('VS Code editor integration', () => {
     const bounded = gitStatusFromRepository(repository, path => path)
     expect(bounded.files).toHaveLength(GIT_ENTRY_LIMIT)
     expect(bounded.truncated).toBe(true)
+  })
+
+  it('routes /compact and /compact <instructions> to the compact RPC command without user bubbles or editor context', async () => {
+    let finishCompact!: () => void
+    const command = vi.fn(() => new Promise<object>((resolve) => { finishCompact = () => resolve({}) }))
+    const addOp = vi.fn()
+    const refreshStats = vi.fn().mockResolvedValue(undefined)
+    const refreshState = vi.fn().mockResolvedValue(undefined)
+    const flushQueue = vi.fn()
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      promptToken: 0,
+      state: { isStreaming: false, commands: [], queued: [] },
+      update(patch: object) {
+        Object.assign(this.state, patch)
+      },
+      addOp,
+      refreshStats,
+      refreshState,
+      flushQueue,
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    const bare = session.send('/compact', [], 'queue', '\nCAPTURED_EDITOR')
+    expect(session.state.isStreaming).toBe(true)
+    expect(addOp).not.toHaveBeenCalled()
+    expect(command).toHaveBeenCalledWith('compact', {})
+    finishCompact()
+    await bare
+    expect(session.state.isStreaming).toBe(false)
+    expect(refreshStats).toHaveBeenCalledOnce()
+    expect(refreshState).toHaveBeenCalledOnce()
+    expect(flushQueue).toHaveBeenCalledOnce()
+
+    const instructed = session.send('  /compact   keep API contracts  ', [], 'queue', '\nCAPTURED_EDITOR')
+    expect(command).toHaveBeenLastCalledWith('compact', { customInstructions: 'keep API contracts' })
+    finishCompact()
+    await instructed
+  })
+
+  it('queues /compact while streaming even under steer or sendQueued, then runs compact on settle', async () => {
+    const command = vi.fn().mockResolvedValue({})
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      promptToken: 0,
+      queuePaused: false,
+      state: { isStreaming: true, commands: [], queued: [] },
+      update(patch: object) {
+        Object.assign(this.state, patch)
+      },
+      addOp: vi.fn(),
+      refreshStats: vi.fn().mockResolvedValue(undefined),
+      refreshState: vi.fn().mockResolvedValue(undefined),
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    await session.send('/compact focus on tests', [], 'steer', '\nCAPTURED_EDITOR')
+    expect(command).not.toHaveBeenCalled()
+    expect(session.state.queued).toEqual([expect.objectContaining({ text: '/compact focus on tests', intent: 'queue' })])
+    expect(vscode.window.setStatusBarMessage).toHaveBeenCalledWith('Apex: Compaction will run when the current turn finishes.', 6000)
+
+    await session.handle({ type: 'sendQueued', id: session.state.queued[0].id })
+    expect(command).not.toHaveBeenCalled()
+    expect(session.state.queued).toHaveLength(1)
+
+    session.onRecord({ type: 'agent_settled' })
+    await Promise.resolve()
+    expect(command).toHaveBeenCalledWith('compact', { customInstructions: 'focus on tests' })
+    expect(session.state.queued).toEqual([])
+  })
+
+  it('avoids duplicate error notices when Pi already emitted compaction_end before rejecting compact', async () => {
+    const notice = vi.fn()
+    const session = Object.create(ApexSession.prototype)
+    const command = vi.fn(async () => {
+      session.onRecord({ type: 'compaction_start', reason: 'manual' })
+      session.onRecord({ type: 'compaction_end', reason: 'manual', aborted: false, willRetry: false, errorMessage: 'Compaction failed: Nothing to compact (session too small)' })
+      throw new Error('Nothing to compact (session too small)')
+    })
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      promptToken: 0,
+      state: { isStreaming: false, commands: [], queued: [] },
+      update(patch: object) {
+        Object.assign(this.state, patch)
+      },
+      appendEvent: vi.fn(),
+      notice,
+      refreshStats: vi.fn().mockResolvedValue(undefined),
+      refreshState: vi.fn().mockResolvedValue(undefined),
+      flushQueue: vi.fn(),
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    await session.send('/compact', [], 'queue', '')
+    expect(notice).not.toHaveBeenCalled()
+    expect(session.state.isStreaming).toBe(false)
+
+    command.mockRejectedValueOnce(new Error('Pi exited (code 1)'))
+    await session.send('/compact', [], 'queue', '')
+    expect(notice).toHaveBeenCalledWith('Pi exited (code 1)')
+  })
+
+  it('holds steers, image prompts, and sendQueued while manual compaction is running, then flushes them after compact settles', async () => {
+    let finishCompact!: () => void
+    const command = vi.fn((type: string) => (type === 'compact' ? new Promise<object>((resolve) => { finishCompact = () => resolve({}) }) : Promise.resolve({})))
+    const addOp = vi.fn()
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      promptToken: 0,
+      queuePaused: false,
+      state: { isStreaming: false, commands: [], queued: [] },
+      update(patch: object) {
+        Object.assign(this.state, patch)
+      },
+      addOp,
+      refreshStats: vi.fn().mockResolvedValue(undefined),
+      refreshState: vi.fn().mockResolvedValue(undefined),
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    const compactRun = session.send('/compact', [], 'queue', '')
+    expect(session.state.isStreaming).toBe(true)
+
+    const image = { type: 'image' as const, mimeType: 'image/png', data: 'aGVsbG8=' }
+    await session.send('Steer during compact', [], 'steer', '\nSTEER_CTX')
+    await session.send('Image during compact', [image], 'queue', '\nIMAGE_CTX')
+    await session.handle({ type: 'sendQueued', id: session.state.queued[0].id })
+
+    // Neither prompt nor user bubbles may be sent while manual compaction is active.
+    expect(command).toHaveBeenCalledTimes(1)
+    expect(command).toHaveBeenCalledWith('compact', {})
+    expect(addOp).not.toHaveBeenCalled()
+    expect(session.state.queued).toHaveLength(2)
+
+    finishCompact()
+    await compactRun
+    expect(command).toHaveBeenNthCalledWith(2, 'prompt', { message: 'Steer during compact\nSTEER_CTX' })
+    expect(session.state.queued).toHaveLength(1)
+
+    session.onRecord({ type: 'agent_settled' })
+    await Promise.resolve()
+    expect(command).toHaveBeenNthCalledWith(3, 'prompt', { message: 'Image during compact\nIMAGE_CTX', images: [image] })
+    expect(session.state.queued).toEqual([])
+  })
+
+  it('settles extension-triggered manual compaction on compaction_end while keeping auto-compaction busy until agent_settled', async () => {
+    const command = vi.fn().mockResolvedValue({})
+    const refreshState = vi.fn().mockResolvedValue(undefined)
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      promptToken: 0,
+      queuePaused: false,
+      state: { isStreaming: false, commands: [], queued: [] },
+      update(patch: object) {
+        Object.assign(this.state, patch)
+      },
+      addOp: vi.fn(),
+      appendEvent: vi.fn(),
+      refreshStats: vi.fn().mockResolvedValue(undefined),
+      refreshState,
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+
+    // Active run followed by auto-compaction stays streaming until agent_settled.
+    session.onRecord({ type: 'agent_start' })
+    session.onRecord({ type: 'compaction_start', reason: 'threshold' })
+    session.onRecord({ type: 'compaction_end', reason: 'threshold', aborted: false, willRetry: false })
+    expect(session.state.isStreaming).toBe(true)
+    session.onRecord({ type: 'agent_settled' })
+    expect(session.state.isStreaming).toBe(false)
+
+    // Extension-triggered manual compaction has no host compact promise and no trailing agent_settled,
+    // and an idle extension command may emit compaction_start before resolving with disposition=handled.
+    command.mockImplementationOnce(async () => {
+      session.onRecord({ type: 'compaction_start', reason: 'manual' })
+      return { disposition: 'handled' }
+    })
+    session.state.commands = [{ name: 'extcompact', source: 'extension' }]
+    await session.send('/extcompact', [], 'queue', '')
+    expect(session.state.isStreaming).toBe(true)
+    await session.send('After extension compact', [], 'steer', '\nEXT_CTX')
+    expect(command).toHaveBeenCalledTimes(1)
+    expect(session.state.queued).toHaveLength(1)
+
+    session.onRecord({ type: 'compaction_end', reason: 'manual', aborted: false, willRetry: false })
+    expect(refreshState).toHaveBeenCalled()
+    expect(command).toHaveBeenLastCalledWith('prompt', { message: 'After extension compact\nEXT_CTX' })
+    expect(session.state.queued).toEqual([])
   })
 })
