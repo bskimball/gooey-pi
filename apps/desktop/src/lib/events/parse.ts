@@ -1,4 +1,4 @@
-import type { MessagePart } from '@/types/api'
+import type { MessagePart } from 'apex-core/types/api'
 
 /** Record and field coercion for raw Prime events. */
 

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import { ApexSession } from './apex-session'
+import { AgentPresence } from './agent-presence'
 import { editorFileContext } from './editor'
 import { DiagnosticActions, FIX_DIAGNOSTIC_COMMAND, selectionDraft } from './editor-commands'
 import { GitStatusSource } from './git-source'
@@ -9,6 +10,7 @@ import type { HostMessage, WebviewMessage } from './protocol'
 class ApexViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined
   readonly session: ApexSession
+  readonly presence = new AgentPresence()
   private started = false
   private ready = false
   private readonly pendingDrafts: string[] = []
@@ -86,6 +88,7 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
   }
 
   private post(message: HostMessage) {
+    this.presence.observe(message)
     void this.view?.webview.postMessage(message)
   }
 
@@ -119,7 +122,7 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
 
 /** VS Code already decoded the query. This URI has one parameter, whose value may contain '&' or '+'. */
 export function sessionPathFromUri(uri: Pick<vscode.Uri, 'path' | 'query'>): string | null {
-  return uri.path === '/open' && uri.query.startsWith('session=') ? uri.query.slice('session='.length) : null
+  return (uri.path === '/open' || uri.path === '/attach') && uri.query.startsWith('session=') ? uri.query.slice('session='.length) : null
 }
 
 let activeProvider: ApexViewProvider | undefined
@@ -130,6 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
   void provider.git.start()
   context.subscriptions.push(
     provider.session,
+    provider.presence,
     provider.git,
     vscode.window.onDidChangeActiveTextEditor(() => provider.postEditorContext()),
     vscode.window.onDidChangeTextEditorSelection(() => provider.postEditorContext()),
@@ -149,13 +153,13 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand(FIX_DIAGNOSTIC_COMMAND, (draft: unknown) => { if (typeof draft === 'string') provider.insertDraft(draft) }),
     vscode.languages.registerCodeActionsProvider([{ scheme: 'file' }, { scheme: 'untitled' }], new DiagnosticActions(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
-    // Apex desktop's "Continue in VS Code" opens vscode://bdkinc.apex-vscode/open?session=<path>.
+    // /attach preserves Desktop ownership; /open also accepts older standalone handoffs.
     vscode.window.registerUriHandler({
       handleUri(uri) {
         const session = sessionPathFromUri(uri)
         if (!session) return
         provider.reveal()
-        void provider.session.openFromDesktop(session)
+        void provider.session.openFromDesktop(session, uri.path === '/attach')
       },
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {

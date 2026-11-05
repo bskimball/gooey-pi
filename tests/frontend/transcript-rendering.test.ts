@@ -55,6 +55,9 @@ describe('transcript rendering', () => {
       expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('Failed')
       await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+      onOpenSpecialist.mockClear()
+      await act(async () => first.querySelector<HTMLElement>('.subagent-lane__summary.is-clickable')!.click())
+      expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
       expect(first.querySelector('.spin')).toBeNull()
       expect(container.querySelector('.subagent-lane.is-running .spin')).not.toBeNull()
     } finally {

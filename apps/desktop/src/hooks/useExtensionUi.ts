@@ -215,6 +215,19 @@ export function useExtensionUi({
   }, [cancelPending, clearExtensionUi])
 
   const showExtensionUi = useCallback((runtimeId: string, rawEvent: Record<string, unknown>) => {
+    if (rawEvent.type === 'extension_ui_resolved' && typeof rawEvent.id === 'string') {
+      const pending = pendingByRuntimeRef.current.get(runtimeId)
+      if (!pending || !requestIds(pending).includes(rawEvent.id)) return
+      const remaining = pending.requests?.filter((request) => request.id !== rawEvent.id)
+      if (pending.request.method !== 'questionnaire' || !remaining?.length) clearExtensionUi(runtimeId)
+      else {
+        const next: PendingExtensionUi = { ...pending, requests: remaining, request: { ...pending.request, questions: pending.request.questions.filter((question) => question.id !== rawEvent.id), total: remaining.length, complete: true } }
+        pendingByRuntimeRef.current.set(runtimeId, next)
+        setPendingByRuntime(new Map(pendingByRuntimeRef.current))
+        if (extensionUiRef.current?.runtimeId === runtimeId) { extensionUiRef.current = next; setExtensionUi(next) }
+      }
+      return
+    }
     if (rawEvent.type === 'runtime_exit') {
       modeByRuntimeRef.current.delete(runtimeId)
       hydraByRuntimeRef.current.delete(runtimeId)

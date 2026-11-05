@@ -1,5 +1,5 @@
 import type { BrowserMethod, HostMessage, SessionSummary, WebviewMessage } from '../src/protocol'
-import type { AgentBrowserState, AgentBrowserTabRecord, AgentBrowserExtensionStatus, ProjectFileListing } from 'apex-core/types/api'
+import type { AgentBrowserState, AgentBrowserTabRecord, AgentBrowserExtensionStatus, ProjectFileListing, TranscriptMessage } from 'apex-core/types/api'
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void }
 
@@ -69,6 +69,18 @@ export const sessions = {
       postToHost({ type: 'sessions:list', requestId })
     })
   },
+  read: (path: string): Promise<TranscriptMessage[]> => {
+    const requestId = ++sessionRequestId
+    return new Promise((resolve, reject) => {
+      const stop = onHostMessage(message => {
+        if (message.type !== 'sessions:read' || message.requestId !== requestId) return
+        stop()
+        if (message.error) reject(new Error(message.error))
+        else resolve(message.messages)
+      })
+      postToHost({ type: 'sessions:read', requestId, path })
+    })
+  },
   switch: (path: string): Promise<void> => {
     const requestId = ++sessionRequestId
     return new Promise((resolve, reject) => {
@@ -121,6 +133,7 @@ export function installPrimeShim() {
       openInVsCode: async () => false,
     },
     projects: { listFiles },
+    sessions: { read: sessions.read },
     browser,
   }
   ;(window as unknown as { prime: unknown }).prime = prime

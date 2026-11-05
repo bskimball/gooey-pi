@@ -195,6 +195,8 @@
 .subagent-lane.is-running { border-color: color-mix(in srgb, var(--prime) 30%, var(--border)); }
 .subagent-lane.is-error { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
 .subagent-lane__summary { min-height: 32px; display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 6px; color: var(--text-secondary); font-size: var(--chat-ui); }
+.subagent-lane__summary.is-clickable { cursor: pointer; transition: background-color 120ms ease-out; }
+.subagent-lane__summary.is-clickable:hover { background: var(--surface-hover); }
 .subagent-lane__status { width: 20px; height: 20px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--text-tertiary); }
 .subagent-lane.is-running .subagent-lane__status { color: var(--prime); }
 .subagent-lane.is-done .subagent-lane__status { color: var(--success); }

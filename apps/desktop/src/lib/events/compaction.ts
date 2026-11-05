@@ -1,4 +1,4 @@
-import type { MessagePart, TranscriptMessage } from '@/types/api'
+import type { MessagePart, TranscriptMessage } from 'apex-core/types/api'
 import { nextTranscriptId, withPartId } from './ids'
 import { record, string } from './parse'
 

@@ -255,11 +255,13 @@ describe('pi RPC handshake', () => {
     const events: Array<Record<string, unknown>> = []
     manager.setEventSink(({ event }) => events.push(event))
 
-    await manager.start({ cwd: fake.cwd, sessionPath: '/sessions/bucket/run.jsonl', model: 'openai-codex/gpt-5.6-luna', thinking: 'high' })
+    const sessionPath = join(fake.cwd, 'run.jsonl')
+    writeFileSync(sessionPath, '')
+    await manager.start({ cwd: fake.cwd, sessionPath, model: 'openai-codex/gpt-5.6-luna', thinking: 'high' })
 
     await waitUntil(() => events.some((event) => event.type === 'fake_argv'))
     const argv = (events.find((event) => event.type === 'fake_argv') as { argv: string[] }).argv
-    expect(argv[argv.indexOf('--session') + 1]).toBe('/sessions/bucket/run.jsonl')
+    expect(argv[argv.indexOf('--session') + 1]).toBe(sessionPath)
     expect(argv).not.toContain('--resume')
     expect(argv[argv.indexOf('--provider') + 1]).toBe('openai-codex')
     expect(argv[argv.indexOf('--model') + 1]).toBe('gpt-5.6-luna')
@@ -278,9 +280,11 @@ describe('pi RPC handshake', () => {
     const events: Array<Record<string, unknown>> = []
     manager.setEventSink(({ event }) => events.push(event))
 
+    const sessionPath = join(fake.cwd, 'run.jsonl')
+    writeFileSync(sessionPath, '')
     const runtime = await manager.start({
       cwd: fake.cwd,
-      sessionPath: '/sessions/bucket/run.jsonl',
+      sessionPath,
       model: 'openai-codex/gpt-5.6-luna',
       thinking: 'high',
     })

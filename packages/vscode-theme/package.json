@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "package": "node build.mjs && npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository --skip-license"
+    "package": "node build.mjs && node -e \"fs.mkdirSync('../../release', { recursive: true })\" && vsce package --no-dependencies --allow-missing-repository --skip-license --out ../../release"
   },
   "contributes": {
     "themes": [

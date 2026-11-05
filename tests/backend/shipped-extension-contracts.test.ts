@@ -64,6 +64,7 @@ function piHost(): Fixture {
 const fixtureFactories = { pi: piHost }
 
 const expectedRegistrations: Record<string, Registration[]> = {
+  'apex-editor.ts': ['editor_context', 'editor_read', 'editor_diagnostics', 'editor_open'].map((name) => ({ kind: 'tool', name })),
   'apex-browser-agent.ts': [{ kind: 'tool', name: 'browser_task' }, { kind: 'tool', name: 'browser_run' }],
   'omp-work-browser.ts': [
     ...['terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate'].map((name) => ({ kind: 'tool' as const, name })),
@@ -82,6 +83,7 @@ const expectedRegistrations: Record<string, Registration[]> = {
 }
 
 const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly [string, string]>> = {
+  editor: ['APEX_EDITOR_URL', 'APEX_EDITOR_TOKEN'],
   browser: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
   browserAgent: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
   schedule: ['PRIME_WORK_SCHEDULE_URL', 'PRIME_WORK_SCHEDULE_TOKEN'],
@@ -89,6 +91,7 @@ const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly
 }
 
 const UNPREFIXED_TOOLS = [
+  'editor_context', 'editor_read', 'editor_diagnostics', 'editor_open',
   'browser_run', 'browser_task',
   'ask_user', 'terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page',
   'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate',

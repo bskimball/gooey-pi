@@ -1,8 +1,9 @@
 import type { Dirent } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { canonicalSessionPath } from 'apex-core/session-paths'
-import { createPiSessionMetadataReader, piSessionBucketDir, piSessionRoot, readPiTranscript } from 'apex-core/sessions/pi'
+import { createPiSessionMetadataReader, isPiSessionPath, piSessionBucketDir, piSessionRoot, readPiTranscript, resolvePiSessionCandidate } from 'apex-core/sessions/pi'
+import type { TranscriptMessage } from 'apex-core/types/api'
 import type { SessionSummary, TranscriptOp } from './protocol'
 
 export const sessionBucket = piSessionBucketDir
@@ -54,4 +55,14 @@ export async function listSessions(cwd: string, root = piSessionRoot()): Promise
 /** Saved rows are already reduced; live events cannot represent their identity or timestamps. */
 export async function sessionTranscriptOps(path: string): Promise<TranscriptOp[]> {
   return (await readPiTranscript(path, false)).map((message) => ({ kind: 'saved', message }))
+}
+
+/** Reads an authorized saved or worker session transcript under the Pi session root. */
+export async function readSessionTranscript(path: string, root = piSessionRoot()): Promise<TranscriptMessage[]> {
+  if (!path || typeof path !== 'string' || path.length > 4096) throw new Error('Invalid session path.')
+  const rootRealPath = await realpath(root)
+  const candidate = await resolvePiSessionCandidate(rootRealPath, path)
+  const targetRealPath = await realpath(candidate)
+  if (!isPiSessionPath(rootRealPath, targetRealPath)) throw new Error('Session path is outside the Pi session directory.')
+  return readPiTranscript(targetRealPath, false)
 }

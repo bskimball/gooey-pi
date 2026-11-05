@@ -10,6 +10,9 @@ import { PI_RPC_ADAPTER, type HarnessRpcAdapter } from './harness-adapter'
 import { RpcRuntime } from './runtime'
 import type { RpcObject } from './types'
 import type { WorkspaceUseLease, WorkspaceUseOwner } from '../repository-use-gate'
+import { readPiTranscript } from 'apex-core/sessions/pi'
+import type { DesktopSessionSnapshot } from 'apex-core/sessions/desktop-link'
+import { DesktopSessionProjection } from '../desktop-link-projection'
 
 /**
  * Structural slice of the provider catalog the manager needs; PrimeProviderService
@@ -25,6 +28,10 @@ const IDLE_RUNTIME_TTL_MS = 5 * 60_000
 
 export class AgentRpcManager {
   private readonly runtimes = new Map<string, RpcRuntime>()
+  private readonly projections = new Map<string, DesktopSessionProjection>()
+  private readonly unavailableProjections = new Set<string>()
+  private readonly subscribers = new Set<(event: PrimeEventEnvelope) => void>()
+  private readonly attachmentPins = new Map<string, number>()
   private readonly sessionClaims = new Map<string, RuntimeSessionClaims>()
   private readonly sessionTransitions = new Set<string>()
   private acquireSession: (path: string) => () => void = () => () => undefined
@@ -33,6 +40,7 @@ export class AgentRpcManager {
   private readonly runtimeEnvironmentRevisions = new Map<string, number>()
   private readonly lastUsedAt = new Map<string, number>()
   private readonly activeCommands = new Map<string, number>()
+  private readonly promptAdmissions = new Map<string, number>()
   private readonly idleSweep: NodeJS.Timeout
   private runtimeEnvironmentRevision = 0
   private disabledModels: () => ReadonlySet<string> = () => new Set()
@@ -64,6 +72,42 @@ export class AgentRpcManager {
   }
 
   setEventSink(sink: (envelope: PrimeEventEnvelope) => void): void { this.eventSink = sink }
+
+  subscribe(sink: (envelope: PrimeEventEnvelope) => void): () => void {
+    this.subscribers.add(sink)
+    return () => { this.subscribers.delete(sink) }
+  }
+
+  sessionSnapshot(runtimeId: string): DesktopSessionSnapshot {
+    const runtime = this.requireRuntime(runtimeId).snapshot()
+    const projection = this.projections.get(runtimeId)
+    if (!projection || this.unavailableProjections.has(runtimeId) || this.startingRuntimes.has(runtimeId) || this.sessionTransitions.has(runtimeId)) throw new Error('Runtime snapshot is not available')
+    return structuredClone({ runtime, messages: projection.messages, dialogs: projection.pendingDialogs(), statuses: projection.statuses })
+  }
+
+  pinAttachment(runtimeId: string): () => void {
+    this.requireRuntime(runtimeId)
+    this.attachmentPins.set(runtimeId, (this.attachmentPins.get(runtimeId) ?? 0) + 1)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      const count = (this.attachmentPins.get(runtimeId) ?? 1) - 1
+      if (count) this.attachmentPins.set(runtimeId, count)
+      else this.attachmentPins.delete(runtimeId)
+    }
+  }
+
+  private publishEvent(envelope: PrimeEventEnvelope): void {
+    const normalized = this.projections.get(envelope.runtimeId)?.apply(envelope.event)
+    this.eventSink(envelope)
+    for (const sink of this.subscribers) sink(envelope)
+    if (normalized) {
+      const event = { runtimeId: envelope.runtimeId, event: normalized }
+      this.eventSink(event)
+      for (const sink of this.subscribers) sink(event)
+    }
+  }
 
   setDisabledModelsProvider(provider: () => ReadonlySet<string>): void { this.disabledModels = provider }
 
@@ -169,6 +213,8 @@ export class AgentRpcManager {
         thinking,
         environment: runtimeEnvironment,
       })
+      // Read before spawn: persistence cannot race the baseline and live frames.
+      const baseline = sessionPath ? await readPiTranscript(sessionPath, false) : []
       runtime = await this.admitRuntime(() => {
         const created = new RpcRuntime(
           executable,
@@ -176,7 +222,7 @@ export class AgentRpcManager {
           cwd,
           (event) => {
             this.lastUsedAt.set(event.runtimeId, Date.now())
-            this.eventSink(event)
+            this.publishEvent(event)
           },
           (closed) => {
             claims.dispose()
@@ -186,12 +232,16 @@ export class AgentRpcManager {
             this.retiringRuntimes.delete(closed.runtimeId)
             this.runtimeEnvironmentRevisions.delete(closed.runtimeId)
             this.lastUsedAt.delete(closed.runtimeId)
+            this.projections.delete(closed.runtimeId)
+            this.unavailableProjections.delete(closed.runtimeId)
+            this.attachmentPins.delete(closed.runtimeId)
             notifyRuntimeEnd(closed.snapshot())
           },
           runtimeEnvironment,
           {},
           this.adapter,
         )
+        this.projections.set(created.runtimeId, new DesktopSessionProjection(baseline))
         this.sessionClaims.set(created.runtimeId, claims)
         created.setSessionFileListener((path) => {
           try { claims.confirm(path) } catch (error) {
@@ -262,8 +312,12 @@ export class AgentRpcManager {
   async command(runtimeId: unknown, rawCommand: unknown): Promise<RpcObject> {
     const id = requireId(runtimeId, 'runtimeId')
     const transition = isRecord(rawCommand) && ['switch_session', 'new_session', 'clone', 'fork', 'branch'].includes(String(rawCommand.type))
-    if (transition && this.sessionTransitions.has(id)) throw new Error('A session change is already in progress')
-    if (transition) this.sessionTransitions.add(id)
+    if (this.sessionTransitions.has(id) && !(isRecord(rawCommand) && rawCommand.type === 'extension_ui_response')) throw new Error('A session change is already in progress')
+    const previousSession = transition ? this.runtimes.get(id)?.snapshot().sessionFile : undefined
+    if (transition) {
+      this.sessionTransitions.add(id)
+      this.publishEvent({ runtimeId: id, event: { type: 'desktop_session_revoked', reason: 'Desktop session is changing' } })
+    }
     this.activeCommands.set(id, (this.activeCommands.get(id) ?? 0) + 1)
     try {
       return await this.dispatchCommand(runtimeId, rawCommand)
@@ -275,7 +329,18 @@ export class AgentRpcManager {
       console.error(`[agent-rpc] ${new Date().toISOString()} command ${type} failed:`, error instanceof Error ? error.message : error)
       throw error
     } finally {
-      if (transition) this.sessionTransitions.delete(id)
+      if (transition) {
+        const next = this.runtimes.get(id)?.snapshot()
+        if (next && next.sessionFile !== previousSession) {
+          this.unavailableProjections.add(id)
+          try {
+            const baseline = next.sessionFile ? await readPiTranscript(next.sessionFile, false) : []
+            this.projections.set(id, new DesktopSessionProjection(baseline))
+            this.unavailableProjections.delete(id)
+          } catch { /* A failed read must not expose the previous session's history. */ }
+        }
+        this.sessionTransitions.delete(id)
+      }
       const remaining = (this.activeCommands.get(id) ?? 1) - 1
       if (remaining) this.activeCommands.set(id, remaining)
       else this.activeCommands.delete(id)
@@ -287,6 +352,14 @@ export class AgentRpcManager {
     const runtime = this.requireRuntime(runtimeId)
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired for a branch checkout')
     const command = await validateRpcCommand(rawCommand, this.validateSessionPath)
+    // attached_prompt is resolved here, after validation, against owner state.
+    const attachedPrompt = command.type === 'attached_prompt'
+    if (attachedPrompt) {
+      const state = runtime.snapshot()
+      const busy = state.isStreaming || state.isCompacting || Boolean(state.sessionActions?.active) || this.promptAdmissions.has(runtime.runtimeId)
+      command.type = busy ? command.intent === 'steer' ? 'steer' : 'follow_up' : 'prompt'
+      delete command.intent
+    }
     if (command.type === 'switch_session' && typeof command.sessionPath === 'string') await this.sessionAttachGuard(command.sessionPath)
     this.requireOpen()
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired')
@@ -314,15 +387,31 @@ export class AgentRpcManager {
     const finishReservation = command.type === 'switch_session' && typeof command.sessionPath === 'string'
       ? this.sessionClaims.get(runtime.runtimeId)?.reserve(command.sessionPath)
       : undefined
+    const projection = this.projections.get(runtime.runtimeId)
+    const dialogId = command.type === 'extension_ui_response' && typeof command.id === 'string' ? command.id : undefined
+    if (dialogId) {
+      if (!projection) throw new Error('Dialog response is stale or already submitted')
+      projection.beginAnswer(dialogId)
+    }
+    const holdsAdmission = command.type === 'prompt' || command.type === 'compact'
+    if (holdsAdmission) this.promptAdmissions.set(runtime.runtimeId, (this.promptAdmissions.get(runtime.runtimeId) ?? 0) + 1)
     let response: RpcObject
     try {
       response = await runtime.command(translated)
+      if (dialogId && response.success === true) this.publishEvent({ runtimeId: runtime.runtimeId, event: { type: 'extension_ui_resolved', id: dialogId } })
       finishReservation?.()
     } catch (error) {
       // A lost response may mean the switch succeeded. Keep both claims until
       // the child actually closes rather than guessing which file it writes.
       if (finishReservation || ['new_session', 'clone', 'fork', 'branch'].includes(String(command.type))) await runtime.stop().catch(() => false)
       throw error
+    } finally {
+      if (dialogId) projection?.answering.delete(dialogId)
+      if (holdsAdmission) {
+        const count = (this.promptAdmissions.get(runtime.runtimeId) ?? 1) - 1
+        if (count) this.promptAdmissions.set(runtime.runtimeId, count)
+        else this.promptAdmissions.delete(runtime.runtimeId)
+      }
     }
     if (command.type === 'steer' || command.type === 'follow_up') {
       // Refresh the action snapshot after admission when the runtime exposes it.
@@ -490,10 +579,10 @@ export class AgentRpcManager {
 
   private async pruneIdleRuntimes(limit: number): Promise<void> {
     const now = Date.now()
-    const idle = [...this.runtimes.values()].filter((runtime) => this.isIdle(runtime))
+    const idle = [...this.runtimes.values()].filter((runtime) => !this.attachmentPins.has(runtime.runtimeId) && this.isIdle(runtime))
       .sort((left, right) => (this.lastUsedAt.get(left.runtimeId) ?? now) - (this.lastUsedAt.get(right.runtimeId) ?? now))
     for (const [index, runtime] of idle.entries()) {
-      if (!this.isIdle(runtime)) continue
+      if (this.attachmentPins.has(runtime.runtimeId) || !this.isIdle(runtime)) continue
       if (index >= idle.length - limit && now - (this.lastUsedAt.get(runtime.runtimeId) ?? now) < IDLE_RUNTIME_TTL_MS) continue
       this.retiringRuntimes.add(runtime.runtimeId)
       try {

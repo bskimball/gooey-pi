@@ -461,3 +461,114 @@ describe('RunConfigSection disclosure and formatting', () => {
     Reflect.deleteProperty(window, 'prime')
   })
 })
+
+describe('VS Code webview sub-agent inspection', () => {
+  it('opens sub-agent transcripts from the lane or toolbar and loads worker sessions via sessions:read', async () => {
+    const posted: Array<Record<string, unknown>> = []
+    Object.defineProperty(globalThis, 'acquireVsCodeApi', {
+      configurable: true,
+      value: () => ({
+        postMessage(message: Record<string, unknown>) {
+          posted.push(message)
+          if (message.type === 'sessions:list') {
+            window.dispatchEvent(new MessageEvent('message', {
+              data: { type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: '/repo/session.jsonl' },
+            }))
+          } else if (message.type === 'sessions:read') {
+            window.dispatchEvent(new MessageEvent('message', {
+              data: {
+                type: 'sessions:read',
+                requestId: message.requestId,
+                messages: [
+                  { id: 'w-u', role: 'user', parts: [{ type: 'text', text: 'Inspect the VS Code extension' }] },
+                  { id: 'w-a', role: 'assistant', parts: [{ type: 'text', text: 'Live sub-agent findings from disk' }] },
+                ],
+              },
+            }))
+          }
+        },
+      }),
+    })
+    const { installPrimeShim } = await import('../../packages/vscode/webview/host')
+    const { App: VsCodeApp } = await import('../../packages/vscode/webview/App')
+    installPrimeShim()
+
+    await act(async () => {
+      root.render(<VsCodeApp />)
+    })
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'state',
+          state: {
+            status: 'ready',
+            cwd: '/repo',
+            homeDir: '/home/dev',
+            isStreaming: true,
+            thinkingLevel: 'medium',
+            thinkingLevels: ['off', 'medium', 'high'],
+            models: [],
+            providers: [],
+            commands: [],
+            statuses: {},
+            queued: [],
+            messageEnterAction: 'queue',
+          },
+        },
+      }))
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'reset',
+          ops: [{
+            kind: 'saved',
+            message: {
+              id: 'm-1',
+              role: 'assistant',
+              parts: [
+                { type: 'toolCall', id: 'call-1', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect the VS Code extension' } },
+                { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', instanceId: 'worker-42', agent: 'scout' } } },
+              ],
+            },
+          }],
+        },
+      }))
+    })
+
+    const toolbarTrigger = container.querySelector<HTMLButtonElement>('.apex-agents-trigger')!
+    expect(toolbarTrigger).not.toBeNull()
+    expect(toolbarTrigger.classList.contains('is-running')).toBe(true)
+    expect(toolbarTrigger.querySelector('.apex-agents-trigger__count')?.textContent).toBe('1')
+    expect(container.querySelector('.apex-specialists-pane')).toBeNull()
+
+    // Click the sub-agent lane in the transcript to open its transcript view.
+    const openLink = container.querySelector<HTMLButtonElement>('.subagent-lane__links button')!
+    expect(openLink?.textContent).toBe('Open agent transcript')
+    await act(async () => { openLink.click() })
+    await act(async () => {})
+
+    const pane = container.querySelector('.apex-specialists-pane')
+    expect(pane).not.toBeNull()
+    expect(posted).toContainEqual(expect.objectContaining({
+      type: 'sessions:read',
+      path: '/home/dev/.pi/agent/sessions/rpc-workers/worker-42/worker.jsonl',
+    }))
+    expect(pane?.textContent).toContain('Live sub-agent findings from disk')
+
+    // Close via Back to chat button and reopen via toolbar trigger.
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.apex-specialists-pane__close')!.click()
+    })
+    expect(container.querySelector('.apex-specialists-pane')).toBeNull()
+
+    await act(async () => { toolbarTrigger.click() })
+    expect(container.querySelector('.apex-specialists-pane')).not.toBeNull()
+
+    // Escape closes the sub-agents pane and returns to chat.
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+    })
+    expect(container.querySelector('.apex-specialists-pane')).toBeNull()
+
+    Reflect.deleteProperty(window, 'prime')
+  })
+})

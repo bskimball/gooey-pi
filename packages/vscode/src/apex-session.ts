@@ -4,12 +4,13 @@ import { canonicalSessionPath } from 'apex-core/session-paths'
 import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
 import * as vscode from 'vscode'
 import { BrowserHost } from './browser/host'
+import { AttachedSession } from './attached-session'
 import type { ScreenshotResizer } from './browser/service'
 import { editorPromptContext } from './editor'
 import { PiRpc, resolvePi } from './pi-rpc'
 import type { HostMessage, HostState, ModelDescriptor, PromptImage, ProviderDescriptor, QueuedPrompt, RuntimeCommand, ThinkingLevel, TranscriptOp, WebviewMessage } from './protocol'
 import { assertSessionFree, sessionOwnerLabels, VsCodeRuntimeOwner } from './runtime-owner'
-import { isWorkspaceProject, listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from './session-catalog'
+import { isWorkspaceProject, listSessions, readSessionTranscript, sessionBucket, sessionTranscriptOps, workspacePath } from './session-catalog'
 
 type Json = Record<string, unknown>
 
@@ -79,6 +80,9 @@ function parseCompactCommand(text: string): { customInstructions?: string } | un
 /** One pi RPC process plus the transcript log the webview replays. */
 export class ApexSession implements vscode.Disposable {
   private rpc: PiRpc | undefined
+  private attached: AttachedSession | undefined
+  private desktopTarget: string | undefined
+  private attachingDesktop = false
   private stopping: Promise<void> = Promise.resolve()
   private shutdown: Promise<void> | undefined
   private ops: TranscriptOp[] = []
@@ -102,6 +106,7 @@ export class ApexSession implements vscode.Disposable {
   private readonly owner = new VsCodeRuntimeOwner(() => this.cwd)
   private state: HostState = {
     status: 'starting',
+    homeDir: homedir(),
     isStreaming: false,
     thinkingLevel: 'off',
     thinkingLevels: ['off'],
@@ -139,6 +144,15 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async start() {
+    if (this.desktopTarget) {
+      const path = this.desktopTarget
+      await this.attached?.dispose()
+      this.attached = undefined
+      try {
+        if (!(await this.attachDesktop(path))) throw new Error('Desktop no longer owns this session. Select it again after Desktop starts.')
+      } catch (error) { this.update({ status: 'exited', connection: 'desktop', error: error instanceof Error ? error.message : String(error), isStreaming: false }) }
+      return
+    }
     const generation = ++this.launchGeneration
     this.browser.capability.revoke(this.browserToken)
     this.browserToken = undefined
@@ -156,6 +170,7 @@ export class ApexSession implements vscode.Disposable {
     this.post({ type: 'extensionUi', request: null })
     this.update({
       status: 'starting',
+      connection: 'standalone',
       statuses: {},
       error: undefined,
       isStreaming: false,
@@ -220,6 +235,8 @@ export class ApexSession implements vscode.Disposable {
   dispose(): Promise<void> {
     if (this.shutdown) return this.shutdown
     ++this.launchGeneration
+    void this.attached?.dispose()
+    this.attached = undefined
     void this.browser.stop().catch(() => undefined)
     const previous = this.rpc
     this.rpc = undefined
@@ -241,6 +258,7 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async handle(message: WebviewMessage) {
+    if (this.attached && await this.attached.handle(message)) return
     switch (message.type) {
       case 'sessions:list': {
         try {
@@ -249,6 +267,15 @@ export class ApexSession implements vscode.Disposable {
           this.post({ type: 'sessions:list', requestId: message.requestId, sessions: labeled, currentPath: this.currentPath })
         } catch (error) {
           this.post({ type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: this.currentPath, error: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
+      case 'sessions:read': {
+        try {
+          const messages = await readSessionTranscript(message.path)
+          this.post({ type: 'sessions:read', requestId: message.requestId, messages })
+        } catch (error) {
+          this.post({ type: 'sessions:read', requestId: message.requestId, messages: [], error: error instanceof Error ? error.message : String(error) })
         }
         return
       }
@@ -335,6 +362,16 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async switchSession(path: string) {
+    if (!this.attached && !this.desktopTarget && (!this.rpc || this.state.status !== 'ready' || this.state.isStreaming || this.switching)) throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
+    if (await this.attachDesktop(path)) return
+    if (this.attached || this.desktopTarget) {
+      await this.attached?.dispose()
+      this.attached = undefined
+      this.desktopTarget = undefined
+      await this.start()
+      await this.refreshAll()
+      this.update({ status: 'ready' })
+    }
     if (!this.rpc || this.state.status !== 'ready' || this.state.isStreaming || this.switching) throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
     const rpc = this.rpc
     this.switching = true
@@ -385,8 +422,59 @@ export class ApexSession implements vscode.Disposable {
     }
   }
 
-  /** Opens a session handed over by Apex desktop once this window's Pi is ready. */
-  async openFromDesktop(path: string) {
+  private async attachDesktop(path: string): Promise<boolean> {
+    if (this.attachingDesktop) throw new Error('A Desktop attachment is already in progress.')
+    this.attachingDesktop = true
+    try { return await this.connectDesktop(path) } finally { this.attachingDesktop = false }
+  }
+
+  private async connectDesktop(path: string): Promise<boolean> {
+    const generation = this.launchGeneration
+    const metadata = await createPiSessionMetadataReader()(path)
+    if (!metadata.projectPath || !isWorkspaceProject(metadata.projectPath, this.cwd)) throw new Error('Session belongs to a different workspace. Open its VS Code folder first.')
+    if (this.attached?.path === path && this.attached.isConnected) { this.attached.replay(); return true }
+    const view = new AttachedSession(path, this.cwd, (message) => { if (this.attached === view) this.post(message) })
+    if (!(await view.connect())) return false
+    if (this.shutdown || generation !== this.launchGeneration) { await view.dispose(); throw new Error('Editor session changed during Desktop attachment.') }
+    ++this.launchGeneration
+    const previous = this.rpc
+    this.rpc = undefined
+    await this.attached?.dispose()
+    this.attached = view
+    this.desktopTarget = path
+    this.stopping = this.stopping.then(() => previous?.dispose())
+    await this.stopping
+    this.owner.set(null)
+    this.currentPath = path
+    this.resetTranscript()
+    view.replay()
+    return true
+  }
+
+  /** Attach without stopping Desktop's runtime; old standalone handoffs still work. */
+  async openFromDesktop(path: string, attachmentOnly = false) {
+    if (!this.attached && this.state.isStreaming) {
+      void vscode.window.showWarningMessage('Apex: this editor has an active standalone run. Stop it before attaching to Desktop.')
+      return
+    }
+    try {
+      if (attachmentOnly) {
+        this.desktopTarget = path
+        ++this.launchGeneration
+        const previous = this.rpc
+        this.rpc = undefined
+        this.stopping = this.stopping.then(() => previous?.dispose())
+        await this.stopping
+        this.owner.set(null)
+      }
+      if (await this.attachDesktop(path)) return
+      if (attachmentOnly) throw new Error('Desktop attachment is unavailable. Reconnect after Desktop opens the session; ownership will not be transferred.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (attachmentOnly) this.update({ status: 'exited', connection: 'desktop', error: message, isStreaming: false })
+      void vscode.window.showWarningMessage(`Apex: ${message}`)
+      return
+    }
     if (this.state.status === 'exited') await this.start()
     // A cold VS Code window resolves the view, starts the browser bridge, and boots Pi first, which can take well over 15s.
     const deadline = Date.now() + 120_000
@@ -407,6 +495,7 @@ export class ApexSession implements vscode.Disposable {
 
   /** Releases the current session to Apex desktop by moving this window's Pi to a new, empty session. */
   async continueInDesktop() {
+    if (this.attached) return void vscode.window.showInformationMessage('This session is already running in Apex Desktop. Both views remain connected.')
     const path = this.currentPath
     if (!path) return void vscode.window.showInformationMessage('Apex: this window has no saved session to hand over yet.')
     if (this.state.isStreaming) return void vscode.window.showWarningMessage('Apex: stop the current run or wait for it to finish before continuing in Apex desktop.')
@@ -424,6 +513,12 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async newSession() {
+    if (this.desktopTarget) {
+      this.desktopTarget = undefined
+      await this.attached?.dispose()
+      this.attached = undefined
+      return this.start()
+    }
     if (this.switching) {
       this.notice('Cannot create a session while switching sessions.')
       return
@@ -456,6 +551,7 @@ export class ApexSession implements vscode.Disposable {
   }
 
   async stop() {
+    if (this.attached) { await this.attached.handle({ type: 'stop' }); return }
     if (!this.rpc || !this.state.isStreaming) return
     // Queued messages stay visible but wait for the user's next run instead of firing right after an abort.
     this.queuePaused = this.state.queued.length > 0

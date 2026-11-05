@@ -193,7 +193,7 @@ describe('registerIpc verify gate', () => {
     registration.dispose()
   })
 
-  it('hands an idle, authorized session to VS Code and releases it before opening the editor', async () => {
+  it('opens busy and idle authorized sessions alongside VS Code while retaining Desktop ownership', async () => {
     const event = fakeEvent()
     registration.authorize(event.sender as never)
     const ownersDir = mkdtempSync(join(tmpdir(), 'apex-handoff-'))
@@ -205,6 +205,7 @@ describe('registerIpc verify gate', () => {
       list: vi.fn(() => runtimes.map((runtime) => ({ ...runtime, isStreaming: streaming }))),
       getForSession: vi.fn(() => runtimes[0] && { ...runtimes[0], isStreaming: streaming }),
       stopForSession: vi.fn(async () => { order.push('stop'); runtimes.length = 0 }),
+      pinAttachment: vi.fn(() => vi.fn()),
       setSessionAttachGuard: vi.fn(),
       setSessionClaimProvider: vi.fn(),
     }
@@ -221,19 +222,20 @@ describe('registerIpc verify gate', () => {
     stubs.sessionHandoff = handoff
     try {
       expect(agents.setSessionAttachGuard).toHaveBeenCalledOnce()
-      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).rejects.toThrow('Stop the current run')
+      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).resolves.toBeUndefined()
       expect(agents.stopForSession).not.toHaveBeenCalled()
 
       streaming = false
+      order.length = 0
       await handlers.get('sessions:continue-in-vscode')!(event, sessionPath)
       expect(order).toEqual([
         'authorize /work/repo',
-        'stop',
         expect.stringMatching(/^vscode:\/\/file\/.*work\/repo$/),
-        `vscode://bdkinc.apex-vscode/open?session=${encodeURIComponent(sessionPath)}`,
+        `vscode://bdkinc.apex-vscode/attach?session=${encodeURIComponent(sessionPath)}`,
       ])
       const record = JSON.parse(readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')) as { sessions: string[] }
-      expect(record.sessions).toEqual([])
+      expect(record.sessions).toEqual([join(realpathSync(ownersDir), 'held session.jsonl')])
+      expect(agents.stopForSession).not.toHaveBeenCalled()
       await expect(handlers.get('sessions:runtime-owners')!(event)).resolves.toEqual([])
     } finally {
       await handoff.dispose()

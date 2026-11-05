@@ -7,7 +7,7 @@ const SIMPLE_COMMANDS = new Set([
   'abort', 'new_session', 'get_state', 'cycle_model', 'get_available_models', 'cycle_thinking_level',
   'abort_retry', 'get_session_stats', 'clone', 'get_fork_messages', 'get_last_assistant_text',
   'get_messages', 'agent_messages_status', 'agent_messages_pause', 'agent_messages_resume',
-  'agent_messages_clear', 'get_commands', 'abort_bash',
+  'agent_messages_clear', 'get_commands', 'abort_bash', 'get_available_thinking_levels', 'clear_queue',
 ])
 const THINKING_LEVELS: ReadonlySet<string> = new Set(PRIME_THINKING_LEVELS)
 
@@ -52,6 +52,14 @@ export async function validateRpcCommand(raw: unknown, validateSessionPath: (pat
       return { type, parentSession: await validateSessionPath(requireString(command.parentSession, 'parentSession', { max: 4096 })) }
     }
     return { type }
+  }
+  if (type === 'attached_prompt') {
+    rejectUnknownKeys(command, ['type', 'message', 'images', 'intent'], 'command')
+    if (command.intent !== 'queue' && command.intent !== 'steer') throw new TypeError('Invalid attached prompt intent')
+    const result: RpcObject = { type, message: requireString(command.message, 'message', { min: 1, max: 1024 * 1024 }), intent: command.intent }
+    const images = validateImages(command.images)
+    if (images) result.images = images
+    return result
   }
   if (type === 'prompt' || type === 'steer' || type === 'follow_up') {
     rejectUnknownKeys(command, ['type', 'message', 'images', 'streamingBehavior'], 'command')

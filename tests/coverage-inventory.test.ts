@@ -111,6 +111,7 @@ describe('safety-critical coverage inventory', () => {
     const shippedExtensions = inventory.includedFiles.filter((file) => file.startsWith('apps/desktop/assets/extensions/'))
     expect(shippedExtensions).toEqual([
       'apps/desktop/assets/extensions/apex-browser-agent.ts',
+      'apps/desktop/assets/extensions/apex-editor.ts',
       'apps/desktop/assets/extensions/omp-work-ask-user.ts',
       'apps/desktop/assets/extensions/omp-work-browser.ts',
       'apps/desktop/assets/extensions/omp-work-collaboration.ts',

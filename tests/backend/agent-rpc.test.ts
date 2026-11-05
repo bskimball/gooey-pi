@@ -16,6 +16,10 @@ import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-u
 import type { RuntimeInfo } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
 import { acquireRuntimeSession } from 'apex-core/sessions/runtime-owners'
+import { connectDesktopSessionInDirectory, DesktopLinkPeer } from 'apex-core/sessions/desktop-link'
+import { DesktopLinkServer } from '../../apps/desktop/electron/main/desktop-link'
+import { SessionHandoff } from '../../apps/desktop/electron/main/session-handoff'
+import { connect } from 'node:net'
 
 const dirs: string[] = []
 const managers: AgentRpcManager[] = []
@@ -86,7 +90,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 })
 
-function fakeAgent(promptResponse: string, stateResponse?: string, exitDelayMs = 0): { cwd: string; executable: string } {
+function fakeAgent(promptResponse: string, stateResponse?: string, exitDelayMs = 0, confirmSwitch = false): { cwd: string; executable: string } {
   const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-'))
   dirs.push(cwd)
   const executable = join(cwd, 'fake-agent.cjs')
@@ -94,6 +98,7 @@ function fakeAgent(promptResponse: string, stateResponse?: string, exitDelayMs =
 const readline = require('node:readline')
 const input = readline.createInterface({ input: process.stdin })
 let stateCalls = 0
+let pendingSwitch
 const sessionArg = process.argv.indexOf('--session')
 let sessionFile = sessionArg < 0 ? require('node:path').join(process.cwd(), 'generated.jsonl') : process.argv[sessionArg + 1]
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
@@ -103,17 +108,26 @@ input.on('line', (line) => {
     send(${stateResponse ?? "{ id: command.id, type: 'response', command: 'get_state', success: true, data: { sessionId: 'session-1', thinkingLevel: 'medium', isStreaming: false } }"})
   } else if (command.type === 'get_session_stats') {
     send({ id: command.id, type: 'response', command: 'get_session_stats', success: true, data: { contextUsage: { tokens: 25000, contextWindow: 100000, percent: 25 } } })
-  } else if (command.type === 'prompt') {
+  } else if (command.type === 'prompt' || command.type === 'steer' || command.type === 'follow_up') {
     send(${promptResponse})
   } else if (command.type === 'abort') {
     send({ id: command.id, type: 'response', command: 'abort', success: true })
   } else if (command.type === 'set_service_tier') {
     send({ id: command.id, type: 'response', command: 'set_service_tier', success: true })
   } else if (command.type === 'switch_session' || command.type === 'new_session') {
+    if (${confirmSwitch}) {
+      pendingSwitch = command
+      send({ type: 'extension_ui_request', method: 'confirm', id: 'switch-confirm', title: 'Switch session?' })
+      return
+    }
     const cancelled = command.sessionPath?.includes('cancelled')
     const rejected = command.sessionPath?.includes('rejected')
     if (!cancelled && !rejected) sessionFile = command.sessionPath || require('node:path').join(process.cwd(), 'new-session.jsonl')
     send({ id: command.id, type: 'response', command: command.type, success: !rejected, error: rejected ? 'switch rejected' : undefined, data: { cancelled } })
+  } else if (command.type === 'extension_ui_response' && pendingSwitch) {
+    const request = pendingSwitch
+    pendingSwitch = undefined
+    send({ id: request.id, type: 'response', command: request.type, success: true, data: { cancelled: true } })
   }
 })
 input.on('close', () => {
@@ -145,6 +159,231 @@ function managerFor(executable: string): AgentRpcManager {
   managers.push(manager)
   return manager
 }
+
+describe('Desktop session attachment over real local sockets', () => {
+  async function linkedFixture(promptResponse = "{ id: command.id, type: 'response', command: command.type, success: true }", busy = false) {
+    const fake = fakeAgent(promptResponse, `{ id: command.id, type: 'response', command: command.type, success: true, data: { sessionFile, isStreaming: ${busy} } }`)
+    const sessionPath = join(fake.cwd, 'saved.jsonl')
+    writeFileSync(sessionPath, [
+      { type: 'session', version: 3, id: 'saved', cwd: fake.cwd },
+      { type: 'message', id: 'user', parentId: null, message: { role: 'user', content: 'Saved prompt', timestamp: 1 } },
+      { type: 'message', id: 'answer', parentId: 'user', message: { role: 'assistant', content: [{ type: 'text', text: 'Saved answer' }], timestamp: 2 } },
+    ].map((row) => JSON.stringify(row)).join('\n') + '\n')
+    const manager = managerFor(fake.executable)
+    const runtime = await manager.start({ cwd: fake.cwd, sessionPath })
+    const directory = join(fake.cwd, 'links')
+    const server = new DesktopLinkServer(manager, async (cwd) => cwd, directory)
+    await server.start()
+    const events: Record<string, unknown>[] = []
+    const disconnected: string[] = []
+    const editorRequest = vi.fn(async (_method: string, params: Record<string, unknown>) => ({ cwd: params.cwd, line: 12 }))
+    const options = { sessionPath, cwd: fake.cwd, onEvent: (event: Record<string, unknown>) => events.push(event), onDisconnect: (reason: string) => disconnected.push(reason), editorRequest }
+    return { fake, sessionPath, manager, runtime, directory, server, events, disconnected, editorRequest, options }
+  }
+
+  it('selects ownership, rejects workspace/auth and second editor, forwards full replies and reverse editor calls, and detaches without stopping', async () => {
+    const f = await linkedFixture()
+    try {
+      await expect(connectDesktopSessionInDirectory({ ...f.options, sessionPath: join(f.fake.cwd, 'other.jsonl') }, f.directory)).resolves.toBeNull()
+      await expect(connectDesktopSessionInDirectory({ ...f.options, cwd: tmpdir() }, f.directory)).rejects.toThrow('workspace does not match')
+      const endpoint = JSON.parse(readFileSync(join(f.directory, `desktop-${process.pid}.json`), 'utf8'))
+      const socket = connect(endpoint.port, '127.0.0.1')
+      await new Promise<void>((resolve) => socket.once('connect', resolve))
+      const bad = new DesktopLinkPeer(socket)
+      await expect(bad.request('attach', { version: 1, token: '0'.repeat(64), sessionPath: f.sessionPath, cwd: f.fake.cwd })).rejects.toThrow('authentication failed')
+      bad.close()
+      const client = await connectDesktopSessionInDirectory(f.options, f.directory)
+      expect(client).not.toBeNull()
+      expect(client!.snapshot.messages.map((row) => row.role)).toEqual(['user', 'assistant'])
+      await expect(connectDesktopSessionInDirectory(f.options, f.directory)).rejects.toThrow('already has a controlling editor')
+      await expect(client!.command({ type: 'attached_prompt', message: 'hello', intent: 'queue' })).resolves.toMatchObject({ success: true, command: 'prompt' })
+      await expect(client!.command({ type: 'switch_session', sessionPath: f.sessionPath })).rejects.toThrow('not allowed')
+      await expect(f.server.editorRequest(f.sessionPath, f.fake.cwd, 'editor.context', {})).resolves.toMatchObject({ line: 12 })
+      expect(f.editorRequest).toHaveBeenCalledWith('editor.context', expect.objectContaining({ cwd: expect.any(String) }))
+      // Admission prunes idle residents, but an attached runtime remains pinned.
+      for (let index = 0; index < 4; index += 1) await f.manager.start({ cwd: f.fake.cwd })
+      expect(f.manager.has(f.runtime.runtimeId)).toBe(true)
+      await client!.close()
+      let reconnected = false
+      for (let attempt = 0; attempt < 50 && !reconnected; attempt += 1) {
+        try {
+          const again = await connectDesktopSessionInDirectory(f.options, f.directory)
+          expect(again).not.toBeNull()
+          await again!.close()
+          reconnected = true
+        } catch { await new Promise((resolve) => setTimeout(resolve, 10)) }
+      }
+      expect(reconnected).toBe(true)
+      expect(f.manager.has(f.runtime.runtimeId)).toBe(true)
+    } finally { await f.server.stop() }
+  })
+
+  it('continues a busy Desktop runtime in VS Code without stopping it and starts an owner for an idle saved session', async () => {
+    const f = await linkedFixture(undefined, true)
+    const openExternal = vi.fn(async () => undefined)
+    const handoff = new SessionHandoff({
+      agents: f.manager,
+      sessions: { requireSessionPath: async () => f.sessionPath, list: async () => [{ filePath: f.sessionPath, projectPath: f.fake.cwd }] as Awaited<ReturnType<import('../../apps/desktop/electron/main/sessions').SessionService['list']>> },
+      projects: { authorizePath: async (cwd) => cwd },
+      openExternal,
+      ownersDir: join(f.fake.cwd, 'owners'),
+      focusDelayMs: 0,
+    })
+    try {
+      await handoff.continueInVsCode(f.sessionPath)
+      expect(f.manager.getForSession(f.sessionPath)?.runtimeId).toBe(f.runtime.runtimeId)
+      expect(openExternal.mock.calls).toHaveLength(2)
+      expect(openExternal.mock.calls[1]).toEqual([expect.stringContaining(`?session=${encodeURIComponent(f.sessionPath)}`)])
+      await f.manager.stop(f.runtime.runtimeId)
+      await handoff.continueInVsCode(f.sessionPath)
+      expect(f.manager.getForSession(f.sessionPath)?.runtimeId).not.toBe(f.runtime.runtimeId)
+      expect(f.manager.getForSession(f.sessionPath)).toBeDefined()
+    } finally { await handoff.dispose(); await f.server.stop() }
+  })
+
+  it('admits attached input against owner busy state and publishes actual user records', async () => {
+    const f = await linkedFixture(`(() => {
+      send({ type: 'message_end', message: { role: 'user', content: command.message } });
+      return { id: command.id, type: 'response', command: command.type, success: true };
+    })()`, true)
+    try {
+      const client = await connectDesktopSessionInDirectory(f.options, f.directory)
+      await expect(client!.command({ type: 'attached_prompt', message: 'queued', intent: 'queue' })).resolves.toMatchObject({ success: true, command: 'follow_up' })
+      await expect(client!.command({ type: 'attached_prompt', message: 'steered', intent: 'steer' })).resolves.toMatchObject({ success: true, command: 'steer' })
+      await waitUntil(() => f.events.filter((event) => event.type === 'desktop_user_message').length === 2)
+      expect(f.events.filter((event) => event.type === 'desktop_user_message').at(-1)?.messages).toEqual(f.manager.sessionSnapshot(f.runtime.runtimeId).messages)
+      expect(f.manager.sessionSnapshot(f.runtime.runtimeId).messages.filter((row) => row.role === 'user')).toHaveLength(3)
+      await client!.close()
+    } finally { await f.server.stop() }
+  })
+
+  it('binds editor credentials to the originating runtime after it changes sessions', async () => {
+    const f = await linkedFixture()
+    try {
+      const environment = f.server.editor.environmentFor({ cwd: f.fake.cwd, sessionPath: f.sessionPath })
+      f.server.editor.bindRuntime(environment.APEX_EDITOR_TOKEN, f.runtime.runtimeId)
+      const nextPath = join(f.fake.cwd, 'next.jsonl')
+      writeFileSync(nextPath, readFileSync(f.sessionPath))
+      await f.manager.command(f.runtime.runtimeId, { type: 'switch_session', sessionPath: nextPath })
+      const replacement = await f.manager.start({ cwd: f.fake.cwd, sessionPath: f.sessionPath })
+      expect(replacement.runtimeId).not.toBe(f.runtime.runtimeId)
+      const otherEditor = vi.fn(async () => ({ editor: 'old session' }))
+      const client = await connectDesktopSessionInDirectory({ ...f.options, editorRequest: otherEditor }, f.directory)
+      const call = () => fetch(environment.APEX_EDITOR_URL!, { method: 'POST', headers: { Authorization: `Bearer ${environment.APEX_EDITOR_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'editor.context', params: {} }) }).then((response) => response.json())
+      expect(await call()).toMatchObject({ ok: false })
+      expect(otherEditor).not.toHaveBeenCalled()
+      const next = await connectDesktopSessionInDirectory({ ...f.options, sessionPath: nextPath }, f.directory)
+      expect(await call()).toMatchObject({ ok: true, result: { line: 12 } })
+      await client!.close()
+      await next!.close()
+    } finally { await f.server.stop() }
+  })
+
+  it('accepts a session-switch confirmation without admitting unrelated commands during the transition', async () => {
+    const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", undefined, 0, true)
+    const manager = managerFor(fake.executable)
+    const runtime = await manager.start({ cwd: fake.cwd })
+    const events: Record<string, unknown>[] = []
+    manager.subscribe(({ event }) => events.push(event))
+    const switching = manager.command(runtime.runtimeId, { type: 'new_session' })
+    await waitUntil(() => events.some((event) => event.id === 'switch-confirm'))
+    await expect(manager.command(runtime.runtimeId, { type: 'prompt', message: 'do not admit' })).rejects.toThrow('session change')
+    await expect(manager.command(runtime.runtimeId, { type: 'extension_ui_response', id: 'switch-confirm', confirmed: false })).resolves.toMatchObject({ success: true })
+    await expect(switching).resolves.toMatchObject({ data: { cancelled: true } })
+  })
+
+  it('keeps a valid blocking prompt attached beyond the ordinary transport deadline', async () => {
+    const f = await linkedFixture("{ type: 'extension_ui_request', id: 'long-dialog', method: 'confirm', title: 'Waiting for user' }")
+    try {
+      let seen!: () => void
+      const dialogSeen = new Promise<void>((resolve) => { seen = resolve })
+      const client = await connectDesktopSessionInDirectory({ ...f.options, onEvent: (event) => { f.events.push(event); if (event.id === 'long-dialog') seen() } }, f.directory)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      const pending = client!.command({ type: 'attached_prompt', message: 'wait', intent: 'queue' }).catch(() => undefined)
+      await dialogSeen
+      await vi.advanceTimersByTimeAsync(61_000)
+      expect(f.disconnected).toEqual([])
+      expect(f.manager.sessionSnapshot(f.runtime.runtimeId).dialogs).toHaveLength(1)
+      vi.useRealTimers()
+      await client!.close()
+      await pending
+    } finally { vi.useRealTimers(); await f.server.stop() }
+  })
+
+  it('queues attached input while an earlier prompt awaits its first agent_start event', async () => {
+    const f = await linkedFixture("command.type === 'prompt' ? { type: 'extension_ui_request', id: 'admission', method: 'confirm', title: 'Awaiting start' } : { id: command.id, type: 'response', command: command.type, success: true }")
+    try {
+      const client = await connectDesktopSessionInDirectory(f.options, f.directory)
+      const first = client!.command({ type: 'attached_prompt', message: 'first', intent: 'queue' }).catch(() => undefined)
+      await waitUntil(() => f.manager.sessionSnapshot(f.runtime.runtimeId).dialogs.length === 1)
+      expect(f.manager.sessionSnapshot(f.runtime.runtimeId).runtime.isStreaming).toBe(false)
+      await expect(client!.command({ type: 'attached_prompt', message: 'second', intent: 'queue' })).resolves.toMatchObject({ success: true, command: 'follow_up' })
+      await client!.close()
+      await first
+      await f.manager.stop(f.runtime.runtimeId)
+    } finally { await f.server.stop() }
+  })
+
+  it('seeds before spawn, snapshots live deltas and dialogs, never redelivers baseline tokens, and rejects duplicate UI answers', async () => {
+    const f = await linkedFixture(`(() => {
+      send({ type: 'message_end', message: { role: 'user', content: command.message, timestamp: 3 } });
+      send({ type: 'message_start', message: { role: 'assistant' } });
+      send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Live token' } });
+      send({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'work', statusText: 'Running' });
+      send({ type: 'extension_ui_request', method: 'confirm', id: 'dialog-1', title: 'Continue?' });
+      return { id: command.id, type: 'response', command: command.type, success: true };
+    })()`)
+    try {
+      await f.manager.command(f.runtime.runtimeId, { type: 'prompt', message: 'Desktop input' })
+      let resolved = false
+      const received: Record<string, unknown>[] = []
+      const client = await connectDesktopSessionInDirectory({ ...f.options, onEvent: (event) => { expect(resolved).toBe(true); received.push(event) } }, f.directory)
+      resolved = true
+      expect(client!.snapshot.messages.filter((row) => row.role === 'user')).toHaveLength(2)
+      expect(client!.snapshot.messages.at(-1)?.parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Live token' }))
+      expect(client!.snapshot.dialogs).toHaveLength(1)
+      expect(client!.snapshot.statuses).toEqual({ work: 'Running' })
+      expect(received).toEqual([])
+      const answers = await Promise.allSettled([
+        client!.command({ type: 'extension_ui_response', id: 'dialog-1', confirmed: true }),
+        f.manager.command(f.runtime.runtimeId, { type: 'extension_ui_response', id: 'dialog-1', confirmed: true }),
+      ])
+      expect(answers.filter((answer) => answer.status === 'fulfilled')).toHaveLength(1)
+      await waitUntil(() => received.some((event) => event.type === 'extension_ui_resolved'))
+      expect(f.manager.sessionSnapshot(f.runtime.runtimeId).dialogs).toEqual([])
+      await client!.close()
+      await waitUntil(() => f.manager.has(f.runtime.runtimeId))
+      // Client close is a detach, not an abort; a fresh manager snapshot retains live text.
+      expect(f.manager.sessionSnapshot(f.runtime.runtimeId).messages.at(-1)?.parts).toContainEqual(expect.objectContaining({ text: 'Live token' }))
+    } finally { await f.server.stop() }
+  })
+
+  it('rejects pending commands on drop with unknown outcome, does not retry, and reconnects with a fresh snapshot', async () => {
+    const f = await linkedFixture("(() => { require('node:fs').appendFileSync('prompts.log', '1'); return { type: 'extension_ui_request', method: 'confirm', id: 'waiting', title: 'Waiting' }; })()")
+    try {
+      const client = await connectDesktopSessionInDirectory(f.options, f.directory)
+      const pending = client!.command({ type: 'attached_prompt', message: 'wait', intent: 'queue' })
+      const rejection = expect(pending).rejects.toThrow(/outcome unknown.*retry/i)
+      await waitUntil(() => f.manager.sessionSnapshot(f.runtime.runtimeId).dialogs.length === 1)
+      await f.server.stop()
+      await rejection
+      await waitUntil(() => f.disconnected.length === 1)
+      expect(f.manager.has(f.runtime.runtimeId)).toBe(true)
+      const resumed = new DesktopLinkServer(f.manager, async (cwd) => cwd, f.directory)
+      await resumed.start()
+      try {
+        const again = await connectDesktopSessionInDirectory(f.options, f.directory)
+        expect(again!.snapshot.dialogs.map((dialog) => dialog.id)).toEqual(['waiting'])
+        expect(readFileSync(join(f.fake.cwd, 'prompts.log'), 'utf8')).toBe('1')
+        await f.manager.stop(f.runtime.runtimeId)
+        await waitUntil(() => f.disconnected.length === 2)
+        await again!.close()
+      } finally { await resumed.stop() }
+      await f.manager.stop(f.runtime.runtimeId)
+    } finally { await f.server.stop() }
+  })
+})
 
 const processExists = (pid: number): boolean => {
   try { process.kill(pid, 0); return true } catch { return false }
@@ -1006,7 +1245,10 @@ setInterval(() => {}, 1000)
   })
 
   it('notifies termination for session stop and manager shutdown', async () => {
-    const sessionFile = '/sessions/runtime-claim.jsonl'
+    const root = mkdtempSync(join(tmpdir(), 'apex-claim-test-'))
+    dirs.push(root)
+    const sessionFile = join(root, 'runtime-claim.jsonl')
+    writeFileSync(sessionFile, '')
     const state = `{ id: command.id, type: 'response', command: 'get_state', success: true, data: { sessionId: 'claimed', sessionFile: ${JSON.stringify(sessionFile)}, isStreaming: true } }`
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }", state)
     const sessionManager = managerFor(fake.executable)
@@ -1029,7 +1271,10 @@ setInterval(() => {}, 1000)
   })
 
   it('releases an idle session runtime on request but keeps one with an unanswered prompt', async () => {
-    const sessionFile = '/sessions/release.jsonl'
+    const root = mkdtempSync(join(tmpdir(), 'apex-release-test-'))
+    dirs.push(root)
+    const sessionFile = join(root, 'release.jsonl')
+    writeFileSync(sessionFile, '')
     const state = `{ id: command.id, type: 'response', command: 'get_state', success: true, data: { sessionId: 'release', sessionFile: ${JSON.stringify(sessionFile)}, isStreaming: false } }`
     // The prompt never gets a response, as when an extension dialog awaits the user.
     const fake = fakeAgent("{ type: 'extension_ui_request', id: 'dialog', method: 'confirm', title: 'Continue?' }", state)
@@ -1051,6 +1296,7 @@ setInterval(() => {}, 1000)
   it('atomically admits one of two competing starts and retains its claim until child close', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: command.type, success: true }", "{ id: command.id, type: 'response', command: command.type, success: true, data: { sessionFile, isStreaming: false } }", 150)
     const path = join(fake.cwd, 'held.jsonl')
+    writeFileSync(path, '')
     const acquire = (file: string) => acquireRuntimeSession(file, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, fake.cwd)
     const contenders = [managerFor(fake.executable), managerFor(fake.executable)]
     for (const manager of contenders) manager.setSessionClaimProvider(acquire)
@@ -1096,6 +1342,7 @@ setInterval(() => {}, 1000)
     const manager = managerFor(fake.executable)
     manager.setSessionClaimProvider(acquire)
     const path = join(fake.cwd, 'failed.jsonl')
+    writeFileSync(path, '')
     await expect(manager.start({ cwd: fake.cwd, sessionPath: path })).rejects.toThrow('handshake rejected')
     acquire(path)()
   })

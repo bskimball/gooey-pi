@@ -1,5 +1,4 @@
 import { basename } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import {
   assertSessionNotOwnedElsewhere,
   acquireRuntimeSession,
@@ -7,16 +6,11 @@ import {
   publishRuntimeOwner,
   readRuntimeOwners,
   removeRuntimeOwner,
-  requestSessionRelease,
-  runtimeOwnerOf,
   RUNTIME_OWNER_HEARTBEAT_MS,
   type RuntimeOwnerIdentity,
 } from 'apex-core/sessions/runtime-owners'
 
 const SELF: RuntimeOwnerIdentity = { app: 'vscode', pid: process.pid }
-// Apex desktop checks release requests every 5s, then stops the runtime.
-const DESKTOP_RELEASE_WAIT_MS = 15_000
-const DESKTOP_RELEASE_POLL_MS = 250
 
 /** Publishes the session this window's Pi runtime holds, so Apex desktop does not attach a second runtime to it. */
 export class VsCodeRuntimeOwner {
@@ -63,22 +57,9 @@ export class VsCodeRuntimeOwner {
   }
 }
 
-/** Throws when another app holds `sessionPath`. Apex desktop is first asked to release an idle runtime on it. */
+/** A failed attachment must never silently request a Desktop runtime shutdown. */
 export async function assertSessionFree(sessionPath: string): Promise<void> {
-  if (runtimeOwnerOf(await readRuntimeOwners(SELF), sessionPath)?.app !== 'desktop') return assertSessionNotOwnedElsewhere(sessionPath, SELF)
-  const withdraw = await requestSessionRelease(sessionPath)
-  try {
-    const deadline = Date.now() + DESKTOP_RELEASE_WAIT_MS
-    while (Date.now() < deadline) {
-      await delay(DESKTOP_RELEASE_POLL_MS)
-      const owner = runtimeOwnerOf(await readRuntimeOwners(SELF), sessionPath)
-      if (!owner) return
-      if (owner.app !== 'desktop') return assertSessionNotOwnedElsewhere(sessionPath, SELF)
-    }
-  } finally {
-    withdraw()
-  }
-  throw new Error('This session is busy in Apex desktop. Stop the run there or wait for it to finish, then open it again.')
+  await assertSessionNotOwnedElsewhere(sessionPath, SELF)
 }
 
 /** Labels of other Apex apps holding sessions, keyed by session path. */

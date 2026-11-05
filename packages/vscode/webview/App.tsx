@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Composer, ExtensionUiModal, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
+import { CircleNotch, Composer, createSessionSummarySelector, ExtensionUiModal, Robot, SpecialistsPanel, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
 import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, PrimeModelDescriptor, PrimeThinkingLevel, QueuedPrompt, SessionRecord, TranscriptMessage } from 'apex-core/types/api'
 import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost, sessions } from './host'
@@ -38,6 +38,16 @@ export function App() {
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [state, setState] = useState<HostState | undefined>()
   const [uiRequest, setUiRequest] = useState<Record<string, unknown> | null>(null)
+  const [currentSessionPath, setCurrentSessionPath] = useState<string | null>(null)
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(null)
+  const [specialistsOpen, setSpecialistsOpen] = useState(false)
+  const [selectSummary] = useState(createSessionSummarySelector)
+  const { specialists } = useMemo(() => selectSummary(messages), [messages, selectSummary])
+  const runningSpecialists = useMemo(() => specialists.filter((specialist) => specialist.status === 'running').length, [specialists])
+  const openSpecialist = useCallback((id: string) => {
+    setSelectedSpecialistId(id)
+    setSpecialistsOpen(true)
+  }, [])
   const noticeSeqRef = useRef(0)
   const pushNotice = useCallback((text: string) => {
     const id = `local-notice-${++noticeSeqRef.current}`
@@ -50,7 +60,13 @@ export function App() {
       else if (message.type === 'editorContext') setEditorFile(message.file)
       else if (message.type === 'git') setGit(message.git)
       else if (message.type === 'insertDraft') setInsertDraft({ id: ++draftSeqRef.current, text: message.text })
-      else if (message.type === 'reset') setMessages(applyOps([], message.ops))
+      else if (message.type === 'reset') {
+        if (!message.ops.length) {
+          setSelectedSpecialistId(null)
+          setSpecialistsOpen(false)
+        }
+        setMessages(applyOps([], message.ops))
+      }
       else if (message.type === 'ops') setMessages((current) => applyOps(current, message.ops))
       else if (message.type === 'state') setState(message.state)
       else if (message.type === 'extensionUi') setUiRequest(message.request)
@@ -83,21 +99,47 @@ export function App() {
   // `/resume` offers this workspace's other free saved sessions; they are not @-referenceable because VS Code has no session tools.
   const [resumeSessions, setResumeSessions] = useState<SessionRecord[]>([])
   useEffect(() => {
-    const refresh = () => void sessions.list().then(({ sessions: saved, currentPath }) => setResumeSessions(saved.filter((session) => session.path !== currentPath && !session.owner).map((session) => ({
-      id: session.id,
-      harness: 'pi',
-      filePath: session.path,
-      projectPath: state?.cwd ?? '',
-      title: session.title,
-      createdAt: session.updatedAt,
-      updatedAt: session.updatedAt,
-      status: 'idle',
-      depth: 0,
-      preview: session.preview,
-    }))), () => undefined)
+    const syncSessionPath = (nextPath: string | null) => {
+      setCurrentSessionPath((previous) => {
+        if (previous !== null && previous !== nextPath) {
+          setSelectedSpecialistId(null)
+          setSpecialistsOpen(false)
+        }
+        return nextPath
+      })
+    }
+    const refresh = () => void sessions.list().then(({ sessions: saved, currentPath }) => {
+      syncSessionPath(currentPath)
+      setResumeSessions(saved.filter((session) => session.path !== currentPath && !session.owner).map((session) => ({
+        id: session.id,
+        harness: 'pi',
+        filePath: session.path,
+        projectPath: state?.cwd ?? '',
+        title: session.title,
+        createdAt: session.updatedAt,
+        updatedAt: session.updatedAt,
+        status: 'idle',
+        depth: 0,
+        preview: session.preview,
+      })))
+    }, () => undefined)
     refresh()
-    return sessions.onCurrent(refresh)
+    return sessions.onCurrent((nextPath) => {
+      syncSessionPath(nextPath)
+      refresh()
+    })
   }, [state?.cwd])
+
+  useEffect(() => {
+    if (!specialistsOpen || parsedUiRequest) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      setSpecialistsOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [specialistsOpen, parsedUiRequest])
 
   // A dialog Apex can't render must still be answered, or the extension waits forever.
   useEffect(() => {
@@ -119,15 +161,28 @@ export function App() {
           sessionName={state?.sessionName}
           onNotice={pushNotice}
         />
+        {state?.connection === 'desktop' ? <span className="apex-toolbar__workspace" title="Desktop owns the runtime. Prompts and controls go to the same session.">Desktop connected</span> : null}
         {state?.cwd ? <span className="apex-toolbar__workspace" title={state.cwd}>{folderName(state.cwd)}</span> : null}
+        <button
+          type="button"
+          className={`permissions-chip apex-agents-trigger${specialistsOpen ? ' is-active' : ''}${runningSpecialists > 0 ? ' is-running' : ''}`}
+          aria-pressed={specialistsOpen}
+          aria-label={specialists.length ? `Sub-agents (${specialists.length})` : 'Sub-agents'}
+          title={specialists.length ? `${specialists.length} sub-${specialists.length === 1 ? 'agent' : 'agents'} in this session` : 'View sub-agents in this session'}
+          onClick={() => setSpecialistsOpen((open) => !open)}
+        >
+          {runningSpecialists > 0 ? <CircleNotch className="spin" size={13} /> : <Robot size={13} />}
+          <span className="apex-agents-trigger__label">Agents</span>
+          {specialists.length > 0 ? <span className="apex-agents-trigger__count">{specialists.length}</span> : null}
+        </button>
       </header>
       <div className="workbench__content">
         <div className="session-workspace">
           <div className="conversation-column">
-            <main className="conversation-pane">
+            <main className="conversation-pane" data-specialists-open={specialistsOpen ? 'true' : 'false'}>
               {state?.status === 'exited' ? <div className="apex-banner" role="alert">
                 <pre>{state.error ?? 'Pi stopped.'}</pre>
-                <button type="button" onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>Restart Pi</button>
+                <button type="button" onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>{state?.connection === 'desktop' ? 'Reconnect to Desktop' : 'Restart Pi'}</button>
               </div> : null}
               <Transcript
                 messages={messages}
@@ -136,13 +191,36 @@ export function App() {
                 loading={!state}
                 active={busy}
                 onOpenChanges={openChanges}
+                onOpenSpecialist={openSpecialist}
                 onSuggestion={(prompt) => postToHost({ type: 'send', text: prompt, images: [], intent: 'queue', attachEditor })}
                 suggestionsDisabled={!ready}
                 showPinnedChanges={false}
                 queuedMessageCount={queuedMessages.length}
               />
+              {specialistsOpen ? (
+                <section className="apex-specialists-pane" aria-label="Sub-agents">
+                  <div className="apex-specialists-pane__bar">
+                    <span className="apex-specialists-pane__title">
+                      <Robot size={13} aria-hidden="true" />
+                      <span>Sub-agents</span>
+                    </span>
+                    <button type="button" className="apex-specialists-pane__close" onClick={() => setSpecialistsOpen(false)}>
+                      Back to chat
+                    </button>
+                  </div>
+                  <SpecialistsPanel
+                    key={currentSessionPath ?? state?.cwd ?? 'current-session'}
+                    messages={messages}
+                    selectedId={selectedSpecialistId}
+                    onSelect={setSelectedSpecialistId}
+                    homeDir={state?.homeDir}
+                    sessionKey={currentSessionPath ?? state?.cwd}
+                  />
+                </section>
+              ) : null}
               <div className="conversation-bottom-dock">
                 <div className="apex-editor-context" data-included={attachEditor ? 'true' : 'false'} role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
+                  {state?.connection === 'desktop' && Boolean(state.pendingCount) ? <span className="apex-editor-context__detail">{state.pendingCount} queued in Desktop</span> : null}
                   <span className="apex-editor-context__label">Editor</span>
                   <span className="apex-editor-context__file">{editorFile?.name ?? 'No active text file'}</span>
                   {editorFile?.dirty ? <span className="apex-editor-context__detail">Unsaved</span> : null}

@@ -86,6 +86,7 @@ import { AgentScheduleBridge } from "./schedules/agent-bridge";
 import { ScheduledRunExecutor } from "./schedules/executor";
 import { AutomationService } from "./schedules/service";
 import { describeDesktopSession, SessionHandoff } from "./session-handoff";
+import { DesktopLinkServer } from "./desktop-link";
 import { SessionService } from "./sessions";
 import { piSessionServiceOptions } from "apex-core/sessions/pi";
 import { SettingsService } from "./settings-schedules";
@@ -123,6 +124,7 @@ let agentScheduleBridges: AgentScheduleBridge[] = [];
 let extensionBrowserBridge: ExtensionBrowserBridge | null = null;
 let agentBrowser: AgentBrowserService | null = null;
 let agentBrowserBridge: AgentBrowserBridge | null = null;
+let desktopLink: DesktopLinkServer | null = null;
 let agentCollaborationBridge: AgentCollaborationBridge | null = null;
 let backgroundMode: MacBackgroundController | null = null;
 let shutdownStarted = false;
@@ -889,6 +891,8 @@ async function bootstrap(): Promise<void> {
 	);
 	piManager.setDisabledModelsProvider(piDisabledModels);
 	const sessionHandoff = new SessionHandoff({ agents: piManager, sessions: piSessions, projects: piProjects, openExternal: (url) => shell.openExternal(url, { activate: true }) });
+	desktopLink = new DesktopLinkServer(piManager, (cwd) => piProjects.authorizePath(cwd));
+	await desktopLink.start();
 	piManager.setWorkspaceUseProvider((cwd, owner, retireIfIdle) =>
 		repositoryUseGate.beginWorkspaceUse(cwd, owner, retireIfIdle),
 	);
@@ -1182,6 +1186,7 @@ async function bootstrap(): Promise<void> {
 				environment.PRIME_WORK_SCHEDULE_TOKEN,
 			],
 			["browser", browserBridge, environment.PRIME_WORK_BROWSER_TOKEN],
+			...(desktopLink ? [["editor", desktopLink.editor, environment.APEX_EDITOR_TOKEN] as [string, { revoke(token: string | undefined): boolean }, string | undefined]] : []),
 			[
 				"collaboration",
 				collaborationBridge,
@@ -1213,6 +1218,8 @@ async function bootstrap(): Promise<void> {
 	// Pi runtimes receive the identical capability surface: pi's extension API
 	// is the ancestor of OMP's, so the omp-work-* files are shared by design.
 	piManager.setRuntimeEnvironmentProvider((scope) => ({
+		...desktopLink?.editor.environmentFor(scope),
+		APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),
 		...extensionRuntimeEnvironment(
 			piScheduleBridge.environmentFor(scope),
 			() => browserBridge.environmentFor(scope),
@@ -1231,6 +1238,7 @@ async function bootstrap(): Promise<void> {
 				: undefined,
 	}));
 	piManager.setRuntimeStartListener((environment, info) => {
+		desktopLink?.editor.bindRuntime(environment.APEX_EDITOR_TOKEN, info.runtimeId);
 		browserBridge.bindSession(
 			environment.PRIME_WORK_BROWSER_TOKEN,
 			info.sessionFile,
@@ -1509,6 +1517,7 @@ app.on("before-quit", (event) => {
 	agentBrowser?.beginShutdown();
 	void settleShutdown([
 		...agentScheduleBridges.map((bridge) => bridge.stop()),
+		desktopLink?.stop() ?? Promise.resolve(),
 		agentBrowserBridge?.stop() ?? Promise.resolve(),
 		extensionBrowserBridge?.stop() ?? Promise.resolve(),
 		agentCollaborationBridge?.stop() ?? Promise.resolve(),

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { HarnessId } from '../../src/types/api'
 
-export type ExtensionCapability = 'schedule' | 'browser' | 'browserAgent' | 'askUser' | 'collaboration' | 'piFastMode'
+export type ExtensionCapability = 'schedule' | 'browser' | 'browserAgent' | 'askUser' | 'collaboration' | 'piFastMode' | 'editor'
 
 export interface ExtensionInjection {
   readonly capability: ExtensionCapability
@@ -12,6 +12,7 @@ export interface ExtensionInjection {
 
 const injectionsByHarness = {
   pi: [
+    { capability: 'editor', filename: 'apex-editor.ts', environmentVariable: 'APEX_EDITOR_EXTENSION_PATH' },
     { capability: 'piFastMode', filename: 'pi-work-fast-mode.ts', environmentVariable: 'GOOEYPI_PI_FAST_MODE_EXTENSION_PATH' },
     { capability: 'schedule', filename: 'omp-work-schedules.ts', environmentVariable: 'PRIME_WORK_SCHEDULE_EXTENSION_PATH' },
     { capability: 'browser', filename: 'omp-work-browser.ts', environmentVariable: 'PRIME_WORK_BROWSER_EXTENSION_PATH' },

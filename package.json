@@ -21,7 +21,7 @@
 		"dev:inspect": "node scripts/build-browser-agent.mjs && electron-vite dev --remoteDebuggingPort 9222",
 		"build": "npm run typecheck && npm run build:bundle",
 		"build:apps": "npm run build",
-		"build:theme": "npm run build --workspace=packages/vscode-theme",
+		"build:theme": "npm run package --workspace=packages/vscode-theme",
 		"build:vscode": "npm run package --workspace=packages/vscode",
 		"build:all": "npm run build:theme && npm run build:apps && npm run build:vscode",
 		"build:bundle": "electron-vite build && node scripts/build-browser-agent.mjs",

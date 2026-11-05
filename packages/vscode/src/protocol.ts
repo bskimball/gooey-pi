@@ -45,9 +45,12 @@ export interface EditorFileContext {
 }
 
 export interface HostState {
+  connection?: 'standalone' | 'desktop'
+  pendingCount?: number
   status: 'starting' | 'ready' | 'exited'
   error?: string
   cwd?: string
+  homeDir?: string
   sessionName?: string
   isStreaming: boolean
   model?: string
@@ -89,6 +92,7 @@ export type HostMessage =
   | { type: 'git'; git: GitStatus }
   | { type: 'insertDraft'; text: string }
   | { type: 'sessions:list'; requestId: number; sessions: SessionSummary[]; currentPath: string | null; error?: string }
+  | { type: 'sessions:read'; requestId: number; messages: TranscriptMessage[]; error?: string }
   | { type: 'sessions:switch'; requestId: number; error?: string }
   | { type: 'sessions:current'; path: string | null }
   | { type: 'resizeScreenshot'; requestId: number; dataUrl: string; width: number; height: number; quality: number }
@@ -102,6 +106,7 @@ export type HostMessage =
 
 export type WebviewMessage =
   | { type: 'sessions:list'; requestId: number }
+  | { type: 'sessions:read'; requestId: number; path: string }
   | { type: 'sessions:switch'; requestId: number; path: string }
   | { type: 'screenshotResized'; requestId: number; data?: string }
   | { type: 'browserRequest'; requestId: number; method: BrowserMethod; tabId?: string; paused?: boolean }

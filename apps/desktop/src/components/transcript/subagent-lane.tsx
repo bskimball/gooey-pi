@@ -102,9 +102,13 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const highlights = report ? reportHighlights(report) : []
   const rail = highlights.length ? highlights : state === 'running' ? [specialist?.activity ? `Last observed: ${specialist.activity}` : 'Awaiting a recorded update…'] : []
   const verb = VERBS[part.name]
+  const singleTarget = onOpen && targets.length === 1 ? targets[0] : undefined
 
   return <div className={`subagent-lane is-${state}`}>
-    <div className="subagent-lane__summary">
+    <div
+      className={`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`}
+      onClick={onOpen && singleTarget ? () => onOpen(singleTarget.id) : undefined}
+    >
       <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch className="spin" size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
       {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
       {roles.length

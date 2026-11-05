@@ -1,4 +1,4 @@
-import type { MessagePart, QueuedPrompt, TranscriptMessage } from '@/types/api'
+import type { MessagePart, QueuedPrompt, TranscriptMessage } from 'apex-core/types/api'
 import { applyCompactionEvent, isCompactionEvent } from './compaction'
 import { nextTranscriptId, withPartId } from './ids'
 import { fallbackModelFromRecord, fallbackNoticeText } from './model-fallback'
@@ -211,6 +211,12 @@ export function replayPrimeEvents(
   for (const raw of events) {
     if (stats) stats.eventScans += 1
     const type = string(raw.type) ?? string(raw.event)
+    if (type === 'desktop_user_message' && Array.isArray(raw.messages) && raw.messages.every((row) => { const item = record(row); return item && typeof item.id === 'string' && ['user', 'assistant', 'system'].includes(String(item.role)) && Array.isArray(item.parts) })) {
+      // Main-process projection replaces optimistic rows without guessing which client sent identical text.
+      materializeDrafts()
+      rebase(raw.messages as TranscriptMessage[])
+      continue
+    }
     if (!type) continue
     if (type === 'gooeypi_steer_accepted' && (raw as Record<PropertyKey, unknown>)[LOCAL_STEER_ACCEPTED] === true) {
       const accepted = steerMessage(raw.prompt, 'accepted')

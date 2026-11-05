@@ -1,6 +1,7 @@
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { diagnosticPrompt, selectionPrompt, SELECTION_CHAR_LIMIT } from '../../packages/vscode/src/editor-prompts'
@@ -9,14 +10,17 @@ import { PiRpc } from '../../packages/vscode/src/pi-rpc'
 import { sessionPathFromUri } from '../../packages/vscode/src/extension'
 import { assertSessionFree, VsCodeRuntimeOwner } from '../../packages/vscode/src/runtime-owner'
 import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
-import { listSessions, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
+import { listSessions, readSessionTranscript, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
 
 vi.mock('vscode', () => ({
   workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
   window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn(), setStatusBarMessage: vi.fn() },
   languages: { getDiagnostics: vi.fn() },
-  Uri: { parse: (value: string) => ({ scheme: value.split(':')[0], toString: () => value }) },
+  Uri: {
+    parse: (value: string) => ({ scheme: value.split(':')[0], fsPath: value.startsWith('file:') ? fileURLToPath(value, { windows: /^file:\/\/\/\w:/.test(value) }) : value, toString: () => value }),
+    file: (path: string) => ({ scheme: 'file', fsPath: path, toString: () => pathToFileURL(path).href }),
+  },
   Range: class {
     start: { line: number; character: number }
     end: { line: number; character: number }
@@ -32,7 +36,7 @@ vi.mock('vscode', () => ({
 
 import * as vscode from 'vscode'
 import { ApexSession } from '../../packages/vscode/src/apex-session'
-import { editorContext, editorFileContext, editorRequest } from '../../packages/vscode/src/editor'
+import { editorContext, editorFileContext, editorRequest, scopedEditorRequest } from '../../packages/vscode/src/editor'
 import editorExtension from '../../packages/vscode/src/editor-extension'
 
 const directories: string[] = []
@@ -66,6 +70,7 @@ describe('VS Code handoff lifecycle', () => {
     const wireQuery = `session=${encodeURIComponent(path)}`
     // vscode.Uri exposes an already percent-decoded query, not a WHATWG query.
     expect(sessionPathFromUri({ path: '/open', query: decodeURIComponent(wireQuery) })).toBe(path)
+    expect(sessionPathFromUri({ path: '/attach', query: decodeURIComponent(wireQuery) })).toBe(path)
     expect(sessionPathFromUri({ path: '/other', query: decodeURIComponent(wireQuery) })).toBeNull()
   })
 
@@ -121,24 +126,63 @@ describe('VS Code handoff lifecycle', () => {
     }
   })
 
-  it('asks Apex desktop to release a session it holds and opens it once released', async () => {
+  it('refuses standalone takeover without asking Desktop to release its runtime', async () => {
     const session = join(tmpdir(), 'held.jsonl')
-    const desktop = { app: 'desktop' as const, label: 'Apex desktop', pid: 1, updatedAt: new Date().toISOString(), sessions: [session] }
-    const withdraw = vi.fn()
-    const request = vi.spyOn(runtimeOwners, 'requestSessionRelease').mockResolvedValue(withdraw)
-    const read = vi.spyOn(runtimeOwners, 'readRuntimeOwners')
-      .mockResolvedValueOnce([desktop])
-      .mockResolvedValueOnce([desktop])
-      .mockResolvedValue([])
+    const assertFree = vi.spyOn(runtimeOwners, 'assertSessionNotOwnedElsewhere').mockRejectedValue(new Error('Open in Apex desktop'))
+    const request = vi.spyOn(runtimeOwners, 'requestSessionRelease')
     try {
-      await expect(assertSessionFree(session)).resolves.toBeUndefined()
-      expect(request).toHaveBeenCalledWith(session)
-      expect(withdraw).toHaveBeenCalledOnce()
-      expect(read).toHaveBeenCalledTimes(3)
-    } finally {
-      request.mockRestore()
-      read.mockRestore()
-    }
+      await expect(assertSessionFree(session)).rejects.toThrow('Open in Apex desktop')
+      expect(request).not.toHaveBeenCalled()
+    } finally { assertFree.mockRestore(); request.mockRestore() }
+  })
+
+  it('retains Desktop attachment intent through repeated failed reconnects', async () => {
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { desktopTarget: '/desktop-session.jsonl', state: {}, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false) })
+    await session.start()
+    expect(session.state).toMatchObject({ status: 'exited', connection: 'desktop' })
+    await session.start()
+    expect(session.attachDesktop).toHaveBeenCalledTimes(2)
+    expect(session.desktopTarget).toBe('/desktop-session.jsonl')
+  })
+
+  it('rejects an attachment during a standalone run without changing state, ownership, or the running RPC', async () => {
+    const state = { status: 'ready', connection: 'standalone', isStreaming: true }
+    const rpc = { dispose: vi.fn() }
+    const owner = { set: vi.fn() }
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { state, rpc, owner, desktopTarget: undefined, launchGeneration: 3, post: vi.fn(), attachDesktop: vi.fn() })
+    Object.assign(vscode.window, { showWarningMessage: vi.fn() })
+    await session.openFromDesktop('/desktop-session.jsonl', true)
+    expect(session.state).toBe(state)
+    expect(state).toEqual({ status: 'ready', connection: 'standalone', isStreaming: true })
+    expect(session.desktopTarget).toBeUndefined()
+    expect(session.rpc).toBe(rpc)
+    expect(session.launchGeneration).toBe(3)
+    expect(rpc.dispose).not.toHaveBeenCalled()
+    expect(owner.set).not.toHaveBeenCalled()
+    expect(session.attachDesktop).not.toHaveBeenCalled()
+    expect(session.post).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back to standalone when an attachment-only URI cannot connect', async () => {
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { state: {}, launchGeneration: 0, stopping: Promise.resolve(), owner: { set: vi.fn() }, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false), switchSession: vi.fn(), start: vi.fn() })
+    const warning = vi.fn()
+    Object.assign(vscode.window, { showWarningMessage: warning })
+    await session.openFromDesktop('/desktop-session.jsonl', true)
+    expect(session.desktopTarget).toBe('/desktop-session.jsonl')
+    expect(session.state).toMatchObject({ status: 'exited', connection: 'desktop' })
+    expect(session.switchSession).not.toHaveBeenCalled()
+    expect(session.start).not.toHaveBeenCalled()
+  })
+
+  it('overrides inherited Desktop editor credentials in a real standalone Pi child', async () => {
+    vi.stubEnv('APEX_EDITOR_URL', 'http://inherited-desktop')
+    vi.stubEnv('APEX_EDITOR_TOKEN', 'inherited-fixture-token')
+    const rpc = new PiRpc({ file: process.execPath, args: ['-e', `require('node:readline').createInterface({ input: process.stdin }).on('line', line => { const c = JSON.parse(line); process.stdout.write(JSON.stringify({type:'response',id:c.id,success:true,data:{url:process.env.APEX_EDITOR_URL,token:process.env.APEX_EDITOR_TOKEN}})+'\\n') })`] }, [], process.cwd(), () => undefined, () => undefined, { PRIME_WORK_BROWSER_URL: 'http://own-editor', PRIME_WORK_BROWSER_TOKEN: 'own-fixture-token' })
+    try { expect(await rpc.command('get_state')).toEqual({ url: 'http://own-editor', token: 'own-fixture-token' }) }
+    finally { await rpc.dispose(); vi.unstubAllEnvs() }
   })
 
   it('keeps ownership through a child shutdown flush', async () => {
@@ -277,6 +321,36 @@ describe('VS Code saved sessions', () => {
     expect(messages[1].streaming).not.toBe(true)
   })
 
+  it('resolves rpc-worker transcripts and rejects paths outside the Pi session root', async () => {
+    const { cwd, root } = await fixture()
+    const workerDir = join(root, 'rpc-workers', 'worker-abc')
+    await mkdir(workerDir, { recursive: true })
+    const workerFile = join(workerDir, '2026-01-01T00-00-00-000Z_worker.jsonl')
+    const entries = [
+      { type: 'session', version: 3, id: 'worker-abc', cwd, timestamp: '2026-01-01T00:00:00.000Z' },
+      { type: 'message', id: 'u1', parentId: null, message: { role: 'user', content: [{ type: 'text', text: 'Worker mission' }] } },
+      { type: 'message', id: 'a1', parentId: 'u1', message: { role: 'assistant', content: [{ type: 'text', text: 'Worker findings' }] } },
+    ]
+    await writeFile(workerFile, `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`)
+    const loaded = await readSessionTranscript(join(workerDir, 'worker.jsonl'), root)
+    expect(loaded).toHaveLength(2)
+    expect(loaded[1]?.parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'Worker findings' }))
+    const rootLevelFile = join(root, 'outside.jsonl')
+    await writeFile(rootLevelFile, '{}')
+    await expect(readSessionTranscript(rootLevelFile, root)).rejects.toThrow('outside the Pi session directory')
+    const externalDir = await mkdtemp(join(tmpdir(), 'apex-vscode-external-'))
+    directories.push(externalDir)
+    const externalFile = join(externalDir, '2026-01-01T00-00-00-000Z_ext.jsonl')
+    await writeFile(externalFile, '{}')
+    await expect(readSessionTranscript(externalFile, root)).rejects.toThrow('outside the Pi session directory')
+
+    const post = vi.fn()
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { post })
+    await session.handle({ type: 'sessions:read', requestId: 42, path: '' })
+    expect(post).toHaveBeenCalledWith({ type: 'sessions:read', requestId: 42, messages: [], error: 'Invalid session path.' })
+  })
+
   it('keeps persisted tool results in the live projection', async () => {
     const { paths } = await fixture()
     const entries = [
@@ -348,6 +422,26 @@ describe('VS Code editor integration', () => {
       Object.assign(vscode.workspace, { workspaceFolders })
       vi.mocked(vscode.workspace.findFiles).mockReset()
     }
+  })
+
+  it('binds attached editor reads to the negotiated workspace and retains unsaved buffer versions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'apex-editor-scope-'))
+    directories.push(root)
+    const project = join(root, 'project')
+    await mkdir(project)
+    const file = join(project, 'file.ts')
+    const outside = join(root, 'outside.ts')
+    await writeFile(file, 'disk content')
+    await writeFile(outside, 'outside content')
+    Object.assign(vscode.workspace, { workspaceFolders: [{ uri: vscode.Uri.file(project), name: 'project' }] })
+    vi.mocked(vscode.workspace.openTextDocument).mockResolvedValue({ uri: vscode.Uri.file(file), languageId: 'typescript', isDirty: true, version: 12, lineCount: 1, lineAt: () => ({ text: 'unsaved buffer' }), getText: () => 'unsaved buffer' } as unknown as vscode.TextDocument)
+    try {
+      expect(await scopedEditorRequest(project, 'editor.read', { cwd: project, uri: pathToFileURL(file).href })).toMatchObject({ text: 'unsaved buffer', version: 12, dirty: true })
+      await expect(scopedEditorRequest(project, 'editor.read', { cwd: root, uri: pathToFileURL(file).href })).rejects.toThrow('workspace does not match')
+      await expect(scopedEditorRequest(project, 'editor.read', { cwd: project, uri: pathToFileURL(outside).href })).rejects.toThrow('outside the attached workspace')
+      Object.assign(vscode.workspace, { workspaceFolders: [] })
+      await expect(scopedEditorRequest(project, 'editor.read', { cwd: project, uri: pathToFileURL(file).href })).rejects.toThrow('no longer open')
+    } finally { Object.assign(vscode.workspace, { workspaceFolders: [] }) }
   })
 
   it('reports no active editor explicitly', () => {

@@ -1,4 +1,4 @@
-import type { MessagePart } from '@/types/api'
+import type { MessagePart } from 'apex-core/types/api'
 
 /**
  * Monotonic transcript identity for reducer-created messages and parts. A

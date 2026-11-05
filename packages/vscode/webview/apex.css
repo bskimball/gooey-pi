@@ -68,6 +68,107 @@ body { padding: 0; }
   text-overflow: ellipsis;
 }
 
+.apex-shell .apex-agents-trigger {
+  display: inline-flex;
+}
+
+.apex-agents-trigger {
+  flex: 0 0 auto;
+  height: 26px;
+  gap: 5px;
+  padding: 0 8px;
+  cursor: pointer;
+  transition:
+    color 120ms ease-out,
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    transform 100ms ease-out;
+}
+.apex-agents-trigger:hover:not(:disabled),
+.apex-agents-trigger.is-active {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.apex-agents-trigger.is-running {
+  color: var(--prime);
+  border-color: color-mix(in srgb, var(--prime) 35%, var(--border));
+}
+.apex-agents-trigger:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.apex-agents-trigger__label {
+  font-size: 11.5px;
+  font-weight: 540;
+}
+.apex-agents-trigger__count {
+  min-width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--surface-selected);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.apex-agents-trigger.is-running .apex-agents-trigger__count {
+  background: var(--prime-soft);
+  color: var(--prime);
+}
+
+.conversation-pane[data-specialists-open='true'] > .transcript,
+.conversation-pane[data-specialists-open='true'] > .turn-navigator {
+  display: none;
+}
+
+.apex-specialists-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.apex-specialists-pane__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+}
+.apex-specialists-pane__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+.apex-specialists-pane__title > svg {
+  color: var(--prime);
+}
+.apex-specialists-pane__close {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out;
+}
+.apex-specialists-pane__close:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
 .apex-session-picker {
   position: relative;
   min-width: 0;

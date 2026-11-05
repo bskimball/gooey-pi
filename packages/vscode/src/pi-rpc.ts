@@ -26,7 +26,7 @@ export class PiRpc {
     onExit: (code: number | null, stderr: string) => void,
     environment: NodeJS.ProcessEnv = {},
   ) {
-    this.child = spawn(invocation.file, [...invocation.args, ...args], { cwd, env: { ...process.env, ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    this.child = spawn(invocation.file, [...invocation.args, ...args], { cwd, env: { ...process.env, ...environment, APEX_EDITOR_URL: environment.PRIME_WORK_BROWSER_URL, APEX_EDITOR_TOKEN: environment.PRIME_WORK_BROWSER_TOKEN }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     const fail = (error: Error) => {
       for (const { reject } of this.pending.values()) reject(error)
       this.pending.clear()
