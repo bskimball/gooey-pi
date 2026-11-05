@@ -13,7 +13,7 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -103,6 +103,32 @@ describe('registerIpc verify gate', () => {
     await expect(handlers.get('providers:set-enabled')!(event, 'unknown', true)).rejects.toThrow('Provider was not found')
     await expect(handlers.get('providers:set-enabled')!(event, 'provider', 'yes')).rejects.toThrow('enabled must be a boolean')
     registration.dispose()
+  })
+
+  it('resolves page source metadata only inside the active granted workspace without changing files', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'apex-browser-source-'))
+    const cwd = join(directory, 'workspace')
+    const outside = join(directory, 'outside')
+    mkdirSync(cwd); mkdirSync(outside)
+    const file = join(cwd, 'Button.tsx')
+    writeFileSync(file, 'export function Button() {\n  return <button>Save</button>\n}\n')
+    writeFileSync(join(outside, 'Other.tsx'), 'private outside source')
+    symlinkSync(outside, join(cwd, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const authorizeCwd = vi.fn(async (requested: string) => { if (requested !== cwd) throw new Error('Not granted'); return realpathSync(cwd) })
+    stubs.projects = { authorizeCwd }
+    const invoke = (hint: unknown, workspace = cwd) => handlers.get('app:resolve-browser-source')!(event, workspace, hint)
+    try {
+      expect(await invoke({ kind: 'explicit', path: 'Button.tsx', line: 2 })).toEqual({ kind: 'resolved', path: realpathSync(file), line: 2, evidence: 'explicit' })
+      expect(await invoke({ kind: 'astro', path: pathToFileURL(file).href })).toMatchObject({ kind: 'resolved', path: realpathSync(file) })
+      for (const hint of [null, { kind: 'guess', path: file }, { kind: 'explicit', path: file, line: 100 }, { kind: 'explicit', path: file, line: 0 }, { kind: 'explicit', path: 'missing.tsx' }, { kind: 'explicit', path: cwd }, { kind: 'explicit', path: '../outside/Other.tsx' }, { kind: 'explicit', path: 'linked/Other.tsx' }, { kind: 'explicit', path: 'https://example.com/src/Button.tsx', line: 2 }]) {
+        expect(await invoke(hint)).toMatchObject({ kind: 'unknown' })
+      }
+      expect(await invoke({ kind: 'explicit', path: file }, outside)).toMatchObject({ kind: 'unknown' })
+      expect(readFileSync(file, 'utf8')).toBe('export function Button() {\n  return <button>Save</button>\n}\n')
+      expect(electronMocks.shell.openExternal).not.toHaveBeenCalled()
+    } finally { rmSync(directory, { recursive: true, force: true }); registration.dispose() }
   })
 
   it('routes runtime, update and application actions to their desktop services', async () => {

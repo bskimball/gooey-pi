@@ -14,6 +14,7 @@ import type {
 } from "../../src/types/api";
 import type { AgentRpcManager } from "./agent-rpc";
 import type { AgentBrowserService } from "./browser/agent-service";
+import { resolveBrowserSource } from "./browser/source";
 import type { CheckoutService } from "./checkouts";
 import type { ParallelWorkService } from "./parallel-work";
 import type { CuaDriverService } from "./cua-driver";
@@ -291,6 +292,7 @@ export function registerIpc(
 		);
 		return false;
 	});
+	handle("app:resolve-browser-source", (_event, cwd, hint) => resolveBrowserSource(services.projects, cwd, hint));
 	handle("app:open-in-vscode", async (_event, path, line) => {
 		try {
 			if (line !== undefined && (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647)) {

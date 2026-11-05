@@ -1,4 +1,5 @@
-import type { BrowserAnnotation, BrowserAnnotationElement, BrowserAnnotationRect } from '@/types/api'
+import type { BrowserAnnotation, BrowserAnnotationElement, BrowserAnnotationRect, BrowserSourceResult } from '@/types/api'
+import { parseBrowserSourceHint } from 'apex-core/browser/source'
 
 // Everything captured from the embedded page is untrusted data. These bounds are
 // enforced when a selection crosses from the webview into renderer state, so no
@@ -54,12 +55,15 @@ export function sanitizeCapturedElement(raw: unknown): BrowserAnnotationElement 
     : []
   const href = boundSingleLine(source.href, MAX_URL_LENGTH)
   const src = boundSingleLine(source.src, MAX_URL_LENGTH)
+  const sourceHint = parseBrowserSourceHint(source.sourceHint)
   return {
     selector,
     tagName,
     id: boundSingleLine(source.id, MAX_ID_LENGTH),
     classes,
     text: boundSingleLine(source.text, MAX_SNIPPET_LENGTH),
+    ...(typeof source.component === 'string' && source.component ? { component: boundSingleLine(source.component, 120) } : {}),
+    ...(sourceHint ? { sourceHint } : {}),
     ...(href ? { href } : {}),
     ...(src ? { src } : {}),
     rect: sanitizeRect(source.rect),
@@ -69,6 +73,7 @@ export function sanitizeCapturedElement(raw: unknown): BrowserAnnotationElement 
 export interface BrowserAnnotationInput {
   comment: string
   element: BrowserAnnotationElement
+  source?: BrowserSourceResult
   pageUrl: string
   pageTitle: string
 }
@@ -80,6 +85,7 @@ export function createAnnotation(input: BrowserAnnotationInput, id: string, crea
     id,
     comment: boundCapturedText(input.comment, MAX_COMMENT_LENGTH).trim(),
     element: input.element,
+    ...(input.source ? { source: input.source } : {}),
     pageUrl: boundSingleLine(input.pageUrl, MAX_URL_LENGTH),
     pageTitle: boundSingleLine(input.pageTitle, MAX_TITLE_LENGTH),
     stale: false,
@@ -143,6 +149,10 @@ export function serializeAnnotations(annotations: BrowserAnnotation[]): string {
       ...field('Comment', annotation.comment),
       ...field('Element', annotationElementLabel(annotation.element)),
       ...field('Selector', annotation.element.selector),
+      ...field('Component reported by page', annotation.element.component ?? ''),
+      ...(annotation.source?.kind === 'resolved'
+        ? [...field('Source file', annotation.source.path), ...field('Source line', annotation.source.line === undefined ? 'not reported' : String(annotation.source.line)), ...field('Source evidence', annotation.source.evidence), 'Source note: page-reported location checked inside the workspace, not proof of ownership. Recorded positions may be stale after edits.']
+        : ['Source: unknown', ...field('Source note', annotation.source?.reason ?? 'No usable original-source metadata was reported. Do not guess a source location.')]),
       ...field('Text snippet', annotation.element.text),
       ...field('Href', annotation.element.href ?? ''),
       ...field('Src', annotation.element.src ?? ''),

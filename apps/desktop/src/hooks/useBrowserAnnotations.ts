@@ -18,24 +18,40 @@ export interface BrowserAnnotationsApi {
 }
 
 /** Owns the browser annotation set shared by the inspector BrowserPanel (capture, markers) and the Composer (attachment, prompt payload). */
-export function useBrowserAnnotations(): BrowserAnnotationsApi {
+export function useBrowserAnnotations(scopeKey = 'default'): BrowserAnnotationsApi {
+  // Returning to a session must not reactivate callbacks from its previous visit.
+  const [scope, setScope] = useState({ key: scopeKey })
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
   const [annotations, setAnnotations] = useState<BrowserAnnotation[]>([])
   const [sendSignal, setSendSignal] = useState(0)
-  const requestSend = useCallback(() => setSendSignal((current) => current + 1), [])
+  const requestSend = useCallback(() => {
+    if (scopeRef.current === scope) setSendSignal((current) => current + 1)
+  }, [scope])
   const annotationsRef = useRef(annotations)
+  if (scope.key !== scopeKey) {
+    const nextScope = { key: scopeKey }
+    scopeRef.current = nextScope
+    setScope(nextScope)
+    setAnnotations([])
+    setSendSignal(0)
+    annotationsRef.current = []
+  }
   const commit = useCallback((next: BrowserAnnotation[]) => {
+    if (scopeRef.current !== scope) return
     annotationsRef.current = next
     setAnnotations(next)
-  }, [])
+  }, [scope])
 
   const add = useCallback(
     (input: BrowserAnnotationInput) => {
+      if (scopeRef.current !== scope) return false
       const result = addAnnotation(annotationsRef.current, createAnnotation(input, crypto.randomUUID(), Date.now()))
       if (!result.ok) return false
       commit(result.annotations)
       return true
     },
-    [commit],
+    [commit, scope],
   )
   const remove = useCallback((id: string) => commit(removeAnnotation(annotationsRef.current, id)), [commit])
   const clear = useCallback(() => commit([]), [commit])

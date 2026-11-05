@@ -98,9 +98,19 @@ describe('Phase 2 coordination', () => {
     const rows = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
     expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(['scout', 'oracle'])
     expect(rows[0].textContent).toContain('Waiting for input')
-    expect(rows[0].textContent).toContain('1 file references')
+    expect(rows[0].textContent).toContain('1 file')
+    expect(rows[1].textContent).not.toContain('No blocker recorded')
+    expect(rows[1].textContent).not.toContain('No active tool recorded')
+    expect(rows[1].textContent).not.toContain('0 file')
+    const details = container.querySelector<HTMLDetailsElement>('.specialist-header__details')!
+    expect(details.open).toBe(false)
+    await act(async () => details.querySelector('summary')!.click())
+    expect(details.open).toBe(true)
+    expect(details.textContent).toContain('task_1')
+    expect(details.textContent).toContain('Inspect source')
     await act(async () => rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
     expect(onSelect).toHaveBeenCalledWith('task_2')
+    await act(async () => container.querySelector<HTMLElement>('.specialist-files summary')!.click())
     const source = container.querySelector<HTMLButtonElement>('.specialist-files button')!
     expect(source.textContent).toContain('/repo/src/a.ts:42')
     await act(async () => source.click())

@@ -2,7 +2,7 @@
   "name": "apex-vscode-theme",
   "displayName": "Pi Desktop Theme",
   "description": "Dark and light VS Code themes matching the pi-desktop app.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "bdkinc",
   "license": "MIT",
   "engines": { "vscode": "^1.80.0" },

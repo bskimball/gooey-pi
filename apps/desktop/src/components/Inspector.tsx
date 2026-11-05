@@ -239,6 +239,8 @@ export const Inspector = memo(function Inspector({
 				) : null}
 				{activeTab === "browser" ? (
 					<BrowserPanel
+						key={`${cwd ?? ''}:${agentSessionKey ?? ''}`}
+						cwd={cwd}
 						platform={platform}
 						home={browserHome}
 						navigationRequest={browserNavigationRequest}

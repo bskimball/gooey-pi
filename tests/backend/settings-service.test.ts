@@ -77,6 +77,17 @@ describe('SettingsService.update', () => {
     expect(service.get()).toEqual(next)
   })
 
+  it('persists namespaced model IDs for selection and disabling across restart', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prime-work-settings-model-key-'))
+    dirs.push(dir)
+    const path = join(dir, 'state.json')
+    const service = new SettingsService(new JsonStateStore(path), () => '/bin/zsh')
+    const modelKey = 'cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731'
+    const patch = { lastSelectedModels: { pi: modelKey }, piDisabledModels: [modelKey] }
+    await expect(service.update(patch)).resolves.toMatchObject(patch)
+    expect(new JsonStateStore(path).getSettings()).toMatchObject(patch)
+  })
+
   it('leaves unrelated settings untouched on a partial patch', async () => {
     const service = makeService()
     const before = service.get()

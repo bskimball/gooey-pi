@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
-import type { FileHandle } from 'node:fs/promises'
-import { open, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import {
   type AppSettings,
@@ -17,7 +15,9 @@ import {
   type ScheduleTiming,
 } from '../../src/types/api'
 import { normalizeScheduleRunHistory } from './schedules/retention'
-import { isRecord } from 'apex-core/validation'
+import { isModelKey, isRecord } from 'apex-core/validation'
+import { nodeFileSystem, renameStateFile, type JsonStateStoreFileSystem } from './state-file-system'
+export type { JsonStateStoreFileHandle, JsonStateStoreFileSystem } from './state-file-system'
 
 export interface FolderIdentity {
   dev: string
@@ -265,7 +265,7 @@ function parseSettings(value: unknown): AppSettings {
       }
     : defaults.runtimePaths
   const parseLastSelectedModel = (model: unknown, fallback: string): string =>
-    typeof model === 'string' && model.length <= 385 && (!model || /^[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9._:/+-]{1,256}$/i.test(model)) ? model : fallback
+    model === '' || isModelKey(model) ? model : fallback
   const lastSelectedModels = isRecord(value.lastSelectedModels)
     ? {
         pi: parseLastSelectedModel(value.lastSelectedModels.pi, defaults.lastSelectedModels.pi),
@@ -339,7 +339,7 @@ function parseSettings(value: unknown): AppSettings {
 
 function parseDisabledModels(value: unknown, fallback: string[]): string[] {
   if (!Array.isArray(value)) return fallback
-  return [...new Set(value.filter((item): item is string => typeof item === 'string' && /^[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9._:/+-]{1,256}$/i.test(item)))].slice(0, 5_000)
+  return [...new Set(value.filter(isModelKey))].slice(0, 5_000)
 }
 
 const THINKING_LEVELS: ReadonlySet<string> = new Set(['auto', ...PRIME_THINKING_LEVELS])
@@ -471,24 +471,6 @@ function parseState(value: unknown, statePath: string): { sourceVersion: Support
   }
   capUnboundedCollections(state)
   return { sourceVersion: version, state }
-}
-
-export interface JsonStateStoreFileHandle {
-  writeFile(data: string | Uint8Array, options: { encoding: 'utf8' }): Promise<void>
-  sync(): Promise<void>
-  close(): Promise<void>
-}
-
-export interface JsonStateStoreFileSystem {
-  open(path: string, flags: string, mode?: number): Promise<JsonStateStoreFileHandle>
-  rename(oldPath: string, newPath: string): Promise<void>
-  unlink(path: string): Promise<void>
-}
-
-const nodeFileSystem: JsonStateStoreFileSystem = {
-  open: (path, flags, mode) => open(path, flags, mode) as Promise<FileHandle>,
-  rename,
-  unlink,
 }
 
 export class JsonStateStore {
@@ -751,7 +733,7 @@ export class JsonStateStore {
     if (!this.legacyFilePath) return
     const backupPath = this.nextLegacyBackupPath()
     try {
-      await this.fileSystem.rename(this.legacyFilePath, backupPath)
+      await renameStateFile(this.fileSystem, this.legacyFilePath, backupPath, this.platform)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' && !this.pathExists(backupPath)) return
       throw this.migrationError(`Legacy desktop state could not be retired before startup: ${this.errorMessage(error)}`, this.verifiedBackupFile(backupPath))
@@ -760,7 +742,7 @@ export class JsonStateStore {
       await this.syncParentDirectory(this.legacyFilePath, true)
     } catch (retirementSyncError) {
       try {
-        await this.fileSystem.rename(backupPath, this.legacyFilePath)
+        await renameStateFile(this.fileSystem, backupPath, this.legacyFilePath, this.platform)
       } catch (rollbackRenameError) {
         throw this.migrationError(
           `Legacy desktop state retirement was not durable: ${this.errorMessage(retirementSyncError)}; rollback rename failed: ${this.errorMessage(rollbackRenameError)}`,
@@ -863,7 +845,7 @@ export class JsonStateStore {
 
     const backupPath = this.nextLegacyBackupPath()
     try {
-      await this.fileSystem.rename(this.legacyFilePath, backupPath)
+      await renameStateFile(this.fileSystem, this.legacyFilePath, backupPath, this.platform)
     } catch (renameError) {
       const verifiedBackup = this.verifiedBackupFile(backupPath)
       throw this.migrationError(`Quarantine rename failed for a legacy state recreated by a downgraded binary: ${this.errorMessage(renameError)}`, verifiedBackup)
@@ -872,7 +854,7 @@ export class JsonStateStore {
       await this.syncExistingFile(backupPath)
     } catch (syncError) {
       try {
-        await this.fileSystem.rename(backupPath, this.legacyFilePath)
+        await renameStateFile(this.fileSystem, backupPath, this.legacyFilePath, this.platform)
       } catch (rollbackError) {
         const verifiedBackup = this.verifiedBackupFile(backupPath)
         const location = verifiedBackup
@@ -914,7 +896,7 @@ export class JsonStateStore {
     )}\n`
     try {
       await this.writeDurableFile(temp, serialized, 'wx')
-      await this.fileSystem.rename(temp, this.legacyFilePath)
+      await renameStateFile(this.fileSystem, temp, this.legacyFilePath, this.platform)
     } finally {
       await this.fileSystem.unlink(temp).catch((error: unknown) => {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
@@ -998,7 +980,7 @@ export class JsonStateStore {
         await file.close()
       }
 
-      await this.fileSystem.rename(temp, this.filePath)
+      await renameStateFile(this.fileSystem, temp, this.filePath, this.platform)
 
       await this.syncParentDirectory(this.filePath, requireDirectorySync)
     } finally {

@@ -8,6 +8,7 @@ import {
   annotationTeardownScript,
   boundInnerText,
   buildSelectorPath,
+  captureSourceMetadata,
 } from '../../apps/desktop/src/lib/annotation-picker'
 import { sanitizeCapturedElement } from '../../apps/desktop/src/lib/browser-annotations'
 
@@ -64,6 +65,62 @@ describe('boundInnerText', () => {
   })
 })
 
+describe('original source metadata', () => {
+  it('reads same-element explicit, Astro and Svelte locations and allows a file-only stamp', () => {
+    const element = document.createElement('button')
+    element.setAttribute('data-source-file', 'src/Button.tsx')
+    expect(captureSourceMetadata(element).sourceHint).toEqual({ kind: 'explicit', path: 'src/Button.tsx' })
+    element.setAttribute('data-source-line', '12')
+    element.setAttribute('data-source-component', 'Button')
+    expect(captureSourceMetadata(element)).toMatchObject({ component: 'Button', sourceHint: { line: 12 } })
+    element.removeAttribute('data-source-file')
+    element.setAttribute('data-astro-source-file', 'src/Button.astro')
+    element.setAttribute('data-astro-source-loc', '8:2')
+    expect(captureSourceMetadata(element).sourceHint).toEqual({ kind: 'astro', path: 'src/Button.astro', line: 8 })
+    element.removeAttribute('data-astro-source-file')
+    Object.assign(element, { __svelte_meta: { loc: { file: 'src/Button.svelte', line: 7, column: 0 } } })
+    expect(captureSourceMetadata(element).sourceHint).toEqual({ kind: 'svelte', path: 'src/Button.svelte', line: 8 })
+    Object.assign(element, { __svelte_meta: { loc: { file: 'src/Button.svelte', line: 0, column: 0 } } })
+    expect(captureSourceMetadata(element).sourceHint).toEqual({ kind: 'svelte', path: 'src/Button.svelte', line: 1 })
+  })
+
+  it('refuses malformed paths and positions rather than repairing or guessing them', () => {
+    const element = document.createElement('button')
+    for (const path of ['', 'x'.repeat(4097), 'bad\npath']) {
+      element.setAttribute('data-source-file', path)
+      expect(captureSourceMetadata(element).sourceHint).toBeUndefined()
+    }
+    element.setAttribute('data-source-file', 'src/Button.tsx')
+    for (const line of ['0', '2147483648', '1.5', 'maybe']) {
+      element.setAttribute('data-source-line', line)
+      expect(captureSourceMetadata(element).sourceHint).toBeUndefined()
+    }
+    element.removeAttribute('data-source-file')
+    element.setAttribute('data-astro-source-file', 'src/Button.astro')
+    element.setAttribute('data-astro-source-loc', 'invalid')
+    Object.assign(element, { __svelte_meta: { loc: { file: 'src/Button.svelte', line: true } } })
+    expect(captureSourceMetadata(element).sourceHint).toBeUndefined()
+  })
+
+  it('uses bounded React owner names but never a generated stack as an original source location', () => {
+    const element = document.createElement('button')
+    const named = { type: { displayName: 'Card'.repeat(50) } }
+    const anonymous = { type: null, _debugOwner: named }
+    Object.assign(element, { __reactFiber$test: { _debugOwner: anonymous, _debugStack: { stack: 'generated.tsx:999:20' } } })
+    expect(captureSourceMetadata(element).component).toHaveLength(120)
+    expect(captureSourceMetadata(element).sourceHint).toBeUndefined()
+    function Card() { return null }
+    Object.assign(element, { __reactFiber$test: { _debugOwner: { type: Card } } })
+    expect(captureSourceMetadata(element).component).toBe('Card')
+    const cycle: { type: object; _debugOwner?: unknown } = { type: {} }
+    cycle._debugOwner = cycle
+    Object.assign(element, { __reactFiber$test: { _debugOwner: cycle } })
+    expect(captureSourceMetadata(element).component).toBeUndefined()
+    Object.defineProperty(element, '__svelte_meta', { get() { throw new Error('page-owned getter') } })
+    expect(() => captureSourceMetadata(element)).not.toThrow()
+  })
+})
+
 describe('injected picker script', () => {
   it('is idempotent and captures a bounded element payload on click', () => {
     document.body.innerHTML = '<div id="app"><a id="cta" class="btn primary" href="https://example.com/signup">Join   now</a></div>'
@@ -94,6 +151,29 @@ describe('injected picker script', () => {
     expect(clean!.href).toBe('https://example.com/signup')
     // Drained: a second take returns null.
     expect(runScript(annotationTakeScript())).toBeNull()
+  })
+
+  it('captures original source stamps only from the selected element', () => {
+    document.body.innerHTML = '<button id="explicit" data-source-file="src/Button.tsx" data-source-line="7" data-source-component="Button"><span id="child">Label</span></button><section id="astro" data-astro-source-file="/repo/src/Hero.astro" data-astro-source-loc="12:4"></section><div id="svelte"></div>'
+    Object.assign(document.querySelector('#svelte')!, { __svelte_meta: { loc: { file: 'src/Card.svelte', line: 9, column: 0 } } })
+    runScript(annotationPickerScript('start'))
+    for (const id of ['explicit', 'astro', 'svelte', 'child']) document.getElementById(id)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    const selected = JSON.parse(String(runScript(annotationTakeScript()))).map((raw: unknown) => sanitizeCapturedElement(raw))
+    expect(selected[0]).toMatchObject({ component: 'Button', sourceHint: { kind: 'explicit', path: 'src/Button.tsx', line: 7 } })
+    expect(selected[1].sourceHint).toEqual({ kind: 'astro', path: '/repo/src/Hero.astro', line: 12 })
+    expect(selected[2].sourceHint).toEqual({ kind: 'svelte', path: 'src/Card.svelte', line: 10 })
+    expect(selected[3].sourceHint).toBeUndefined()
+  })
+
+  it('captures a React owner name without claiming generated stack positions are TSX source', () => {
+    document.body.innerHTML = '<button id="react">Profile</button><button id="invalid" data-source-file="src/Foo.tsx" data-source-line="0">Invalid</button>'
+    function Profile() { return null }
+    Object.assign(document.getElementById('react')!, { __reactFiber$fixture: { _debugOwner: { type: Profile }, _debugStack: new Error('http://localhost:5173/src/Profile.tsx:999:20') } })
+    runScript(annotationPickerScript('start'))
+    for (const id of ['react', 'invalid']) document.getElementById(id)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    const selected = JSON.parse(String(runScript(annotationTakeScript()))).map((raw: unknown) => sanitizeCapturedElement(raw))
+    expect(selected[0].component).toBe('Profile')
+    expect(selected.every((item: { sourceHint?: unknown }) => item.sourceHint === undefined)).toBe(true)
   })
 
   it('stop removes the hover overlay and its listeners but keeps markers', () => {

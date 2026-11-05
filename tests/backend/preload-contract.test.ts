@@ -33,6 +33,7 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['app', 'revealPath', 'app:reveal-path', ['/repo/file']],
   ['app', 'openInVsCode', 'app:open-in-vscode', ['/repo']],
   ['app', 'openInVsCode', 'app:open-in-vscode', ['/repo/file.ts', 42]],
+  ['app', 'resolveBrowserSource', 'app:resolve-browser-source', ['/repo', { kind: 'explicit', path: 'src/Button.tsx', line: 2 }]],
   ['parallel', 'list', 'parallel:list', ['project']],
   ['parallel', 'create', 'parallel:create', ['project', { cwd: '/repo', baseRef: 'HEAD', prompts: ['A', 'B'], maxMinutes: 15 }]],
   ['parallel', 'start', 'parallel:start', ['project', 'run']],

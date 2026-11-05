@@ -15,12 +15,12 @@ import {
 } from "@/lib/browser-annotations";
 import {
 	detectRendererPlatform,
-	shortcutLabel,
 } from "@/lib/platform-shortcuts";
 import {
 	type AgentBrowserTabRecord,
 	BROWSER_PARTITION,
 	type BrowserAnnotationElement,
+	type BrowserSourceResult,
 } from "@/types/api";
 import { AgentCursorOverlay, type AgentSlotRect } from "../AgentBrowserLayer";
 import {
@@ -40,6 +40,7 @@ import {
 	X,
 } from "../icons";
 import { IconButton } from "../ui";
+import { BrowserAnnotationPopover } from "./BrowserAnnotationPopover";
 
 type WebviewElement = HTMLElement & {
 	loadURL(url: string): Promise<void>;
@@ -83,6 +84,7 @@ function normalizeUrl(value: string) {
 }
 
 interface BrowserPanelProps {
+	cwd?: string;
 	navigationRequest?: { id: number; url: string };
 	onNavigationRequestHandled?(id: number): void;
 	platform?: NodeJS.Platform;
@@ -132,6 +134,7 @@ function agentTabLabel(tab: AgentBrowserTabRecord): string {
 
 export function BrowserPanel({
 	home,
+	cwd,
 	navigationRequest,
 	onNavigationRequestHandled,
 	onOpenExternal,
@@ -326,13 +329,13 @@ export function BrowserPanel({
 		view.addEventListener("did-start-loading", didStart);
 		view.addEventListener("did-stop-loading", didStop);
 		view.addEventListener("did-navigate", didNavigate);
-		view.addEventListener("did-navigate-in-page", sync);
+		view.addEventListener("did-navigate-in-page", didNavigate);
 		return () => {
 			view.removeEventListener("dom-ready", onDomReady);
 			view.removeEventListener("did-start-loading", didStart);
 			view.removeEventListener("did-stop-loading", didStop);
 			view.removeEventListener("did-navigate", didNavigate);
-			view.removeEventListener("did-navigate-in-page", sync);
+			view.removeEventListener("did-navigate-in-page", didNavigate);
 		};
 	}, [home]);
 
@@ -431,9 +434,9 @@ export function BrowserPanel({
 		setPicking(true);
 	};
 
-	const saveAnnotation = () => {
+	const saveAnnotation = (source: BrowserSourceResult): boolean => {
 		const view = webviewRef.current;
-		if (!pendingElement || !annotationText.trim()) return;
+		if (!pendingElement || !annotationText.trim()) return false;
 		let pageTitle = "";
 		let pageUrl = currentUrl;
 		try {
@@ -446,6 +449,7 @@ export function BrowserPanel({
 			!annotationsRef.current.add({
 				comment: annotationText,
 				element: pendingElement,
+				source,
 				pageUrl,
 				pageTitle,
 			})
@@ -453,10 +457,11 @@ export function BrowserPanel({
 			showNotice(
 				`Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`,
 			);
-			return;
+			return false;
 		}
 		setPendingElement(null);
 		setAnnotationText("");
+		return true;
 	};
 
 	const webview = createElement("webview" as never, {
@@ -632,69 +637,12 @@ export function BrowserPanel({
 						</div>
 					) : null}
 					{pendingElement ? (
-						<div className="annotation-layer">
-							<div className="annotation-popover">
-								<div>
-									<ChatCircleText size={14} />
-									<strong>Comment on element {count + 1}</strong>
-									<button
-										type="button"
-										aria-label="Discard annotation"
-										onClick={() => {
-											setPendingElement(null);
-											setAnnotationText("");
-										}}
-									>
-										<X size={13} />
-									</button>
-								</div>
-								<textarea
-									autoFocus
-									value={annotationText}
-									onChange={(event) => setAnnotationText(event.target.value)}
-									onKeyDown={(event) => {
-										if (event.key !== "Enter" || event.shiftKey) return;
-										event.preventDefault();
-										if (!annotationText.trim()) return;
-										saveAnnotation();
-										// Ctrl/Cmd+Enter also fires the composer's send with the saved annotation attached.
-										if (event.ctrlKey || event.metaKey)
-											annotationsRef.current.requestSend();
-									}}
-									placeholder="Describe what should change…"
-								/>
-								<p className="annotation-popover__hints">
-									<span>
-										<kbd>{platform === "darwin" ? "↩" : "Enter"}</kbd> add to
-										chat
-									</span>
-									<span>
-										<kbd>{shortcutLabel(platform, ["Primary", "Enter"])}</kbd>{" "}
-										send now
-									</span>
-								</p>
-								<div>
-									<button
-										type="button"
-										className="button"
-										onClick={() => {
-											setPendingElement(null);
-											setAnnotationText("");
-										}}
-									>
-										Cancel
-									</button>
-									<button
-										type="button"
-										className="button button--primary"
-										disabled={!annotationText.trim()}
-										onClick={saveAnnotation}
-									>
-										Add comment
-									</button>
-								</div>
-							</div>
-						</div>
+						<BrowserAnnotationPopover
+							element={pendingElement} cwd={cwd} index={count + 1} platform={platform}
+							text={annotationText} onTextChange={setAnnotationText} onSave={saveAnnotation}
+							onCancel={() => { setPendingElement(null); setAnnotationText(""); }}
+							onRequestSend={() => annotationsRef.current.requestSend()}
+						/>
 					) : null}
 					{count ? (
 						<div className="annotation-count">

@@ -604,20 +604,20 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     <div className="specialists-panel">
       <SpecialistMatrix specialists={specialists} activeId={active.id} onSelect={onSelect} cwd={cwd} />
       <header className="specialist-header" key={active.id}>
-        <div className="specialist-header__top">
-          <div className="specialist-header__title"><strong>{active.agent}</strong><span className="mono">{active.id}</span></div>
-          <span className={`run-state is-${active.status}`}>{specialistStatusLabel[active.status]}</span>
-        </div>
-        <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
-        {failure ? <div className="specialist-header__error"><WarningCircle size={12} /><span>{failure}</span></div> : null}
-        {active.status === 'running' && active.activity ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
-        <SpecialistFiles key={active.id} messages={rawTranscript} cwd={active.cwd ? observedPath(active.cwd, cwd) : cwd} />
         <details className="specialist-header__details">
-          <summary>Details <span>{matchedDiskTranscript ? 'Session transcript' : 'Parent summary'}</span></summary>
+          <summary><strong>{active.agent}</strong><span>Details</span></summary>
+          <div className="specialist-header__top">
+            <div className="specialist-header__title"><span className="mono">{active.id}</span></div>
+            <span className={`run-state is-${active.status}`}>{specialistStatusLabel[active.status]}</span>
+          </div>
+          <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
           <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
           {!matchedDiskTranscript ? <small className="specialist-header__source">Showing the parent session's recorded activity, not a live worker status.</small> : null}
           <strong className="specialist-turn__label">Work order</strong><MarkdownText text={active.prompt} />
         </details>
+        <SpecialistFiles key={active.id} messages={rawTranscript} cwd={active.cwd ? observedPath(active.cwd, cwd) : cwd} />
+        {failure ? <div className="specialist-header__error"><WarningCircle size={12} /><span>{failure}</span></div> : null}
+        {active.status === 'running' && active.activity ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
       </header>
       <div
         ref={scrollRef}

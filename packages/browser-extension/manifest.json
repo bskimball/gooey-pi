@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Apex",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Share browser tabs with an Apex thread.",
 	"icons": {
 		"16": "icons/icon-16.png",

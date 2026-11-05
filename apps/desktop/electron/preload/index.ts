@@ -76,6 +76,7 @@ const api: PrimeWorkApi = {
 		openExternal: (url) => invoke("app:open-external", url),
 		revealPath: (path) => invoke("app:reveal-path", path),
 		openInVsCode: (path, line) => line === undefined ? invoke("app:open-in-vscode", path) : invoke("app:open-in-vscode", path, line),
+		resolveBrowserSource: (cwd, hint) => invoke("app:resolve-browser-source", cwd, hint),
 		popupMenu: (menu, x, y) => invoke("app:popup-menu", menu, x, y),
 		setTitleBarTheme: (theme) => invoke("app:set-title-bar-theme", theme),
 		onOpenSettings: (callback) =>

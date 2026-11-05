@@ -14,7 +14,7 @@ import {
   StateMigrationError,
   UnsupportedStateVersionError,
 } from '../../apps/desktop/electron/main/store'
-import type { JsonStateStoreFileHandle, JsonStateStoreFileSystem } from '../../apps/desktop/electron/main/store'
+import type { DesktopState, JsonStateStoreFileHandle, JsonStateStoreFileSystem } from '../../apps/desktop/electron/main/store'
 import { SessionService } from '../../apps/desktop/electron/main/sessions'
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -113,6 +113,66 @@ describe('JsonStateStore', () => {
     await Promise.all(Array.from({ length: 20 }, (_, index) => store.update((state) => { state.archivedSessions.push(String(index)) })))
     expect(store.snapshot().archivedSessions).toHaveLength(20)
     expect(JSON.parse(readFileSync(path, 'utf8')).archivedSessions).toHaveLength(20)
+  })
+
+  it('retries a transient Windows rename denial without replaying mutations or reordering queued updates', async () => {
+    const dir = makeDirectory()
+    const path = join(dir, 'state.json')
+    writeValidState(path)
+    const before = readFileSync(path, 'utf8')
+    const attemptedSources: string[] = []
+    const replacement = vi.fn(async (source: string, destination: string) => {
+      attemptedSources.push(source)
+      if (attemptedSources.length <= 2) {
+        expect(readFileSync(path, 'utf8')).toBe(before)
+        expect(store.snapshot().archivedSessions).toEqual([])
+        throw Object.assign(new Error('destination handle denies replacement'), { code: 'EPERM' })
+      }
+      await rename(source, destination)
+    })
+    const store = new JsonStateStore(path, { ...realFileSystem, rename: replacement }, undefined, 'win32')
+    const first = vi.fn((state: DesktopState) => { state.archivedSessions.push('first') })
+    const second = vi.fn((state: DesktopState) => { state.archivedSessions.push('second') })
+    const results = await Promise.allSettled([store.update(first), store.update(second)])
+    expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled'])
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(new Set(attemptedSources.slice(0, 3)).size).toBe(1)
+    expect(store.snapshot().archivedSessions).toEqual(['first', 'second'])
+    expect(new JsonStateStore(path).snapshot().archivedSessions).toEqual(['first', 'second'])
+    expect(readdirSync(dir)).toEqual(['state.json'])
+  })
+
+  it('bounds Windows rename retries and preserves disk and memory on permanent failure before recovering the queue', async () => {
+    const dir = makeDirectory()
+    const path = join(dir, 'state.json')
+    writeValidState(path)
+    const before = readFileSync(path, 'utf8')
+    const denied = Object.assign(new Error('permanent replacement denial'), { code: 'EPERM' })
+    const replacement = vi.fn(realFileSystem.rename).mockRejectedValue(denied)
+    const store = new JsonStateStore(path, { ...realFileSystem, rename: replacement }, undefined, 'win32')
+    await expect(store.update((state) => { state.archivedSessions.push('must-not-publish') })).rejects.toBe(denied)
+    expect(replacement).toHaveBeenCalledTimes(6)
+    expect(readFileSync(path, 'utf8')).toBe(before)
+    expect(store.snapshot().archivedSessions).toEqual([])
+    expect(readdirSync(dir)).toEqual(['state.json'])
+    replacement.mockImplementation(realFileSystem.rename)
+    await store.update((state) => { state.archivedSessions.push('recovered') })
+    expect(new JsonStateStore(path).snapshot().archivedSessions).toEqual(['recovered'])
+  })
+
+  it.each([{ platform: 'linux', code: 'EPERM' }, { platform: 'win32', code: 'EIO' }] as const)('does not retry $code on $platform', async ({ platform, code }) => {
+    const dir = makeDirectory()
+    const path = join(dir, 'state.json')
+    writeValidState(path)
+    const before = readFileSync(path, 'utf8')
+    const failure = Object.assign(new Error('non-retryable failure'), { code })
+    const replacement = vi.fn(realFileSystem.rename).mockRejectedValue(failure)
+    const store = new JsonStateStore(path, { ...realFileSystem, rename: replacement }, undefined, platform)
+    await expect(store.update((state) => { state.archivedSessions.push('rejected') })).rejects.toBe(failure)
+    expect(replacement).toHaveBeenCalledTimes(1)
+    expect(readFileSync(path, 'utf8')).toBe(before)
+    expect(store.snapshot().archivedSessions).toEqual([])
   })
 
   it('defaults to Orb and preserves the selected pet across a full store restart', async () => {

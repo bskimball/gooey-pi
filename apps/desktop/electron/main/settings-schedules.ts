@@ -2,7 +2,7 @@ import { session } from 'electron'
 import { isAbsolute } from 'node:path'
 import { BROWSER_PARTITION, HARNESS_IDS, INTERFACE_FONT_SCALES, PROJECT_SORT_MODES, type AppSettings, type ProjectSortMode } from '../../src/types/api'
 import type { JsonStateStore } from './store'
-import { isRecord, rejectUnknownKeys, requireBoolean, requireInteger, requireSelfHostedVoiceUrl, requireString, requireWebUrl } from 'apex-core/validation'
+import { isModelKey, isRecord, rejectUnknownKeys, requireBoolean, requireInteger, requireSelfHostedVoiceUrl, requireString, requireWebUrl } from 'apex-core/validation'
 
 export class SettingsService {
   constructor(
@@ -131,7 +131,7 @@ export class SettingsService {
         const models = {} as AppSettings['lastSelectedModels']
         for (const harness of HARNESS_IDS) {
           const model = requireString(value[harness], `lastSelectedModels.${harness}`, { max: 385, trim: true })
-          if (model && !/^[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9._:/+-]{1,256}$/i.test(model)) throw new TypeError(`lastSelectedModels.${harness} is not a valid model key`)
+          if (model && !isModelKey(model)) throw new TypeError(`lastSelectedModels.${harness} is not a valid model key`)
           models[harness] = model
         }
         return models
@@ -165,7 +165,7 @@ export class SettingsService {
     if (!Array.isArray(value) || value.length > 5_000) throw new TypeError(`${label} must be a bounded array`)
     return [...new Set(value.map((entry, index) => {
       const key = requireString(entry, `${label}[${index}]`, { min: 3, max: 385, trim: true })
-      if (!/^[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9._:/+-]{1,256}$/i.test(key)) throw new TypeError(`${label}[${index}] is not a valid model key`)
+      if (!isModelKey(key)) throw new TypeError(`${label}[${index}] is not a valid model key`)
       return key
     }))]
   }

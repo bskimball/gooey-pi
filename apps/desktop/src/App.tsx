@@ -174,7 +174,6 @@ export default function App() {
     })
     setSessions((items) => items.map((session) => ids.has(session.id) ? { ...session, unread: false } : session))
   }, [setSessions])
-  const browserAnnotations = useBrowserAnnotations()
   const workspace = useWorkspaceRuntime({
     bridge, harness: activeHarness, initialProject, initialSession, sessions,
     initialMessages: bridge ? [] : SAMPLE_TRANSCRIPT, reportError,
@@ -214,6 +213,7 @@ export default function App() {
   const terminalSessionKey = workspace.activeSessionId
     ? `${activeProject?.id ?? 'no-project'}:${workspace.activeSessionId}`
     : `${activeProject?.id ?? 'no-project'}:new:${workspace.workspaceGeneration}`
+  const browserAnnotations = useBrowserAnnotations(`${terminalSessionKey}:${activeCwd ?? ''}`)
   const activeTerminalSessionPath = workspace.runtime?.sessionFile ?? activeSession?.filePath
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionMount[]>([])
   const [terminalDrawerRevision, setTerminalDrawerRevision] = useState(0)

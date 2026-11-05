@@ -253,6 +253,16 @@ describe('persisted settings parsing', () => {
     expect(settings.piDisabledModels).toEqual(['openai/gpt-5'])
   })
 
+  it('retains namespaced model preferences and disabled entries while rejecting malformed keys', () => {
+    const key = 'cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731'
+    const { settings } = loadState({ version: 4, settings: {
+      lastSelectedModels: { pi: key },
+      piDisabledModels: [key, '../escape', 'provider/model with spaces', 'provider/', key],
+    } })
+    expect(settings.lastSelectedModels.pi).toBe(key)
+    expect(settings.piDisabledModels).toEqual([key])
+  })
+
   it('keeps valid per-harness model preferences and clears malformed entries', () => {
     const { settings } = loadState({
       version: 4,

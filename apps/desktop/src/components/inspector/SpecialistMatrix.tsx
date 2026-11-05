@@ -8,25 +8,43 @@ import type { PiSpecialistSession } from './SpecialistsPanel'
 export function SpecialistMatrix({ specialists, activeId, onSelect, cwd }: { specialists: PiSpecialistSession[]; activeId: string; onSelect(id: string): void; cwd?: string }) {
   const rows = useMemo(() => specialists.map((spec) => ({ spec, evidence: specialistEvidence(spec.messages, spec.cwd ? observedPath(spec.cwd, cwd) : cwd) })), [specialists, cwd])
   return <div className="specialist-matrix scroll-area" role="tablist" aria-label="Session specialists" aria-orientation="vertical">
-    {rows.map(({ spec, evidence }, index) => <button key={spec.id} type="button" role="tab" aria-selected={spec.id === activeId} tabIndex={spec.id === activeId ? 0 : -1} className={`specialist-matrix__row is-${spec.status} ${spec.id === activeId ? 'is-active' : ''}`} onClick={() => onSelect(spec.id)} onKeyDown={(event) => {
-      const next = { ArrowDown: (index + 1) % rows.length, ArrowRight: (index + 1) % rows.length, ArrowUp: (index - 1 + rows.length) % rows.length, ArrowLeft: (index - 1 + rows.length) % rows.length, Home: 0, End: rows.length - 1 }[event.key]
-      if (next === undefined) return
-      event.preventDefault(); onSelect(rows[next].spec.id)
-      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
-    }}>
-      <span className="specialist-matrix__identity"><strong>{spec.agent}</strong><small>{spec.id}</small></span>
-      <span className="run-state">{spec.waitingForInput ? 'Waiting for input' : specialistStatusLabel[spec.status]}</span>
-      <span className="specialist-matrix__task" title={spec.prompt}>{spec.mission || 'No task recorded'}</span>
-      <span className="specialist-matrix__evidence">{evidence.files.length} file references · {spec.activity || 'No active tool recorded'}</span>
-      <span className={`specialist-matrix__issue ${spec.killReason || evidence.issue ? 'has-issue' : ''}`}>{spec.waitingForInput ? 'Input requested by this worker' : spec.killReason || (evidence.issue ? `Last recorded error: ${evidence.issue}` : 'No blocker recorded')}</span>
-    </button>)}
+    {rows.map(({ spec, evidence }, index) => {
+      const status = spec.waitingForInput ? 'Waiting for input' : specialistStatusLabel[spec.status]
+      const issue = spec.killReason || (evidence.issue ? `Last recorded error: ${evidence.issue}` : '')
+      return <button
+        key={spec.id}
+        type="button"
+        role="tab"
+        aria-selected={spec.id === activeId}
+        aria-label={`${spec.agent} ${spec.id}: ${status}. ${spec.mission || 'No task recorded'}`}
+        tabIndex={spec.id === activeId ? 0 : -1}
+        title={spec.id}
+        className={`specialist-matrix__row is-${spec.status} ${spec.id === activeId ? 'is-active' : ''}`}
+        onClick={() => onSelect(spec.id)}
+        onKeyDown={(event) => {
+          const next = { ArrowDown: (index + 1) % rows.length, ArrowRight: (index + 1) % rows.length, ArrowUp: (index - 1 + rows.length) % rows.length, ArrowLeft: (index - 1 + rows.length) % rows.length, Home: 0, End: rows.length - 1 }[event.key]
+          if (next === undefined) return
+          event.preventDefault()
+          onSelect(rows[next].spec.id)
+          event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+        }}
+      >
+        <span className="specialist-matrix__identity">
+          <strong>{spec.agent}</strong>
+          {evidence.files.length > 0 ? <small title="Observed file references, not ownership">{evidence.files.length} file{evidence.files.length === 1 ? '' : 's'}</small> : null}
+        </span>
+        <span className={`specialist-matrix__state is-${spec.waitingForInput ? 'waiting' : spec.status}`}>{status}</span>
+        <span className="specialist-matrix__task" title={spec.prompt}>{spec.mission || 'No task recorded'}</span>
+        {issue ? <span className="specialist-matrix__issue" title={issue}>{issue}</span> : null}
+      </button>
+    })}
   </div>
 }
 
 export function SpecialistFiles({ messages, cwd }: { messages: TranscriptMessage[]; cwd?: string }) {
   const { files } = useMemo(() => specialistEvidence(messages, cwd), [messages, cwd])
   const [error, setError] = useState('')
-  if (!files.length) return <small className="specialist-files__empty">No source paths recorded yet.</small>
+  if (!files.length) return null
   return <details className="specialist-files">
     <summary>Observed files <span>{files.length}</span></summary>
     <small>Tool references only, not file locks. Line numbers are recorded positions, not tracked edits.</small>

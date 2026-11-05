@@ -1,0 +1,40 @@
+.annotation-source {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.annotation-source p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.annotation-source code {
+  white-space: normal;
+  color: var(--text);
+}
+.annotation-source .button {
+  justify-self: start;
+  min-height: 32px;
+}
+.annotation-source [role='alert'] {
+  color: var(--danger);
+}
+.annotation-popover:has(.annotation-source) {
+  top: 12px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+}
+.annotation-popover__hints {
+  flex-wrap: wrap;
+}
+.annotation-popover textarea:focus-visible {
+  outline: 2px solid var(--annotation);
+  outline-offset: 1px;
+}

@@ -1,3 +1,4 @@
+import type { BrowserAnnotationElement, BrowserSourceHint } from '@/types/api'
 import { MAX_BROWSER_ANNOTATIONS, MAX_SELECTOR_LENGTH, MAX_SNIPPET_LENGTH } from '@/lib/browser-annotations'
 
 // The picker runs inside the guest page via webview.executeJavaScript. The
@@ -54,6 +55,53 @@ export function boundInnerText(value: string | null | undefined, maxLength: numb
   return collapsed.length > maxLength ? collapsed.slice(0, maxLength) : collapsed
 }
 
+/** Reads only original-source stamps. React owner stacks describe generated code, not TSX positions. */
+export function captureSourceMetadata(element: Element): Pick<BrowserAnnotationElement, 'sourceHint' | 'component'> {
+  const result: Pick<BrowserAnnotationElement, 'sourceHint' | 'component'> = {}
+  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object'
+  const hint = (kind: BrowserSourceHint['kind'], path: unknown, rawLine: unknown): BrowserSourceHint | undefined => {
+    if (typeof path !== 'string' || !path.trim() || path.length > 4096 || /[\x00-\x1f\x7f]/.test(path)) return undefined
+    let line: number | undefined
+    if (rawLine !== null && rawLine !== undefined && rawLine !== '') {
+      if (typeof rawLine === 'number') line = rawLine
+      else if (typeof rawLine === 'string' && /^\d+$/.test(rawLine)) line = Number(rawLine)
+      else return undefined
+      if (!Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647) return undefined
+    }
+    return { kind, path, ...(line !== undefined ? { line } : {}) }
+  }
+  try {
+    result.sourceHint = hint('explicit', element.getAttribute('data-source-file'), element.getAttribute('data-source-line'))
+    const astroLocation = element.getAttribute('data-astro-source-loc')
+    if (!result.sourceHint && (astroLocation === null || /^\d+:\d+$/.test(astroLocation))) {
+      result.sourceHint = hint('astro', element.getAttribute('data-astro-source-file'), astroLocation?.split(':')[0])
+    }
+    const svelte: unknown = Reflect.get(element, '__svelte_meta')
+    if (!result.sourceHint && record(svelte) && record(svelte.loc)) {
+      const line = svelte.loc.line
+      if (typeof line === 'number' && Number.isSafeInteger(line) && line >= 0) {
+        result.sourceHint = hint('svelte', svelte.loc.file, line + 1)
+      }
+    }
+    const explicitComponent = element.getAttribute('data-source-component')
+    if (explicitComponent) result.component = explicitComponent.slice(0, 120)
+    if (!result.component) {
+      const key = Object.getOwnPropertyNames(element).find((name) => name.startsWith('__reactFiber$'))
+      const fiber: unknown = key ? Reflect.get(element, key) : undefined
+      let owner: unknown = record(fiber) ? fiber._debugOwner : undefined
+      for (let depth = 0; record(owner) && depth < 32; depth += 1) {
+        const type = owner.type
+        if (typeof type === 'function' || record(type)) {
+          const name: unknown = Reflect.get(type, 'displayName') || Reflect.get(type, 'name')
+          if (typeof name === 'string' && name) { result.component = name.slice(0, 120); break }
+        }
+        owner = owner._debugOwner
+      }
+    }
+  } catch { /* Metadata is optional and belongs to the untrusted page. */ }
+  return result
+}
+
 const NAMESPACE = '__primeAnnotator'
 
 // Idempotent bootstrap: defines window.__primeAnnotator once and touches no
@@ -63,6 +111,7 @@ const ENSURE_SCRIPT = `(function () {
   if (window.${NAMESPACE}) return;
   var buildSelectorPath = ${buildSelectorPath.toString()};
   var boundInnerText = ${boundInnerText.toString()};
+  var captureSourceMetadata = ${captureSourceMetadata.toString()};
   var state = { picking: false, pending: [], hover: null, onMove: null, onClick: null, markerRoot: null, markers: [], reposition: null, raf: 0 };
   function ownedNode(target) {
     return target === state.hover || (state.markerRoot && state.markerRoot.contains(target));
@@ -71,6 +120,7 @@ const ENSURE_SCRIPT = `(function () {
     var rect = el.getBoundingClientRect();
     var anchor = typeof el.closest === 'function' ? el.closest('a[href]') : null;
     return {
+      ...captureSourceMetadata(el),
       selector: buildSelectorPath(el),
       tagName: el.tagName ? el.tagName.toLowerCase() : '',
       id: el.getAttribute && el.getAttribute('id') ? el.getAttribute('id') : '',

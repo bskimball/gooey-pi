@@ -53,12 +53,13 @@ const webviewMethods = {
 }
 
 let latestApi: BrowserAnnotationsApi
-function Harness({ pollIntervalMs = 50 }: { pollIntervalMs?: number }) {
-  latestApi = useBrowserAnnotations()
-  return <BrowserPanel platform="linux" home="https://example.com/" onOpenExternal={() => undefined} annotations={latestApi} pollIntervalMs={pollIntervalMs} />
+function Harness({ pollIntervalMs = 50, scope = 'first' }: { pollIntervalMs?: number; scope?: string }) {
+  latestApi = useBrowserAnnotations(scope)
+  return <BrowserPanel key={scope} cwd="/repo" platform="linux" home="https://example.com/" onOpenExternal={() => undefined} annotations={latestApi} pollIntervalMs={pollIntervalMs} />
 }
 
 beforeEach(() => {
+  Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: undefined })
   vi.useFakeTimers()
   executed = []
   takeResult = null
@@ -156,6 +157,87 @@ describe('BrowserPanel annotation mode', () => {
     const markerCall = [...executed].reverse().find((code) => code.includes('setMarkers'))
     expect(markerCall).toContain('"selector":"#cta"')
     expect(markerCall).toContain('"index":1')
+  })
+
+  it('shows checked source, navigates only on request, and attaches evidence without sending', async () => {
+    const resolveBrowserSource = vi.fn(async () => ({ kind: 'resolved', path: '/repo/Button.tsx', line: 2, evidence: 'explicit' }))
+    const openInVsCode = vi.fn(async () => true)
+    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
+    await act(async () => root.render(<Harness />))
+    await makeDomReady(); await toggleAnnotate()
+    takeResult = JSON.stringify([{ selector: '#cta', tagName: 'button', component: 'Button', sourceHint: { kind: 'explicit', path: 'Button.tsx', line: 2 } }])
+    await act(async () => { await vi.advanceTimersByTimeAsync(120) })
+    takeResult = null
+    expect(container.textContent).toContain('/repo/Button.tsx:2')
+    expect(container.textContent).toContain('Component reported by page: Button')
+    expect(openInVsCode).not.toHaveBeenCalled()
+    expect(latestApi.annotations).toHaveLength(0)
+    const open = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Open source in VS Code')!
+    await act(async () => open.click())
+    expect(openInVsCode).toHaveBeenCalledWith('/repo/Button.tsx', 2)
+    expect(resolveBrowserSource).toHaveBeenCalledTimes(2)
+    await setComment('Change this button')
+    await act(async () => (container.querySelector('.button--primary') as HTMLButtonElement).click())
+    expect(latestApi.annotations[0].source).toEqual({ kind: 'resolved', path: '/repo/Button.tsx', line: 2, evidence: 'explicit' })
+    expect(latestApi.sendSignal).toBe(0)
+  })
+
+  it('keeps unmapped selections useful and discards pending source checks on navigation', async () => {
+    let finish: ((value: { kind: 'resolved'; path: string; evidence: 'explicit' }) => void) | undefined
+    const resolveBrowserSource = vi.fn(() => new Promise((resolve) => { finish = resolve }))
+    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource } } })
+    await act(async () => root.render(<Harness />))
+    await makeDomReady(); await toggleAnnotate()
+    takeResult = capturedPayload
+    await act(async () => { await vi.advanceTimersByTimeAsync(120) })
+    takeResult = null
+    expect(container.textContent).toContain('Source unknown')
+    expect(resolveBrowserSource).not.toHaveBeenCalled()
+    await setComment('Keep visual context')
+    await act(async () => (container.querySelector('.button--primary') as HTMLButtonElement).click())
+    expect(latestApi.annotations[0].source?.kind).toBe('unknown')
+    await toggleAnnotate()
+    takeResult = JSON.stringify([{ selector: '#cta', tagName: 'button', sourceHint: { kind: 'explicit', path: 'Button.tsx' } }])
+    await act(async () => { await vi.advanceTimersByTimeAsync(120) })
+    takeResult = null
+    expect(container.textContent).toContain('Checking source')
+    webviewUrl = 'https://example.com/new-route'
+    await act(async () => webviewElement().dispatchEvent(new Event('did-navigate-in-page')))
+    await act(async () => { finish?.({ kind: 'resolved', path: '/repo/Button.tsx', evidence: 'explicit' }) })
+    expect(container.querySelector('.annotation-popover')).toBeNull()
+    expect(latestApi.annotations[0].stale).toBe(true)
+  })
+
+  it('does not carry source attachments or send requests into another session', async () => {
+    await act(async () => root.render(<Harness />))
+    await act(async () => {
+      latestApi.add({ comment: 'First session', element: { selector: '#first', tagName: 'button', id: '', classes: [], text: '', rect: { x: 0, y: 0, width: 1, height: 1 } }, source: { kind: 'resolved', path: '/repo/First.tsx', line: 2, evidence: 'explicit' }, pageUrl: webviewUrl, pageTitle: 'First' })
+      latestApi.requestSend()
+    })
+    expect(latestApi.annotations).toHaveLength(1)
+    expect(latestApi.sendSignal).toBe(1)
+    const previousSession = latestApi
+    const firstInput = previousSession.annotations[0]
+    await act(async () => root.render(<Harness scope="second" />))
+    expect(latestApi.annotations).toEqual([])
+    expect(latestApi.sendSignal).toBe(0)
+    await act(async () => {
+      latestApi.add({ ...firstInput, comment: 'Second session' })
+      previousSession.clear()
+      previousSession.requestSend()
+      expect(previousSession.add(firstInput)).toBe(false)
+    })
+    expect(latestApi.annotations.map((entry) => entry.comment)).toEqual(['Second session'])
+    expect(latestApi.sendSignal).toBe(0)
+    await act(async () => root.render(<Harness scope="first" />))
+    await act(async () => {
+      latestApi.add({ ...firstInput, comment: 'New draft after returning to first session' })
+      previousSession.clear()
+      previousSession.requestSend()
+      expect(previousSession.add(firstInput)).toBe(false)
+    })
+    expect(latestApi.annotations.map((entry) => entry.comment)).toEqual(['New draft after returning to first session'])
+    expect(latestApi.sendSignal).toBe(0)
   })
 
   it('saves on Enter and saves-then-sends on Ctrl+Enter in the comment popover', async () => {

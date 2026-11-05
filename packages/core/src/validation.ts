@@ -28,6 +28,10 @@ export function requireId(value: unknown, label = 'id'): string {
   return id
 }
 
+export function isModelKey(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9._:@/+-]{1,256}$/i.test(value)
+}
+
 export function requireBoolean(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') throw new TypeError(`${label} must be a boolean`)
   return value
