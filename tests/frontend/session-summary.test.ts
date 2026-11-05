@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { observedPath, specialistEvidence } from '../../apps/desktop/src/lib/specialist-evidence'
 import { createSessionSummarySelector, extractPiSessionWidgets, summarizeTranscript } from '../../apps/desktop/src/components/inspector/session-summary'
 import { createReadinessSelector, extractReadiness } from '../../apps/desktop/src/components/inspector/readiness'
 import { extractPiSpecialistSessions } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
@@ -6,6 +7,22 @@ import type { MessagePart, TranscriptMessage } from '../../apps/desktop/src/type
 
 const message = (id: string, parts: MessagePart[]): TranscriptMessage => ({ id, role: 'assistant', parts })
 const fullSummary = (messages: TranscriptMessage[]) => ({ ...summarizeTranscript(messages), ...extractPiSessionWidgets(messages) })
+
+describe('observed specialist source references', () => {
+  it('preserves recorded positions without guessing files from shell commands or prompt text', () => {
+    const evidence = specialistEvidence([message('tools', [
+      { type: 'text', text: 'I will edit imaginary.ts' },
+      { type: 'toolCall', name: 'bash', args: { command: 'cat ignored.ts', path: 'ignored.ts' } },
+      { type: 'toolCall', name: 'functions.read', args: { path: 'src/a.ts', offset: 7 } },
+      { type: 'toolCall', name: 'edit', args: { path: 'src/a.ts' } },
+      { type: 'toolCall', name: 'editor_open', args: { uri: 'file:///C:/work/a%20b.ts', line: 12 } },
+    ])], '/repo')
+    expect(evidence.files).toEqual([{ path: '/repo/src/a.ts', tool: 'edit', line: undefined }, { path: 'C:/work/a b.ts', tool: 'editor_open', line: 12 }])
+    expect(observedPath('relative.ts')).toBeUndefined()
+    expect(observedPath('file://%')).toBeUndefined()
+    expect(observedPath('file://server/share/a.ts')).toBe('//server/share/a.ts')
+  })
+})
 
 describe('recorded specialist outcomes', () => {
   it.each([

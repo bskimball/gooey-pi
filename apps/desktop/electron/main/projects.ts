@@ -539,7 +539,7 @@ export class ProjectService {
     return this.resolveCheckoutProject(idValue)
   }
 
-  async adoptCheckoutWorktree(idValue: unknown, parentCwdValue: unknown, pathValue: unknown): Promise<ProjectRecord> {
+  async adoptCheckoutWorktree(idValue: unknown, parentCwdValue: unknown, pathValue: unknown, activate = true): Promise<ProjectRecord> {
     const id = requireId(idValue, 'project id')
     const project = await this.resolveCheckoutProject(id)
     const parentCwd = await this.authorizeCwd(requireString(parentCwdValue, 'cwd', { min: 1, max: 4096 }))
@@ -548,7 +548,7 @@ export class ProjectService {
     const linked = (await listGitWorktrees(parentCwd)).find((worktree) => resolve(worktree.path) === requested)
     if (!linked) throw new TypeError('worktree path is not linked to the authorized Git repository')
     const { path, identity } = await this.captureFolderIdentity(linked.path)
-    const next = await this.persistWorktree(parentCwd, path, identity)
+    const next = await this.persistWorktree(parentCwd, path, identity, activate)
     if (next.id !== id) throw new TypeError('worktree belongs to a different project grant')
     return next
   }
@@ -607,7 +607,7 @@ export class ProjectService {
     return { ...project, sessionCount: sessions.filter((session) => resolve(session.projectPath) === path).length, gitBranch: await this.branchProvider(path) }
   }
 
-  private async persistWorktree(parentCwd: string, path: string, identity: FolderIdentity): Promise<ProjectRecord> {
+  private async persistWorktree(parentCwd: string, path: string, identity: FolderIdentity, activate = true): Promise<ProjectRecord> {
     if (await this.isBroadRoot(path)) throw new TypeError('Broad filesystem roots cannot be added as projects')
     this.removalRoots.delete(path)
     const now = new Date().toISOString()
@@ -639,7 +639,7 @@ export class ProjectService {
         identities[path] = identity
       }
       parent.folders = [...folders]
-      parent.primaryFolder = path
+      if (activate) parent.primaryFolder = path
       parent.lastOpenedAt = now
       parent.folderIdentities = identities
       if (absorbed.length) {

@@ -214,6 +214,7 @@ export function App() {
                     selectedId={selectedSpecialistId}
                     onSelect={setSelectedSpecialistId}
                     homeDir={state?.homeDir}
+                    cwd={state?.cwd}
                     sessionKey={currentSessionPath ?? state?.cwd}
                   />
                 </section>

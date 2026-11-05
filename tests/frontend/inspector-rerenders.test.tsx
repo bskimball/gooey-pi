@@ -8,7 +8,8 @@ import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../apps/de
 import type { InspectorProps } from '../../apps/desktop/src/components/Inspector'
 import { RunConfigSection } from '../../apps/desktop/src/components/inspector/RunConfigSection'
 import { SpecialistsPanel } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
-import type { EffectiveRunConfig, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import { ParallelWorkPanel } from '../../apps/desktop/src/components/inspector/ParallelWorkPanel'
+import type { EffectiveRunConfig, RuntimeInfo, TranscriptMessage, ParallelRun, ParallelReview, ProjectRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,6 +63,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
+  Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: undefined })
   vi.restoreAllMocks()
 })
 
@@ -80,6 +82,58 @@ const openChangesTab = async () => {
   await act(async () => { changesTab?.click() })
   expect(container.querySelector('#inspector-panel-changes')).not.toBeNull()
 }
+
+describe('Phase 2 coordination', () => {
+  it('shows stable task rows and opens only an observed source position', async () => {
+    const openInVsCode = vi.fn(async () => true)
+    Object.defineProperty(window, 'prime', { configurable: true, value: { app: { openInVsCode } } })
+    const onSelect = vi.fn()
+    const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect source', cwd: '/repo' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { activities: [{ tool: 'read', args: { path: 'src/a.ts', offset: 42 }, status: 'completed' }], waiting_ui_requests: [{ id: 'confirm' }] } } },
+      { type: 'toolCall', name: 'task_start', args: { agent: 'oracle', prompt: 'Review source' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_2' },
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={onSelect} cwd="/repo" />))
+    const rows = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(['scout', 'oracle'])
+    expect(rows[0].textContent).toContain('Waiting for input')
+    expect(rows[0].textContent).toContain('1 file references')
+    await act(async () => rows[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(onSelect).toHaveBeenCalledWith('task_2')
+    const source = container.querySelector<HTMLButtonElement>('.specialist-files button')!
+    expect(source.textContent).toContain('/repo/src/a.ts:42')
+    await act(async () => source.click())
+    expect(openInVsCode).toHaveBeenCalledWith('/repo/src/a.ts', 42)
+    expect(container.textContent).toContain('not file locks')
+  })
+
+  it('requires an exact snapshot review before promotion and disables truncated reviews', async () => {
+    const project: ProjectRecord = { id: 'p', harness: 'pi', name: 'Project', path: '/repo', primaryFolder: '/repo', folders: ['/repo'], pinned: false, createdAt: '', lastOpenedAt: '', sessionCount: 0 }
+    const run: ParallelRun = { id: 'run', projectId: 'p', cwd: '/repo', targetBranch: 'main', base: 'base-sha', status: 'stopped', createdAt: '2026-11-05T00:00:00Z', maxMinutes: 15, variants: [
+      { id: 'a', path: '/a', branch: 'variant-a', prompt: 'Approach A', status: 'completed' },
+      { id: 'b', path: '/b', branch: 'variant-b', prompt: 'Approach B', status: 'completed' },
+    ] }
+    const snapshot: ParallelReview = { id: 'review-a', runId: 'run', variantId: 'a', base: 'base-sha', head: 'head-sha', tree: 'tree-sha', commit: 'reviewed-commit', diff: '+actual A change', files: ['a.ts'], truncated: false }
+    const api = { list: vi.fn(async () => [run]), review: vi.fn(async () => snapshot), promote: vi.fn(async () => ({ ...run, status: 'promoted', promotedVariant: 'a' })) }
+    Object.defineProperty(window, 'prime', { configurable: true, value: { parallel: api, app: { openInVsCode: vi.fn() } } })
+    await act(async () => root.render(<ParallelWorkPanel project={project} cwd="/repo" onRefreshGit={vi.fn()} />))
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Review A')!.click())
+    expect(container.querySelector('pre')?.textContent).toBe('+actual A change')
+    const promote = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Promote A…')!
+    expect(promote.disabled).toBe(true)
+    await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+    expect(promote.disabled).toBe(false)
+    await act(async () => promote.click())
+    expect(api.promote).toHaveBeenCalledWith('p', 'run', 'review-a')
+    expect(container.textContent).toContain('Nothing was pushed')
+    await act(async () => root.render(<ParallelWorkPanel key="truncated" project={project} cwd="/repo" onRefreshGit={vi.fn()} />))
+    api.review.mockResolvedValueOnce({ ...snapshot, id: 'truncated', truncated: true })
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Review A')!.click())
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true)
+    expect(container.textContent).toContain('Promotion is disabled')
+  })
+})
 
 describe('inspector re-render containment', () => {
   it('keeps the memoized inspector subtree mounted across App re-renders on the changes tab', async () => {

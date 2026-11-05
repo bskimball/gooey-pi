@@ -16,6 +16,7 @@ vi.mock('electron', () => electronMocks)
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { registerIpc, type IpcRegistration } from '../../apps/desktop/electron/main/ipc'
 import { SessionHandoff } from '../../apps/desktop/electron/main/session-handoff'
 import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
@@ -131,6 +132,37 @@ describe('registerIpc verify gate', () => {
     handlers.get('app:set-title-bar-theme')!(event, 'dark')
     expect(setTitleBarTheme).toHaveBeenCalledWith(event.sender, 'dark')
     registration.dispose()
+  })
+
+  it('opens authorized files in VS Code at an optional bounded line and rejects invalid input', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'apex-vscode-line-'))
+    const path = join(directory, 'source #1.ts')
+    writeFileSync(path, 'export {}\n')
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const authorizePath = vi.fn().mockImplementation(async (value: string) => value)
+    stubs.projects = { authorizePath }
+    electronMocks.shell.openExternal.mockReset()
+    const open = handlers.get('app:open-in-vscode')!
+    const uri = `vscode://file${pathToFileURL(realpathSync(path)).pathname}`
+    try {
+      await expect(open(event, path)).resolves.toBe(true)
+      expect(electronMocks.shell.openExternal).toHaveBeenLastCalledWith(uri, { activate: true })
+      await expect(open(event, path, 42)).resolves.toBe(true)
+      expect(electronMocks.shell.openExternal).toHaveBeenLastCalledWith(`${uri}:42`, { activate: true })
+      await expect(open(event, path, 2_147_483_647)).resolves.toBe(true)
+      electronMocks.shell.openExternal.mockClear()
+      for (const line of [0, -1, 1.5, NaN, Infinity, 2_147_483_648, '42', null]) {
+        await expect(open(event, path, line)).resolves.toBe(false)
+      }
+      await expect(open(event, join(directory, 'missing.ts'), 1)).resolves.toBe(false)
+      authorizePath.mockRejectedValue(new Error('Path is outside registered projects'))
+      await expect(open(event, path, 1)).resolves.toBe(false)
+      expect(electronMocks.shell.openExternal).not.toHaveBeenCalled()
+    } finally {
+      registration.dispose()
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('routes project operations to Pi with their arguments intact', async () => {

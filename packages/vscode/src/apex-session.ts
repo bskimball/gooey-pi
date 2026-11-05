@@ -6,7 +6,7 @@ import * as vscode from 'vscode'
 import { BrowserHost } from './browser/host'
 import { AttachedSession } from './attached-session'
 import type { ScreenshotResizer } from './browser/service'
-import { editorPromptContext } from './editor'
+import { editorPromptContext, scopedEditorRequest } from './editor'
 import { PiRpc, resolvePi } from './pi-rpc'
 import type { HostMessage, HostState, ModelDescriptor, PromptImage, ProviderDescriptor, QueuedPrompt, RuntimeCommand, ThinkingLevel, TranscriptOp, WebviewMessage } from './protocol'
 import { assertSessionFree, sessionOwnerLabels, VsCodeRuntimeOwner } from './runtime-owner'
@@ -260,6 +260,14 @@ export class ApexSession implements vscode.Disposable {
   async handle(message: WebviewMessage) {
     if (this.attached && await this.attached.handle(message)) return
     switch (message.type) {
+      case 'editor:open': {
+        try {
+          if (typeof message.path !== 'string' || !message.path) throw new TypeError('Source path must be a nonempty string')
+          await scopedEditorRequest(this.cwd, 'editor.open', { cwd: this.cwd, uri: vscode.Uri.file(message.path).toString(), line: message.line })
+          this.post({ type: 'editor:opened', requestId: message.requestId })
+        } catch (error) { this.post({ type: 'editor:opened', requestId: message.requestId, error: error instanceof Error ? error.message : String(error) }) }
+        return
+      }
       case 'sessions:list': {
         try {
           const [sessions, owners] = await Promise.all([listSessions(this.cwd), sessionOwnerLabels().catch(() => new Map<string, string>())])

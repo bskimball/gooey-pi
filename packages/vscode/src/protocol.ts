@@ -88,6 +88,7 @@ export interface SessionSummary {
 }
 
 export type HostMessage =
+  | { type: 'editor:opened'; requestId: number; error?: string }
   | { type: 'editorContext'; file: EditorFileContext | null }
   | { type: 'git'; git: GitStatus }
   | { type: 'insertDraft'; text: string }
@@ -105,6 +106,7 @@ export type HostMessage =
   | { type: 'files'; requestId: number; entries: Array<{ path: string; type: 'file' | 'directory' }> }
 
 export type WebviewMessage =
+  | { type: 'editor:open'; requestId: number; path: string; line?: number }
   | { type: 'sessions:list'; requestId: number }
   | { type: 'sessions:read'; requestId: number; path: string }
   | { type: 'sessions:switch'; requestId: number; path: string }

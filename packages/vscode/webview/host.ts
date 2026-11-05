@@ -130,7 +130,18 @@ export function installPrimeShim() {
     app: {
       openExternal: async (url: string) => { postToHost({ type: 'openExternal', url }); return true },
       revealPath: async () => false,
-      openInVsCode: async () => false,
+      openInVsCode: (path: string, line?: number): Promise<boolean> => {
+        const requestId = ++fileRequest
+        return new Promise((resolve, reject) => {
+          const stop = onHostMessage((message) => {
+            if (message.type !== 'editor:opened' || message.requestId !== requestId) return
+            stop()
+            if (message.error) reject(new Error(message.error))
+            else resolve(true)
+          })
+          postToHost({ type: 'editor:open', requestId, path, line })
+        })
+      },
     },
     projects: { listFiles },
     sessions: { read: sessions.read },

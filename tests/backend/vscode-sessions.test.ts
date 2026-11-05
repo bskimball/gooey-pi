@@ -66,6 +66,31 @@ async function fixture(count = 1) {
 }
 
 describe('VS Code handoff lifecycle', () => {
+  it('opens an observed source line through the webview host without escaping its workspace', async () => {
+    const { cwd, root } = await fixture()
+    await mkdir(cwd)
+    const path = join(cwd, 'file.ts')
+    Object.assign(vscode.workspace, { workspaceFolders: [{ uri: vscode.Uri.file(cwd) }] })
+    await writeFile(path, 'one\ntwo\nthree')
+    const revealRange = vi.fn()
+    vi.mocked(vscode.workspace.openTextDocument).mockResolvedValue({ uri: vscode.Uri.file(path), lineCount: 3, languageId: 'typescript', version: 1, isDirty: false, lineAt: () => ({ text: 'line' }) } as never)
+    vi.mocked(vscode.window.showTextDocument).mockResolvedValue({ revealRange } as never)
+    const session = Object.create(ApexSession.prototype)
+    const post = vi.fn()
+    Object.defineProperty(session, 'cwd', { value: cwd })
+    Object.assign(session, { post })
+    await session.handle({ type: 'editor:open', requestId: 1, path, line: 2 })
+    expect(post).toHaveBeenLastCalledWith({ type: 'editor:opened', requestId: 1 })
+    expect(revealRange.mock.calls[0][0].start.line).toBe(1)
+    await session.handle({ type: 'editor:open', requestId: 2, path, line: 0 })
+    expect(post.mock.calls.at(-1)?.[0]).toMatchObject({ type: 'editor:opened', requestId: 2, error: expect.any(String) })
+    const outside = join(root, 'outside.ts')
+    await writeFile(outside, 'private')
+    await session.handle({ type: 'editor:open', requestId: 3, path: outside, line: 1 })
+    expect(post.mock.calls.at(-1)?.[0]).toMatchObject({ requestId: 3, error: expect.any(String) })
+    expect(revealRange).toHaveBeenCalledTimes(1)
+  })
+
   it.each(['C:\\Users\\a+b&c%20#名\\session.jsonl', '/work/a+b&c=%25 #名/session.jsonl'])('decodes the handoff path once: %s', (path) => {
     const wireQuery = `session=${encodeURIComponent(path)}`
     // vscode.Uri exposes an already percent-decoded query, not a WHATWG query.

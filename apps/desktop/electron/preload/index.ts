@@ -62,12 +62,20 @@ function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api: PrimeWorkApi = {
+	parallel: {
+		list: (projectId) => invoke("parallel:list", projectId),
+		create: (projectId, options) => invoke("parallel:create", projectId, options),
+		start: (projectId, runId) => invoke("parallel:start", projectId, runId),
+		stop: (projectId, runId) => invoke("parallel:stop", projectId, runId),
+		review: (projectId, runId, variantId) => invoke("parallel:review", projectId, runId, variantId),
+		promote: (projectId, runId, reviewId) => invoke("parallel:promote", projectId, runId, reviewId),
+	},
 	app: {
 		getMeta: () => invoke("app:get-meta"),
 		refreshHarnesses: () => invoke("app:refresh-harnesses"),
 		openExternal: (url) => invoke("app:open-external", url),
 		revealPath: (path) => invoke("app:reveal-path", path),
-		openInVsCode: (path) => invoke("app:open-in-vscode", path),
+		openInVsCode: (path, line) => line === undefined ? invoke("app:open-in-vscode", path) : invoke("app:open-in-vscode", path, line),
 		popupMenu: (menu, x, y) => invoke("app:popup-menu", menu, x, y),
 		setTitleBarTheme: (theme) => invoke("app:set-title-bar-theme", theme),
 		onOpenSettings: (callback) =>

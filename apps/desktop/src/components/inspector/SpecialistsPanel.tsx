@@ -1,14 +1,18 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { specialistOutcome, specialistStepStatus, specialistStatusLabel } from '@/lib/specialist-status'
-import { CaretDown, CaretRight, Check, Record as RecordIcon, WarningCircle } from '../icons'
+import { CaretDown, CaretRight, Record as RecordIcon, WarningCircle } from '../icons'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { coalesceAssistantTurns } from '../transcript/grouping'
 import { MarkdownText } from '../MarkdownText'
 import { renderNarrativeWithActivity } from '../transcript/messages'
 import type { PiSpecialistSummary } from './SummaryPanel'
+import { SpecialistFiles, SpecialistMatrix } from './SpecialistMatrix'
+import { observedPath } from '@/lib/specialist-evidence'
 
 export interface PiSpecialistSession extends PiSpecialistSummary {
   prompt: string
+  cwd?: string
+  waitingForInput?: boolean
   instanceId?: string
   sessionFile?: string
   model?: string
@@ -71,7 +75,7 @@ function activityPartsFromDetails(rawActivities: unknown): { parts: MessagePart[
       type: 'toolCall',
       id,
       name: tool,
-      args: parseActivityArgs(summaryText),
+      args: asRecord(item.args) ?? parseActivityArgs(summaryText),
     })
     parts.push({
       type: 'toolResult',
@@ -147,6 +151,8 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
       target.sessionFile = closeInfo.sessionFile
     }
     if (!worker) return
+    if (typeof worker.cwd === 'string') target.cwd = worker.cwd
+    if (Array.isArray(worker.waiting_ui_requests)) target.waitingForInput = worker.waiting_ui_requests.length > 0
     if (typeof worker.instanceId === 'string' && worker.instanceId) target.instanceId = worker.instanceId
     if (typeof worker.sessionFile === 'string' && worker.sessionFile) target.sessionFile = worker.sessionFile
     if (typeof worker.model === 'string' && worker.model) target.model = worker.model
@@ -188,6 +194,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
         agent: args.agent,
         mission: rawPrompt.slice(0, 120),
         prompt: fullPrompt,
+        cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
         status,
         ...(status === 'running' && runningLabel ? { activity: runningLabel } : {}),
         ...(typeof details?.instanceId === 'string' && details.instanceId ? { instanceId: details.instanceId } : {}),
@@ -274,6 +281,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
       const existing = workerId ? workerById.get(workerId) : undefined
       if (existing && workerId) {
         existing.agent = args.agent
+        if (typeof args.cwd === 'string') existing.cwd = args.cwd
         if (rawPrompt) existing.mission = rawPrompt.slice(0, 120)
         if (fullPrompt) existing.prompt = fullPrompt
         existing.status = result?.isError ? 'error' : 'running'
@@ -306,6 +314,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
           agent: args.agent,
           mission: rawPrompt.slice(0, 120),
           prompt: fullPrompt,
+          cwd: typeof args.cwd === 'string' ? args.cwd : undefined,
           status: result?.isError ? 'error' : 'running',
           ...(runningLabel ? { activity: runningLabel } : {}),
           messages: buildMessagesFromTurns(turns),
@@ -392,6 +401,7 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
     }
   }
 
+  for (const specialist of specialists) if (specialist.status !== 'running') specialist.waitingForInput = false
   return specialists
 }
 
@@ -401,6 +411,7 @@ interface SpecialistsPanelProps {
   onSelect(id: string): void
   homeDir?: string
   sessionKey?: string
+  cwd?: string
 }
 
 function WorkOrderTurn({ text }: { text: string }) {
@@ -431,6 +442,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   onSelect,
   homeDir,
   sessionKey,
+  cwd,
 }: SpecialistsPanelProps) {
   const specialists = useMemo(() => extractPiSpecialistSessions(messages), [messages])
   const active = useMemo(
@@ -590,36 +602,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
 
   return (
     <div className="specialists-panel">
-      <div className="specialist-tabstrip" role="tablist" aria-label="Session specialists">
-        {specialists.map((spec) => {
-          const isSelected = spec.id === active.id
-          return (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              title={`${spec.mission} · ${specialistStatusLabel[spec.status]}`}
-              tabIndex={isSelected ? 0 : -1}
-              onKeyDown={(event) => {
-                const index = specialists.indexOf(spec)
-                const destinations: Record<string, number> = { ArrowRight: (index + 1) % specialists.length, ArrowLeft: (index - 1 + specialists.length) % specialists.length, Home: 0, End: specialists.length - 1 }
-                const next = destinations[event.key]
-                if (next === undefined) return
-                event.preventDefault()
-                onSelect(specialists[next].id)
-                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
-              }}
-              key={spec.id}
-              className={`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.status}`}
-              onClick={() => onSelect(spec.id)}
-            >
-              {spec.status === 'done' ? <Check size={12} /> : spec.status === 'error' ? <WarningCircle size={12} /> : <RecordIcon size={12} />}
-              <strong>{spec.agent}</strong>
-              {/^task_\d+$/.test(spec.id) ? <span>({spec.id})</span> : null}
-            </button>
-          )
-        })}
-      </div>
+      <SpecialistMatrix specialists={specialists} activeId={active.id} onSelect={onSelect} cwd={cwd} />
       <header className="specialist-header" key={active.id}>
         <div className="specialist-header__top">
           <div className="specialist-header__title"><strong>{active.agent}</strong><span className="mono">{active.id}</span></div>
@@ -628,6 +611,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
         <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
         {failure ? <div className="specialist-header__error"><WarningCircle size={12} /><span>{failure}</span></div> : null}
         {active.status === 'running' && active.activity ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
+        <SpecialistFiles key={active.id} messages={rawTranscript} cwd={active.cwd ? observedPath(active.cwd, cwd) : cwd} />
         <details className="specialist-header__details">
           <summary>Details <span>{matchedDiskTranscript ? 'Session transcript' : 'Parent summary'}</span></summary>
           <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>

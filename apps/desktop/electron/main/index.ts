@@ -46,6 +46,7 @@ import { AgentBrowserService } from "./browser/agent-service";
 import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
+import { ParallelWorkService } from "./parallel-work";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
 import {
 	configureGooeyPiAgentMessageSigning,
@@ -125,6 +126,7 @@ let extensionBrowserBridge: ExtensionBrowserBridge | null = null;
 let agentBrowser: AgentBrowserService | null = null;
 let agentBrowserBridge: AgentBrowserBridge | null = null;
 let desktopLink: DesktopLinkServer | null = null;
+let parallelWork: ParallelWorkService | null = null;
 let agentCollaborationBridge: AgentCollaborationBridge | null = null;
 let backgroundMode: MacBackgroundController | null = null;
 let shutdownStarted = false;
@@ -1269,6 +1271,23 @@ async function bootstrap(): Promise<void> {
 		meta.harnesses = harnesses;
 		return { meta: structuredClone(meta), settings: currentSettings };
 	};
+	const parallel = new ParallelWorkService({
+		file: join(userDataPath, "parallel-work.json"),
+		projects: piProjects,
+		agents: piManager,
+		gate: repositoryUseGate,
+		chooseDirectory: async () => {
+			const options = { title: "Choose a parent folder outside the target checkout for both alternatives", properties: ["openDirectory", "createDirectory"] as Array<"openDirectory" | "createDirectory"> };
+			const choice = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+			return choice.canceled ? null : choice.filePaths[0] ?? null;
+		},
+		confirmPromotion: async (run, review) => {
+			const options = { type: "question" as const, buttons: ["Cancel", "Promote reviewed snapshot"], defaultId: 0, cancelId: 0, title: "Promote alternative", message: `Promote alternative ${review.variantId.toUpperCase()} to ${run.targetBranch}?`, detail: `${run.cwd}\nBase: ${run.base}\nReviewed snapshot: ${review.commit}\nThis creates a local fast-forward commit. Both worktrees are preserved. Nothing is pushed.` };
+			const result = mainWindow ? await dialog.showMessageBox(mainWindow, options) : await dialog.showMessageBox(options);
+			return result.response === 1;
+		},
+	});
+	parallelWork = parallel;
 	trustedRendererUrl = resolveRendererUrl();
 	ipc = registerIpc(
 		{
@@ -1276,6 +1295,7 @@ async function bootstrap(): Promise<void> {
 			refreshHarnesses,
 			projects: piProjects,
 			checkouts,
+			parallel,
 			sessions: piSessions,
 			sessionHandoff,
 			extensionPathContext,
@@ -1517,6 +1537,7 @@ app.on("before-quit", (event) => {
 	agentBrowser?.beginShutdown();
 	void settleShutdown([
 		...agentScheduleBridges.map((bridge) => bridge.stop()),
+		parallelWork?.close() ?? Promise.resolve(),
 		desktopLink?.stop() ?? Promise.resolve(),
 		agentBrowserBridge?.stop() ?? Promise.resolve(),
 		extensionBrowserBridge?.stop() ?? Promise.resolve(),

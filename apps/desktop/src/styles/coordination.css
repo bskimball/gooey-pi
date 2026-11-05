@@ -1,0 +1,48 @@
+.agents-workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.agents-workspace__toolbar { display: flex; justify-content: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.agents-workspace > .specialists-panel { flex: 1; height: auto; min-height: 0; }
+.specialist-matrix { display: flex; flex-direction: column; flex: 0 1 auto; max-height: 34%; min-height: 96px; overflow-y: auto; border-bottom: 1px solid var(--border); }
+.specialist-matrix__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px; flex: 0 0 auto; padding: 10px 14px; text-align: left; background: transparent; border-bottom: 1px solid var(--border); border-left: 2px solid transparent; color: var(--text); }
+.specialist-matrix__row:hover { background: var(--surface-hover); }
+.specialist-matrix__row.is-active { border-left-color: var(--prime); background: var(--surface-subtle); }
+.specialist-matrix__row:focus-visible { outline: 2px solid var(--prime); outline-offset: -2px; }
+.specialist-matrix__identity { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; }
+.specialist-matrix__identity small { color: var(--text-tertiary); font-size: 10px; }
+.specialist-matrix__task, .specialist-matrix__evidence, .specialist-matrix__issue { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.specialist-matrix__task { color: var(--text-secondary); font-size: 11px; }
+.specialist-matrix__evidence, .specialist-matrix__issue { font-size: 10px; color: var(--text-tertiary); }
+.specialist-matrix__issue.has-issue { color: var(--danger); }
+.specialist-files { font-size: 11px; max-height: 160px; overflow: auto; }
+.specialist-files summary { cursor: pointer; color: var(--text-secondary); }
+.specialist-files summary span { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.specialist-files > small, .specialist-files__empty { color: var(--text-tertiary); font-size: 10px; }
+.specialist-files ul { list-style: none; padding: 0; margin: 6px 0; }
+.specialist-files button { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 32px; padding: 4px 6px; text-align: left; color: var(--text); background: transparent; }
+.specialist-files button:hover { background: var(--surface-hover); }
+.specialist-files button code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+.specialist-files button small { margin-left: auto; color: var(--text-tertiary); }
+.parallel-panel { padding: 14px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.parallel-toolbar, .parallel-variant header, .parallel-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.parallel-toolbar > strong { margin-right: auto; font-size: 12px; }
+.parallel-note, .parallel-form small { color: var(--text-tertiary); font-size: 11px; line-height: 1.5; margin: 0; }
+.parallel-empty { padding: 30px 22px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.parallel-empty h3 { color: var(--text); font-size: 13px; }
+.parallel-form { display: grid; gap: 14px; }
+.parallel-form textarea { resize: vertical; min-height: 70px; }
+.parallel-base { display: grid; gap: 6px; font-size: 11px; padding: 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; }
+.parallel-base code, .parallel-base small, .parallel-variant details code { overflow-wrap: anywhere; font-size: 10px; color: var(--text-secondary); }
+.parallel-variants { display: flex; flex-direction: column; gap: 14px; }
+.parallel-variant { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
+.parallel-variant header { justify-content: space-between; }
+.parallel-variant h3 { margin: 0; font-size: 12px; }
+.parallel-prompt { margin: 0; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 140px; overflow: auto; }
+.parallel-variant details { font-size: 11px; }
+.parallel-variant details summary { color: var(--text-secondary); cursor: pointer; }
+.parallel-variant details code { display: block; margin-top: 6px; }
+.parallel-review { display: flex; flex-direction: column; gap: 10px; font-size: 11px; }
+.parallel-review p { margin: 0; }
+.parallel-review ul { padding-left: 18px; margin: 0; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
+.parallel-diff { font-size: 10px; line-height: 1.6; padding: 10px; margin: 0; max-height: 350px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--canvas); tab-size: 2; }
+.parallel-review-check { display: flex; gap: 8px; align-items: center; min-height: 32px; cursor: pointer; }
+.parallel-review-check input { accent-color: var(--prime); }
+@container inspector (min-width: 720px) { .parallel-variants { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }

@@ -1,3 +1,6 @@
+export type { ParallelRun, ParallelVariant, ParallelVariantId, ParallelReview, ParallelRunOptions } from './parallel-work'
+import type { ParallelWorkApi } from './parallel-work'
+
 /**
  * Session partition shared by the in-app browser webviews. The renderer's
  * webview attribute must match the main process's will-attach-webview gate
@@ -751,7 +754,8 @@ export interface AgentBrowserPointerEvent {
 }
 
 export interface PrimeWorkApi {
-  app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string): Promise<boolean>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
+  parallel: ParallelWorkApi
+  app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
     getState(): Promise<AppUpdateState>
     check(): Promise<AppUpdateState>

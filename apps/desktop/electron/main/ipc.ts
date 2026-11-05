@@ -15,6 +15,7 @@ import type {
 import type { AgentRpcManager } from "./agent-rpc";
 import type { AgentBrowserService } from "./browser/agent-service";
 import type { CheckoutService } from "./checkouts";
+import type { ParallelWorkService } from "./parallel-work";
 import type { CuaDriverService } from "./cua-driver";
 import { describeEffectiveRunConfig } from "./effective-run-config";
 import type { ExtensionPathContext } from "./extension-manifest";
@@ -55,6 +56,7 @@ interface Services {
 	): boolean;
 	projects: ProjectService;
 	checkouts: { pi: CheckoutService };
+	parallel: ParallelWorkService;
 	sessions: SessionService;
 	sessionHandoff: SessionHandoff;
 	extensionPathContext: ExtensionPathContext;
@@ -289,8 +291,11 @@ export function registerIpc(
 		);
 		return false;
 	});
-	handle("app:open-in-vscode", async (_event, path) => {
+	handle("app:open-in-vscode", async (_event, path, line) => {
 		try {
+			if (line !== undefined && (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647)) {
+				throw new TypeError("line must be a positive integer no greater than 2147483647");
+			}
 			const requested = await requireExistingPath(path);
 			const domains = [services.projects];
 			let authorized: string | undefined;
@@ -304,7 +309,7 @@ export function registerIpc(
 			}
 			if (!authorized) throw new Error("no registered project covers the path");
 			await shell.openExternal(
-				`vscode://file${pathToFileURL(authorized).pathname}`,
+				`vscode://file${pathToFileURL(authorized).pathname}${line === undefined ? "" : `:${line}`}`,
 				{ activate: true },
 			);
 			return true;
@@ -328,6 +333,12 @@ export function registerIpc(
 	handle("projects:list-files", (_event, root, harness) =>
 		projectsFor(requireHarness(harness)).listFiles(root),
 	);
+	handle("parallel:list", (_event, projectId) => services.parallel.list(projectId));
+	handle("parallel:create", (_event, projectId, options) => services.parallel.create(projectId, options));
+	handle("parallel:start", (_event, projectId, runId) => services.parallel.start(projectId, runId));
+	handle("parallel:stop", (_event, projectId, runId) => services.parallel.stop(projectId, runId));
+	handle("parallel:review", (_event, projectId, runId, variantId) => services.parallel.review(projectId, runId, variantId));
+	handle("parallel:promote", (_event, projectId, runId, reviewId) => services.parallel.promote(projectId, runId, reviewId));
 	handle("projects:list-checkouts", (_event, projectId, harness) =>
 		checkoutsFor(requireHarness(harness)).list(projectId),
 	);
