@@ -23,7 +23,7 @@ import {
   Trash,
 } from './icons'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type WorkspaceView } from '@/types/api'
+import { PROJECT_SORT_MODES, type HarnessId, type PrimeWorkApi, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
@@ -58,7 +58,7 @@ export interface SidebarProps {
   onArchiveSession(session: SessionRecord): Promise<void>
   /** Sessions held by another live Apex app, keyed by session file path. */
   runtimeOwners?: ReadonlyMap<string, RuntimeOwnerView>
-  onContinueInVsCode?(session: SessionRecord): void
+  onContinueInVsCode?(session: SessionRecord, mode: Parameters<PrimeWorkApi['sessions']['continueInVsCode']>[1]): void
   overlay?: boolean
   platform?: NodeJS.Platform
 }
@@ -347,7 +347,14 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                             }}
                           >{archiveTarget?.id === session.id ? <Check size={13} /> : <Archive size={13}/>}</IconButton>
                           <IconButton size="small" className="session-row__more" aria-expanded={sessionMenu === session.id} label={`Session options for ${session.title}`} onClick={() => setSessionMenu((current) => current === session.id ? null : session.id)}><DotsThree size={13}/></IconButton>
-                          {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options"><button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button><button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button>{onContinueInVsCode && !runtimeOwners?.has(session.filePath) ? <button type="button" title="Attach VS Code while this session keeps running in Desktop" onClick={() => { setSessionMenu(null); onContinueInVsCode(session) }}><Code size={12}/> Open alongside VS Code</button> : null}</div> : null}
+                          {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options">
+                            <button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button>
+                            <button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button>
+                            {onContinueInVsCode && !runtimeOwners?.has(session.filePath) ? <>
+                              <button type="button" disabled={session.status === 'running' || session.status === 'waiting'} title="Move this session to VS Code so Desktop can be closed. Stop any active run first." onClick={() => { setSessionMenu(null); onContinueInVsCode(session, 'transfer') }}><Code size={12}/> Continue in VS Code</button>
+                              <button type="button" title="Attach VS Code while this session keeps running in Desktop. Desktop must stay open." onClick={() => { setSessionMenu(null); onContinueInVsCode(session, 'attach') }}><Code size={12}/> Open alongside VS Code</button>
+                            </> : null}
+                          </div> : null}
                         </div>
                       ))}
                       {remaining > 0 ? <button type="button" className="session-row session-row--empty" onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}

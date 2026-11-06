@@ -39,7 +39,7 @@ export function createSidebarActionProxy(initialActions: SidebarActions): Sideba
       onOpenPalette: () => current.onOpenPalette(),
       onRenameSession: (session, title) => current.onRenameSession(session, title),
       onArchiveSession: (session) => current.onArchiveSession(session),
-      onContinueInVsCode: (session) => current.onContinueInVsCode?.(session),
+      onContinueInVsCode: (session, mode) => current.onContinueInVsCode?.(session, mode),
     },
     update(actions) { current = actions },
   }

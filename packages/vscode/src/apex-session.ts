@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { canonicalSessionPath } from 'apex-core/session-paths'
+import { isPathWithin, requireExistingPath } from 'apex-core/validation'
 import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
 import * as vscode from 'vscode'
 import { BrowserHost } from './browser/host'
@@ -364,14 +365,25 @@ export class ApexSession implements vscode.Disposable {
       case 'listFiles':
         return this.listFiles(message.requestId)
       case 'openExternal':
-        if (/^(https?:|mailto:)/i.test(message.url)) void vscode.env.openExternal(vscode.Uri.parse(message.url))
-        return
+        return this.guard(async () => {
+          if (!/^(https?:|mailto:|file:)/i.test(message.url)) return
+          let uri = vscode.Uri.parse(message.url)
+          if (uri.scheme.toLowerCase() === 'file') {
+            if (uri.authority) throw new Error('File links must refer to this computer')
+            const path = await requireExistingPath(uri.fsPath)
+            const root = await requireExistingPath(this.cwd)
+            if (!isPathWithin(root, path)) throw new Error('File is outside the current workspace')
+            uri = vscode.Uri.file(path)
+          }
+          if (!await vscode.env.openExternal(uri)) throw new Error(`Apex could not open ${message.url}.`)
+        })
     }
   }
 
-  async switchSession(path: string) {
+  async switchSession(path: string, attachToDesktop = true) {
     if (!this.attached && !this.desktopTarget && (!this.rpc || this.state.status !== 'ready' || this.state.isStreaming || this.switching)) throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
-    if (await this.attachDesktop(path)) return
+    if (attachToDesktop && await this.attachDesktop(path)) return
+    if (!attachToDesktop) await assertSessionFree(path)
     if (this.attached || this.desktopTarget) {
       await this.attached?.dispose()
       this.attached = undefined
@@ -459,10 +471,10 @@ export class ApexSession implements vscode.Disposable {
     return true
   }
 
-  /** Attach without stopping Desktop's runtime; old standalone handoffs still work. */
+  /** /attach keeps Desktop ownership; /open resumes a released session in this editor. */
   async openFromDesktop(path: string, attachmentOnly = false) {
     if (!this.attached && this.state.isStreaming) {
-      void vscode.window.showWarningMessage('Apex: this editor has an active standalone run. Stop it before attaching to Desktop.')
+      void vscode.window.showWarningMessage('Apex: this editor has an active standalone run. Stop it before opening another session.')
       return
     }
     try {
@@ -474,25 +486,25 @@ export class ApexSession implements vscode.Disposable {
         this.stopping = this.stopping.then(() => previous?.dispose())
         await this.stopping
         this.owner.set(null)
+        if (await this.attachDesktop(path)) return
+        throw new Error('Desktop attachment is unavailable. Reconnect after Desktop opens the session; ownership will not be transferred.')
       }
-      if (await this.attachDesktop(path)) return
-      if (attachmentOnly) throw new Error('Desktop attachment is unavailable. Reconnect after Desktop opens the session; ownership will not be transferred.')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (attachmentOnly) this.update({ status: 'exited', connection: 'desktop', error: message, isStreaming: false })
       void vscode.window.showWarningMessage(`Apex: ${message}`)
       return
     }
-    if (this.state.status === 'exited') await this.start()
+    if (this.state.status === 'exited' && !this.desktopTarget) await this.start()
     // A cold VS Code window resolves the view, starts the browser bridge, and boots Pi first, which can take well over 15s.
     const deadline = Date.now() + 120_000
     const waiting = (async () => {
-      while ((this.state.status === 'starting' || this.state.isStreaming || this.switching) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200))
+      while (!this.desktopTarget && (this.state.status === 'starting' || this.state.isStreaming || this.switching) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200))
     })()
     vscode.window.setStatusBarMessage('$(sync~spin) Apex: opening the session from Apex desktop…', waiting)
     await waiting
     try {
-      await this.switchSession(path)
+      await this.switchSession(path, false)
       vscode.window.setStatusBarMessage('Apex: continued the session from Apex desktop', 5000)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

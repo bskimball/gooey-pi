@@ -14,11 +14,12 @@ import { listSessions, readSessionTranscript, sessionBucket, sessionTranscriptOp
 import { applyOps } from '../../packages/vscode/webview/transcript'
 
 vi.mock('vscode', () => ({
+  env: { openExternal: vi.fn() },
   workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
   window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn(), setStatusBarMessage: vi.fn() },
   languages: { getDiagnostics: vi.fn() },
   Uri: {
-    parse: (value: string) => ({ scheme: value.split(':')[0], fsPath: value.startsWith('file:') ? fileURLToPath(value, { windows: /^file:\/\/\/\w:/.test(value) }) : value, toString: () => value }),
+    parse: (value: string) => ({ scheme: value.split(':')[0], authority: new URL(value).hostname, fsPath: /^file:/i.test(value) ? fileURLToPath(value, { windows: /^file:\/\/\/\w:/i.test(value) }) : value, toString: () => value }),
     file: (path: string) => ({ scheme: 'file', fsPath: path, toString: () => pathToFileURL(path).href }),
   },
   Range: class {
@@ -66,6 +67,35 @@ async function fixture(count = 1) {
 }
 
 describe('VS Code handoff lifecycle', () => {
+  it('opens local file links within the workspace and reports denied or failed opens', async () => {
+    const { cwd, root } = await fixture()
+    await mkdir(cwd)
+    const path = join(cwd, 'Migration plan #1.docx')
+    const outside = join(root, 'outside.docx')
+    await writeFile(path, 'sample file')
+    await writeFile(outside, 'outside file')
+    const session = Object.create(ApexSession.prototype)
+    const notice = vi.fn()
+    Object.defineProperty(session, 'cwd', { value: cwd })
+    Object.assign(session, { notice })
+    const openExternal = vi.mocked(vscode.env.openExternal).mockReset().mockResolvedValue(true)
+    await session.handle({ type: 'openExternal', url: pathToFileURL(path).href })
+    expect(openExternal).toHaveBeenCalledTimes(1)
+    expect(openExternal.mock.calls[0][0].toString()).toBe(pathToFileURL(path).href)
+    for (const url of [pathToFileURL(outside).href, pathToFileURL(join(cwd, 'missing.docx')).href, 'file://remote.example/share/plan.docx']) {
+      await session.handle({ type: 'openExternal', url })
+      await session.handle({ type: 'openExternal', url: url.replace(/^file:/, 'FILE:') })
+    }
+    expect(openExternal).toHaveBeenCalledTimes(1)
+    expect(notice).toHaveBeenCalledTimes(6)
+    await session.handle({ type: 'openExternal', url: pathToFileURL(path).href.replace(/^file:/, 'FiLe:') })
+    expect(openExternal).toHaveBeenCalledTimes(2)
+    expect(openExternal.mock.calls[1][0].toString()).toBe(pathToFileURL(path).href)
+    openExternal.mockResolvedValue(false)
+    await session.handle({ type: 'openExternal', url: pathToFileURL(path).href })
+    expect(notice).toHaveBeenLastCalledWith(expect.stringContaining('could not open'))
+  })
+
   it('opens an observed source line through the webview host without escaping its workspace', async () => {
     const { cwd, root } = await fixture()
     await mkdir(cwd)
@@ -200,6 +230,40 @@ describe('VS Code handoff lifecycle', () => {
     expect(session.state).toMatchObject({ status: 'exited', connection: 'desktop' })
     expect(session.switchSession).not.toHaveBeenCalled()
     expect(session.start).not.toHaveBeenCalled()
+  })
+
+  it('opens a transfer without waiting on stale startup state from a previous Desktop attachment', async () => {
+    vi.useFakeTimers()
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      state: { status: 'starting', isStreaming: false },
+      desktopTarget: '/desktop-session.jsonl', attached: {},
+      attachDesktop: vi.fn(), switchSession: vi.fn().mockResolvedValue(undefined),
+    })
+    const opening = session.openFromDesktop('/desktop-session.jsonl')
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      expect(session.switchSession).toHaveBeenCalledWith('/desktop-session.jsonl', false)
+      expect(session.attachDesktop).not.toHaveBeenCalled()
+    } finally {
+      await vi.runAllTimersAsync()
+      await opening
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the current attached view when a standalone transfer is still owned elsewhere', async () => {
+    const assertFree = vi.spyOn(runtimeOwners, 'assertSessionNotOwnedElsewhere').mockRejectedValue(new Error('Open in Apex desktop'))
+    const attached = { dispose: vi.fn() }
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, { desktopTarget: '/desktop-session.jsonl', attached, attachDesktop: vi.fn(), start: vi.fn() })
+    try {
+      await expect(session.switchSession('/desktop-session.jsonl', false)).rejects.toThrow('Open in Apex desktop')
+      expect(session.attached).toBe(attached)
+      expect(attached.dispose).not.toHaveBeenCalled()
+      expect(session.attachDesktop).not.toHaveBeenCalled()
+      expect(session.start).not.toHaveBeenCalled()
+    } finally { assertFree.mockRestore() }
   })
 
   it('overrides inherited Desktop editor credentials in a real standalone Pi child', async () => {

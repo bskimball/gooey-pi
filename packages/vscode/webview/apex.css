@@ -263,7 +263,14 @@ body { padding: 0; }
 }
 
 .apex-session-picker .session-row-wrap > .session-row {
-  padding-right: 8px;
+  padding: 6px 8px 6px 7px;
+}
+.apex-session-picker .session-row__text {
+  display: grid;
+  gap: 2px;
+}
+.apex-session-picker .session-row-wrap .session-row__meta {
+  display: block;
 }
 .apex-session-picker .session-row:focus-visible {
   outline: 2px solid var(--focus);
@@ -286,6 +293,7 @@ body { padding: 0; }
 }
 .apex-session-picker .session-row__time {
   flex: 0 0 auto;
+  white-space: nowrap;
   color: var(--text-tertiary);
   font-size: 10.5px;
   line-height: 1.25;

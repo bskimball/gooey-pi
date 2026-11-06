@@ -218,7 +218,7 @@ describe('Desktop session attachment over real local sockets', () => {
     } finally { await f.server.stop() }
   })
 
-  it('continues a busy Desktop runtime in VS Code without stopping it and starts an owner for an idle saved session', async () => {
+  it('opens alongside a busy Desktop runtime without stopping it and starts an owner for an idle saved session', async () => {
     const f = await linkedFixture(undefined, true)
     const openExternal = vi.fn(async () => undefined)
     const handoff = new SessionHandoff({
@@ -230,14 +230,45 @@ describe('Desktop session attachment over real local sockets', () => {
       focusDelayMs: 0,
     })
     try {
-      await handoff.continueInVsCode(f.sessionPath)
+      await expect(handoff.continueInVsCode(f.sessionPath)).rejects.toThrow('Stop the current run')
+      expect(openExternal).not.toHaveBeenCalled()
+      await handoff.continueInVsCode(f.sessionPath, 'attach')
       expect(f.manager.getForSession(f.sessionPath)?.runtimeId).toBe(f.runtime.runtimeId)
       expect(openExternal.mock.calls).toHaveLength(2)
       expect(openExternal.mock.calls[1]).toEqual([expect.stringContaining(`?session=${encodeURIComponent(f.sessionPath)}`)])
       await f.manager.stop(f.runtime.runtimeId)
-      await handoff.continueInVsCode(f.sessionPath)
+      await handoff.continueInVsCode(f.sessionPath, 'attach')
       expect(f.manager.getForSession(f.sessionPath)?.runtimeId).not.toBe(f.runtime.runtimeId)
       expect(f.manager.getForSession(f.sessionPath)).toBeDefined()
+    } finally { await handoff.dispose(); await f.server.stop() }
+  })
+
+  it('releases an idle Desktop runtime before handing its saved session to standalone VS Code', async () => {
+    const f = await linkedFixture()
+    const saved = readFileSync(f.sessionPath, 'utf8')
+    const openExternal = vi.fn(async () => {
+      expect(f.manager.getForSession(f.sessionPath)).toBeUndefined()
+      const release = acquireRuntimeSession(f.sessionPath, { app: 'vscode', pid: process.pid, label: 'VS Code fixture' }, join(f.fake.cwd, 'owners'))
+      release()
+    })
+    const handoff = new SessionHandoff({
+      agents: f.manager,
+      sessions: { requireSessionPath: async () => f.sessionPath, list: async () => [{ filePath: f.sessionPath, projectPath: f.fake.cwd }] as Awaited<ReturnType<import('../../apps/desktop/electron/main/sessions').SessionService['list']>> },
+      projects: { authorizePath: async (cwd) => cwd },
+      openExternal,
+      ownersDir: join(f.fake.cwd, 'owners'),
+      focusDelayMs: 0,
+    })
+    try {
+      await handoff.continueInVsCode(f.sessionPath)
+      expect(openExternal.mock.calls).toHaveLength(2)
+      expect(openExternal).toHaveBeenLastCalledWith(`vscode://bdkinc.apex-vscode/open?session=${encodeURIComponent(f.sessionPath)}`)
+      await handoff.continueInVsCode(f.sessionPath)
+      expect(f.manager.getForSession(f.sessionPath)).toBeUndefined()
+      await handoff.dispose()
+      await f.server.stop()
+      await f.manager.stopAll()
+      expect(readFileSync(f.sessionPath, 'utf8')).toBe(saved)
     } finally { await handoff.dispose(); await f.server.stop() }
   })
 

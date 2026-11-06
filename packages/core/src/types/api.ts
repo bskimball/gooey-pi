@@ -791,8 +791,8 @@ export interface PrimeWorkApi {
     onChanged(callback: (event: SessionChangeEvent) => void): () => void
     /** Other live Apex apps (VS Code windows, other desktop instances) and the sessions their Pi runtimes hold. */
     runtimeOwners(): Promise<RuntimeOwnerView[]>
-    /** Stops this app's runtime for the session and opens it in Apex for VS Code. */
-    continueInVsCode(filePath: string): Promise<void>
+    /** Transfers an idle session to VS Code by default; attach keeps Desktop's runtime running. */
+    continueInVsCode(filePath: string, mode?: 'transfer' | 'attach'): Promise<void>
   }
   runtime: {
     /** Instruction files, skill directories, and injected extensions a run in an authorized project path will pick up. */

@@ -1,4 +1,4 @@
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
 	type IpcMainEvent,
 	type IpcMainInvokeEvent,
@@ -241,6 +241,14 @@ export function registerIpc(
 	);
 	handle("app:open-external", async (_event, url) => {
 		try {
+			if (typeof url === "string" && /^file:/i.test(url)) {
+				if (new URL(url).hostname) throw new TypeError("File links must refer to this computer");
+				const requested = await requireExistingPath(fileURLToPath(url));
+				const authorized = await services.projects.authorizePath(requested);
+				const failure = await shell.openPath(authorized);
+				if (failure) throw new Error(failure);
+				return true;
+			}
 			await shell.openExternal(requireWebUrl(url, { mailto: true }), {
 				activate: true,
 			});
@@ -398,8 +406,8 @@ export function registerIpc(
 	);
 	handle("sessions:runtime-owners", () => services.sessionHandoff.otherOwners());
 	handle("runtime:effective-config", async (_event, cwd) => describeEffectiveRunConfig({ cwd: await services.projects.authorizeReadOnlyCwd(requireString(cwd, "cwd", { min: 1, max: 4096 })), harness: "pi", extensionContext: services.extensionPathContext }));
-	handle("sessions:continue-in-vscode", (_event, filePath) =>
-		services.sessionHandoff.continueInVsCode(filePath),
+	handle("sessions:continue-in-vscode", (_event, filePath, mode) =>
+		services.sessionHandoff.continueInVsCode(filePath, mode),
 	);
 	handle("sessions:archive", async (_event, filePath, archived) => {
 		const routed = await sessionsForPath(filePath);

@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react'
 import type { Components } from 'react-markdown'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openExternalUrl } from '@/lib/desktop-actions'
 
@@ -10,23 +10,31 @@ interface MarkdownTextProps {
   streaming?: boolean
 }
 
-function openMarkdownLink(event: MouseEvent<HTMLAnchorElement>, href?: string): void {
-  if (!href) return
+async function openMarkdownLink(event: MouseEvent<HTMLAnchorElement>, href: string): Promise<string | null> {
   event.preventDefault()
   if (href.startsWith('#')) {
     try { document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' }) } catch { /* malformed fragment */ }
-    return
+    return null
   }
-  if (!/^(https?:|mailto:)/i.test(href)) return
-  if (window.prime) {
-    void openExternalUrl(window.prime.app, href).then((failure) => {
-      // Transcript links have no toast surface of their own; the refusal still
-      // has to leave a trace instead of looking like a dead link.
-      if (failure) console.error('Opening a transcript link failed:', failure)
-    })
-    return
-  }
+  if (window.prime) return openExternalUrl(window.prime.app, href)
+  if (/^file:/i.test(href)) return 'Open this file from the desktop app.'
   window.open(href, '_blank', 'noopener,noreferrer')
+  return null
+}
+
+function MarkdownLink({ href, children, ...props }: ComponentProps<'a'>) {
+  const [failure, setFailure] = useState<string | null>(null)
+  if (!href || !/^(https?:|mailto:|file:|#)/i.test(href)) {
+    return <span className="markdown-link-unsupported" title={href ? `Project-relative link: ${href}` : undefined}>{children}</span>
+  }
+  return <>
+    <a {...props} href={href} rel="noreferrer" onClick={(event) => { void openMarkdownLink(event, href).then(setFailure) }}><bdi>{children}</bdi></a>
+    {failure ? <span role="alert"> {failure}</span> : null}
+  </>
+}
+
+function markdownUrlTransform(url: string): string {
+  return /^file:/i.test(url) ? url : defaultUrlTransform(url)
 }
 
 const markdownPlugins = [remarkGfm]
@@ -37,9 +45,7 @@ const markdownPlugins = [remarkGfm]
  * opening with LTR code still lays out RTL prose correctly.
  */
 const markdownComponents: Components = {
-  a: ({ node: _node, href, children, ...props }) => href && (/^(https?:|mailto:|#)/i.test(href))
-    ? <a {...props} href={href} rel="noreferrer" onClick={(event) => openMarkdownLink(event, href)}><bdi>{children}</bdi></a>
-    : <span className="markdown-link-unsupported" title={href ? `Project-relative link: ${href}` : undefined}>{children}</span>,
+  a: ({ node: _node, ...props }) => <MarkdownLink {...props} />,
   blockquote: ({ node: _node, ...props }) => <blockquote {...props} dir="auto" />,
   code: ({ node: _node, children, ...props }) => <code {...props} dir="ltr">{children}</code>,
   h1: ({ node: _node, ...props }) => <h1 {...props} dir="auto" />,
@@ -146,7 +152,7 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
   // unparsed suffix as a sibling block makes punctuation and partial words
   // jump onto separate lines while tokens are still arriving.
   const markdown = useMemo(
-    () => <ReactMarkdown remarkPlugins={markdownPlugins} skipHtml components={markdownComponents}>{parsedText}</ReactMarkdown>,
+    () => <ReactMarkdown remarkPlugins={markdownPlugins} skipHtml urlTransform={markdownUrlTransform} components={markdownComponents}>{parsedText}</ReactMarkdown>,
     [parsedText],
   )
   return <div className={streaming ? 'prose is-streaming' : 'prose'}>{markdown}</div>

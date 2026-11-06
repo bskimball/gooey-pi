@@ -8,7 +8,7 @@ const electronMocks = vi.hoisted(() => ({
     on: vi.fn(),
     removeAllListeners: vi.fn(),
   },
-  shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
+  shell: { openExternal: vi.fn(), openPath: vi.fn(), showItemInFolder: vi.fn() },
 }))
 
 vi.mock('electron', () => electronMocks)
@@ -160,6 +160,41 @@ describe('registerIpc verify gate', () => {
     registration.dispose()
   })
 
+  it('opens file URLs in their default app only for existing authorized paths and reports shell failures', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'apex-file-link-'))
+    const path = join(directory, 'Migration plan #1.docx')
+    writeFileSync(path, 'sample file')
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    const authorizePath = vi.fn(async (value: string) => value)
+    stubs.projects = { authorizePath }
+    electronMocks.shell.openPath.mockReset().mockResolvedValue('')
+    electronMocks.shell.openExternal.mockReset()
+    const open = handlers.get('app:open-external')!
+    const url = pathToFileURL(path).href
+    try {
+      await expect(open(event, `${url}#L10`)).resolves.toBe(true)
+      expect(electronMocks.shell.openPath).toHaveBeenLastCalledWith(realpathSync(path))
+      expect(authorizePath).toHaveBeenLastCalledWith(realpathSync(path))
+      expect(electronMocks.shell.openExternal).not.toHaveBeenCalled()
+      electronMocks.shell.openPath.mockResolvedValue('No application is associated with this file')
+      await expect(open(event, url)).resolves.toBe(false)
+      electronMocks.shell.openPath.mockClear()
+      await expect(open(event, pathToFileURL(join(directory, 'missing.docx')).href)).resolves.toBe(false)
+      await expect(open(event, 'file:///bad%00path')).resolves.toBe(false)
+      await expect(open(event, 'file://remote.example/share/plan.docx')).resolves.toBe(false)
+      await expect(open(event, 'javascript:alert(1)')).resolves.toBe(false)
+      authorizePath.mockRejectedValue(new Error('Path is outside registered projects'))
+      await expect(open(event, url)).resolves.toBe(false)
+      expect(electronMocks.shell.openPath).not.toHaveBeenCalled()
+      await expect(open(event, 'https://example.com')).resolves.toBe(true)
+      expect(electronMocks.shell.openExternal).toHaveBeenLastCalledWith('https://example.com/', { activate: true })
+    } finally {
+      registration.dispose()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it('opens authorized files in VS Code at an optional bounded line and rejects invalid input', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'apex-vscode-line-'))
     const path = join(directory, 'source #1.ts')
@@ -263,6 +298,12 @@ describe('registerIpc verify gate', () => {
       list: vi.fn(() => runtimes.map((runtime) => ({ ...runtime, isStreaming: streaming }))),
       getForSession: vi.fn(() => runtimes[0] && { ...runtimes[0], isStreaming: streaming }),
       stopForSession: vi.fn(async () => { order.push('stop'); runtimes.length = 0 }),
+      releaseIdleSession: vi.fn(async () => {
+        if (streaming) return false
+        order.push('release')
+        runtimes.length = 0
+        return true
+      }),
       pinAttachment: vi.fn(() => vi.fn()),
       setSessionAttachGuard: vi.fn(),
       setSessionClaimProvider: vi.fn(),
@@ -280,12 +321,15 @@ describe('registerIpc verify gate', () => {
     stubs.sessionHandoff = handoff
     try {
       expect(agents.setSessionAttachGuard).toHaveBeenCalledOnce()
-      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).resolves.toBeUndefined()
+      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath, 'invalid')).rejects.toThrow('Invalid VS Code handoff mode')
+      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).rejects.toThrow('Stop the current run')
+      expect(openExternal).not.toHaveBeenCalled()
+      await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath, 'attach')).resolves.toBeUndefined()
       expect(agents.stopForSession).not.toHaveBeenCalled()
 
       streaming = false
       order.length = 0
-      await handlers.get('sessions:continue-in-vscode')!(event, sessionPath)
+      await handlers.get('sessions:continue-in-vscode')!(event, sessionPath, 'attach')
       expect(order).toEqual([
         'authorize /work/repo',
         expect.stringMatching(/^vscode:\/\/file\/.*work\/repo$/),
@@ -294,6 +338,15 @@ describe('registerIpc verify gate', () => {
       const record = JSON.parse(readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')) as { sessions: string[] }
       expect(record.sessions).toEqual([join(realpathSync(ownersDir), 'held session.jsonl')])
       expect(agents.stopForSession).not.toHaveBeenCalled()
+      order.length = 0
+      await handlers.get('sessions:continue-in-vscode')!(event, sessionPath, 'transfer')
+      expect(order).toEqual([
+        'authorize /work/repo', 'release',
+        expect.stringMatching(/^vscode:\/\/file\/.*work\/repo$/),
+        `vscode://bdkinc.apex-vscode/open?session=${encodeURIComponent(sessionPath)}`,
+      ])
+      const released = JSON.parse(readFileSync(join(ownersDir, `desktop-${process.pid}.json`), 'utf8')) as { sessions: string[] }
+      expect(released.sessions).toEqual([])
       await expect(handlers.get('sessions:runtime-owners')!(event)).resolves.toEqual([])
     } finally {
       await handoff.dispose()

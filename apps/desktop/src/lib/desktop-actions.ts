@@ -11,7 +11,7 @@ type ShellApi = Pick<PrimeWorkApi['app'], 'openExternal' | 'revealPath'>
  */
 export async function openExternalUrl(app: ShellApi, url: string): Promise<string | null> {
   try {
-    return await app.openExternal(url) ? null : `Apex could not open ${url} in your browser.`
+    return await app.openExternal(url) ? null : `Apex could not open ${url}.`
   } catch (error) {
     return errorMessage(error)
   }

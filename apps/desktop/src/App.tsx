@@ -656,7 +656,7 @@ export default function App() {
     onOpenPalette: () => setPaletteOpen(true),
     onRenameSession: renameSession,
     onArchiveSession: (session) => setSessionArchived(session, true),
-    onContinueInVsCode: (session) => { if (bridge) void bridge.sessions.continueInVsCode(session.filePath).then(() => setToast(`Opening “${session.title}” in VS Code…`), reportError) },
+    onContinueInVsCode: (session, mode) => { if (bridge) void bridge.sessions.continueInVsCode(session.filePath, mode).then(() => setToast(`Opening “${session.title}” in VS Code…`), reportError) },
   })
 
   const selectPreviousSession = usePreviousSession(workspace.activeSessionId, sessions, (session) => void selectSession(session), () => setToast('There is no previous session to return to yet.'))

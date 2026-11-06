@@ -127,8 +127,8 @@ const api: PrimeWorkApi = {
 		onChanged: (callback) =>
 			subscribe<SessionChangeEvent>("sessions:changed", callback),
 		runtimeOwners: () => invoke("sessions:runtime-owners"),
-		continueInVsCode: (filePath) =>
-			invoke("sessions:continue-in-vscode", filePath),
+		continueInVsCode: (filePath, mode) =>
+			invoke("sessions:continue-in-vscode", filePath, mode),
 	},
 	runtime: {
 		effectiveConfig: (cwd) => invoke("runtime:effective-config", cwd),

@@ -20,7 +20,7 @@ import type { SessionService } from './sessions'
 
 const SELF: RuntimeOwnerIdentity = { app: 'desktop', pid: process.pid }
 const CHANGE_POLL_MS = 5_000
-const VSCODE_SESSION_URI = 'vscode://bdkinc.apex-vscode/attach'
+const VSCODE_SESSION_URI = 'vscode://bdkinc.apex-vscode'
 // VS Code delivers extension URIs to its focused window; the folder's window needs a moment to take focus.
 const VSCODE_FOCUS_DELAY_MS = 1_200
 
@@ -43,8 +43,8 @@ export function describeDesktopSession(sessions: Pick<SessionService, 'list'>) {
 
 /**
  * Publishes which sessions this app's Pi runtimes hold, refuses to attach a
- * runtime to a session another live Apex app holds, opens VS Code alongside
- * the Desktop runtime, and handles older clients' idle-release requests.
+ * runtime to a session another live Apex app holds, transfers or attaches
+ * sessions to VS Code, and handles older clients' idle-release requests.
  */
 export class SessionHandoff {
   private disposed = false
@@ -110,25 +110,31 @@ export class SessionHandoff {
     return (await readRuntimeOwners(SELF, this.ownersDir)).map(({ app, label, sessions }) => ({ app, label, sessions }))
   }
 
-  async continueInVsCode(filePath: unknown): Promise<void> {
+  async continueInVsCode(filePath: unknown, mode: unknown = 'transfer'): Promise<void> {
+    if (mode !== 'transfer' && mode !== 'attach') throw new TypeError('Invalid VS Code handoff mode')
     const sessionPath = await this.deps.sessions.requireSessionPath(filePath)
     const wanted = canonicalSessionPath(sessionPath)
     const session = (await this.deps.sessions.list(undefined, true)).find((candidate) => canonicalSessionPath(candidate.filePath) === wanted)
     if (!session) throw new Error('This session is not in the session catalog.')
     const folder = await this.deps.projects.authorizePath(session.projectPath)
-    const runtime = this.deps.agents.getForSession(sessionPath) ?? await this.deps.agents.start({ cwd: folder, sessionPath })
-    this.pendingLaunches.get(runtime.runtimeId)?.()
-    const unpin = this.deps.agents.pinAttachment(runtime.runtimeId)
-    const release = () => { clearTimeout(timer); unpin(); this.pendingLaunches.delete(runtime.runtimeId) }
-    const timer = setTimeout(release, 120_000)
-    timer.unref()
-    this.pendingLaunches.set(runtime.runtimeId, release)
+    let release: (() => void) | undefined
+    if (mode === 'transfer') {
+      if (!(await this.deps.agents.releaseIdleSession(sessionPath))) throw new Error('Stop the current run or wait for it to finish before continuing in VS Code.')
+    } else {
+      const runtime = this.deps.agents.getForSession(sessionPath) ?? await this.deps.agents.start({ cwd: folder, sessionPath })
+      this.pendingLaunches.get(runtime.runtimeId)?.()
+      const unpin = this.deps.agents.pinAttachment(runtime.runtimeId)
+      release = () => { clearTimeout(timer); unpin(); this.pendingLaunches.delete(runtime.runtimeId) }
+      const timer = setTimeout(release, 120_000)
+      timer.unref()
+      this.pendingLaunches.set(runtime.runtimeId, release)
+    }
     try {
       await this.publish(true)
       await this.deps.openExternal(`vscode://file${pathToFileURL(folder).pathname}`)
       await delay(this.deps.focusDelayMs ?? VSCODE_FOCUS_DELAY_MS)
-      await this.deps.openExternal(`${VSCODE_SESSION_URI}?session=${encodeURIComponent(sessionPath)}`)
-    } catch (error) { release(); throw error }
+      await this.deps.openExternal(`${VSCODE_SESSION_URI}/${mode === 'transfer' ? 'open' : 'attach'}?session=${encodeURIComponent(sessionPath)}`)
+    } catch (error) { release?.(); throw error }
   }
 
   async dispose(): Promise<void> {

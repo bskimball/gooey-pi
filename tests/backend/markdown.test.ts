@@ -16,6 +16,17 @@ describe('chat Markdown rendering', () => {
     expect(html).toContain('<table>')
   })
 
+  it('preserves local file URLs as clickable links without enabling unsafe schemes', () => {
+    const url = 'file:///C:/Users/bskim/Work/output/holt-logistics/Holt-Logistics-IBMi-Migration-Plan-v0.1.docx'
+    const html = renderToStaticMarkup(createElement(MarkdownText, { text: `[Migration plan](${url})` }))
+    expect(html).toContain(`<a href="${url}"`)
+    expect(html).not.toContain('markdown-link-unsupported')
+    for (const href of ['javascript:alert(1)', 'data:text/html,bad', 'vbscript:bad']) {
+      const unsafe = renderToStaticMarkup(createElement(MarkdownText, { text: `[Unsafe](${href})` }))
+      expect(unsafe).not.toContain('<a')
+    }
+  })
+
   it('does not enable raw HTML or remote image loading', () => {
     const html = renderToStaticMarkup(createElement(MarkdownText, {
       text: '<script>bad()</script>\n\n![tracking](https://example.com/pixel.png)',

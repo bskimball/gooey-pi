@@ -153,7 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand(FIX_DIAGNOSTIC_COMMAND, (draft: unknown) => { if (typeof draft === 'string') provider.insertDraft(draft) }),
     vscode.languages.registerCodeActionsProvider([{ scheme: 'file' }, { scheme: 'untitled' }], new DiagnosticActions(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }),
-    // /attach preserves Desktop ownership; /open also accepts older standalone handoffs.
+    // /attach preserves Desktop ownership; /open transfers a released session to this editor.
     vscode.window.registerUriHandler({
       handleUri(uri) {
         const session = sessionPathFromUri(uri)
