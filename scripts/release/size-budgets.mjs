@@ -13,8 +13,8 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 577623 bytes after adding isolated alternatives and reviewed snapshot promotion.
-  mainBytes: 568 * KIB,
+  // Measured 560280 bytes after adding Desktop-owned VS Code session attachment.
+  mainBytes: 552 * KIB,
   preloadBytes: 16 * KIB,
   initialRendererBytes: 1280 * KIB,
   largestRendererChunkBytes: 600 * KIB,

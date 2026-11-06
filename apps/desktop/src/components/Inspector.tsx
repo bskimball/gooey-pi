@@ -18,7 +18,7 @@ import { Folder, GitDiff, Globe, Info, Robot, SidebarRight } from "./icons";
 import { BrowserPanel } from "./inspector/BrowserPanel";
 import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
-import { AgentsPanel } from "./inspector/AgentsPanel";
+import { SpecialistsPanel } from "./inspector/SpecialistsPanel";
 import { SummaryPanel } from "./inspector/SummaryPanel";
 import { createReadinessSelector } from "./inspector/readiness";
 import { createSessionSummarySelector } from "./inspector/session-summary";
@@ -215,11 +215,9 @@ export const Inspector = memo(function Inspector({
 					</div>
 				) : null}
 				{activeTab === "specialists" ? (
-					<AgentsPanel
+					<SpecialistsPanel
 						key={agentSessionKey ?? "no-session"}
-						project={project}
 						cwd={cwd}
-						onRefreshGit={onRefreshGit}
 						messages={messages}
 						selectedId={selectedSpecialistId}
 						onSelect={onSelectSpecialist}

@@ -35,11 +35,8 @@ function hardenedGitArgs(args: readonly string[], extraConfig: readonly string[]
   return [...result, ...args]
 }
 
-export function runGit(cwd: string, args: readonly string[], options: { timeoutMs: number; maxBytes: number; input?: string; indexFile?: string }, extraConfig: readonly string[] = []): Promise<ProcessResult> {
-  const { indexFile, ...processOptions } = options
-  const env = restrictedGitEnvironment()
-  if (indexFile) env.GIT_INDEX_FILE = indexFile
-  return runProcess('git', hardenedGitArgs(args, extraConfig), { cwd, ...processOptions, env })
+function runGit(cwd: string, args: readonly string[], options: { timeoutMs: number; maxBytes: number; input?: string }, extraConfig: readonly string[] = []): Promise<ProcessResult> {
+  return runProcess('git', hardenedGitArgs(args, extraConfig), { cwd, ...options, env: restrictedGitEnvironment() })
 }
 
 function resultDetail(result: ProcessResult): string {
@@ -54,7 +51,7 @@ function processError(operation: string, result: ProcessResult): Error {
   return new Error(detail ? `${operation} failed: ${detail}` : `${operation} failed${suffix}`)
 }
 
-export function requireProcessSuccess(operation: string, result: ProcessResult): void {
+function requireProcessSuccess(operation: string, result: ProcessResult): void {
   if (result.code !== 0 || result.timedOut || result.outputExceeded) throw processError(operation, result)
 }
 
@@ -294,8 +291,7 @@ async function globalExcludesOverride(cwd: string, config: ReadonlyMap<string, s
  * Derives commit identity from the already-fetched repository configuration;
  * only a missing repository-scope value costs an extra (global-scope) spawn.
  */
-export async function commitIdentityOverrides(cwd: string, config?: ReadonlyMap<string, string>): Promise<string[]> {
-  config ??= await repositoryConfig(cwd)
+async function commitIdentityOverrides(cwd: string, config: ReadonlyMap<string, string>): Promise<string[]> {
   const localName = validIdentityValue(config.get('user.name') ?? '')
   const localEmail = validIdentityValue(config.get('user.email') ?? '')
   const [globalName, globalEmail] = await Promise.all([
@@ -339,7 +335,7 @@ function changedPathStatesFromStatus(output: string): Map<string, ChangedPathSta
 }
 
 
-async function rejectFilteredPaths(cwd: string, paths: readonly string[], overrides: readonly string[], indexFile?: string): Promise<void> {
+async function rejectFilteredPaths(cwd: string, paths: readonly string[], overrides: readonly string[]): Promise<void> {
   if (!paths.length) return
   // Feed the paths to one bounded process. Status output and direct mutation inputs
   // are capped, so this inspects every path without an attacker causing an
@@ -348,7 +344,6 @@ async function rejectFilteredPaths(cwd: string, paths: readonly string[], overri
     timeoutMs: 10_000,
     maxBytes: GIT_CONFIG_OUTPUT_LIMIT,
     input: `${paths.join('\0')}\0`,
-    indexFile,
   }, overrides)
   requireProcessSuccess('Git filter attribute inspection', result)
   const affected: string[] = []
@@ -492,16 +487,6 @@ async function inspectGitWorktreeCleanAtRoot(repositoryRoot: string, overrides: 
     }
   }
   return { kind: 'dirty', changedPaths, truncated: cursor < result.stdout.length }
-}
-
-export async function requireFilterFreeGit(cwd: string, indexFile?: string): Promise<string[]> {
-  const config = await repositoryConfig(cwd)
-  if (filterOverridesFromConfig(config).length) throw new Error('Parallel work cannot snapshot repositories with clean/smudge filters. Use a trusted Git client with the required filter support.')
-  const overrides = await globalExcludesOverride(cwd, config)
-  const paths = await runGit(cwd, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { timeoutMs: 10_000, maxBytes: GIT_STATUS_OUTPUT_LIMIT, indexFile }, overrides)
-  requireProcessSuccess('Git snapshot path inspection', paths)
-  await rejectFilteredPaths(cwd, paths.stdout.split('\0').filter(Boolean), overrides, indexFile)
-  return overrides
 }
 
 export async function inspectGitWorktreeClean(cwd: string): Promise<GitWorktreeCleanliness> {

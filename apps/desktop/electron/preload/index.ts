@@ -62,14 +62,6 @@ function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api: PrimeWorkApi = {
-	parallel: {
-		list: (projectId) => invoke("parallel:list", projectId),
-		create: (projectId, options) => invoke("parallel:create", projectId, options),
-		start: (projectId, runId) => invoke("parallel:start", projectId, runId),
-		stop: (projectId, runId) => invoke("parallel:stop", projectId, runId),
-		review: (projectId, runId, variantId) => invoke("parallel:review", projectId, runId, variantId),
-		promote: (projectId, runId, reviewId) => invoke("parallel:promote", projectId, runId, reviewId),
-	},
 	app: {
 		getMeta: () => invoke("app:get-meta"),
 		refreshHarnesses: () => invoke("app:refresh-harnesses"),

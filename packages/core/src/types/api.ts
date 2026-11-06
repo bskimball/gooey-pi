@@ -1,5 +1,3 @@
-export type { ParallelRun, ParallelVariant, ParallelVariantId, ParallelReview, ParallelRunOptions } from './parallel-work'
-import type { ParallelWorkApi } from './parallel-work'
 import type { BrowserSourceHint, BrowserSourceResult } from '../browser/source'
 export type { BrowserSourceHint, BrowserSourceResult } from '../browser/source'
 
@@ -759,7 +757,6 @@ export interface AgentBrowserPointerEvent {
 }
 
 export interface PrimeWorkApi {
-  parallel: ParallelWorkApi
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
     getState(): Promise<AppUpdateState>

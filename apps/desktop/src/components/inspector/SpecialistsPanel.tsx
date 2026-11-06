@@ -1,12 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { specialistOutcome, specialistStepStatus, specialistStatusLabel } from '@/lib/specialist-status'
-import { CaretDown, CaretRight, Record as RecordIcon, WarningCircle } from '../icons'
+import { CaretDown, CaretRight, Check, Record as RecordIcon, WarningCircle } from '../icons'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { coalesceAssistantTurns } from '../transcript/grouping'
 import { MarkdownText } from '../MarkdownText'
 import { renderNarrativeWithActivity } from '../transcript/messages'
 import type { PiSpecialistSummary } from './SummaryPanel'
-import { SpecialistFiles, SpecialistMatrix } from './SpecialistMatrix'
+import { SpecialistFiles } from './SpecialistMatrix'
 import { observedPath } from '@/lib/specialist-evidence'
 
 export interface PiSpecialistSession extends PiSpecialistSummary {
@@ -600,15 +600,47 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
       : undefined,
   ].filter((item): item is string => Boolean(item))
 
+  const activeStatus = active.waitingForInput ? 'Waiting for input' : specialistStatusLabel[active.status]
+
   return (
     <div className="specialists-panel">
-      <SpecialistMatrix specialists={specialists} activeId={active.id} onSelect={onSelect} cwd={cwd} />
+      <div className="specialist-tabstrip" role="tablist" aria-label="Session specialists">
+        {specialists.map((spec, index) => {
+          const isSelected = spec.id === active.id
+          const status = spec.waitingForInput ? 'Waiting for input' : specialistStatusLabel[spec.status]
+          return (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
+              aria-label={`${spec.agent} ${spec.id}: ${status}. ${spec.mission || 'No task recorded'}`}
+              title={`${spec.mission} · ${status}`}
+              tabIndex={isSelected ? 0 : -1}
+              onKeyDown={(event) => {
+                const destinations: Record<string, number> = { ArrowRight: (index + 1) % specialists.length, ArrowDown: (index + 1) % specialists.length, ArrowLeft: (index - 1 + specialists.length) % specialists.length, ArrowUp: (index - 1 + specialists.length) % specialists.length, Home: 0, End: specialists.length - 1 }
+                const next = destinations[event.key]
+                if (next === undefined) return
+                event.preventDefault()
+                onSelect(specialists[next].id)
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+              }}
+              key={spec.id}
+              className={`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.waitingForInput ? 'waiting' : spec.status}`}
+              onClick={() => onSelect(spec.id)}
+            >
+              {spec.status === 'done' ? <Check size={12} /> : spec.status === 'error' ? <WarningCircle size={12} /> : <RecordIcon size={12} />}
+              <strong>{spec.agent}</strong>
+              {/^task_\d+$/.test(spec.id) ? <span>({spec.id})</span> : null}
+            </button>
+          )
+        })}
+      </div>
       <header className="specialist-header" key={active.id}>
         <details className="specialist-header__details">
-          <summary><strong>{active.agent}</strong><span>Details</span></summary>
+          <summary><strong>{active.agent}</strong><span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span><span>Details</span></summary>
           <div className="specialist-header__top">
             <div className="specialist-header__title"><span className="mono">{active.id}</span></div>
-            <span className={`run-state is-${active.status}`}>{specialistStatusLabel[active.status]}</span>
+            <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span>
           </div>
           <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
           <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
