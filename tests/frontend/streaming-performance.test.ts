@@ -122,9 +122,8 @@ describe('Sidebar memoization and scale bounds', () => {
     const handoff = vi.fn()
     proxy.update({ ...sidebarProps(() => { newCalls += 1 }), onContinueInVsCode: handoff })
     const session = { filePath: '/session.jsonl' } as SessionRecord
-    stable.onContinueInVsCode?.(session, 'transfer')
-    stable.onContinueInVsCode?.(session, 'attach')
-    expect(handoff.mock.calls).toEqual([[session, 'transfer'], [session, 'attach']])
+    stable.onContinueInVsCode?.(session)
+    expect(handoff.mock.calls).toEqual([[session]])
 
     expect(proxy.callbacks).toBe(stable)
     stable.onNewSession()

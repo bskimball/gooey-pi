@@ -344,6 +344,25 @@ describe('sidebar project context menu', () => {
     expect(writeText).toHaveBeenCalledWith(session.id)
   })
 
+  it.each(['idle', 'running', 'waiting'] as const)('offers one VS Code handoff action for a %s session', async (status) => {
+    const current = { ...session, status }
+    const onContinueInVsCode = vi.fn()
+    await renderSidebar({ sessions: [current], activeProjectId: project.id, onContinueInVsCode })
+    await rightClick(container.querySelector('.session-row')!)
+    const actions = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Session options"] button')].filter((button) => button.textContent?.includes('VS Code'))
+    expect(actions.map((button) => button.textContent?.trim())).toEqual(['Continue in VS Code'])
+    const action = actions[0]
+    expect(action.disabled).toBe(status !== 'idle')
+    expect(action.title).toBe(status === 'idle' ? 'Move this session to VS Code. You can close Desktop afterward.' : 'Stop the current run before continuing in VS Code.')
+    await act(async () => action.click())
+    if (status === 'idle') {
+      expect(onContinueInVsCode).toHaveBeenCalledWith(current)
+      expect(container.querySelector('[aria-label="Session options"]')).toBeNull()
+    } else {
+      expect(onContinueInVsCode).not.toHaveBeenCalled()
+    }
+  })
+
   it('offers a confirmed remove action without deleting the project folder', async () => {
     const onRemoveProject = vi.fn()
     await act(async () => {
