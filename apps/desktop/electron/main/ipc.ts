@@ -1,7 +1,9 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { stat } from "node:fs/promises";
 import {
 	type IpcMainEvent,
 	type IpcMainInvokeEvent,
+	app,
 	ipcMain,
 	shell,
 	type WebContents,
@@ -240,9 +242,18 @@ export function registerIpc(
 	handle("app:open-external", async (_event, url) => {
 		try {
 			if (typeof url === "string" && /^file:/i.test(url)) {
-				if (new URL(url).hostname) throw new TypeError("File links must refer to this computer");
-				const requested = await requireExistingPath(fileURLToPath(url));
+				const fileUrl = new URL(url);
+				if (fileUrl.hostname) throw new TypeError("File links must refer to this computer");
+				const requested = await requireExistingPath(fileURLToPath(fileUrl));
 				const authorized = await services.projects.authorizePath(requested);
+				const textFile = /\.(?:[cm]?[jt]sx?|jsonc?|mdx?|txt|css|scss|sass|less|html?|xml|ya?ml|toml|ini|cfg|conf|csv|sql|graphql|gql|py|go|rs|java|kt|c|h|cpp|hpp|cs|php|rb|sh|bash|ps1|vue|svelte)$/i.test(authorized);
+				if (textFile && (await stat(authorized)).isFile() && app.getApplicationNameForProtocol("vscode://")) {
+					const match = /^#L([1-9]\d*)(?:-L[1-9]\d*)?$/.exec(fileUrl.hash);
+					const line = match ? Number(match[1]) : undefined;
+					const suffix = line !== undefined && Number.isSafeInteger(line) && line <= 2_147_483_647 ? `:${line}` : "";
+					await shell.openExternal(`vscode://file${pathToFileURL(authorized).pathname}${suffix}`, { activate: true });
+					return true;
+				}
 				const failure = await shell.openPath(authorized);
 				if (failure) throw new Error(failure);
 				return true;

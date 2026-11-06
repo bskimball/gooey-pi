@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronMocks = vi.hoisted(() => ({
-  app: {},
+  app: { getApplicationNameForProtocol: vi.fn(() => 'Visual Studio Code') },
   ipcMain: {
     removeHandler: vi.fn(),
     handle: vi.fn(),
@@ -177,6 +177,25 @@ describe('registerIpc verify gate', () => {
       expect(electronMocks.shell.openPath).toHaveBeenLastCalledWith(realpathSync(path))
       expect(authorizePath).toHaveBeenLastCalledWith(realpathSync(path))
       expect(electronMocks.shell.openExternal).not.toHaveBeenCalled()
+      const source = join(directory, 'source #1.tsx')
+      writeFileSync(source, 'export {}\n')
+      const sourceUrl = pathToFileURL(source).href
+      const editorUrl = `vscode://file${pathToFileURL(realpathSync(source)).pathname}`
+      electronMocks.shell.openPath.mockClear()
+      await expect(open(event, `${sourceUrl}#L10-L20`)).resolves.toBe(true)
+      expect(electronMocks.shell.openExternal).toHaveBeenLastCalledWith(`${editorUrl}:10`, { activate: true })
+      expect(electronMocks.shell.openPath).not.toHaveBeenCalled()
+      for (const fragment of ['', '#L0', '#L2147483648', '#other']) {
+        await expect(open(event, `${sourceUrl}${fragment}`)).resolves.toBe(true)
+        expect(electronMocks.shell.openExternal).toHaveBeenLastCalledWith(editorUrl, { activate: true })
+      }
+      electronMocks.app.getApplicationNameForProtocol.mockReturnValueOnce('')
+      await expect(open(event, sourceUrl)).resolves.toBe(true)
+      expect(electronMocks.shell.openPath).toHaveBeenLastCalledWith(realpathSync(source))
+      const folder = join(directory, 'folder.ts')
+      mkdirSync(folder)
+      await expect(open(event, pathToFileURL(folder).href)).resolves.toBe(true)
+      expect(electronMocks.shell.openPath).toHaveBeenLastCalledWith(realpathSync(folder))
       electronMocks.shell.openPath.mockResolvedValue('No application is associated with this file')
       await expect(open(event, url)).resolves.toBe(false)
       electronMocks.shell.openPath.mockClear()
