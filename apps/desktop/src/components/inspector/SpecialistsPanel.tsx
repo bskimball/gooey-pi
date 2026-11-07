@@ -637,10 +637,14 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
       </div>
       <header className="specialist-header" key={active.id}>
         <details className="specialist-header__details">
-          <summary><strong>{active.agent}</strong><span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span><span>Details</span></summary>
+          <summary title="Show work order and details">
+            <CaretRight size={12} aria-hidden="true" className="specialist-header__caret" />
+            <strong>{active.agent}</strong>
+            <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span>
+            {active.mission ? <span className="specialist-header__preview">{active.mission}</span> : null}
+          </summary>
           <div className="specialist-header__top">
             <div className="specialist-header__title"><span className="mono">{active.id}</span></div>
-            <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span>
           </div>
           <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
           <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>

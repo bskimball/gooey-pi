@@ -3,9 +3,19 @@
 .specialists-panel > .specialist-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 8px 12px; max-height: 45%; overflow-y: auto; scrollbar-width: thin; }
 .specialist-header > details { min-width: 0; }
 .specialist-header > details[open], .specialist-header > .specialist-header__error, .specialist-header > .specialist-header__activity { grid-column: 1 / -1; }
-.specialist-header__details > summary { display: inline-flex; align-items: center; gap: 6px; line-height: 18px; }
-.specialist-header__details > summary strong { color: var(--text); font-size: 12px; font-weight: 550; }
+.specialist-header__details > summary { display: flex; align-items: center; gap: 8px; min-width: 0; line-height: 20px; list-style: none; }
+.specialist-header__details > summary::-webkit-details-marker { display: none; }
+.specialist-header__details > summary strong { flex: none; color: var(--text); font-size: 12px; font-weight: 550; }
 .specialist-header__details > summary span { margin-left: 0; }
+.specialist-header__caret { flex: none; margin-right: -2px; color: var(--text-tertiary); transition: transform 120ms ease, color 120ms ease; }
+.specialist-header__details > summary:hover .specialist-header__caret { color: var(--text); }
+.specialist-header__details[open] .specialist-header__caret { transform: rotate(90deg); }
+.specialist-header__details > summary .run-state { flex: none; min-height: 18px; gap: 5px; padding: 0 7px 0 6px; border-radius: 999px; font-size: 10.5px; }
+.specialist-header__details > summary .run-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.specialist-header__details > summary .specialist-header__preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-size: 11.5px; }
+.specialist-header__details[open] .specialist-header__preview { display: none; }
+.specialist-header__details > .specialist-header__source, .specialist-header__details > .specialist-turn__label { display: block; margin-bottom: 6px; }
+@media (prefers-reduced-motion: reduce) { .specialist-header__caret { transition: none; } }
 .specialist-header__details[open] > .specialist-header__top, .specialist-header__details[open] > .specialist-header__mission, .specialist-header__details[open] > .specialist-header__meta { margin-bottom: 8px; }
 .specialist-files { font-size: 11px; line-height: 18px; max-height: 160px; overflow: auto; }
 .specialist-files summary { cursor: pointer; color: var(--text-secondary); }
