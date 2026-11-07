@@ -823,7 +823,7 @@ export interface PrimeWorkApi {
   }
   terminal: {
     create(options: TerminalSpawnOptions): Promise<{ terminalId: string; shell: string }>
-    bindSession(terminalId: string, sessionPath: string): Promise<boolean>
+    bindSession(terminalId: string, sessionPath: string | null): Promise<boolean>
     input(terminalId: string, data: string): void
     resize(terminalId: string, cols: number, rows: number): void
     setActiveContext(terminalId: string, context: TerminalActiveContext): void

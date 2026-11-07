@@ -975,7 +975,6 @@ describe('Pi provider catalog authority', () => {
       setSubmitting: () => undefined,
       refreshSchedules: async () => undefined,
       resetBrowserView: () => undefined,
-      closeTerminalForSession: () => undefined,
       clearSessionAttention: () => undefined,
       reportError,
     }))

@@ -215,10 +215,12 @@ export default function App() {
     : `${activeProject?.id ?? 'no-project'}:new:${workspace.workspaceGeneration}`
   const browserAnnotations = useBrowserAnnotations(`${terminalSessionKey}:${activeCwd ?? ''}`)
   const activeTerminalSessionPath = workspace.runtime?.sessionFile ?? activeSession?.filePath
+  // Terminals belong to a project folder, not a session, so a dev process
+  // keeps running and stays visible across every session in that folder.
+  const terminalWorkspaceKey = `${activeProject?.id ?? 'no-project'}:${activeCwd ?? ''}`
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionMount[]>([])
   const [terminalDrawerRevision, setTerminalDrawerRevision] = useState(0)
-  const activeTerminalSession = useMemo(() => terminalSessions.find((terminal) => terminal.workspaceKey === terminalSessionKey
-    || Boolean(activeTerminalSessionPath && terminal.sessionPath === activeTerminalSessionPath)), [activeTerminalSessionPath, terminalSessionKey, terminalSessions])
+  const activeTerminalSession = useMemo(() => terminalSessions.find((terminal) => terminal.workspaceKey === terminalWorkspaceKey), [terminalWorkspaceKey, terminalSessions])
   const terminalOpen = Boolean(activeTerminalSession)
   const git = gitStatusForWorkspace(gitSnapshot, activeCwd)
   const closeSmallestPanels = useCallback((patch: { sidebarOpen?: false; inspectorOpen?: false }) => {
@@ -410,12 +412,6 @@ export default function App() {
     setProjects, setSessions, setGitSnapshot, setView, setPaletteOpen, setToast, setSubmitting,
     refreshSchedules,
     resetBrowserView: () => setBrowserGeneration((value) => value + 1),
-    closeTerminalForSession: (sessionPath) => {
-      const removed = terminalSessions.find((terminal) => terminal.sessionPath === sessionPath)
-      const projectRun = activeProjectScriptRunRef.current
-      if (removed && projectRun?.drawerId === removed.id) finishProjectScriptRun(projectRun, { cancelled: true })
-      setTerminalSessions((current) => current.filter((terminal) => terminal.sessionPath !== sessionPath))
-    },
     clearSessionAttention, reportError,
   })
   const openSpecialist = useCallback((id: string) => {
@@ -510,25 +506,23 @@ export default function App() {
       try { await grantProject(activeProject) } catch (error) { reportError(error); return }
     }
     setTerminalSessions((current) => {
-      const existing = current.find((terminal) => terminal.workspaceKey === terminalSessionKey
-        || Boolean(activeTerminalSessionPath && terminal.sessionPath === activeTerminalSessionPath))
-      if (existing) return current
-      return [...current, { id: crypto.randomUUID(), workspaceKey: terminalSessionKey, cwd: activeCwd, sessionPath: activeTerminalSessionPath }]
+      if (current.some((terminal) => terminal.workspaceKey === terminalWorkspaceKey)) return current
+      return [...current, { id: crypto.randomUUID(), workspaceKey: terminalWorkspaceKey, cwd: activeCwd, sessionPath: activeTerminalSessionPath }]
     })
-  }, [activeCwd, activeProject, activeTerminalSession, activeTerminalSessionPath, closeTerminal, grantProject, reportError, terminalSessionKey])
+  }, [activeCwd, activeProject, activeTerminalSession, activeTerminalSessionPath, closeTerminal, grantProject, reportError, terminalWorkspaceKey])
   useEffect(() => {
     settingsState.setTerminalOpen(terminalOpen)
   }, [settingsState.setTerminalOpen, terminalOpen])
   useEffect(() => {
     if (!activeTerminalSession) { setTerminalSelection(undefined); return }
+    // The shared terminal follows the visible session so only that session's
+    // agent can read it; an unsaved new session unbinds it.
     setTerminalSessions((current) => current.map((terminal) => {
-      if (terminal.id !== activeTerminalSession.id) return terminal
-      const sessionPath = activeTerminalSessionPath ?? terminal.sessionPath
-      if (terminal.cwd === activeCwd && terminal.sessionPath === sessionPath) return terminal
-      return { ...terminal, cwd: activeCwd, sessionPath }
+      if (terminal.id !== activeTerminalSession.id || terminal.sessionPath === activeTerminalSessionPath) return terminal
+      return { ...terminal, sessionPath: activeTerminalSessionPath }
     }))
     setTerminalSelection(terminalDrawerRefs.current.get(activeTerminalSession.id)?.readSelectionContext())
-  }, [activeCwd, activeTerminalSession?.id, activeTerminalSessionPath])
+  }, [activeTerminalSession?.id, activeTerminalSessionPath])
   // Stable identities keep the memoized Inspector and Composer from
   // re-rendering at streaming-frame rate; useStableCallback always dispatches
   // to the latest render's closures.
@@ -567,8 +561,7 @@ export default function App() {
         patchProjectScripts(project.id, scripts)
       }
       const run: ActiveProjectScriptRun = { requestId: crypto.randomUUID(), projectId: project.id, harness: project.harness, kind, command, ownsDrawer: false }
-      const existing = terminalSessions.find((terminal) => terminal.workspaceKey === terminalSessionKey
-        || Boolean(activeTerminalSessionPath && terminal.sessionPath === activeTerminalSessionPath))
+      const existing = terminalSessions.find((terminal) => terminal.workspaceKey === terminalWorkspaceKey)
       if (existing) {
         const pending = { ...run, drawerId: existing.id, ownsDrawer: false }
         activeProjectScriptRunRef.current = pending
@@ -581,7 +574,7 @@ export default function App() {
         setActiveProjectScriptRun(started)
         setTerminalSessions((current) => [...current, {
           id: drawerId,
-          workspaceKey: terminalSessionKey,
+          workspaceKey: terminalWorkspaceKey,
           cwd: activeCwd,
           sessionPath: activeTerminalSessionPath,
           initialCommand: {
@@ -595,7 +588,7 @@ export default function App() {
     } finally {
       projectScriptStartingRef.current = false
     }
-  }, [activeCwd, activeProject, activeTerminalSessionPath, bridge, finishProjectScriptRun, grantProject, patchProjectScripts, terminalSessionKey, terminalSessions])
+  }, [activeCwd, activeProject, activeTerminalSessionPath, bridge, finishProjectScriptRun, grantProject, patchProjectScripts, terminalWorkspaceKey, terminalSessions])
   const saveProjectScripts = useCallback(async (scripts: { setup: string; run: string }) => {
     if (!bridge || !activeProject) throw new Error('Select a project first.')
     const project = activeProject.inferred ? await grantProject(activeProject) : activeProject

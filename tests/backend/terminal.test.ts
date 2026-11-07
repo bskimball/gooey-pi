@@ -57,8 +57,53 @@ describe('TerminalService', () => {
     expect(service.readActive('/sessions/one.jsonl')).toMatchObject({ label: 'zsh 2', content: '$ second', cwd })
     await service.kill(owner, second.terminalId)
     expect(service.readActive('/sessions/one.jsonl')).toBeUndefined()
-    await expect(service.bindSession(owner, first.terminalId, '/sessions/two.jsonl')).rejects.toThrow('another task')
+    service.setActiveContext(owner, first.terminalId, { label: 'zsh 1', content: '$ first', truncated: false })
+    await service.bindSession(owner, first.terminalId, '/sessions/two.jsonl')
+    expect(service.readActive('/sessions/one.jsonl')).toBeUndefined()
+    expect(service.readActive('/sessions/two.jsonl')).toBeUndefined()
+    service.setActiveContext(owner, first.terminalId, { label: 'zsh 1', content: '$ handed over', truncated: false })
+    expect(service.readActive('/sessions/two.jsonl')).toMatchObject({ content: '$ handed over' })
+    await service.bindSession(owner, first.terminalId, null)
+    expect(service.readActive('/sessions/two.jsonl')).toBeUndefined()
+    service.setActiveContext(owner, first.terminalId, { label: 'zsh 1', content: '$ detached', truncated: false })
+    expect(service.readActive('/sessions/two.jsonl')).toBeUndefined()
     await service.kill(owner, first.terminalId)
+  })
+
+  it('applies only the latest session bind when authorization resolves out of order', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-pty-bind-order-')); dirs.push(cwd)
+    const owner = { id: 48, isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
+    const pending = new Map<string, () => void>()
+    const authorize = (path: string) => new Promise<string>((resolve) => { pending.set(path, () => resolve(path)) })
+    const service = new TerminalService(async () => cwd, () => testShell, authorize)
+    const created = await service.create(owner, { cwd, shell: testShell, cols: 80, rows: 24 })
+    try {
+      const stale = service.bindSession(owner, created.terminalId, '/sessions/stale.jsonl')
+      const current = service.bindSession(owner, created.terminalId, '/sessions/current.jsonl')
+      pending.get('/sessions/current.jsonl')!()
+      await expect(current).resolves.toBe(true)
+      pending.get('/sessions/stale.jsonl')!()
+      await expect(stale).resolves.toBe(false)
+      service.setActiveContext(owner, created.terminalId, { label: 'zsh 1', content: '$ current', truncated: false })
+      expect(service.readActive('/sessions/current.jsonl')).toMatchObject({ content: '$ current' })
+      expect(service.readActive('/sessions/stale.jsonl')).toBeUndefined()
+
+      const superseded = service.bindSession(owner, created.terminalId, '/sessions/stale.jsonl')
+      expect(service.readActive('/sessions/current.jsonl')).toBeUndefined()
+      await expect(service.bindSession(owner, created.terminalId, null)).resolves.toBe(true)
+      pending.get('/sessions/stale.jsonl')!()
+      await expect(superseded).resolves.toBe(false)
+      expect(service.readActive('/sessions/current.jsonl')).toBeUndefined()
+
+      const archived = service.bindSession(owner, created.terminalId, '/sessions/archived.jsonl')
+      service.unbindSession('/sessions/archived.jsonl')
+      pending.get('/sessions/archived.jsonl')!()
+      await expect(archived).resolves.toBe(false)
+      service.setActiveContext(owner, created.terminalId, { label: 'zsh 1', content: '$ after archive', truncated: false })
+      expect(service.readActive('/sessions/archived.jsonl')).toBeUndefined()
+    } finally {
+      await service.kill(owner, created.terminalId)
+    }
   })
   it('runs configured commands without npm prefix overrides while preserving PREFIX', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'gooeypi-project-run-')); dirs.push(cwd)
@@ -108,21 +153,22 @@ describe('TerminalService', () => {
     } finally { try { process.kill(childPid, 'SIGKILL') } catch { /* test cleanup */ } }
   }, 15_000)
 
-  it('kills dev-server descendants only for terminals bound to the archived session', async () => {
+  it('keeps project dev servers running when their session is archived', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'prime-work-pty-session-')); dirs.push(cwd)
     const pidFile = join(cwd, 'dev-server.pid')
     const owner = { id: 47, isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
     const service = new TerminalService(async () => cwd, () => testShell, async (path) => path)
     const archived = await service.create(owner, { cwd, sessionPath: '/sessions/archived.jsonl', shell: testShell, cols: 80, rows: 24 })
-    const retained = await service.create(owner, { cwd, sessionPath: '/sessions/retained.jsonl', shell: testShell, cols: 80, rows: 24 })
     service.input(owner, archived.terminalId, `${backgroundCommand(cwd, pidFile)}\r`)
     await waitFor(() => { try { return Number(readFileSync(pidFile, 'utf8').trim()) > 0 } catch { return false } })
     const childPid = Number(readFileSync(pidFile, 'utf8').trim())
     try {
-      await service.killForSession('/sessions/./archived.jsonl')
+      service.setActiveContext(owner, archived.terminalId, { label: 'zsh 1', content: '$ dev', truncated: false })
+      service.unbindSession('/sessions/./archived.jsonl')
+      expect(service.readActive('/sessions/archived.jsonl')).toBeUndefined()
+      expect(() => process.kill(childPid, 0)).not.toThrow()
+      expect(await service.kill(owner, archived.terminalId)).toBe(true)
       await waitFor(() => { try { process.kill(childPid, 0); return false } catch { return true } })
-      expect(await service.kill(owner, archived.terminalId)).toBe(false)
-      expect(await service.kill(owner, retained.terminalId)).toBe(true)
     } finally { try { process.kill(childPid, 'SIGKILL') } catch { /* test cleanup */ } }
   }, 15_000)
 

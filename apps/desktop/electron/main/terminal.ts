@@ -18,6 +18,8 @@ interface OwnedTerminal {
   cwd: string
   shell: string
   sessionPath?: string
+  /** Latest bind awaiting authorization; older or cancelled binds must not apply. */
+  pendingBind?: { sessionPath?: string }
   activeContext?: TerminalActiveContext
   outputWindowStartedAt: number
   outputWindowBytes: number
@@ -182,12 +184,20 @@ export class TerminalService {
     terminal.terminal.write(data)
   }
 
+  /** Hands a project terminal to the visible session; null detaches it from every session. */
   async bindSession(owner: WebContents, idValue: unknown, sessionPathValue: unknown): Promise<boolean> {
     const id = requireString(idValue, 'terminalId', { min: 1, max: 128 })
-    this.owned(owner, id)
-    const sessionPath = canonicalSessionPath(await this.authorizeSessionPath(requireString(sessionPathValue, 'sessionPath', { min: 1, max: 4096 })))
+    const requested = sessionPathValue === null ? undefined : requireString(sessionPathValue, 'sessionPath', { min: 1, max: 4096 })
+    const bind = { sessionPath: requested === undefined ? undefined : canonicalSessionPath(requested) }
+    const previous = this.owned(owner, id)
+    previous.pendingBind = bind
+    // The outgoing session loses access immediately, even if authorization later fails.
+    if (previous.sessionPath !== bind.sessionPath) this.detachSession(id, previous)
+    const sessionPath = requested === undefined ? undefined : canonicalSessionPath(await this.authorizeSessionPath(requested))
     const terminal = this.owned(owner, id)
-    if (terminal.sessionPath && terminal.sessionPath !== sessionPath) throw new Error('Terminal already belongs to another task')
+    if (terminal.pendingBind !== bind) return false
+    terminal.pendingBind = undefined
+    if (terminal.sessionPath !== sessionPath) this.detachSession(id, terminal)
     terminal.sessionPath = sessionPath
     return true
   }
@@ -241,11 +251,13 @@ export class TerminalService {
     await Promise.all([...new Set([...this.terminationPromises.values(), ...starting])])
   }
 
-  /** Terminates every PTY and descendant process tree bound to one session. */
-  async killForSession(sessionPathValue: unknown): Promise<void> {
+  /** Detaches terminals from an archived session; their processes keep running for the project. */
+  unbindSession(sessionPathValue: unknown): void {
     const sessionPath = canonicalSessionPath(requireString(sessionPathValue, 'sessionPath', { min: 1, max: 4096 }))
-    const matches = [...this.terminals].filter(([, terminal]) => terminal.sessionPath === sessionPath)
-    await Promise.all(matches.map(([id, terminal]) => this.terminate(id, terminal)))
+    for (const [id, terminal] of this.terminals) {
+      if (terminal.pendingBind?.sessionPath === sessionPath) terminal.pendingBind = undefined
+      if (terminal.sessionPath === sessionPath) this.detachSession(id, terminal)
+    }
   }
 
   async killForProjectRoots(roots: string[]): Promise<void> {
@@ -349,6 +361,12 @@ export class TerminalService {
     const terminal = this.terminals.get(id)
     if (!terminal || terminal.ownerId !== owner.id) throw new Error('Terminal was not found')
     return terminal
+  }
+
+  private detachSession(id: string, terminal: OwnedTerminal): void {
+    this.removeActive(id, terminal)
+    terminal.activeContext = undefined
+    terminal.sessionPath = undefined
   }
 
   private removeActive(id: string, terminal: OwnedTerminal): void {

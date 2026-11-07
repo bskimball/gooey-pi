@@ -298,7 +298,6 @@ describe('prompt admission versus background transcript reads', () => {
       setSubmitting: () => undefined,
       refreshSchedules: async () => undefined,
       resetBrowserView: () => undefined,
-      closeTerminalForSession: () => undefined,
       clearSessionAttention: () => undefined,
       reportError: () => undefined,
     }))

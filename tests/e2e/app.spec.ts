@@ -1122,7 +1122,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).not.toBe(guestId)
   })
 
-  test('stops a dev server launched from the thread terminal when archived', async () => {
+  test('keeps a dev server launched from the project terminal running when the session is archived', async () => {
     const sessionRow = page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' })
     await sessionRow.locator('.session-row').click()
     await page.getByLabel(/Toggle terminal/).click()
@@ -1130,24 +1130,26 @@ test.describe('Prime Work desktop smoke', () => {
     const input = terminal.locator('.xterm-helper-textarea')
     await expect(input).toBeVisible()
     const pidFile = join(fixtureRoot, 'archived-dev-server.pid')
+    const serverScript = join(fixtureRoot, 'archived-dev-server.cjs')
+    writeFileSync(serverScript, `require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)\n`)
     await input.click()
-    await page.keyboard.type(`/bin/sh -c 'echo $$ > ${pidFile}; while true; do /bin/sleep 1; done'`)
+    await page.keyboard.type(`node ${JSON.stringify(serverScript)}`)
     await page.keyboard.press('Enter')
     await expect.poll(() => existsSync(pidFile)).toBe(true)
     const serverPid = Number(readFileSync(pidFile, 'utf8').trim())
     expect(serverPid).toBeGreaterThan(0)
 
     try {
+      await sessionRow.hover()
       await sessionRow.getByTitle('Archive Hermetic desktop fixture').click()
       await sessionRow.getByTitle('Confirm archive Hermetic desktop fixture').click()
 
       await expect(sessionRow).toHaveCount(0)
-      await expect(page.locator('.terminal-drawer')).toHaveCount(0)
-      await expect.poll(() => {
-        try { process.kill(serverPid, 0); return false } catch { return true }
-      }).toBe(true)
+      await page.locator('.session-row-wrap').filter({ hasText: 'Ownership peer fixture' }).locator('.session-row').click()
+      await expect(page.locator('.terminal-drawer:not([hidden])')).toHaveCount(1)
+      expect(processIsAlive(serverPid)).toBe(true)
     } finally {
-      try { process.kill(serverPid, 'SIGKILL') } catch { /* archive cleanup succeeded */ }
+      try { process.kill(serverPid, 'SIGKILL') } catch { /* test cleanup */ }
     }
   })
 
@@ -1977,7 +1979,7 @@ test.describe('Prime Work desktop smoke', () => {
     // Electron app and exercises the native node-pty shutdown path.
   })
 
-  test('restores each session terminal without leaking it into another session', async () => {
+  test('shares a terminal across sessions in one folder without leaking it into another folder', async () => {
     await page.getByLabel(/Toggle terminal/).click()
     const visibleDrawer = page.locator('.terminal-drawer:not([hidden])')
     const input = visibleDrawer.locator('.xterm-helper-textarea')
@@ -2000,6 +2002,8 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(primaryDrawer.locator('.xterm-rows')).not.toContainText('secondary-session-state')
 
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
+    await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText('secondary-session-state')
+    await page.locator('.session-row-wrap').filter({ hasText: 'Ownership peer fixture' }).locator('.session-row').click()
     await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText('secondary-session-state')
     await page.locator('.session-row').filter({ hasText: 'Primary workspace fixture' }).click()
     await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText(/prime-work-e2e-[^/]+\/project/)

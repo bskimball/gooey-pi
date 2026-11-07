@@ -285,11 +285,11 @@ describe('registerIpc verify gate', () => {
     const rename = vi.fn().mockResolvedValue(true)
     const archive = vi.fn().mockResolvedValue(true)
     const closeForSession = vi.fn()
-    const killForSession = vi.fn().mockResolvedValue(undefined)
+    const unbindSession = vi.fn()
     stubs.projects = { authorizePath }
     stubs.sessions = { requireSessionPath, create, read, rename, archive }
     stubs.browser = { closeForSession }
-    stubs.terminals = { killForSession }
+    stubs.terminals = { unbindSession }
     await expect(handlers.get('sessions:create')!(event, '/repo')).resolves.toBe('created')
     expect(create).toHaveBeenCalledWith('/authorized')
     await expect(handlers.get('sessions:read')!(event, '/session')).resolves.toBe('transcript')
@@ -298,7 +298,7 @@ describe('registerIpc verify gate', () => {
     expect(rename).toHaveBeenCalledWith('/session', 'Title')
     await expect(handlers.get('sessions:archive')!(event, '/session', true)).resolves.toBe(true)
     expect(closeForSession).toHaveBeenCalledWith('/session')
-    expect(killForSession).toHaveBeenCalledWith('/session')
+    expect(unbindSession).toHaveBeenCalledWith('/session')
     requireSessionPath.mockRejectedValue(new Error('denied'))
     await expect(handlers.get('sessions:archive')!(event, '/denied', true)).rejects.toThrow('denied')
     expect(archive).toHaveBeenCalledOnce()

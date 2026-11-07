@@ -179,8 +179,8 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
 
   useEffect(() => {
     const terminalId = terminalIdRef.current
-    if (!terminalId || !sessionPath || !window.prime) return
-    void window.prime.terminal.bindSession(terminalId, sessionPath).then(() => scheduleActiveContext()).catch(() => undefined)
+    if (!terminalId || !window.prime) return
+    void window.prime.terminal.bindSession(terminalId, sessionPath ?? null).then(() => scheduleActiveContext()).catch(() => undefined)
   }, [sessionPath])
 
   useEffect(() => {

@@ -417,7 +417,7 @@ export function registerIpc(
 		const result = await routed.service.archive(filePath, archived);
 		if (archived === true) {
 			services.browser.closeForSession(filePath);
-			await services.terminals.killForSession(filePath);
+			services.terminals.unbindSession(filePath);
 		}
 		return result;
 	});
