@@ -633,6 +633,8 @@ describe('VS Code editor integration', () => {
   })
 
   it('registers editor tools and sends authenticated calls to the bridge', async () => {
+    vi.stubEnv('APEX_EDITOR_URL', undefined)
+    vi.stubEnv('APEX_EDITOR_TOKEN', undefined)
     vi.stubEnv('PRIME_WORK_BROWSER_URL', 'http://127.0.0.1:12345/v1/call')
     vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'test-token')
     const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ ok: true, result: { dirty: true, text: 'buffer' } }) })
