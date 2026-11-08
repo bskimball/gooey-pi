@@ -198,7 +198,8 @@ export class SessionService {
         ? runtimeBySession.get(resolve(metadata.filePath))
         : this.runtimeForSession(metadata.filePath)
       if (runtime) {
-        metadata.status = runtime.isStreaming || runtime.isCompacting ? 'running' : 'idle'
+        if (runtime.isStreaming || runtime.isCompacting) metadata.status = 'running'
+        else if (metadata.status === 'running' || metadata.status === 'waiting') metadata.status = 'idle'
         if (runtime.model?.provider && runtime.model.id) {
           metadata.provider = runtime.model.provider
           metadata.model = runtime.model.id

@@ -40,6 +40,9 @@ export function applySessionLifecycleEvent(
   visible: boolean,
   now = Date.now(),
 ): SessionRecord {
+  if (event.type === 'runtime_exit' && session.status !== 'running' && session.status !== 'waiting') {
+    return session
+  }
   const change = sessionLifecycleChange(event)
   if (!change) return session
   const eventRevision = (session.eventRevision ?? 0) + 1

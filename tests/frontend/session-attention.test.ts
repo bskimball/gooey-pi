@@ -114,6 +114,38 @@ describe('session lifecycle attention', () => {
     expect(running.status).toBe('running')
     expect(completed).toMatchObject({ status: 'complete', unread: false, eventRevision: 2 })
   })
+
+  it('ignores idle runtime eviction exits on already reviewed or settled sessions', () => {
+    const reviewed = {
+      ...applySessionLifecycleEvent(session(), { type: 'agent_end' }, false, 1),
+      unread: false,
+    }
+    expect(applySessionLifecycleEvent(reviewed, { type: 'runtime_exit', expected: true }, false, 2)).toBe(reviewed)
+    expect(applySessionLifecycleEvent(reviewed, { type: 'runtime_exit', expected: false }, false, 2)).toBe(reviewed)
+    expect(applySessionLifecycleEvent(session(), { type: 'runtime_exit', expected: true }, false, 2)).toEqual(session())
+
+    const running = applySessionLifecycleEvent(session(), { type: 'agent_start' }, false, 1)
+    expect(applySessionLifecycleEvent(running, { type: 'runtime_exit', expected: true }, false, 2)).toMatchObject({
+      status: 'complete',
+      unread: true,
+      eventRevision: 2,
+    })
+    expect(applySessionLifecycleEvent(running, { type: 'runtime_exit', expected: false }, false, 2)).toMatchObject({
+      status: 'failed',
+      eventRevision: 2,
+    })
+
+    const waiting = applySessionLifecycleEvent(session(), { type: 'extension_ui_request' }, false, 1)
+    expect(applySessionLifecycleEvent(waiting, { type: 'runtime_exit', expected: true }, false, 2)).toMatchObject({
+      status: 'complete',
+      unread: true,
+      eventRevision: 2,
+    })
+    expect(applySessionLifecycleEvent(waiting, { type: 'runtime_exit', expected: false }, false, 2)).toMatchObject({
+      status: 'failed',
+      eventRevision: 2,
+    })
+  })
 })
 
 describe('catalog merges over live session state', () => {
@@ -304,6 +336,37 @@ describe('catalog merges over live session state', () => {
 
     expect(sameRevision.unread).toBeUndefined()
     expect(nextRevision.unread).toBe(true)
+  })
+
+  it('does not resurrect unread state when a stale in-flight running scan resolves after review', () => {
+    const running = applySessionLifecycleEvent(session(), { type: 'agent_start' }, false, Date.parse('2025-01-01T00:00:02.000Z'))
+    const completed = applySessionLifecycleEvent(running, { type: 'agent_end' }, false, Date.parse('2025-01-01T00:00:05.050Z'))
+    const reviewed: SessionRecord = { ...completed, unread: false }
+
+    const staleRunningDisk: SessionRecord = {
+      ...catalogSnapshot(running, 'running'),
+      updatedAt: '2025-01-01T00:00:04.000Z',
+    }
+    const [afterStaleRunning] = mergeSessionCatalog([reviewed], [staleRunningDisk], undefined, new Map(), 0)
+    expect(afterStaleRunning).toMatchObject({
+      status: 'complete',
+      unread: false,
+      updatedAt: '2025-01-01T00:00:05.050Z',
+      eventRevision: 2,
+      statusEventRevision: 2,
+    })
+
+    const finalCompleteDisk: SessionRecord = {
+      ...catalogSnapshot(completed, 'complete'),
+      updatedAt: '2025-01-01T00:00:05.000Z',
+    }
+    const [afterFinalComplete] = mergeSessionCatalog([afterStaleRunning], [finalCompleteDisk], undefined, new Map(), 0)
+    expect(afterFinalComplete).toMatchObject({
+      status: 'complete',
+      unread: false,
+      updatedAt: '2025-01-01T00:00:05.050Z',
+    })
+    expect(sessionAttentionSignature(afterFinalComplete)).toBeUndefined()
   })
 
   it('keeps a newer optimistic lastUserMessageAt over the disk value', () => {

@@ -63,9 +63,13 @@ export function useAgentEvents({
       if (type === 'session_persisted' && typeof event.sessionFile === 'string'
         && event.harness === 'pi') {
         const harness = event.harness
-        runtimeSessionsRef.current.set(runtimeId, event.sessionFile)
+        const persistedFile = event.sessionFile
+        runtimeSessionsRef.current.set(runtimeId, persistedFile)
         const isCurrentHarness = () => workspaceRef.current.project?.harness === harness
-        void indexStartedSession({ bridge, harness, sessionFile: event.sessionFile, setSessions, isCurrent: isCurrentHarness })
+        const activeFile = () => activeSessionVisible
+          ? workspaceRef.current.sessionFile ?? (runtimeIdRef.current === runtimeId ? persistedFile : undefined)
+          : undefined
+        void indexStartedSession({ bridge, harness, sessionFile: persistedFile, setSessions, isCurrent: isCurrentHarness, activeFile })
           .then((session) => { if (session && isCurrentHarness()) promoteStartedSession?.(session, runtimeId) })
           .catch(() => undefined)
         return
@@ -75,7 +79,8 @@ export function useAgentEvents({
       if (sessionFile) {
         runtimeSessionsRef.current.set(runtimeId, sessionFile)
         if (sessionLifecycleChange(event)) {
-          const visible = activeSessionVisible && workspaceRef.current.sessionFile === sessionFile
+          const visible = activeSessionVisible
+            && (workspaceRef.current.sessionFile === sessionFile || (!workspaceRef.current.sessionFile && runtimeIdRef.current === runtimeId))
           setSessions((items) => items.map((session) => session.filePath === sessionFile
             ? applySessionLifecycleEvent(session, event, visible)
             : session))

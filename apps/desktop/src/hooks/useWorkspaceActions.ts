@@ -52,9 +52,10 @@ interface StartedSessionIndexInput {
   sessionFile: string | undefined
   setSessions: Dispatch<SetStateAction<SessionRecord[]>>
   isCurrent?(): boolean
+  activeFile?(): string | undefined
 }
 
-export async function indexStartedSession({ bridge, harness, sessionFile, setSessions, isCurrent }: StartedSessionIndexInput): Promise<SessionRecord | undefined> {
+export async function indexStartedSession({ bridge, harness, sessionFile, setSessions, isCurrent, activeFile }: StartedSessionIndexInput): Promise<SessionRecord | undefined> {
   if (!sessionFile) return
   // Publish only this session, so a delayed scan cannot replace newer catalog
   // entries belonging to other submissions.
@@ -66,7 +67,7 @@ export async function indexStartedSession({ bridge, harness, sessionFile, setSes
       const previous = current.find((session) => session.filePath === sessionFile)
       if (!previous) return [...current, indexedSession]
       if (Date.parse(previous.updatedAt) > Date.parse(indexedSession.updatedAt)) return current
-      const [merged] = mergeSessionCatalog([previous], [indexedSession], undefined, new Map(), 0)
+      const [merged] = mergeSessionCatalog([previous], [indexedSession], activeFile?.(), new Map(), 0)
       return current.map((session) => session.filePath === sessionFile ? merged : session)
     })
   }
@@ -133,30 +134,28 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     }
     persistPanel({ terminalOpen: !settingsState.terminalOpen })
   }
+  const acknowledgeSession = (session = getDeps().workspace?.workspaceRef?.current?.session) => {
+    const { sessions, setSessions, clearSessionAttention } = getDeps()
+    const target = session ? sessions?.find((item) => item.id === session.id) ?? session : undefined
+    if (!target) return
+    clearSessionAttention?.(target)
+    setSessions?.((items) => items.map((item) => item.id === target.id ? { ...item, unread: false } : item))
+  }
   const selectProject = async (project: ProjectRecord) => {
-    const { layout, settingsState, sessions, workspace, setSessions, setView, clearSessionAttention, reportError } = getDeps()
+    const { layout, settingsState, sessions, workspace, setView, reportError } = getDeps()
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
-    if (workspace.workspaceRef.current.project?.id === project.id) {
-      setView('session')
-      return
-    }
+    if (workspace.workspaceRef.current.project?.id === project.id) { acknowledgeSession(); setView('session'); return }
     const session = sessions.find((candidate) => !candidate.archived && projectContainsPath(project, candidate.projectPath))
-    if (session) {
-      clearSessionAttention(session)
-      setSessions((items) => items.map((item) => item.id === session.id ? { ...item, unread: false } : item))
-    }
+    if (session) acknowledgeSession(session)
     const generation = workspace.activateWorkspace(project, session)
     setView('session')
-    try {
-      await touchProject(project)
-      await workspace.reconcileRuntime(generation)
-    } catch (error) { if (workspace.workspaceRef.current.generation === generation) reportError(error) }
+    try { await touchProject(project); await workspace.reconcileRuntime(generation) }
+    catch (error) { if (workspace.workspaceRef.current.generation === generation) reportError(error) }
   }
   const selectSession = async (session: SessionRecord) => {
-    const { layout, settingsState, projects, workspace, setSessions, setView, clearSessionAttention, reportError } = getDeps()
+    const { layout, settingsState, projects, workspace, setView, reportError } = getDeps()
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
-    clearSessionAttention(session)
-    setSessions((items) => items.map((item) => item.id === session.id ? { ...item, unread: false } : item))
+    acknowledgeSession(session)
     const project = findProjectForSession(projects, session)
     if (!project) { reportError('This session is not contained by an available project.'); return }
     const generation = workspace.activateWorkspace(project, session)
@@ -192,6 +191,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
   const navigate = (nextView: WorkspaceView) => {
     const { layout, settingsState, setView, setPaletteOpen } = getDeps()
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
+    if (nextView === 'session') acknowledgeSession()
     setView(nextView); setPaletteOpen(false)
   }
   const renameSession = async (session: SessionRecord, title: string) => {

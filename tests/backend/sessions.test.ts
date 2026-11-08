@@ -944,6 +944,21 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     expect((await service.list())[0]?.archived).toBe(false)
   })
 
+  it('preserves completed status when an idle runtime is cached for the session', async () => {
+    const { root, project, service } = setup()
+    const file = join(root, 'completed.jsonl')
+    writeSession(file, project, 'completed')
+    appendFileSync(file, `${JSON.stringify({ type: 'message', id: 'completed-reply', parentId: 'completed-message', message: { role: 'assistant', content: 'done' } })}\n`)
+    const safePath = await service.requireSessionPath(file)
+    service.bindRuntimeHooks({
+      get: (candidate) => candidate === safePath ? { isStreaming: false } : undefined,
+      stop: async () => undefined,
+      rename: async () => false,
+    })
+
+    expect((await service.list())[0]?.status).toBe('complete')
+  })
+
   it('calls renameFile only when the runtime hook returns false and the CLI path is null', async () => {
     const renameFile = vi.fn(() => true)
     const { root, project, service } = setup(undefined, { renameFile })

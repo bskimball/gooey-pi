@@ -37,12 +37,17 @@ interface UseBootstrapOptions {
 
 const NO_OPEN_EXTENSION_UI = () => false
 
-function sessionRecordChanged(previous: SessionRecord, record: SessionRecord, status = record.status): boolean {
+function sessionRecordChanged(
+  previous: SessionRecord,
+  record: SessionRecord,
+  status = record.status,
+  updatedAt = record.updatedAt,
+): boolean {
   return previous.id !== record.id
     || previous.projectPath !== record.projectPath
     || previous.title !== record.title
     || previous.createdAt !== record.createdAt
-    || previous.updatedAt !== record.updatedAt
+    || previous.updatedAt !== updatedAt
     || previous.lastUserMessageAt !== record.lastUserMessageAt
     || previous.status !== status
     || previous.model !== record.model
@@ -63,14 +68,16 @@ function catalogMergeStatus(
   // The catalog cannot see an open extension-UI request, so renderer-owned
   // waiting state remains authoritative until that request settles.
   if (previous?.status === 'waiting' && sessionHasOpenExtensionUi(record.filePath)) return previous.status
-  // Runtime-backed catalog scans can report idle after agent_end even though
-  // the renderer has already observed the terminal event. The matching status
-  // revision proves that this non-idle status is live renderer state;
-  // startup/external records and catalog-owned transitions have no provenance.
-  if (record.status === 'idle' && typeof previous?.statusEventRevision === 'number'
+  // Runtime-backed catalog scans can report idle after agent_end (or an
+  // earlier in-flight running snapshot) even though the renderer has already
+  // observed the terminal event. The matching status revision proves that this
+  // non-idle status is live renderer state; startup/external records and
+  // catalog-owned transitions have no provenance.
+  if (typeof previous?.statusEventRevision === 'number'
     && previous.statusEventRevision === previous.eventRevision
     && (previous.status === 'running' || previous.status === 'waiting'
-      || previous.status === 'complete' || previous.status === 'failed')) return previous.status
+      || previous.status === 'complete' || previous.status === 'failed')
+    && (record.status === 'idle' || Date.parse(record.updatedAt) < Date.parse(previous.updatedAt))) return previous.status
   return record.status
 }
 
@@ -90,10 +97,14 @@ export function mergeSessionCatalog(
     // snapshots, but a catalog transition to a different status takes
     // ownership. eventRevision itself remains monotonic for attention IDs.
     const statusEventRevision = status === previous?.status ? previous.statusEventRevision : undefined
+    const updatedAt = status === previous?.status && previous?.updatedAt
+      && Date.parse(previous.updatedAt) > Date.parse(record.updatedAt)
+      ? previous.updatedAt
+      : record.updatedAt
     const revisionAdvanced = !previous || Date.parse(record.updatedAt) > Date.parse(previous.updatedAt)
     const needsAttention = (record.status === 'waiting' || record.status === 'complete')
       && previous !== undefined && previous.status !== record.status && revisionAdvanced
-    const recordChanged = !previous || sessionRecordChanged(previous, record, status)
+    const recordChanged = !previous || sessionRecordChanged(previous, record, status, updatedAt)
     // A session's sync revision only advances when its own file changed:
     // catalog-wide ticks must not re-sync (or re-render) untouched sessions.
     const syncRevision = changedFiles.get(record.filePath)
@@ -108,6 +119,7 @@ export function mergeSessionCatalog(
       && previous.lastUserMessageAt === lastUserMessageAt) return previous
     return {
       ...record,
+      updatedAt,
       provider: record.provider ?? previous?.provider,
       model: record.model ?? previous?.model,
       thinkingLevel: record.thinkingLevel ?? previous?.thinkingLevel,
@@ -299,7 +311,9 @@ export function useBootstrap({
           queryKey: sessionCatalogKey(harness), staleTime: 0,
           queryFn: async () => {
             const records = await bridge.sessions.list(undefined, true, harness)
-            return mergeSessionCatalog(queryClient.getQueryData<SessionRecord[]>(sessionCatalogKey(harness)) ?? [],
+            const current = queryClient.getQueryData<SessionRecord[]>(sessionCatalogKey(harness)) ?? []
+            if (disposed || currentRequest !== requestId) return current
+            return mergeSessionCatalog(current,
               records, workspaceRef.current.sessionFile, changedFiles, catalogRevision, sessionHasOpenExtensionUi)
           },
         })).then((nextSessions) => {
