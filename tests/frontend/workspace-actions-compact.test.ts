@@ -16,11 +16,15 @@ describe('runtime command response contracts', () => {
   it('dispatches only listed extension commands through immediate prompt RPC', async () => {
     const command = vi.fn(async () => ({ data: { commands: [{ name: 'deploy', source: 'extension' }, { name: 'template', source: 'prompt' }] } }))
     const bridge = { agent: { command } } as unknown as PrimeWorkApi
-    expect(await runExtensionCommandNow(bridge, 'r', 'plain text')).toBe(false)
+    let messages: TranscriptMessage[] = []
+    const echo = { isCurrent: () => true, setMessages: (update: TranscriptMessage[] | ((items: TranscriptMessage[]) => TranscriptMessage[])) => { messages = typeof update === 'function' ? update(messages) : update } }
+    expect(await runExtensionCommandNow(bridge, 'r', 'plain text', () => true, echo)).toBe(false)
     expect(command).not.toHaveBeenCalled()
-    expect(await runExtensionCommandNow(bridge, 'r', '/template args')).toBe(false)
-    expect(await runExtensionCommandNow(bridge, 'r', '/deploy args')).toBe(true)
+    expect(await runExtensionCommandNow(bridge, 'r', '/template args', () => true, echo)).toBe(false)
+    expect(messages).toEqual([])
+    expect(await runExtensionCommandNow(bridge, 'r', '/deploy args', () => true, echo)).toBe(true)
     expect(command).toHaveBeenLastCalledWith('r', { type: 'prompt', message: '/deploy args', streamingBehavior: 'followUp' })
+    expect(messages).toMatchObject([{ role: 'user', parts: [{ type: 'text', text: '/deploy args' }] }])
   })
 
   it.each([

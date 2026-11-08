@@ -310,7 +310,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           completeQueuedFlush()
           return
         }
-        if (images.length === 0 && await runExtensionCommandNow(bridge, currentRuntime.runtimeId, prompt, ownsCurrentRuntime)) { completeQueuedFlush(); return }
+        if (images.length === 0 && await runExtensionCommandNow(bridge, currentRuntime.runtimeId, prompt, ownsCurrentRuntime, { setMessages: workspace.setMessages, isCurrent: ownsCurrentRuntime })) { completeQueuedFlush(); return }
       } catch (error) { reportError(error); throw error }
       if (intent === 'queue' && images.length === 0) {
         if (!queuedFlushPromptId) workspace.queuePrompt(prompt, intent)
@@ -527,7 +527,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           if (!ownsModeRuntime()) return
           if (refreshed) workspace.attachRuntime(refreshed, generation)
           completeQueuedFlush()
-        } else if (activeRuntime.isStreaming && images.length === 0 && await runExtensionCommandNow(bridge, activeRuntime.runtimeId, prompt, () => submissionIsCurrent() || continueInBackground)) {
+        } else if (activeRuntime.isStreaming && images.length === 0 && await runExtensionCommandNow(bridge, activeRuntime.runtimeId, prompt, () => submissionIsCurrent() || continueInBackground, { setMessages: workspace.setMessages, isCurrent: () => submissionIsCurrent() && !userMessageAppended })) {
           completeQueuedFlush()
         } else if (activeRuntime.isStreaming) {
           // Follow-ups are daemon-owned. Steers get a renderer-only pending

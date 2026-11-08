@@ -7,12 +7,14 @@ import type { PrimeWorkApi, TranscriptMessage } from '@/types/api'
  * Runs a runtime extension command through `prompt`, which Pi executes
  * immediately even mid-turn; as a steer or follow-up Pi would reject it.
  * Returns false, sending nothing, when the prompt is not an extension command.
+ * Pi does not echo extension commands, so a sent command is shown as a user row.
  */
 export async function runExtensionCommandNow(
   bridge: PrimeWorkApi,
   runtimeId: string,
   prompt: string,
-  ownsRuntime: () => boolean = () => true,
+  ownsRuntime: () => boolean,
+  echo: { setMessages: Dispatch<SetStateAction<TranscriptMessage[]>>; isCurrent(): boolean },
 ): Promise<boolean> {
   const slash = parseSlashCommand(prompt)
   if (!slash) return false
@@ -20,6 +22,8 @@ export async function runExtensionCommandNow(
   if (!ownsRuntime()) throw new Error('Workspace changed before the command could be sent.')
   if (!hasPiExtensionCommand(listed, slash.name)) return false
   await bridge.agent.command(runtimeId, { type: 'prompt', message: prompt, streamingBehavior: 'followUp' })
+  const sentAt = Date.now()
+  if (echo.isCurrent()) echo.setMessages((items) => [...items, { id: `user-${sentAt}`, role: 'user', timestamp: sentAt, parts: [{ type: 'text', text: prompt }] }])
   return true
 }
 
