@@ -675,6 +675,27 @@ describe('VS Code editor integration', () => {
     expect(session.state.queued).toEqual([])
   })
 
+  it('keeps queued prompts paused when an extension cancels a new session', async () => {
+    const command = vi.fn().mockResolvedValue({ cancelled: true })
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      rpc: { command },
+      seq: 0,
+      state: { isStreaming: true, commands: [], queued: [] },
+      update(patch: object) { Object.assign(this.state, patch) },
+      addOp: vi.fn(),
+      notice: vi.fn(),
+      guard: (fn: () => Promise<unknown>) => fn(),
+    })
+    await session.send('Hold this', [], 'queue', '')
+    session.state.isStreaming = false
+    await session.newSession()
+    session.flushQueue()
+    expect(command).toHaveBeenCalledTimes(1)
+    expect(command).toHaveBeenCalledWith('new_session')
+    expect(session.state.queued).toHaveLength(1)
+  })
+
   it('registers editor tools and sends authenticated calls to the bridge', async () => {
     vi.stubEnv('APEX_EDITOR_URL', undefined)
     vi.stubEnv('APEX_EDITOR_TOKEN', undefined)

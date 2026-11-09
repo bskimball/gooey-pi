@@ -90,7 +90,7 @@ export const apexSessionTurnMachine = setup({
       actions: assign({
         switching: true,
         queuePaused: true,
-        wasPausedBeforeSwitch: false,
+        wasPausedBeforeSwitch: true,
       }),
     },
     NEW_SESSION_READY: {

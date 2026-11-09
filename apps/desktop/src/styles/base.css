@@ -2,7 +2,7 @@
    picks - on Windows that is Segoe UI's thin, cramped Arabic. Vazirmatn is bundled (no
    network, and `font-src 'self'`) as a weight-variable Arabic subset: the variable axis is
    required because `font-synthesis: none` would otherwise render bold Persian at regular
-   weight, and `unicode-range` keeps every Latin run on the system font, including inside
+   weight, and `unicode-range` keeps Latin runs on the Latin UI font, including inside
    mixed Latin/Persian lines. */
 @font-face {
   font-family: 'Vazirmatn';
