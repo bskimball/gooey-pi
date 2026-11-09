@@ -116,14 +116,14 @@ export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): s
   return boundText(serialize(raw).replace(/\s+/g, ' ').trim(), 180, '…')
 }
 
-/** Reasoning stays readable while its turn runs; once the turn settles it folds to one quiet line. */
+/** Reasoning stays readable while its turn runs and after it settles; a Thought header lets you fold it away. */
 function ReasoningPart({ part, live = false, streaming = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const bodyId = useId()
   if (live && !part.text.trim()) return null
   const body = <MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} />
   if (live) return <div className="activity-line activity-line--reasoning">{body}</div>
-  return <div className="activity-line activity-line--reasoning is-collapsed">
+  return <div className="activity-line activity-line--reasoning is-settled">
     <button type="button" className="activity-thought__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
       <span className="activity-line__icon"><Brain size={14} /></span>
       <span className="activity-line__kind">Thought</span>

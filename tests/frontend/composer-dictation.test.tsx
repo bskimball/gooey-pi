@@ -3,6 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createActor, fromPromise, type SnapshotFrom } from 'xstate'
+import { dictationMachine } from '../../apps/desktop/src/hooks/dictationMachine'
 import { Composer } from '../../apps/desktop/src/components/Composer'
 import { useDictation } from '../../apps/desktop/src/hooks/useDictation'
 
@@ -37,6 +39,85 @@ function composerProps(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+describe('dictation lifecycle', () => {
+  it('ignores a late transcription after cancel without interrupting a new recording', async () => {
+    let complete!: (text: string) => void
+    const close = vi.fn().mockResolvedValue(undefined)
+    const stop = vi.fn()
+    const machine = dictationMachine.provide({
+      actors: {
+        capture: fromPromise(async (): Promise<NonNullable<SnapshotFrom<typeof dictationMachine>['context']['capture']>> => ({
+          kind: 'batch' as const,
+          stream: { getTracks: () => [{ stop }] } as unknown as MediaStream,
+          context: { close } as unknown as AudioContext,
+          source: { disconnect: vi.fn() } as unknown as MediaStreamAudioSourceNode,
+          processor: { disconnect: vi.fn() } as unknown as ScriptProcessorNode,
+          sink: { disconnect: vi.fn() } as unknown as GainNode,
+          chunks: [], frames: 1, sampleRate: 48_000, overflowed: false,
+        })),
+        transcribe: fromPromise(() => new Promise<string>((resolve) => { complete = resolve })),
+      },
+    })
+    const actor = createActor(machine).start()
+    const options = { voice, provider: 'openai' as const, onError: vi.fn() }
+    const result = vi.fn()
+    try {
+      actor.send({ type: 'START', options, resolve: vi.fn() })
+      await Promise.resolve(); await Promise.resolve()
+      expect(actor.getSnapshot().matches({ active: 'recording' })).toBe(true)
+      actor.send({ type: 'FINISH', options, resolve: result })
+      actor.send({ type: 'CANCEL' })
+      expect(result).toHaveBeenCalledExactlyOnceWith('')
+      expect(stop).toHaveBeenCalledOnce()
+      actor.send({ type: 'START', options, resolve: vi.fn() })
+      await Promise.resolve(); await Promise.resolve()
+      complete('stale transcript')
+      await Promise.resolve(); await Promise.resolve()
+      expect(actor.getSnapshot().matches({ active: 'recording' })).toBe(true)
+      expect(result).toHaveBeenCalledOnce()
+      expect(options.onError.mock.calls).toEqual([[''], ['']])
+    } finally {
+      actor.send({ type: 'CANCEL' })
+      actor.stop()
+    }
+  })
+
+  it('releases the microphone and audio context when the hook unmounts mid-recording', async () => {
+    const { useDictation: realUseDictation } = await vi.importActual<typeof import('../../apps/desktop/src/hooks/useDictation')>('../../apps/desktop/src/hooks/useDictation')
+    const stopTrack = vi.fn()
+    const closeContext = vi.fn().mockResolvedValue(undefined)
+    const node = () => ({ connect: vi.fn(), disconnect: vi.fn() })
+    vi.stubGlobal('AudioContext', class {
+      sampleRate = 48_000
+      destination = {}
+      createMediaStreamSource = node
+      createScriptProcessor = node
+      createGain = () => ({ ...node(), gain: { value: 1 } })
+      resume = () => Promise.resolve()
+      close = closeContext
+    })
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop: stopTrack }] }) } })
+    let dictation!: ReturnType<typeof realUseDictation>
+    function Probe() {
+      dictation = realUseDictation(voice, 'openai', vi.fn())
+      return null
+    }
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    try {
+      await act(async () => root.render(<Probe />))
+      await act(async () => { await dictation.start() })
+      expect(dictation.state).toBe('recording')
+      act(() => root.unmount())
+      expect(stopTrack).toHaveBeenCalledOnce()
+      expect(closeContext).toHaveBeenCalledOnce()
+    } finally {
+      vi.unstubAllGlobals()
+      Reflect.deleteProperty(navigator, 'mediaDevices')
+    }
+  })
+})
 
 describe('composer dictation controls', () => {
   let container: HTMLDivElement

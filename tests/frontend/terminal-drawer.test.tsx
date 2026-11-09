@@ -118,6 +118,29 @@ describe('TerminalDrawer project command handle', () => {
     expect(onExit).toHaveBeenCalledWith(7)
   })
 
+  it('kills a late create result after its tab unmounts without attaching or announcing an exit', async () => {
+    const handle = createHandle()
+    renderDrawer(handle)
+    await act(async () => { await Promise.resolve() })
+    let finish!: (result: { terminalId: string; shell: string }) => void
+    create.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const onExit = vi.fn()
+    let tabId = ''
+    await act(async () => { tabId = handle.current?.runCommand('slow spawn', 'Late', onExit) ?? '' })
+    act(() => { handle.current?.stopCommand(tabId) })
+    expect(onExit).toHaveBeenCalledExactlyOnceWith()
+    await act(async () => {
+      finish({ terminalId: 'late-terminal', shell: '/bin/sh' })
+      await Promise.resolve()
+    })
+    expect(kill).toHaveBeenCalledExactlyOnceWith('late-terminal')
+    expect(window.prime.terminal.bindSession).not.toHaveBeenCalledWith('late-terminal', expect.anything())
+    expect(window.prime.terminal.setActiveContext).not.toHaveBeenCalledWith('late-terminal', expect.anything())
+    expect(onExit).toHaveBeenCalledOnce()
+    expect(onError).not.toHaveBeenCalled()
+    expect([...container.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('Late'))).toBe(false)
+  })
+
   it('reports terminal creation failures without fabricating an exit code', async () => {
     const handle = createHandle()
     renderDrawer(handle)

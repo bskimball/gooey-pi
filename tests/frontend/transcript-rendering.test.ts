@@ -240,7 +240,8 @@ describe('transcript rendering', () => {
     }], true)
 
     expect(html).toContain('Turn finished in</span> 1s')
-    expect(html).not.toContain('Prior completed reasoning.')
+    // The prior turn's reasoning stays settled under its Thought header rather than reopening as live work.
+    expect(html).toContain('activity-line--reasoning is-settled')
     expect(html).toContain('transcript-active-placeholder')
     expect(html).toContain('Pi is working')
   })
@@ -267,22 +268,22 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('transcript-active-placeholder')
   })
 
-  it('folds settled reasoning to a one-line Thought as soon as the response yields', () => {
+  it('keeps settled reasoning open under a foldable Thought header once the response yields', () => {
     const html = render([{
       id: 'complete',
       role: 'assistant',
       timestamp: 1_000,
       startedAt: 1_000,
       completedAt: 4_000,
-      parts: [{ type: 'thinking', text: 'This stays collapsed until requested.' }],
+      parts: [{ type: 'thinking', text: 'This stays visible after the turn.' }],
     }])
 
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 3s')
-    expect(html).toContain('activity-line--reasoning is-collapsed')
+    expect(html).toContain('activity-line--reasoning is-settled')
     expect(html).toContain('>Thought</span>')
-    expect(html).toContain('aria-expanded="false"')
-    expect(html).not.toContain('This stays collapsed until requested.')
+    expect(html).toContain('aria-expanded="true"')
+    expect(html).toContain('This stays visible after the turn.')
     expect(html).not.toContain('thinking-dots')
   })
 
@@ -409,10 +410,10 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Turn finished in</span> 1s')
     expect(html).toContain('The primary final report stays visible.')
-    // Both reasoning blocks fold in place around the report.
-    expect(html.match(/activity-line--reasoning is-collapsed/g)).toHaveLength(2)
-    expect(html).not.toContain('Trailing lightweight reasoning.')
-    expect(html).not.toContain('Earlier reasoning.')
+    // Both reasoning blocks stay readable in place around the report.
+    expect(html.match(/activity-line--reasoning is-settled/g)).toHaveLength(2)
+    expect(html).toContain('Trailing lightweight reasoning.')
+    expect(html).toContain('Earlier reasoning.')
     expect(html).toContain('aria-label="Copy assistant message"')
   })
 
@@ -441,7 +442,7 @@ describe('transcript rendering', () => {
     expect(html.indexOf('Cleanup complete.')).toBeGreaterThan(tool)
     expect(html).toContain('class="turn-receipt"')
     expect(html).toContain('1 tool')
-    expect(html).not.toContain('Earlier reasoning.')
+    expect(html).toContain('Earlier reasoning.')
     // Copy rides on the receipt line instead of a separate actions row.
     expect(html).toContain('turn-receipt__copy')
     expect(html).toContain('aria-label="Copy assistant message"')

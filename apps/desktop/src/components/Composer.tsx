@@ -881,7 +881,7 @@ export const Composer = memo(function Composer({
 											: "Steer this run… (Ctrl+Enter to steer, Enter to queue)"
 										: submitting
 											? `Starting ${shortName}…`
-											: `Ask ${shortName} anything, @ for files, / for commands, $ for skills`
+											: `Ask ${shortName} anything  ·  @ files  / commands  $ skills`
 						}
 						aria-label={`Message ${shortName}`}
 						role="combobox"

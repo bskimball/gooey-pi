@@ -51,12 +51,12 @@ describe('application window lifecycle', () => {
     })
     expect(mainWindowChromeOptions('win32')).toEqual({
       titleBarStyle: 'hidden',
-      titleBarOverlay: { color: '#ffffff', symbolColor: '#20201e', height: 32 },
+      titleBarOverlay: { color: '#f7fafc', symbolColor: '#3b4a5e', height: 52 },
       autoHideMenuBar: true,
     })
     expect(mainWindowChromeOptions('win32', 'dark')).toEqual({
       titleBarStyle: 'hidden',
-      titleBarOverlay: { color: '#171716', symbolColor: '#f1f1ee', height: 32 },
+      titleBarOverlay: { color: '#0b0c0e', symbolColor: '#b4c3d4', height: 52 },
       autoHideMenuBar: true,
     })
     expect(mainWindowChromeOptions('darwin')).toMatchObject({

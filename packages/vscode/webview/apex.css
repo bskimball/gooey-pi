@@ -1,5 +1,29 @@
 /* Fit pi-desktop's conversation pane into a VS Code side panel. */
 body { padding: 0; }
+
+/* Borrow the active editor theme so the panel reads as part of the workbench, not an embedded app.
+   Every --vscode-* lookup ends in a literal fallback because some themes leave optional colors unset. */
+body[class*='vscode-'] {
+  --canvas: var(--vscode-sideBar-background, var(--vscode-editor-background, #1e1e1e));
+  --sidebar: var(--canvas);
+  --surface: var(--vscode-editorWidget-background, color-mix(in srgb, var(--vscode-foreground, #ccc) 5%, var(--canvas)));
+  --surface-subtle: color-mix(in srgb, var(--vscode-foreground, #ccc) 4%, var(--canvas));
+  --surface-hover: var(--vscode-list-hoverBackground, color-mix(in srgb, var(--vscode-foreground, #ccc) 7%, var(--canvas)));
+  --surface-selected: var(--vscode-list-inactiveSelectionBackground, color-mix(in srgb, var(--vscode-foreground, #ccc) 10%, var(--canvas)));
+  --surface-raised: var(--vscode-input-background, var(--surface));
+  --text: var(--vscode-foreground, #cccccc);
+  --text-primary: var(--text);
+  --text-secondary: color-mix(in srgb, var(--text) 82%, var(--canvas));
+  --text-tertiary: var(--vscode-descriptionForeground, color-mix(in srgb, var(--text) 62%, var(--canvas)));
+  --border: var(--vscode-widget-border, color-mix(in srgb, var(--text) 12%, transparent));
+  --border-subtle: color-mix(in srgb, var(--text) 7%, transparent);
+  --border-strong: var(--vscode-input-border, color-mix(in srgb, var(--text) 18%, transparent));
+  --focus: var(--vscode-focusBorder, #007fd4);
+  --prime: var(--vscode-textLink-foreground, #3794ff);
+  --prime-soft: color-mix(in srgb, var(--prime) 14%, var(--canvas));
+  --accent: var(--prime);
+  --annotation: var(--prime);
+}
 .apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
 .apex-shell .conversation-pane { min-width: 0; }
 .apex-shell .conversation-bottom-dock { padding: 0 10px 10px; }
@@ -11,10 +35,10 @@ body { padding: 0; }
   min-width: 0;
   padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 18px;
 }
 .apex-editor-context__label {
@@ -37,7 +61,7 @@ body { padding: 0; }
   flex: 0 0 auto;
   padding: 0 6px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -63,7 +87,7 @@ body { padding: 0; }
   min-width: 0;
   overflow: hidden;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -98,7 +122,7 @@ body { padding: 0; }
   transform: scale(0.96);
 }
 .apex-agents-trigger__label {
-  font-size: 11.5px;
+  font-size: var(--fs-ui);
   font-weight: 540;
 }
 .apex-agents-trigger__count {
@@ -110,7 +134,7 @@ body { padding: 0; }
   border-radius: 999px;
   background: var(--surface-selected);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -146,7 +170,7 @@ body { padding: 0; }
   align-items: center;
   gap: 6px;
   color: var(--text);
-  font-size: 11.5px;
+  font-size: var(--fs-ui);
   font-weight: 560;
 }
 .apex-specialists-pane__title > svg {
@@ -156,10 +180,10 @@ body { padding: 0; }
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   cursor: pointer;
   transition: color 120ms ease-out, background 120ms ease-out, border-color 120ms ease-out;
 }
@@ -221,7 +245,7 @@ body { padding: 0; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: var(--fs-ui);
   font-weight: 540;
 }
 
@@ -249,7 +273,7 @@ body { padding: 0; }
 .apex-session-picker__count {
   padding: 0 4px;
   color: var(--text-tertiary);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -295,7 +319,7 @@ body { padding: 0; }
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: var(--fs-meta);
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
@@ -306,15 +330,15 @@ body { padding: 0; }
   margin: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--danger-soft);
   color: var(--text-primary);
 }
-.apex-banner pre { margin: 0 0 8px; white-space: pre-wrap; font-size: 12px; }
+.apex-banner pre { margin: 0 0 8px; white-space: pre-wrap; font-size: var(--fs-ui); }
 .apex-banner button {
   padding: 4px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text-primary);
   cursor: pointer;

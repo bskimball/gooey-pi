@@ -48,7 +48,7 @@ interface TranscriptProps {
 
 function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: { message: TranscriptMessage; harness: HarnessId; showReasoning: boolean; showTools: boolean }) {
   const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
-  // The live turn streams in the same chronological order the settled turn keeps, so finishing only folds reasoning.
+  // The live turn streams in the same chronological order the settled turn keeps, so finishing only adds a Thought header to reasoning.
   return (
     <article className="message message--assistant message--streaming">
       <div className="message__content">

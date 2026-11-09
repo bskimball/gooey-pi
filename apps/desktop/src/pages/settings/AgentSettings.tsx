@@ -68,7 +68,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
       </section>
       <section className="settings-group">
         <h2>Transcript</h2>
-        <SettingsToggle checked={settings.showReasoningSummaries} onChange={(showReasoningSummaries) => { void onUpdate({ showReasoningSummaries }) }} label="Show reasoning summaries" description="Display reasoning summaries and traces while an agent works. Completed work stays collapsed." />
+        <SettingsToggle checked={settings.showReasoningSummaries} onChange={(showReasoningSummaries) => { void onUpdate({ showReasoningSummaries }) }} label="Show reasoning summaries" description="Display reasoning summaries and traces, during and after a turn. Each Thought can be folded." />
         <SettingsToggle checked={settings.showToolCalls} onChange={(showToolCalls) => { void onUpdate({ showToolCalls }) }} label="Show tool calls" description="Display compact tool activity, arguments, and expandable results." />
       </section>
       <section className="settings-group">

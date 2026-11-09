@@ -50,6 +50,32 @@ describe('automatic update service', () => {
     expect(check).toHaveBeenCalledTimes(2)
   })
 
+  it('coalesces duplicate service checks while the adapter check is in flight', async () => {
+    const updater = new FakeUpdater()
+    let finish!: () => void
+    updater.checkForUpdates.mockImplementation(() => new Promise<undefined>((resolve) => { finish = () => resolve(undefined) }))
+    const service = new UpdateService(updater as unknown as UpdateAdapter, { enabled: true })
+    const first = service.check()
+    expect(service.check()).toBe(first)
+    expect(service.check()).toBe(first)
+    expect(updater.checkForUpdates).toHaveBeenCalledOnce()
+    let reentrant: Promise<AppUpdateState> | undefined
+    service.setEventSink((state) => { if (state.phase === 'checking') reentrant = service.check() })
+    updater.emit('checking-for-update')
+    expect(reentrant).toBeInstanceOf(Promise)
+    expect(updater.checkForUpdates).toHaveBeenCalledOnce()
+    updater.emit('update-not-available', { version: '0.2.0' })
+    finish()
+    await expect(first).resolves.toEqual({ phase: 'not-available', version: '0.2.0' })
+    await expect(reentrant).resolves.toEqual({ phase: 'not-available', version: '0.2.0' })
+    const next = service.check()
+    expect(next).not.toBe(first)
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
+    finish()
+    await next
+    service.dispose()
+  })
+
   it('automatically checks installed builds without downloading or installing on quit', async () => {
     vi.useFakeTimers()
     const updater = new FakeUpdater()

@@ -4,15 +4,15 @@
   padding: 8px;
   margin: 6px 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-subtle);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   overflow-wrap: anywhere;
 }
 .annotation-source p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 10.5px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
 }
 .annotation-source code {

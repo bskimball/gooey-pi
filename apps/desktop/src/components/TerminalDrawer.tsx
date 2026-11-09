@@ -1,5 +1,7 @@
 import { ArrowsInSimple, ArrowsOutSimple, Plus, Terminal as TerminalIcon, Trash, X } from './icons'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useMachine } from '@xstate/react'
+import { terminalViewMachine } from './terminalViewMachine'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -224,13 +226,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
 
     let offData: (() => void) | undefined
     let offExit: (() => void) | undefined
-    let cancelled = false
-    const bufferedData = new Map<string, string>()
-    const bufferedExits = new Map<string, number>()
-    let exitAnnounced = false
     const announceExit = (exitCode: number) => {
-      if (exitAnnounced) return
-      exitAnnounced = true
       terminal.writeln(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m`)
       onStateChangeRef.current({ shellName: shell?.split('/').at(-1) ?? 'terminal', connected: false })
       onExitRef.current?.(exitCode)
@@ -250,39 +246,30 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
 
     if (window.prime && cwd) {
       // Subscribe before create resolves: a fast shell can emit its prompt or exit before the IPC reply.
-      offData = window.prime.terminal.onData((event) => {
-        if (event.terminalId === terminalIdRef.current) terminal.write(event.data, scheduleActiveContext)
-        else if (!terminalIdRef.current) {
-          const next = `${bufferedData.get(event.terminalId) ?? ''}${event.data}`
-          bufferedData.set(event.terminalId, next.slice(-256 * 1024))
-        }
-      })
-      offExit = window.prime.terminal.onExit((event) => {
-        if (event.terminalId === terminalIdRef.current) announceExit(event.exitCode)
-        else if (!terminalIdRef.current) bufferedExits.set(event.terminalId, event.exitCode)
-      })
-      window.prime.terminal.create({ cwd, shell, command, cols: terminal.cols, rows: terminal.rows }).then(({ terminalId, shell: actualShell }) => {
-        if (cancelled) { void window.prime.terminal.kill(terminalId); return }
-        terminalIdRef.current = terminalId
-        onStateChangeRef.current({ shellName: actualShell.split('/').at(-1) ?? actualShell, connected: true })
-        const initialOutput = bufferedData.get(terminalId)
-        const bindCurrentSession = async () => {
-          if (sessionPathRef.current) await window.prime.terminal.bindSession(terminalId, sessionPathRef.current)
-          scheduleActiveContext()
-        }
-        if (initialOutput) terminal.write(initialOutput, () => { void bindCurrentSession().catch(() => undefined) })
-        else void bindCurrentSession().catch(() => undefined)
-        const earlyExit = bufferedExits.get(terminalId)
-        bufferedData.clear()
-        bufferedExits.clear()
-        if (earlyExit !== undefined) announceExit(earlyExit)
-      }).catch((error: unknown) => {
-        if (cancelled) return
-        const message = error instanceof Error ? error.message : 'Unable to start terminal'
-        terminal.writeln(`\x1b[31m${message}\x1b[0m`)
-        onErrorRef.current?.(message)
-        onExitRef.current?.()
-      })
+      offData = window.prime.terminal.onData((event) => send({ type: 'DATA', event }))
+      offExit = window.prime.terminal.onExit((event) => send({ type: 'EXIT', event }))
+      send({ type: 'START', session: {
+        create: () => window.prime.terminal.create({ cwd, shell, command, cols: terminal.cols, rows: terminal.rows }),
+        kill: (terminalId) => { if (window.prime) void window.prime.terminal.kill(terminalId) },
+        attach: ({ terminalId, shell: actualShell }, initialOutput) => {
+          terminalIdRef.current = terminalId
+          onStateChangeRef.current({ shellName: actualShell.split('/').at(-1) ?? actualShell, connected: true })
+          const bindCurrentSession = async () => {
+            if (sessionPathRef.current) await window.prime.terminal.bindSession(terminalId, sessionPathRef.current)
+            scheduleActiveContext()
+          }
+          if (initialOutput) terminal.write(initialOutput, () => { void bindCurrentSession().catch(() => undefined) })
+          else void bindCurrentSession().catch(() => undefined)
+        },
+        write: (data) => terminal.write(data, scheduleActiveContext),
+        announceExit,
+        fail: (error) => {
+          const message = error instanceof Error ? error.message : 'Unable to start terminal'
+          terminal.writeln(`\x1b[31m${message}\x1b[0m`)
+          onErrorRef.current?.(message)
+          onExitRef.current?.()
+        },
+      } })
     } else {
       terminal.writeln('\x1b[38;5;141mGooeyPi terminal\x1b[0m')
       terminal.writeln('\x1b[90mA live PTY will connect when the desktop bridge and project are available.\x1b[0m')
@@ -295,7 +282,6 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
     })
     observer.observe(container)
     return () => {
-      cancelled = true
       themeObserver.disconnect()
       observer.disconnect()
       offData?.()
@@ -304,14 +290,16 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
       resizeDisposable.dispose()
       selectionDisposable.dispose()
       if (activeContextTimerRef.current !== undefined) window.clearTimeout(activeContextTimerRef.current)
-      const id = terminalIdRef.current
       terminalIdRef.current = null
-      if (id && window.prime) void window.prime.terminal.kill(id)
+      send({ type: 'DISPOSE' })
       terminal.dispose()
       terminalRef.current = null
       fitRef.current = null
     }
   }, [command, cwd, shell])
+
+  // Register actor cleanup after the xterm effect so DISPOSE runs before the actor stops.
+  const [, send] = useMachine(terminalViewMachine)
 
   return <div className="terminal-surface" ref={containerRef} hidden={!visible}/>
 })

@@ -1097,6 +1097,7 @@ test.describe('Prime Work desktop smoke', () => {
   test('destroys an open session browser guest when its thread is archived', async () => {
     const sessionRow = page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' })
     await sessionRow.locator('.session-row').click()
+    if (!(await page.locator('.inspector').count())) await page.getByRole('button', { name: 'Toggle inspector' }).click()
     await page.getByRole('tab', { name: 'Browser' }).click()
     const preview = page.locator('.browser-preview webview[partition="persist:prime-work-browser"]')
     await expect(preview).toHaveCount(1)
@@ -1534,7 +1535,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('keeps transcript text from showing through the composer disclaimer', async () => {
-    await page.getByRole('button', { name: 'Toggle inspector' }).click()
+    if (await page.locator('.inspector').count()) await page.getByRole('button', { name: 'Toggle inspector' }).click()
     await expect(page.locator('.composer-note')).toBeVisible()
     const colors = await page.locator('.composer-note').evaluate((node) => {
       const probe = document.createElement('div')

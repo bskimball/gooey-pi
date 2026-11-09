@@ -46,6 +46,17 @@
   @keyframes sidebar-in { from { opacity: 0; transform: translateX(-8px); } }
 }
 
+/* Windows/Linux draw caption buttons over the toolbar's right edge, so narrow windows shed secondary actions first. */
+@media (max-width: 640px) {
+  .app-shell:is([data-platform='linux'], [data-platform='win32']) .title-toolbar__optional { display: none; }
+}
+@media (max-width: 520px) {
+  .app-shell:is([data-platform='linux'], [data-platform='win32']) .activity-status-pill__label { display: none; }
+}
+@media (max-width: 460px) {
+  .app-shell:is([data-platform='linux'], [data-platform='win32']) .project-run-control { display: none; }
+}
+
 @media (max-width: 720px) {
 
   .title-toolbar { padding-inline: 6px; }

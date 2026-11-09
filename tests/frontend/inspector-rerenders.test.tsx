@@ -73,6 +73,8 @@ const renderApp = async () => {
   await import('../../apps/desktop/src/components/Inspector')
   await act(async () => { root.render(<App />) })
   await act(async () => {})
+  // The inspector starts closed; open it the way a user would.
+  await act(async () => { container.querySelector<HTMLButtonElement>('button[aria-label="Toggle inspector"]')?.click() })
 }
 
 const openChangesTab = async () => {

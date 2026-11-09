@@ -143,7 +143,7 @@ export function defaultSettings(): AppSettings {
     interfaceFontScale: 110,
     projectSortMode: 'recent',
     sidebarOpen: true,
-    inspectorOpen: true,
+    inspectorOpen: false,
     showFileChangesPopup: true,
     checkoutStrategy: 'worktree',
     keepRunningInBackground: false,

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useMachine } from '@xstate/react'
+import { extensionUiMachine } from './extensionUiMachine'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
 import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, piSessionMode, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
@@ -46,62 +48,6 @@ export function useExtensionUi({
   setRuntime,
   reportError,
 }: UseExtensionUiOptions) {
-  const [extensionUi, setExtensionUi] = useState<PendingExtensionUi | null>(null)
-  const [pendingByRuntime, setPendingByRuntime] = useState<ReadonlyMap<string, PendingExtensionUi>>(() => new Map())
-  const extensionUiRef = useRef<PendingExtensionUi | null>(null)
-  const pendingByRuntimeRef = useRef<Map<string, PendingExtensionUi>>(new Map())
-  const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
-  const hydraByRuntimeRef = useRef<Map<string, ActivePiHydraTier>>(new Map())
-  // Reported by the runtime only; never cached across runtimes or restarts.
-  const fusionPairByRuntimeRef = useRef<Map<string, PiFusionPair>>(new Map())
-  const timerByRuntimeRef = useRef<Map<string, number>>(new Map())
-  const timedOutQuestionnairesRef = useRef<Set<string>>(new Set())
-  const activeRuntimeIdRef = useRef(activeRuntimeId)
-  const activeSessionModeRef = useRef(activeSessionMode)
-  useLayoutEffect(() => {
-    activeRuntimeIdRef.current = activeRuntimeId
-    activeSessionModeRef.current = activeSessionMode
-  })
-
-  const showPendingForActiveRuntime = useCallback(() => {
-    const currentRuntimeId = activeRuntimeIdRef.current
-    const visible = pendingExtensionUiForRuntime(pendingByRuntimeRef.current, currentRuntimeId)
-    extensionUiRef.current = visible
-    setExtensionUi(visible)
-    const runtimeHydra = currentRuntimeId ? hydraByRuntimeRef.current.get(currentRuntimeId) : undefined
-    const sessionHydra = parsePiHydraStatus(activeSessionModeRef.current)
-    const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
-    const sessionMode = piModeFromStatusText(activeSessionModeRef.current)
-    const mode = piModeWithHydra(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode(), runtimeHydra ?? sessionHydra)
-    publishActivePiHydraTier(runtimeHydra ?? sessionHydra ?? (mode === 'utopia' ? 'off' : readDefaultPiHydraTier()))
-    publishActivePiBehaviorMode(mode)
-    publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
-  }, [])
-
-  const setFusionPair = useCallback((runtimeId: string, pair: PiFusionPair | undefined) => {
-    if (pair) fusionPairByRuntimeRef.current.set(runtimeId, pair)
-    else fusionPairByRuntimeRef.current.delete(runtimeId)
-    if (activeRuntimeIdRef.current === runtimeId) publishActivePiFusionPair(pair ?? null)
-  }, [])
-
-  const clearExtensionUi = useCallback((runtimeId?: string, clearMode = false) => {
-    const targetRuntimeId = runtimeId ?? extensionUiRef.current?.runtimeId
-    if (clearMode && runtimeId) {
-      modeByRuntimeRef.current.delete(runtimeId)
-      hydraByRuntimeRef.current.delete(runtimeId)
-    }
-    if (!targetRuntimeId) return
-    const timer = timerByRuntimeRef.current.get(targetRuntimeId)
-    if (timer !== undefined) window.clearTimeout(timer)
-    timerByRuntimeRef.current.delete(targetRuntimeId)
-    const deleted = pendingByRuntimeRef.current.delete(targetRuntimeId)
-    if (deleted) setPendingByRuntime(new Map(pendingByRuntimeRef.current))
-    if (extensionUiRef.current?.runtimeId === targetRuntimeId) {
-      extensionUiRef.current = null
-      setExtensionUi(null)
-    }
-  }, [])
-
   const cancelPending = useCallback((pending: PendingExtensionUi) => {
     if (!bridge) return
     for (const id of requestIds(pending)) {
@@ -112,16 +58,61 @@ export function useExtensionUi({
       }).catch(() => undefined)
     }
   }, [bridge])
+  const [snapshot, send, actor] = useMachine(extensionUiMachine.provide({
+    actions: { cancelRequest: (_, { pending }) => cancelPending(pending) },
+  }))
+  const extensionUi = snapshot.context.visible
+  const pendingByRuntime = snapshot.context.pendingByRuntime
+  const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
+  const hydraByRuntimeRef = useRef<Map<string, ActivePiHydraTier>>(new Map())
+  // Reported by the runtime only; never cached across runtimes or restarts.
+  const fusionPairByRuntimeRef = useRef<Map<string, PiFusionPair>>(new Map())
+  const activeRuntimeIdRef = useRef(activeRuntimeId)
+  const activeSessionModeRef = useRef(activeSessionMode)
+  useLayoutEffect(() => {
+    activeRuntimeIdRef.current = activeRuntimeId
+    activeSessionModeRef.current = activeSessionMode
+  })
+
+  const showPendingForActiveRuntime = useCallback(() => {
+    const currentRuntimeId = activeRuntimeIdRef.current
+    send({ type: 'SELECT', runtimeId: currentRuntimeId })
+    const runtimeHydra = currentRuntimeId ? hydraByRuntimeRef.current.get(currentRuntimeId) : undefined
+    const sessionHydra = parsePiHydraStatus(activeSessionModeRef.current)
+    const runtimeMode = currentRuntimeId ? modeByRuntimeRef.current.get(currentRuntimeId) : undefined
+    const sessionMode = piModeFromStatusText(activeSessionModeRef.current)
+    const mode = piModeWithHydra(runtimeMode ?? sessionMode ?? readDefaultPiBehaviorMode(), runtimeHydra ?? sessionHydra)
+    publishActivePiHydraTier(runtimeHydra ?? sessionHydra ?? (mode === 'utopia' ? 'off' : readDefaultPiHydraTier()))
+    publishActivePiBehaviorMode(mode)
+    publishActivePiFusionPair(currentRuntimeId ? fusionPairByRuntimeRef.current.get(currentRuntimeId) ?? null : null)
+  }, [send])
+
+  const setFusionPair = useCallback((runtimeId: string, pair: PiFusionPair | undefined) => {
+    if (pair) fusionPairByRuntimeRef.current.set(runtimeId, pair)
+    else fusionPairByRuntimeRef.current.delete(runtimeId)
+    if (activeRuntimeIdRef.current === runtimeId) publishActivePiFusionPair(pair ?? null)
+  }, [])
+
+  const clearExtensionUi = useCallback((runtimeId?: string, clearMode = false) => {
+    const targetRuntimeId = runtimeId ?? actor.getSnapshot().context.visible?.runtimeId
+    if (clearMode && runtimeId) {
+      modeByRuntimeRef.current.delete(runtimeId)
+      hydraByRuntimeRef.current.delete(runtimeId)
+    }
+    if (!targetRuntimeId) return
+    send({ type: 'CLEAR', runtimeId: targetRuntimeId })
+  }, [actor, send])
 
   const respondToExtensionUi = useCallback(async (response: ExtensionUiResponse, runtimeId?: string) => {
-    const targetRuntimeId = runtimeId ?? extensionUiRef.current?.runtimeId
-    const pending = targetRuntimeId ? pendingByRuntimeRef.current.get(targetRuntimeId) : null
+    const current = actor.getSnapshot().context
+    const targetRuntimeId = runtimeId ?? current.visible?.runtimeId
+    const pending = targetRuntimeId ? current.pendingByRuntime.get(targetRuntimeId) : null
     if (!pending) return
     const shouldReportError = runtimeId !== undefined
       || activeRuntimeIdRef.current === pending.runtimeId
-      || extensionUiRef.current?.runtimeId === pending.runtimeId
+      || current.visible?.runtimeId === pending.runtimeId
     const pendingSession = runtimeSessionsRef.current.get(pending.runtimeId)
-    clearExtensionUi(pending.runtimeId)
+    send({ type: 'CLEAR', runtimeId: pending.runtimeId, outcome: 'cancelled' in response && response.cancelled ? 'CANCEL' : 'ANSWER' })
     if ('cancelled' in response && response.cancelled) {
       if (!bridge) return
       if (pending.request.method !== 'questionnaire') {
@@ -188,7 +179,7 @@ export function useExtensionUi({
       setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
       if (shouldReportError) reportError(error)
     }
-  }, [bridge, cancelPending, clearExtensionUi, reportError, runtimeSessionsRef, setRuntime, setSessions])
+  }, [actor, bridge, cancelPending, reportError, runtimeSessionsRef, send, setRuntime, setSessions])
 
   const respondForRuntime = useCallback(
     (runtimeId: string, response: ExtensionUiResponse) => respondToExtensionUi(response, runtimeId),
@@ -196,35 +187,19 @@ export function useExtensionUi({
   )
 
   const openForRuntime = useCallback((runtimeId: string) => {
-    const pending = pendingByRuntimeRef.current.get(runtimeId)
-    if (!pending) return
-    extensionUiRef.current = pending
-    setExtensionUi(pending)
-  }, [])
-
-  const scheduleTimeout = useCallback((pending: PendingExtensionUi) => {
-    const timeout = 'timeout' in pending.request ? pending.request.timeout : undefined
-    if (timeout === undefined || timerByRuntimeRef.current.has(pending.runtimeId)) return
-    timerByRuntimeRef.current.set(pending.runtimeId, window.setTimeout(() => {
-      const current = pendingByRuntimeRef.current.get(pending.runtimeId)
-      if (!current || current.request.id !== pending.request.id) return
-      if (current.request.method === 'questionnaire') timedOutQuestionnairesRef.current.add(`${pending.runtimeId}:${pending.request.id}`)
-      cancelPending(current)
-      clearExtensionUi(pending.runtimeId)
-    }, timeout))
-  }, [cancelPending, clearExtensionUi])
+    if (!actor.getSnapshot().context.pendingByRuntime.has(runtimeId)) return
+    send({ type: 'SELECT', runtimeId })
+  }, [actor, send])
 
   const showExtensionUi = useCallback((runtimeId: string, rawEvent: Record<string, unknown>) => {
     if (rawEvent.type === 'extension_ui_resolved' && typeof rawEvent.id === 'string') {
-      const pending = pendingByRuntimeRef.current.get(runtimeId)
+      const pending = actor.getSnapshot().context.pendingByRuntime.get(runtimeId)
       if (!pending || !requestIds(pending).includes(rawEvent.id)) return
       const remaining = pending.requests?.filter((request) => request.id !== rawEvent.id)
       if (pending.request.method !== 'questionnaire' || !remaining?.length) clearExtensionUi(runtimeId)
       else {
         const next: PendingExtensionUi = { ...pending, requests: remaining, request: { ...pending.request, questions: pending.request.questions.filter((question) => question.id !== rawEvent.id), total: remaining.length, complete: true } }
-        pendingByRuntimeRef.current.set(runtimeId, next)
-        setPendingByRuntime(new Map(pendingByRuntimeRef.current))
-        if (extensionUiRef.current?.runtimeId === runtimeId) { extensionUiRef.current = next; setExtensionUi(next) }
+        send({ type: 'UPSERT', pending: next, show: actor.getSnapshot().context.visible?.runtimeId === runtimeId })
       }
       return
     }
@@ -322,7 +297,7 @@ export function useExtensionUi({
 
     if (request.method === 'select' && request.questionnaire) {
       const questionnaireKey = `${runtimeId}:${request.questionnaire.groupId}`
-      if (timedOutQuestionnairesRef.current.has(questionnaireKey)) {
+      if (actor.getSnapshot().context.timedOutQuestionnaires.has(questionnaireKey)) {
         void bridge.agent.command(runtimeId, {
           type: 'extension_ui_response',
           id: request.id,
@@ -330,7 +305,7 @@ export function useExtensionUi({
         }).catch(() => undefined)
         return
       }
-      const previous = pendingByRuntimeRef.current.get(runtimeId)
+      const previous = actor.getSnapshot().context.pendingByRuntime.get(runtimeId)
       const sameQuestionnaire = previous?.request.method === 'questionnaire' && previous.request.id === request.questionnaire.groupId
       if (previous && !sameQuestionnaire) {
         cancelPending(previous)
@@ -373,17 +348,11 @@ export function useExtensionUi({
         receivedAt,
         ...(deadline !== undefined ? { deadline } : {}),
       }
-      pendingByRuntimeRef.current.set(runtimeId, pending)
-      setPendingByRuntime(new Map(pendingByRuntimeRef.current))
-      if (activeRuntimeIdRef.current === runtimeId || extensionUiRef.current?.runtimeId === runtimeId) {
-        extensionUiRef.current = pending
-        setExtensionUi(pending)
-      }
-      scheduleTimeout(pending)
+      send({ type: 'UPSERT', pending, show: activeRuntimeIdRef.current === runtimeId || actor.getSnapshot().context.visible?.runtimeId === runtimeId })
       return
     }
 
-    const previous = pendingByRuntimeRef.current.get(runtimeId)
+    const previous = actor.getSnapshot().context.pendingByRuntime.get(runtimeId)
     if (previous) {
       cancelPending(previous)
       clearExtensionUi(runtimeId)
@@ -397,33 +366,23 @@ export function useExtensionUi({
       receivedAt,
       ...(deadline !== undefined ? { deadline } : {}),
     }
-    pendingByRuntimeRef.current.set(runtimeId, pending)
-    setPendingByRuntime(new Map(pendingByRuntimeRef.current))
-    if (activeRuntimeIdRef.current === runtimeId || extensionUiRef.current?.runtimeId === runtimeId) {
-      extensionUiRef.current = pending
-      setExtensionUi(pending)
-    }
-    scheduleTimeout(pending)
-  }, [bridge, cancelPending, clearExtensionUi, scheduleTimeout, setFusionPair])
+    send({ type: 'UPSERT', pending, show: activeRuntimeIdRef.current === runtimeId || actor.getSnapshot().context.visible?.runtimeId === runtimeId })
+  }, [actor, bridge, cancelPending, clearExtensionUi, send, setFusionPair])
 
   const hasOpenRequestForSession = useCallback((filePath: string): boolean => {
-    for (const runtimeId of pendingByRuntimeRef.current.keys()) {
+    for (const runtimeId of actor.getSnapshot().context.pendingByRuntime.keys()) {
       if (runtimeSessionsRef.current.get(runtimeId) === filePath) return true
     }
     return false
-  }, [runtimeSessionsRef])
+  }, [actor, runtimeSessionsRef])
 
   useEffect(() => { showPendingForActiveRuntime() }, [activeRuntimeId, activeSessionMode, showPendingForActiveRuntime])
 
-  useEffect(() => () => {
-    for (const timer of timerByRuntimeRef.current.values()) window.clearTimeout(timer)
-    for (const pending of pendingByRuntimeRef.current.values()) cancelPending(pending)
-    timerByRuntimeRef.current.clear()
-    pendingByRuntimeRef.current.clear()
-    timedOutQuestionnairesRef.current.clear()
+  useLayoutEffect(() => () => {
+    send({ type: 'RESET' })
     fusionPairByRuntimeRef.current.clear()
     publishActivePiFusionPair(null)
-  }, [cancelPending])
+  }, [cancelPending, send])
 
   return {
     extensionUi,

@@ -1,5 +1,7 @@
 import electronUpdater, { type AppUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
+import { createActor, type ActorRefFrom } from 'xstate'
 import type { AppUpdateState } from '../../src/types/api'
+import { updateMachine } from './updateMachine'
 
 export const DEFAULT_CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000
 const INITIAL_CHECK_DELAY_MS = 8_000
@@ -77,53 +79,39 @@ export function getAutoUpdater(): AppUpdater {
 }
 
 export class UpdateService {
-  private state: AppUpdateState
+  private readonly actor: ActorRefFrom<typeof updateMachine>
+  private publishedState: AppUpdateState
   private sink: ((state: AppUpdateState) => void) | null = null
-  private checkPromise: Promise<AppUpdateState> | null = null
-  private downloadPromise: Promise<boolean> | null = null
-  private installAfterDownload = false
-  /** Version of the discovered update, kept independent of the last published phase. */
-  private discoveredVersion: string | undefined
   private interval: ReturnType<typeof globalThis.setInterval> | null = null
   private initialTimer: ReturnType<typeof globalThis.setTimeout> | null = null
   private readonly setIntervalFn: typeof globalThis.setInterval
   private readonly clearIntervalFn: typeof globalThis.clearInterval
   private readonly setTimeoutFn: typeof globalThis.setTimeout
 
-  constructor(private readonly updater: UpdateAdapter, private readonly options: UpdateServiceOptions) {
-    this.state = options.enabled ? { phase: 'idle' } : { phase: 'unsupported', message: 'Automatic updates are available in installed builds.' }
+  constructor(updater: UpdateAdapter, private readonly options: UpdateServiceOptions) {
+    this.publishedState = options.enabled ? { phase: 'idle' } : { phase: 'unsupported', message: 'Automatic updates are available in installed builds.' }
     this.setIntervalFn = options.setInterval ?? globalThis.setInterval
     this.clearIntervalFn = options.clearInterval ?? globalThis.clearInterval
     this.setTimeoutFn = options.setTimeout ?? globalThis.setTimeout
+    this.actor = createActor(updateMachine, { input: {
+      enabled: options.enabled,
+      updater,
+      publish: (state) => {
+        this.publishedState = state
+        this.sink?.(this.getState())
+      },
+      stopScheduledChecks: () => this.stopScheduledChecks(),
+    } }).start()
     if (!options.enabled) return
 
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
-    updater.on('checking-for-update', () => this.publish({ phase: 'checking' }))
-    updater.on('update-available', (info) => {
-      this.discoveredVersion = info.version
-      this.publish({ phase: 'available', version: info.version })
-    })
-    updater.on('download-progress', (progress) => this.publish({
-      phase: 'downloading',
-      percent: Math.max(0, Math.min(100, Math.round(progress.percent))),
-    }))
-    updater.on('update-downloaded', (info) => {
-      this.discoveredVersion = info.version
-      this.stopScheduledChecks()
-      this.publish({ phase: 'downloaded', version: info.version })
-      if (!this.installAfterDownload) return
-      this.installAfterDownload = false
-      this.updater.quitAndInstall(false, true)
-    })
-    updater.on('update-not-available', (info) => {
-      this.discoveredVersion = undefined
-      this.publish({ phase: 'not-available', version: info.version })
-    })
-    updater.on('error', (error) => {
-      this.installAfterDownload = false
-      this.publish({ phase: 'error', message: errorMessage(error) })
-    })
+    updater.on('checking-for-update', () => this.actor.send({ type: 'CHECKING' }))
+    updater.on('update-available', (info) => this.actor.send({ type: 'AVAILABLE', version: info.version }))
+    updater.on('download-progress', (progress) => this.actor.send({ type: 'PROGRESS', percent: progress.percent }))
+    updater.on('update-downloaded', (info) => this.actor.send({ type: 'DOWNLOADED', version: info.version }))
+    updater.on('update-not-available', (info) => this.actor.send({ type: 'NOT_AVAILABLE', version: info.version }))
+    updater.on('error', (error) => this.actor.send({ type: 'ERROR', error }))
   }
 
   start(): void {
@@ -147,7 +135,7 @@ export class UpdateService {
   }
 
   getState(): AppUpdateState {
-    return structuredClone(this.state)
+    return structuredClone(this.publishedState)
   }
 
   setEventSink(sink: ((state: AppUpdateState) => void) | null): void {
@@ -155,45 +143,21 @@ export class UpdateService {
   }
 
   check(): Promise<AppUpdateState> {
-    if (!this.options.enabled) return Promise.resolve(this.getState())
-    if (this.state.phase === 'available' || this.state.phase === 'downloading' || this.state.phase === 'downloaded') return Promise.resolve(this.getState())
-    if (this.checkPromise) return this.checkPromise
-    this.checkPromise = this.updater.checkForUpdates()
-      .then(() => this.getState())
-      .catch((error) => {
-        this.publish({ phase: 'error', message: errorMessage(error) })
-        return this.getState()
-      })
-      .finally(() => { this.checkPromise = null })
-    return this.checkPromise
+    let resolve!: (value: AppUpdateState | PromiseLike<AppUpdateState>) => void
+    let result = new Promise<AppUpdateState>((done) => { resolve = done })
+    this.actor.send({ type: 'CHECK', reply: (promise) => { result = promise; resolve(promise) } })
+    return result
   }
 
   downloadAndInstall(): Promise<boolean> {
-    if (!this.options.enabled) return Promise.resolve(false)
-    if (this.downloadPromise) return this.downloadPromise
-    if (this.state.phase === 'downloaded') {
-      this.updater.quitAndInstall(false, true)
-      return Promise.resolve(true)
-    }
-    if (this.state.phase !== 'available') return Promise.resolve(false)
-
-    this.installAfterDownload = true
-    // Progress stays undefined until the first download-progress event so the
-    // renderer can show a busy state instead of a stuck 0%.
-    this.publish({ phase: 'downloading' })
-    this.downloadPromise = this.updater.downloadUpdate()
-      .then(() => true)
-      .catch((error) => {
-        this.installAfterDownload = false
-        this.publish({ phase: 'error', message: errorMessage(error) })
-        return false
-      })
-      .finally(() => { this.downloadPromise = null })
-    return this.downloadPromise
+    let resolve!: (value: boolean | PromiseLike<boolean>) => void
+    let result = new Promise<boolean>((done) => { resolve = done })
+    this.actor.send({ type: 'DOWNLOAD', reply: (promise) => { result = promise; resolve(promise) } })
+    return result
   }
 
   private runScheduledCheck(): void {
-    if (this.state.phase === 'downloaded') {
+    if (this.publishedState.phase === 'downloaded') {
       this.stopScheduledChecks()
       return
     }
@@ -205,11 +169,5 @@ export class UpdateService {
     if (this.initialTimer) clearTimeout(this.initialTimer)
     this.interval = null
     this.initialTimer = null
-  }
-
-  private publish(state: AppUpdateState): void {
-    const version = state.version ?? this.discoveredVersion
-    this.state = version ? { ...state, version } : state
-    this.sink?.(this.getState())
   }
 }

@@ -155,7 +155,7 @@ describe('settings queue reconciliation', () => {
       firstMutation = state.updateSettings({ sidebarOpen: false })
       secondMutation = state.updateSettings({ terminalOpen: true })
     })
-    expect([state.sidebarOpen, state.inspectorOpen, state.terminalOpen]).toEqual([false, true, true])
+    expect([state.sidebarOpen, state.inspectorOpen, state.terminalOpen]).toEqual([false, false, true])
 
     const saved = { ...DEFAULT_SETTINGS, sidebarOpen: false, inspectorOpen: false, terminalOpen: false }
     await act(async () => { first.resolve(saved); await firstMutation })
@@ -749,6 +749,43 @@ describe('bootstrap critical path', () => {
 
 
 describe('extension UI runtime ownership', () => {
+  it('replaces an open dialog with a second request from the same runtime and cancels the first', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const command = vi.fn().mockResolvedValue({})
+      const bridge = { agent: { command } } as unknown as PrimeWorkApi
+      const runtimeSessionsRef = { current: new Map<string, string>() }
+      const setSessions = vi.fn()
+      const setRuntime = vi.fn()
+      const reportError = vi.fn()
+      let state!: ReturnType<typeof useExtensionUi>
+      function ExtensionProbe() {
+        state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError })
+        return <Probe />
+      }
+      await act(async () => { root.render(<ExtensionProbe />) })
+      await act(async () => {
+        state.showExtensionUi('runtime', { type: 'extension_ui_request', id: 'first', method: 'input', title: 'First', timeout: 10 })
+      })
+      expect(state.extensionUi?.request.id).toBe('first')
+      await act(async () => {
+        state.showExtensionUi('runtime', { type: 'extension_ui_request', id: 'second', method: 'input', title: 'Second', timeout: 100 })
+      })
+      expect(command).toHaveBeenCalledExactlyOnceWith('runtime', { type: 'extension_ui_response', id: 'first', cancelled: true })
+      expect(state.extensionUi?.request.id).toBe('second')
+      expect([...state.pendingByRuntime.values()].map((pending) => pending.request.id)).toEqual(['second'])
+      await act(async () => { vi.advanceTimersByTime(10) })
+      expect(state.extensionUi?.request.id).toBe('second')
+      await act(async () => { await state.respondToExtensionUi({ value: 'answer' }) })
+      expect(state.extensionUi).toBeNull()
+      expect(command).toHaveBeenNthCalledWith(2, 'runtime', { type: 'extension_ui_response', id: 'second', value: 'answer' })
+      await act(async () => { vi.advanceTimersByTime(100) })
+      expect(command).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('retains a background request and surfaces it when that runtime activates', async () => {
     const bridge = { agent: { command: vi.fn().mockResolvedValue({}) } } as unknown as PrimeWorkApi
     const runtimeIdRef = { current: 'active' as string | null }

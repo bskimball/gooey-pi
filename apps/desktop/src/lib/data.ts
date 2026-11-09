@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   petId: 'orb',
   petSize: 75,
   sidebarOpen: true,
-  inspectorOpen: true,
+  inspectorOpen: false,
   showFileChangesPopup: true,
   checkoutStrategy: 'worktree',
   keepRunningInBackground: false,
