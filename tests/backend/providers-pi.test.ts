@@ -29,7 +29,9 @@ function fakePi(body: string): string {
   const executable = join(tempDir(), 'fake-pi.cjs')
   writeFileSync(executable, `#!/usr/bin/env node
 if (process.argv[2] === '--version') { process.stdout.write('0.84.1\\n'); process.exit(0) }
-if (process.argv[2] !== '--mode' || process.argv[3] !== 'rpc' || process.argv[4] !== '--no-session' || process.argv[5] !== '--offline') { process.exit(2) }
+const expectedArgs = ['--mode', 'rpc', '--no-session', '--offline', '--no-mcp', '--no-skills', '--no-prompt-templates', '--no-themes', '--no-context-files', '--no-tools']
+if (process.argv.slice(2).join('\0') !== expectedArgs.join('\0')) { process.exit(2) }
+if (process.cwd() === require('node:os').tmpdir()) { process.exit(5) }
 let buffer = ''
 process.stdin.on('data', (chunk) => {
   buffer += chunk

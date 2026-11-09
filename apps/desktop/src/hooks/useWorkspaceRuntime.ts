@@ -405,6 +405,7 @@ export function useWorkspaceRuntime({
     if (load?.generation === generation) {
       transcriptLoadRef.current = null
       deferredReconciliationRef.current = null
+      if (!load.reconciliation) setLoadingSession(false)
       setMessages((current) => load.eventBuffer.replay(current))
     }
     return true

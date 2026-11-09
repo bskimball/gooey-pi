@@ -257,7 +257,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     queuedFlushPromptId?: string,
   ) => {
     const creation = pendingCreation
-    const { bridge, sessions, workspace, provider, settingsState, submissionAdmissionRef, demoTimerRef, setSessions, setSubmitting, setToast, reportError } = getDeps()
+    const { bridge, sessions, activeProject, workspace, provider, settingsState, submissionAdmissionRef, demoTimerRef, setSessions, setSubmitting, setToast, reportError } = getDeps()
     const commandHarness = workspace.workspaceRef?.current?.project?.harness ?? settingsState.settings.activeHarness
     const compactCommand = parseCompactCommand(prompt)
     const modeCommand = parsePiModeCommand(prompt, commandHarness)
@@ -346,6 +346,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     }
     const admittedSubmission = await submissionAdmissionRef.current.run(async () => {
       setSubmitting(true)
+      if (!workspace.workspaceRef.current.project && activeProject) {
+        workspace.activateWorkspace(activeProject, workspace.workspaceRef.current.session)
+      }
       let admitted = workspace.workspaceRef.current
       const generation = admitted.generation
       let startedPrompt = false

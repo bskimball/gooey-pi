@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { statSync } from 'node:fs'
+import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
@@ -81,9 +81,33 @@ function parseProbeResponse(line: string): Record<string, unknown> | null {
  */
 function runModelProbe(executable: string, options: { timeoutMs: number; maxOutputBytes: number }): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    const invocation = prepareExecutableSpawn(executable, ['--mode', 'rpc', '--no-session', '--offline'])
+    const probeCwd = mkdtempSync(join(tmpdir(), 'apex-pi-model-probe-'))
+    let cleanedCwd = false
+    const cleanProbeCwd = (): void => {
+      if (cleanedCwd) return
+      cleanedCwd = true
+      try { rmSync(probeCwd, { recursive: true, force: true }) } catch { /* best-effort temp cleanup */ }
+    }
+    let invocation: ReturnType<typeof prepareExecutableSpawn>
+    try {
+      invocation = prepareExecutableSpawn(executable, [
+        '--mode', 'rpc',
+        '--no-session',
+        '--offline',
+        '--no-mcp',
+        '--no-skills',
+        '--no-prompt-templates',
+        '--no-themes',
+        '--no-context-files',
+        '--no-tools',
+      ])
+    } catch (error) {
+      cleanProbeCwd()
+      reject(error)
+      return
+    }
     const child = spawn(invocation.file, invocation.args, {
-      cwd: tmpdir(),
+      cwd: probeCwd,
       env: invocation.env,
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -101,6 +125,7 @@ function runModelProbe(executable: string, options: { timeoutMs: number; maxOutp
     const terminate = (): void => {
       if (!child.pid) {
         try { child.kill('SIGKILL') } catch { /* never spawned */ }
+        cleanProbeCwd()
         return
       }
       void killProcessTree(child.pid, {
@@ -108,7 +133,7 @@ function runModelProbe(executable: string, options: { timeoutMs: number; maxOutp
         hasExited,
         waitForExit: (waitMs) => waitForProcessExit(child, waitMs),
         signalDirect: (signal) => child.kill(signal),
-      })
+      }).finally(cleanProbeCwd)
     }
     const settle = (outcome: () => void): void => {
       if (settled) return
@@ -151,6 +176,7 @@ function runModelProbe(executable: string, options: { timeoutMs: number; maxOutp
     child.stderr?.on('error', fail)
     child.stdin?.on('error', () => { /* close reports the process outcome */ })
     child.once('close', (code, signal) => {
+      cleanProbeCwd()
       if (settled) return
       // A clean EOF may leave the response as a final unterminated line.
       scan(`${decoder.end()}\n`)

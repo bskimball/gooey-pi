@@ -288,8 +288,8 @@ export default function App() {
     if (!bridge || !cwd) { setGitSnapshot({ cwd, status: { isRepo: false, files: [] } }); return }
     try {
       const next = await bridge.git.status(cwd)
-      if (gitRequestRef.current === requestId && workspace.workspaceRef.current.cwd === cwd) setGitSnapshot({ cwd, status: next })
-    } catch (error) { if (gitRequestRef.current === requestId && workspace.workspaceRef.current.cwd === cwd) reportError(error) }
+      if (gitRequestRef.current === requestId && (workspace.workspaceRef.current.cwd ?? activeCwd) === cwd) setGitSnapshot({ cwd, status: next })
+    } catch (error) { if (gitRequestRef.current === requestId && (workspace.workspaceRef.current.cwd ?? activeCwd) === cwd) reportError(error) }
   }, [activeCwd, bridge, reportError, workspace.workspaceRef])
 
   useAgentEvents({

@@ -268,56 +268,81 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const sessionChanged = activeSessionIdRef.current !== activeSession?.id
     activeSessionIdRef.current = activeSession?.id
 
-    // Precedence: live runtime, then the tab's unsent selection, then the
-    // session's persisted metadata. The latter two only apply when the tab
+    // Precedence: live runtime (when usable), then the tab's unsent selection,
+    // then the session's persisted metadata. The latter two apply when the tab
     // changes so a catalog refresh cannot revert what the user picked.
-    if (runtime?.model?.provider && runtime.model.id) {
-      if (pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
-      if (applyPendingSelectionToRuntime(runtime, sessionKey)) return
-      const runtimeModel = catalog.models.find((candidate) => candidate.provider === runtime.model?.provider && candidate.id === runtime.model?.id && isUsable(candidate))
-      if (runtimeModel) {
-        if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
-        rememberSelectionRef.current(runtimeModel.key)
-      }
-      const nextRuntimeEffort = runtime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
+    if (runtime && pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
+    if (runtime && applyPendingSelectionToRuntime(runtime, sessionKey)) return
+    const runtimeModel = runtime?.model?.provider && runtime.model.id
+      ? catalog.models.find((candidate) => candidate.provider === runtime.model?.provider && candidate.id === runtime.model?.id && isUsable(candidate))
+      : undefined
+    if (runtimeModel) {
+      if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
+      rememberSelectionRef.current(runtimeModel.key)
+      const nextRuntimeEffort = runtime?.thinkingLevel && runtimeModel.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
         ? runtime.thinkingLevel as PrimeThinkingLevel
         : effortRef.current
       if (effortRef.current !== nextRuntimeEffort) updateEffort(nextRuntimeEffort)
-      if (runtimeModel) {
-        syncActiveSessionChoice(runtimeModel.provider, runtimeModel.id, nextRuntimeEffort)
+      syncActiveSessionChoice(runtimeModel.provider, runtimeModel.id, nextRuntimeEffort)
+      return
+    }
+    if (sessionChanged) {
+      const pending = pendingSelectionsRef.current.get(sessionKey)
+      const pendingModel = pending && catalog.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
+      if (pending && pendingModel) {
+        if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
+        if (pendingModel.availableThinkingLevels.includes(pending.effort) && effortRef.current !== pending.effort) updateEffort(pending.effort)
+        updateFast(pendingModel.fastModeSupported && pending.fast)
+      } else {
+        const sessionModel = findSessionModel(catalog, activeSession)
+        if (sessionModel) {
+          if (modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
+          const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)
+            ? activeSession.thinkingLevel as PrimeThinkingLevel
+            : effortRef.current
+          if (effortRef.current !== sessionEffort) updateEffort(sessionEffort)
+        } else if (sessionKey) {
+          const inherited = fallbackModel(catalog)
+          if (inherited) {
+            if (modelRef.current !== inherited.key) updateModel(inherited.key)
+            const inheritedEffort = inherited.availableThinkingLevels.includes(effortRef.current)
+              ? effortRef.current
+              : inherited.availableThinkingLevels.includes('medium') ? 'medium' : inherited.availableThinkingLevels[0] ?? 'off'
+            if (effortRef.current !== inheritedEffort) updateEffort(inheritedEffort)
+            syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
+          }
+        }
       }
-      return
     }
-    if (!sessionChanged) return
-
-    const pending = pendingSelectionsRef.current.get(sessionKey)
-    const pendingModel = pending && catalog.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
-    if (pending && pendingModel) {
-      if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
-      if (pendingModel.availableThinkingLevels.includes(pending.effort) && effortRef.current !== pending.effort) updateEffort(pending.effort)
-      updateFast(pendingModel.fastModeSupported && pending.fast)
-      return
-    }
-
-    const sessionModel = findSessionModel(catalog, activeSession)
-    if (sessionModel) {
-      if (modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
-      const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)
-        ? activeSession.thinkingLevel as PrimeThinkingLevel
-        : effortRef.current
-      if (effortRef.current !== sessionEffort) updateEffort(sessionEffort)
-    } else if (sessionKey) {
-      const inherited = fallbackModel(catalog)
-      if (inherited) {
-        if (modelRef.current !== inherited.key) updateModel(inherited.key)
-        const inheritedEffort = inherited.availableThinkingLevels.includes(effortRef.current)
+    if (runtime) {
+      const targetModelKey = modelRef.current || fallbackModel(catalog)?.key || ''
+      const targetModel = catalog.models.find((candidate) => candidate.key === targetModelKey && isUsable(candidate))
+      if (targetModel && (runtime.model?.provider !== targetModel.provider || runtime.model?.id !== targetModel.id)) {
+        if (modelRef.current !== targetModel.key) updateModel(targetModel.key)
+        const targetEffort = targetModel.availableThinkingLevels.includes(effortRef.current)
           ? effortRef.current
-          : inherited.availableThinkingLevels.includes('medium') ? 'medium' : inherited.availableThinkingLevels[0] ?? 'off'
-        if (effortRef.current !== inheritedEffort) updateEffort(inheritedEffort)
-        syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
+          : targetModel.availableThinkingLevels.includes('medium') ? 'medium' : targetModel.availableThinkingLevels[0] ?? 'off'
+        if (effortRef.current !== targetEffort) updateEffort(targetEffort)
+        syncActiveSessionChoice(targetModel.provider, targetModel.id, targetEffort)
+        const previousModel = runtime.model?.provider && runtime.model.id
+          ? `${runtime.model.provider}/${runtime.model.id}`
+          : targetModelKey
+        const previousEffort = (runtime.thinkingLevel && targetModel.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
+          ? runtime.thinkingLevel
+          : targetEffort) as PrimeThinkingLevel
+        queueRuntimeMutation(
+          runtime.runtimeId,
+          async () => {
+            if (!bridge) return
+            await bridge.agent.command(runtime.runtimeId, { type: 'set_model', provider: targetModel.provider, modelId: targetModel.id })
+            await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: targetEffort })
+            rememberSelectionRef.current(targetModel.key)
+          },
+          () => { updateModel(previousModel); updateEffort(previousEffort) },
+        )
       }
     }
-  }, [activeSession, applyPendingSelectionToRuntime, catalog, fallbackModel, runtime, sessionKey, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
+  }, [activeSession, applyPendingSelectionToRuntime, bridge, catalog, fallbackModel, queueRuntimeMutation, runtime, sessionKey, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
   // Scoped to the runtime's reported tier so a catalog refresh cannot revert
   // an optimistic fast-mode toggle that the runtime has not confirmed yet.

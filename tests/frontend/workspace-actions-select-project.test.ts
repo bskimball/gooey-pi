@@ -105,4 +105,67 @@ describe('selectProject workspace resume', () => {
     expect(activateWorkspace).toHaveBeenCalledWith(project)
     expect(Date.parse(catalog[0].lastOpenedAt)).toBeGreaterThan(Date.parse(project.lastOpenedAt))
   })
+
+  it('claims the displayed activeProject via activateWorkspace when sendPrompt runs before startup sessions resolve', async () => {
+    const startedRuntime = { runtimeId: 'started-runtime', harness: 'pi' as const, cwd: project.primaryFolder, isStreaming: false }
+    const command = vi.fn(async (_runtimeId: string, payload: { type: string }) => {
+      if (payload.type === 'get_commands') {
+        return { type: 'response', success: true, data: { commands: [{ name: 'mode', source: 'extension' }] } }
+      }
+      return { type: 'response', success: true }
+    })
+    const start = vi.fn(async () => startedRuntime)
+    const stop = vi.fn(async () => true)
+    const bridge = {
+      agent: { list: vi.fn(async () => [startedRuntime]), start, stop, command },
+      projects: { grantInferred: vi.fn(async () => project) },
+    }
+    const workspaceRef = { current: { generation: 0 } as { generation: number; project?: ProjectRecord; session?: SessionRecord; cwd?: string; sessionFile?: string } }
+    const runtimeIdRef = { current: null as string | null }
+    const runtimeOwnerRef = { current: null as { runtimeId: string; generation: number } | null }
+    const activateWorkspace = vi.fn((nextProject?: ProjectRecord, nextSession?: SessionRecord) => {
+      const generation = workspaceRef.current.generation + 1
+      workspaceRef.current = { generation, project: nextProject, session: nextSession, cwd: nextProject?.primaryFolder, sessionFile: nextSession?.filePath }
+      return generation
+    })
+    const attachRuntime = vi.fn((nextRuntime: typeof startedRuntime | undefined, generation: number) => {
+      runtimeIdRef.current = nextRuntime?.runtimeId ?? null
+      runtimeOwnerRef.current = nextRuntime ? { runtimeId: nextRuntime.runtimeId, generation } : null
+    })
+    const reportError = vi.fn()
+    const actions = createWorkspaceActions(() => ({
+      bridge,
+      initialized: true,
+      projects: [project],
+      sessions: [],
+      activeProject: project,
+      workspace: {
+        runtime: null,
+        runtimeIdRef,
+        runtimeOwnerRef,
+        workspaceRef,
+        activateWorkspace,
+        attachRuntime,
+        prepareForPrompt: (generation: number) => workspaceRef.current.generation === generation,
+        setMessages: vi.fn(),
+      },
+      settingsState: { settings: { activeHarness: 'pi' } },
+      provider: { model: 'openai-codex/gpt-5.6', effort: 'medium', fast: false, flushPendingMutations: vi.fn() },
+      submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
+      demoTimerRef: { current: [] },
+      setSessions: vi.fn(),
+      setSubmitting: vi.fn(),
+      setToast: vi.fn(),
+      reportError,
+    } as unknown as WorkspaceActionsDeps))
+
+    await actions.sendPrompt('/mode apex')
+
+    expect(reportError).not.toHaveBeenCalled()
+    expect(activateWorkspace).toHaveBeenCalledWith(project, undefined)
+    expect(workspaceRef.current.generation).toBe(1)
+    expect(start).toHaveBeenCalledOnce()
+    expect(stop).not.toHaveBeenCalled()
+    expect(command).toHaveBeenCalledWith('started-runtime', { type: 'prompt', message: '/mode apex' })
+  })
 })

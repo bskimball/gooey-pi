@@ -16,7 +16,7 @@ import { requireString } from 'apex-core/validation'
  */
 const CATALOG_TTL_MS = 30_000
 export { MAX_CATALOG_PROVIDERS } from './model-catalog'
-export const DEFAULT_CATALOG_TIMEOUT_MS = 15_000
+export const DEFAULT_CATALOG_TIMEOUT_MS = 30_000
 export const DEFAULT_CATALOG_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const VERSION_MAX_OUTPUT_BYTES = 4_096
 

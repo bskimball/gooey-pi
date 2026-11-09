@@ -317,6 +317,37 @@ describe('transcript read ownership', () => {
     expect(read).toHaveBeenLastCalledWith('/sessions/two.jsonl')
     expect(state.loadingSession).toBe(false)
   })
+
+  it('clears loadingSession when prepareForPrompt supersedes a pending initial transcript load', async () => {
+    const pendingRead = deferred<TranscriptMessage[]>()
+    const read = vi.fn()
+      .mockResolvedValueOnce([message('loaded:')])
+      .mockImplementationOnce(() => pendingRead.promise)
+    const nextSession: SessionRecord = { ...session, id: 'next', filePath: '/sessions/next.jsonl', title: 'Next' }
+    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useWorkspaceRuntime>
+    function WorkspaceProbe() {
+      state = useWorkspaceRuntime({
+        bridge, initialProject: project, initialSession: session, sessions: [session, nextSession],
+        initialMessages: [], reportError,
+      })
+      return <Probe />
+    }
+    await act(async () => { root.render(<WorkspaceProbe />); await Promise.resolve(); await Promise.resolve() })
+
+    let generation = 0
+    await act(async () => {
+      generation = state.activateWorkspace(project, nextSession)
+      await Promise.resolve()
+    })
+    expect(state.loadingSession).toBe(true)
+
+    await act(async () => {
+      expect(state.prepareForPrompt(generation)).toBe(true)
+    })
+    expect(state.loadingSession).toBe(false)
+  })
 })
 
 describe('agent event frame queue', () => {

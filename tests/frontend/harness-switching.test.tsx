@@ -795,6 +795,104 @@ describe('Pi provider catalog authority', () => {
     expect(state.effort).toBe('low')
   })
 
+  it('reconciles a runtime that reports an unavailable model back to a usable fallback model', async () => {
+    const command = vi.fn(async () => ({ type: 'response', success: true }))
+    const bridge = {
+      providers: { catalog: vi.fn(async () => primeCatalog) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useProviderCatalog>
+    function CatalogProbe({ runtime, activeSession }: { runtime: RuntimeInfo | null; activeSession?: SessionRecord }) {
+      state = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession, syncRuntime, reportError })
+      return <Probe />
+    }
+
+    const unavailableSession: SessionRecord = {
+      ...primeSession,
+      id: 'session-unavailable',
+      provider: 'claude-bridge',
+      model: 'claude-opus-5-5',
+      thinkingLevel: 'high',
+    }
+    const unavailableRuntime: RuntimeInfo = {
+      ...primeRuntime,
+      runtimeId: 'runtime-unavailable',
+      model: { provider: 'claude-bridge', id: 'claude-opus-5-5' },
+      thinkingLevel: 'high',
+    }
+
+    await act(async () => {
+      root.render(<CatalogProbe activeSession={unavailableSession} runtime={unavailableRuntime} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(command).toHaveBeenCalledWith('runtime-unavailable', {
+      type: 'set_model',
+      provider: primeCatalog.models[0].provider,
+      modelId: primeCatalog.models[0].id,
+    })
+    expect(command).toHaveBeenCalledWith('runtime-unavailable', {
+      type: 'set_thinking_level',
+      level: 'medium',
+    })
+    expect(syncRuntime).toHaveBeenCalledWith('runtime-unavailable')
+  })
+
+  it('reconciles the same live runtime when a catalog refresh removes its active model', async () => {
+    const transientModel = { ...primeCatalog.models[0], key: 'claude-bridge/claude-opus-5-5', provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' }
+    const initialCatalog: PrimeModelCatalog = {
+      ...primeCatalog,
+      models: [transientModel, ...primeCatalog.models],
+      providers: [
+        { id: 'claude-bridge', name: 'Claude Bridge', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
+        ...primeCatalog.providers,
+      ],
+    }
+    let currentCatalog = initialCatalog
+    const command = vi.fn(async () => ({ type: 'response', success: true }))
+    const bridge = {
+      providers: { catalog: vi.fn(async () => currentCatalog) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useProviderCatalog>
+    const liveRuntime: RuntimeInfo = {
+      ...primeRuntime,
+      runtimeId: 'runtime-same-id',
+      model: { provider: 'claude-bridge', id: 'claude-opus-5-5' },
+      thinkingLevel: 'high',
+    }
+    function CatalogProbe() {
+      state = useProviderCatalog({ bridge, harness: 'pi', runtime: liveRuntime, activeSession: primeSession, syncRuntime, reportError })
+      return <Probe />
+    }
+
+    await act(async () => {
+      root.render(<CatalogProbe />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(state.model).toBe('claude-bridge/claude-opus-5-5')
+    expect(command).not.toHaveBeenCalled()
+
+    currentCatalog = primeCatalog
+    await act(async () => {
+      await state.refresh(true)
+      await Promise.resolve()
+    })
+    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(command).toHaveBeenCalledWith('runtime-same-id', {
+      type: 'set_model',
+      provider: primeCatalog.models[0].provider,
+      modelId: primeCatalog.models[0].id,
+    })
+    expect(syncRuntime).toHaveBeenCalledWith('runtime-same-id')
+  })
+
   it('does not revert a selection when the catalog refreshes for the same session', async () => {
     const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
     const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
