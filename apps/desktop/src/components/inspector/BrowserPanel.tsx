@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { useMachine } from "@xstate/react";
 import type {
 	ExtensionTabControls,
 	StampedPointerEvent,
@@ -19,7 +20,6 @@ import {
 import {
 	type AgentBrowserTabRecord,
 	BROWSER_PARTITION,
-	type BrowserAnnotationElement,
 	type BrowserSourceResult,
 } from "@/types/api";
 import { AgentCursorOverlay, type AgentSlotRect } from "../AgentBrowserLayer";
@@ -41,6 +41,7 @@ import {
 } from "../icons";
 import { IconButton } from "../ui";
 import { BrowserAnnotationPopover } from "./BrowserAnnotationPopover";
+import { browserAnnotationMachine } from "./browserAnnotationMachine";
 
 type WebviewElement = HTMLElement & {
 	loadURL(url: string): Promise<void>;
@@ -160,17 +161,14 @@ export function BrowserPanel({
 	const [loading, setLoading] = useState(false);
 	const [canBack, setCanBack] = useState(false);
 	const [canForward, setCanForward] = useState(false);
-	const [picking, setPicking] = useState(false);
 	const [domReady, setDomReady] = useState(false);
-	const [pendingElement, setPendingElement] =
-		useState<BrowserAnnotationElement | null>(null);
-	const [annotationText, setAnnotationText] = useState("");
-	const [notice, setNotice] = useState("");
+	const [annotationSnapshot, sendAnnotation] = useMachine(browserAnnotationMachine);
+	const picking = annotationSnapshot.matches({ mode: "picking" });
+	const { pendingElement, annotationText, notice } = annotationSnapshot.context;
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [history, setHistory] = useState<string[]>(() => [home]);
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
-	const noticeTimerRef = useRef<number | null>(null);
 	const lastMarkersRef = useRef("");
 	const activeAgentTab =
 		agentTabs.find((tab) => tab.tabId === activeAgentTabId) ?? null;
@@ -261,23 +259,6 @@ export function BrowserPanel({
 		};
 	}, [showAgentWebview]);
 
-	const showNotice = (text: string) => {
-		setNotice(text);
-		if (noticeTimerRef.current !== null)
-			window.clearTimeout(noticeTimerRef.current);
-		noticeTimerRef.current = window.setTimeout(() => {
-			noticeTimerRef.current = null;
-			setNotice("");
-		}, 5_000);
-	};
-	useEffect(
-		() => () => {
-			if (noticeTimerRef.current !== null)
-				window.clearTimeout(noticeTimerRef.current);
-		},
-		[],
-	);
-
 	useEffect(() => {
 		const view = webviewRef.current;
 		if (!view) return;
@@ -305,9 +286,7 @@ export function BrowserPanel({
 		const didNavigate = () => {
 			sync();
 			lastMarkersRef.current = "";
-			setPicking(false);
-			setPendingElement(null);
-			setAnnotationText("");
+			sendAnnotation({ type: "NAVIGATED" });
 			try {
 				annotationsRef.current.handleNavigation(view.getURL());
 			} catch {
@@ -337,7 +316,7 @@ export function BrowserPanel({
 			view.removeEventListener("did-navigate", didNavigate);
 			view.removeEventListener("did-navigate-in-page", didNavigate);
 		};
-	}, [home]);
+	}, [home, sendAnnotation]);
 
 	// While annotation mode is on, the picker runs inside the page; poll it for
 	// the element the user clicked. Stopping cleans up the page-side listeners.
@@ -364,9 +343,7 @@ export function BrowserPanel({
 						? sanitizeCapturedElement(parsed[0])
 						: null;
 					if (!element) return;
-					setPendingElement(element);
-					setAnnotationText("");
-					setPicking(false);
+					sendAnnotation({ type: "ELEMENT_CAPTURED", element });
 				})
 				.catch(() => {
 					inFlight = false;
@@ -377,7 +354,7 @@ export function BrowserPanel({
 			window.clearInterval(interval);
 			void runInPage(view, annotationPickerScript("stop"));
 		};
-	}, [picking, pollIntervalMs, domReady]);
+	}, [picking, pollIntervalMs, domReady, sendAnnotation]);
 
 	// Persistent numbered markers for every live annotation on the current page.
 	const markers = annotations.annotations.flatMap((annotation, index) =>
@@ -414,24 +391,14 @@ export function BrowserPanel({
 		onNavigationRequestHandled?.(navigationRequest.id);
 	}, [domReady, navigate, navigationRequest, onNavigationRequestHandled]);
 
+	const capacityNotice = `Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`;
+
 	const toggleAnnotation = () => {
-		if (picking) {
-			setPicking(false);
-			return;
-		}
-		if (pendingElement) {
-			setPendingElement(null);
-			setAnnotationText("");
-			return;
-		}
-		if (annotationsRef.current.atCapacity) {
-			showNotice(
-				`Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`,
-			);
-			return;
-		}
-		setNotice("");
-		setPicking(true);
+		sendAnnotation({
+			type: "TOGGLE",
+			atCapacity: annotationsRef.current.atCapacity,
+			capacityNotice,
+		});
 	};
 
 	const saveAnnotation = (source: BrowserSourceResult): boolean => {
@@ -454,13 +421,10 @@ export function BrowserPanel({
 				pageTitle,
 			})
 		) {
-			showNotice(
-				`Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`,
-			);
+			sendAnnotation({ type: "CAPACITY_BLOCKED", notice: capacityNotice });
 			return false;
 		}
-		setPendingElement(null);
-		setAnnotationText("");
+		sendAnnotation({ type: "SAVED" });
 		return true;
 	};
 
@@ -639,8 +603,8 @@ export function BrowserPanel({
 					{pendingElement ? (
 						<BrowserAnnotationPopover
 							element={pendingElement} cwd={cwd} index={count + 1} platform={platform}
-							text={annotationText} onTextChange={setAnnotationText} onSave={saveAnnotation}
-							onCancel={() => { setPendingElement(null); setAnnotationText(""); }}
+							text={annotationText} onTextChange={(text) => sendAnnotation({ type: "SET_TEXT", text })} onSave={saveAnnotation}
+							onCancel={() => sendAnnotation({ type: "CANCEL" })}
 							onRequestSend={() => annotationsRef.current.requestSend()}
 						/>
 					) : null}

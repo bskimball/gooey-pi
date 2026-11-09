@@ -391,10 +391,13 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
         <circle cx="80" cy="80" r="74" fill="#0b1119" />
         <g clipPath={`url(#${clipId})`}>
           {/* Distant moon / sun disc in upper-left sky */}
-          <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" />
-          <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" />
+          <g className="pi-welcome-mark__moon">
+            <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" />
+            <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" />
+          </g>
 
           {/* Swept shark dorsal fin slicing through the center */}
+          <g className="pi-welcome-mark__fin">
           <path
             d="M42 106 C45 68 63 38 99 20 C90 42 87 63 95 83 L86 87 L96 104 Z"
             fill="currentColor"
@@ -412,37 +415,44 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
             strokeWidth="2.2"
             strokeLinecap="round"
           />
+          </g>
 
           {/* Left Seigaiha concentric wave mound */}
+          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--left">
           <circle cx="34" cy="118" r="42" fill="#0b1119" />
           <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
           <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
           <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
           <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+          </g>
 
           {/* Right Seigaiha concentric wave mound */}
+          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--right">
           <circle cx="126" cy="118" r="42" fill="#0b1119" />
           <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
           <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
           <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
           <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+          </g>
 
           {/* Foreground center Seigaiha wave crest */}
+          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--front">
           <circle cx="80" cy="136" r="46" fill="#0b1119" />
           <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" />
           <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" />
           <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" />
           <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" />
           <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" />
+          </g>
 
           {/* Ukiyo-e spray droplets around the fin */}
-          <circle cx="105" cy="54" r="2.2" fill="currentColor" />
-          <circle cx="111" cy="62" r="1.6" fill="#7dd3fc" />
-          <circle cx="36" cy="70" r="1.8" fill="#7dd3fc" />
+          <circle className="pi-welcome-mark__spray" cx="105" cy="54" r="2.2" fill="currentColor" />
+          <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--late" cx="111" cy="62" r="1.6" fill="#7dd3fc" />
+          <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--later" cx="36" cy="70" r="1.8" fill="#7dd3fc" />
         </g>
         {/* Kamon outer and inner crest rings */}
         <circle cx="80" cy="80" r="73" stroke="currentColor" strokeWidth="3.5" />
-        <circle cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
+        <circle className="pi-welcome-mark__ring" cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
       </svg>
     </span>
   )

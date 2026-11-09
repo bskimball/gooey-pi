@@ -97,8 +97,10 @@ const toggleAnnotate = async () => {
 const setComment = async (value: string) => {
   const textarea = container.querySelector('.annotation-popover textarea') as HTMLTextAreaElement
   await act(async () => {
+    const previous = textarea.value
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
     setter?.call(textarea, value)
+    ;(textarea as unknown as { _valueTracker?: { setValue(v: string): void } })._valueTracker?.setValue(previous)
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
@@ -357,5 +359,110 @@ describe('BrowserPanel annotation mode', () => {
     expect(container.querySelector('.annotation-popover')).toBeNull()
     expect(container.querySelector('.annotation-hint')).not.toBeNull()
     expect(latestApi.annotations).toHaveLength(0)
+  })
+
+  it('keeps the comment popover editable and cancellable when a save hits capacity, and expires the notice across navigation', async () => {
+    let allowAdd = false
+    const api: BrowserAnnotationsApi = {
+      annotations: [],
+      atCapacity: false,
+      add: vi.fn(() => allowAdd),
+      remove: vi.fn(),
+      clear: vi.fn(),
+      handleNavigation: vi.fn(),
+      sendSignal: 0,
+      requestSend: vi.fn(),
+    }
+    await act(async () => root.render(<BrowserPanel home="https://example.com/" onOpenExternal={() => undefined} annotations={api} pollIntervalMs={50} />))
+    await makeDomReady()
+    await toggleAnnotate()
+
+    takeResult = capturedPayload
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120)
+    })
+    takeResult = null
+
+    await setComment('First draft')
+    await act(async () => {
+      ;(container.querySelector('.annotation-popover .button--primary') as HTMLButtonElement).click()
+    })
+
+    // Rejected save shows the notice while keeping the popover interactive and cancellable.
+    expect(container.querySelector('.annotation-notice')?.textContent).toContain('at most 20 annotations')
+    expect(container.querySelector('.annotation-popover')).not.toBeNull()
+    expect(api.add).toHaveBeenCalledOnce()
+    expect(api.add).toHaveBeenLastCalledWith(expect.objectContaining({ comment: 'First draft' }))
+
+    // Even after the 5-second notice expires, the popover stays in commenting mode and can be cancelled or saved.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+    expect(container.querySelector('.annotation-notice')).toBeNull()
+    expect(container.querySelector('.annotation-popover')).not.toBeNull()
+
+    // Retrying after freeing capacity saves and dismisses the popover, and re-triggering capacity notice expires across navigation.
+    await act(async () => {
+      ;(container.querySelector('.annotation-popover .button--primary') as HTMLButtonElement).click()
+    })
+    expect(container.querySelector('.annotation-notice')?.textContent).toContain('at most 20 annotations')
+
+    allowAdd = true
+    await act(async () => {
+      ;(container.querySelector('.annotation-popover .button--primary') as HTMLButtonElement).click()
+    })
+    expect(api.add).toHaveBeenCalledTimes(3)
+    expect(container.querySelector('.annotation-popover')).toBeNull()
+
+    // Navigation does not pin the notice forever; the 5s timer still clears it.
+    webviewUrl = 'https://example.com/next'
+    await act(async () => {
+      webviewElement().dispatchEvent(new Event('did-navigate'))
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_100)
+    })
+    expect(container.querySelector('.annotation-notice')).toBeNull()
+  })
+
+  it('cancels an in-flight open-source revalidation if the popover unmounts before resolution', async () => {
+    let resolvePendingOpen: ((value: { kind: 'resolved'; path: string; line: number; evidence: 'explicit' }) => void) | undefined
+    let callCount = 0
+    const resolveBrowserSource = vi.fn(() => {
+      callCount += 1
+      if (callCount === 1) return Promise.resolve({ kind: 'resolved' as const, path: '/repo/Button.tsx', line: 2, evidence: 'explicit' as const })
+      return new Promise<{ kind: 'resolved'; path: string; line: number; evidence: 'explicit' }>((resolve) => {
+        resolvePendingOpen = resolve
+      })
+    })
+    const openInVsCode = vi.fn(async () => true)
+    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
+
+    await act(async () => root.render(<Harness />))
+    await makeDomReady()
+    await toggleAnnotate()
+    takeResult = JSON.stringify([{ selector: '#cta', tagName: 'button', component: 'Button', sourceHint: { kind: 'explicit', path: 'Button.tsx', line: 2 } }])
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120)
+    })
+    takeResult = null
+
+    const openBtn = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Open source in VS Code')!
+    await act(async () => {
+      openBtn.click()
+    })
+    expect(openBtn.textContent).toBe('Opening…')
+
+    // Dismiss the popover before the second resolveBrowserSource settles.
+    await act(async () => {
+      ;(container.querySelector('button[aria-label="Discard annotation"]') as HTMLButtonElement).click()
+    })
+    expect(container.querySelector('.annotation-popover')).toBeNull()
+
+    await act(async () => {
+      resolvePendingOpen?.({ kind: 'resolved', path: '/repo/Button.tsx', line: 2, evidence: 'explicit' })
+      await Promise.resolve()
+    })
+    expect(openInVsCode).not.toHaveBeenCalled()
   })
 })

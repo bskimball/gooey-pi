@@ -270,7 +270,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
           <PiMark size={24} />
         </div>
         <div className="sidebar__title-actions no-drag">
-          <IconButton label={`New session (${newSessionShortcut})`} onClick={() => onNewSession()}><NotePencil size={16} /></IconButton>
+          <IconButton className="sidebar__new-session" label={`New session (${newSessionShortcut})`} onClick={() => onNewSession()}><NotePencil size={16} /></IconButton>
         </div>
       </div>
 

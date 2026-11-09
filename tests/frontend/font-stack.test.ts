@@ -23,6 +23,18 @@ describe('Vazirmatn font stack', () => {
     expect(rootFontFamily.indexOf('Vazirmatn')).toBeLessThan(rootFontFamily.indexOf('ui-sans-serif'))
   })
 
+  it('bundles Figtree as the variable Latin UI face ahead of the system families', () => {
+    const figtreeFaces = css.match(/@font-face\s*\{[^}]*font-family:\s*['"]Figtree['"][^}]*\}/g) ?? []
+    const figtreeUrls = figtreeFaces.map((face) => face.match(/src:\s*url\(\s*['"]?([^'")\s]+)['"]?\s*\)/)?.[1] ?? '')
+    expect(figtreeUrls).toEqual(['/fonts/figtree-latin-var.woff2', '/fonts/figtree-latin-ext-var.woff2'])
+    for (const face of figtreeFaces) expect(face).toMatch(/font-weight:\s*300\s+900/)
+    for (const url of figtreeUrls) expect(existsSync(join('apps/desktop/public', url))).toBe(true)
+    expect(existsSync('apps/desktop/public/fonts/LICENSE-figtree.txt')).toBe(true)
+    // Vazirmatn stays first so its Arabic unicode-range wins; Figtree covers Latin before the OS fallback.
+    expect(rootFontFamily.indexOf('Vazirmatn')).toBeLessThan(rootFontFamily.indexOf('Figtree'))
+    expect(rootFontFamily.indexOf('Figtree')).toBeLessThan(rootFontFamily.indexOf('ui-sans-serif'))
+  })
+
   it('keeps the font in the renderer inputs that are packaged into the asar', () => {
     const rendererConfig = readFileSync('electron.vite.config.ts', 'utf8')
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { build: { files: string[] } }

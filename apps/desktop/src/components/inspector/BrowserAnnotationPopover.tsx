@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect } from 'react'
+import { useMachine } from '@xstate/react'
 import type { BrowserAnnotationElement, BrowserSourceResult } from '@/types/api'
 import { MAX_COMMENT_LENGTH } from '@/lib/browser-annotations'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { ChatCircleText, X } from '../icons'
+import { annotationSourceMachine } from './browserAnnotationMachine'
 
 interface Props {
   element: BrowserAnnotationElement
@@ -17,10 +19,9 @@ interface Props {
 }
 
 export function BrowserAnnotationPopover({ element, cwd, index, platform, text, onTextChange, onCancel, onSave, onRequestSend }: Props) {
-  const [source, setSource] = useState<BrowserSourceResult | { kind: 'checking' }>({ kind: 'checking' })
-  const [opening, setOpening] = useState(false)
-  const [error, setError] = useState('')
-  const generation = useRef(0)
+  const [snapshot, send] = useMachine(annotationSourceMachine)
+  const { source, error } = snapshot.context
+  const opening = snapshot.matches('opening')
   const resolveSource = useCallback(async (): Promise<BrowserSourceResult> => {
     if (!element.sourceHint) return { kind: 'unknown', reason: 'This element has no usable original-source metadata. Visual context can still be attached.' }
     if (!cwd || !window.prime) return { kind: 'unknown', reason: 'Open a granted workspace to validate this source location.' }
@@ -32,32 +33,15 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
   }, [cwd, element.sourceHint])
 
   useEffect(() => {
-    const request = ++generation.current
-    setSource({ kind: 'checking' })
-    void resolveSource().then((result) => {
-      if (request === generation.current) setSource(result)
+    send({
+      type: 'CHECK',
+      resolveSource,
+      openInVsCode: (path, line) => window.prime.app.openInVsCode(path, line),
     })
-    return () => {
-      generation.current += 1
-    }
-  }, [resolveSource])
+  }, [resolveSource, send])
 
-  const openSource = async () => {
-    const request = generation.current
-    setOpening(true)
-    setError('')
-    try {
-      const current = await resolveSource()
-      if (request !== generation.current) return
-      setSource(current)
-      if (current.kind === 'resolved' && !(await window.prime.app.openInVsCode(current.path, current.line)) && request === generation.current) {
-        setError('VS Code could not open this source location.')
-      }
-    } catch {
-      if (request === generation.current) setError('VS Code could not open this source location.')
-    } finally {
-      if (request === generation.current) setOpening(false)
-    }
+  const openSource = () => {
+    send({ type: 'OPEN_IN_VSCODE' })
   }
   const save = () => source.kind !== 'checking' && text.trim().length > 0 && onSave(source)
 
@@ -113,9 +97,7 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
                 className="button"
                 type="button"
                 disabled={opening}
-                onClick={() => {
-                  void openSource()
-                }}
+                onClick={openSource}
               >
                 {opening ? 'Opening…' : 'Open source in VS Code'}
               </button>

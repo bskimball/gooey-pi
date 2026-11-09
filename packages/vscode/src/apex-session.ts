@@ -4,6 +4,8 @@ import { canonicalSessionPath } from 'apex-core/session-paths'
 import { isPathWithin, requireExistingPath } from 'apex-core/validation'
 import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
 import * as vscode from 'vscode'
+import { createActor, type ActorRefFrom } from 'xstate'
+import { apexSessionTurnMachine } from './apexSessionMachine'
 import { BrowserHost } from './browser/host'
 import { AttachedSession } from './attached-session'
 import type { ScreenshotResizer } from './browser/service'
@@ -93,17 +95,9 @@ export class ApexSession implements vscode.Disposable {
   private uiQueue: Json[] = []
   private statuses = new Map<string, string>()
   private statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
-  private queuePaused = false
-  /** Set when pi reports agent_start after our latest prompt, so a late "handled" response can't end a real run. */
-  private runStarted = false
-  private compacting = false
-  private inFlightCompact = false
-  private onCompactionEnd: (() => void) | undefined
-  /** Bumped per idle prompt and on transcript reset; only the current prompt's response may end its optimistic run. */
-  private promptToken = 0
+  private turnActorRef: ActorRefFrom<typeof apexSessionTurnMachine> | undefined
   private seq = 0
   private currentPath: string | null = null
-  private switching = false
   private readonly owner = new VsCodeRuntimeOwner(() => this.cwd)
   private state: HostState = {
     status: 'starting',
@@ -118,6 +112,20 @@ export class ApexSession implements vscode.Disposable {
     queued: [],
     messageEnterAction: 'queue',
   }
+
+  private get turnActor(): ActorRefFrom<typeof apexSessionTurnMachine> {
+    return (this.turnActorRef ??= createActor(apexSessionTurnMachine).start())
+  }
+
+  private get turnContext() {
+    return this.turnActor.getSnapshot().context
+  }
+
+  private get queuePaused(): boolean { return this.turnContext.queuePaused }
+  private set queuePaused(value: boolean) { this.turnActor.send({ type: 'PAUSE_QUEUE', paused: value }) }
+  private get compacting(): boolean { return this.turnContext.compacting }
+  private get promptToken(): number { return this.turnContext.promptToken }
+  private get switching(): boolean { return this.turnContext.switching }
 
   readonly browser: BrowserHost
   private readonly browserSessionKey = canonicalSessionPath(this.cwd)
@@ -236,6 +244,7 @@ export class ApexSession implements vscode.Disposable {
   dispose(): Promise<void> {
     if (this.shutdown) return this.shutdown
     ++this.launchGeneration
+    this.turnActorRef?.stop()
     void this.attached?.dispose()
     this.attached = undefined
     void this.browser.stop().catch(() => undefined)
@@ -394,9 +403,7 @@ export class ApexSession implements vscode.Disposable {
     }
     if (!this.rpc || this.state.status !== 'ready' || this.state.isStreaming || this.switching) throw new Error('Cannot switch sessions while Pi is starting, busy, or not running.')
     const rpc = this.rpc
-    this.switching = true
-    const wasPaused = this.queuePaused
-    this.queuePaused = true
+    this.turnActor.send({ type: 'BEGIN_SWITCH' })
     let finishReservation: (() => void) | undefined
     let switchSent = false
     // Pi's session hooks can hold switch_session for several seconds; show that the request is in flight.
@@ -437,8 +444,7 @@ export class ApexSession implements vscode.Disposable {
     } finally {
       finishProgress()
       finishReservation?.()
-      this.switching = false
-      this.queuePaused = wasPaused
+      this.turnActor.send({ type: 'END_SWITCH' })
     }
   }
 
@@ -545,8 +551,7 @@ export class ApexSession implements vscode.Disposable {
     }
     if (!this.rpc) return this.start()
     // Hold the local queue first: pi settles before abort responds, which would otherwise send the next queued prompt into the outgoing session.
-    this.queuePaused = true
-    this.switching = true
+    this.turnActor.send({ type: 'BEGIN_NEW_SESSION' })
     const rpc = this.rpc
     await this.guard(async () => {
       try {
@@ -558,14 +563,14 @@ export class ApexSession implements vscode.Disposable {
           return
         }
         this.resetTranscript()
-        this.queuePaused = false
+        this.turnActor.send({ type: 'NEW_SESSION_READY' })
         this.update({ queued: [], isStreaming: false, sessionName: undefined, contextUsage: undefined, sessionUsage: undefined })
         await this.refreshAll()
       } catch (error) {
         await rpc.dispose()
         throw error
       } finally {
-        this.switching = false
+        this.turnActor.send({ type: 'END_SWITCH' })
       }
     })
   }
@@ -635,53 +640,57 @@ export class ApexSession implements vscode.Disposable {
       await this.guard(() => rpc.command('prompt', { message: text + editorContext, streamingBehavior: intent === 'steer' ? 'steer' : 'followUp', ...imagePayload }))
       return
     }
-    this.queuePaused = false
-    this.runStarted = false
-    const token = ++this.promptToken
+    let token = 0
     if (compactCommand) {
-      let compactionEnded = false
-      this.compacting = true
-      this.inFlightCompact = true
-      this.onCompactionEnd = () => { compactionEnded = true }
+      this.turnActor.send({ type: 'BEGIN_COMPACT', assignToken: (next) => { token = next } })
       this.update({ isStreaming: true })
+      let compactError: unknown
       try {
         await rpc.command('compact', compactCommand.customInstructions ? { customInstructions: compactCommand.customInstructions } : {})
       } catch (error) {
-        if (token === this.promptToken && !compactionEnded && this.rpc === rpc) {
-          this.notice(error instanceof Error ? error.message : String(error))
-        }
+        compactError = error
       } finally {
-        this.inFlightCompact = false
-        this.compacting = false
-        this.onCompactionEnd = undefined
-        if (token === this.promptToken && this.rpc === rpc) {
-          this.update({ isStreaming: false })
-          void this.refreshStats()
-          void this.guard(() => this.refreshState())
-          this.flushQueue()
-        }
+        this.turnActor.send({
+          type: 'FINISH_COMPACT',
+          token,
+          onSettled: (compactionEnded) => {
+            if (this.rpc !== rpc) return
+            if (compactError !== undefined && !compactionEnded) {
+              this.notice(compactError instanceof Error ? compactError.message : String(compactError))
+            }
+            this.update({ isStreaming: false })
+            void this.refreshStats()
+            void this.guard(() => this.refreshState())
+            this.flushQueue()
+          },
+        })
       }
       return
     }
+    this.turnActor.send({ type: 'BEGIN_PROMPT', assignToken: (next) => { token = next } })
     this.addOp({ kind: 'user', id: `user-${++this.seq}`, text, ...imagePayload, timestamp: Date.now(), startAssistant: true })
     this.update({ isStreaming: true })
     try {
       const response = await rpc.command<Json>('prompt', { message: this.isExtensionCommand(text) ? text : text + editorContext, ...imagePayload })
-      if (response?.disposition === 'handled' && token === this.promptToken) this.endOptimisticRun()
+      if (response?.disposition === 'handled') this.endOptimisticRun(token)
     } catch (error) {
       if (token !== this.promptToken) return
-      this.endOptimisticRun()
+      this.endOptimisticRun(token)
       this.notice(error instanceof Error ? error.message : String(error))
     }
   }
 
   /** A prompt that started no run (handled command or rejection) leaves an empty placeholder to drop. */
-  private endOptimisticRun() {
-    if (this.runStarted) return
-    this.addOp({ kind: 'event', event: { type: 'apex_drop_empty_assistant' } })
-    if (this.compacting) return
-    this.update({ isStreaming: false })
-    this.flushQueue()
+  private endOptimisticRun(token = this.promptToken) {
+    this.turnActor.send({
+      type: 'OPTIMISTIC_SETTLED',
+      token,
+      onDropPlaceholder: () => this.addOp({ kind: 'event', event: { type: 'apex_drop_empty_assistant' } }),
+      onFullySettled: () => {
+        this.update({ isStreaming: false })
+        this.flushQueue()
+      },
+    })
   }
 
   private isExtensionCommand(text: string) {
@@ -769,34 +778,34 @@ export class ApexSession implements vscode.Disposable {
     const type = asString(record.type)
     if (type === 'extension_ui_request') return this.onExtensionUi(record)
     if (type === 'agent_start') {
-      this.runStarted = true
-      this.compacting = false
+      this.turnActor.send({ type: 'AGENT_START' })
       this.update({ isStreaming: true })
     }
     if (type === 'compaction_start') {
-      if (record.reason === 'manual' || !this.state.isStreaming) this.compacting = true
+      this.turnActor.send({ type: 'COMPACTION_START', manualOrIdle: record.reason === 'manual' || !this.state.isStreaming })
       this.update({ isStreaming: true })
     }
     if (type === 'compaction_end') {
-      this.onCompactionEnd?.()
       void this.refreshStats()
-      if (this.compacting && !this.inFlightCompact) {
-        this.compacting = false
-        if (!this.runStarted) {
+      this.turnActor.send({
+        type: 'COMPACTION_END',
+        onExtensionCompactionSettled: () => {
           this.update({ isStreaming: false })
           void this.guard(() => this.refreshState())
           this.flushQueue()
-        }
-      }
+        },
+      })
     }
     if (type === 'agent_settled') {
-      this.runStarted = false
-      if (!this.compacting) {
-        this.update({ isStreaming: false })
-        void this.refreshStats()
-        void this.guard(() => this.refreshState())
-        this.flushQueue()
-      }
+      this.turnActor.send({
+        type: 'AGENT_SETTLED',
+        onSettled: () => {
+          this.update({ isStreaming: false })
+          void this.refreshStats()
+          void this.guard(() => this.refreshState())
+          this.flushQueue()
+        },
+      })
     }
     if (type === 'model_change') void this.guard(() => this.refreshState())
     if (type && TRANSCRIPT_EVENTS.has(type)) this.appendEvent(record)
@@ -882,11 +891,7 @@ export class ApexSession implements vscode.Disposable {
   }
 
   private resetTranscript() {
-    this.promptToken += 1
-    this.runStarted = false
-    this.compacting = false
-    this.inFlightCompact = false
-    this.onCompactionEnd = undefined
+    this.turnActor.send({ type: 'RESET_TRANSCRIPT' })
     clearTimeout(this.flushTimer)
     this.flushTimer = undefined
     this.ops = []

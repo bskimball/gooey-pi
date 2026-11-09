@@ -140,10 +140,12 @@
     }
   },
   "dependencies": {
+    "@xstate/react": "^6.1.0",
     "apex-core": "0.1.0",
     "apex-ui": "*",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "xstate": "^5.33.4"
   },
   "devDependencies": {
     "@types/vscode": "~1.90.0",

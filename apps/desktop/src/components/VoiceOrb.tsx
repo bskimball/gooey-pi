@@ -1,11 +1,11 @@
 import { Microphone, MicrophoneSlash, X } from './icons'
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useMachine } from '@xstate/react'
 import type { HarnessId, PrimeWorkApi, VoiceTaskStarted, VoiceToolRequest } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { DesktopPet, type DesktopPetProps } from './DesktopPet'
 import type { PetActivity } from './PetAvatar'
-
-type OrbState = 'connecting' | 'listening' | 'user-speaking' | 'thinking' | 'agent-speaking' | 'error'
+import { voiceOrbMachine, type OrbState } from './voiceOrbMachine'
 
 interface VoiceOrbProps {
   voice: PrimeWorkApi['voice']
@@ -60,17 +60,20 @@ function realtimeErrorMessage(message: Record<string, unknown>): string {
 }
 
 export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPetControl = false, onPetControlFocused }: VoiceOrbProps) {
-  const [orbState, setOrbState] = useState<OrbState>('connecting')
-  const [muted, setMuted] = useState(false)
-  const [error, setError] = useState('')
-  const [taskReceipt, setTaskReceipt] = useState<VoiceTaskStarted | null>(null)
-  const [taskOpened, setTaskOpened] = useState(false)
+  const [snapshot, send, actor] = useMachine(voiceOrbMachine)
+  const { muted, error, taskReceipt, taskOpened } = snapshot.context
+  const orbState: OrbState = snapshot.matches('connecting') ? 'connecting'
+    : snapshot.matches('userSpeaking') ? 'user-speaking'
+      : snapshot.matches('thinking') ? 'thinking'
+        : snapshot.matches('agentSpeaking') ? 'agent-speaking'
+          : snapshot.matches('error') ? 'error' : 'listening'
   const [position, setPosition] = useState(initialPosition)
   const streamRef = useRef<MediaStream | null>(null)
   const channelRef = useRef<RTCDataChannel | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const dragRef = useRef<{ pointerId: number; dx: number; dy: number } | null>(null)
   const harnessRef = useRef(harness)
+  harnessRef.current = harness
   const petVisibleRef = useRef(Boolean(pet))
 
   useEffect(() => {
@@ -78,94 +81,73 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
     const isVisible = Boolean(pet)
     petVisibleRef.current = isVisible
     if (wasVisible || !isVisible) return
-    setMuted(true)
+    send({ type: 'MUTE_FOR_PET' })
     for (const track of streamRef.current?.getAudioTracks() ?? []) track.enabled = false
-    setOrbState((current) => current === 'error' ? current : 'listening')
-  }, [pet])
+  }, [pet, send])
 
   useEffect(() => {
     let active = true
-    const handledCalls = new Set<string>()
-    let responseActive = false
-    let pendingToolCalls = 0
-    let continuationPending = false
-    let pendingResponseCreateEventId: string | null = null
-    let clientEventSequence = 0
     const peer = new RTCPeerConnection()
     const channel = peer.createDataChannel('oai-events')
     channelRef.current = channel
-
-    const continueAfterTools = () => {
-      if (!active || channel.readyState !== 'open' || responseActive || pendingToolCalls > 0 || !continuationPending) return
-      continuationPending = false
-      responseActive = true
-      pendingResponseCreateEventId = `gooeypi-response-${Date.now().toString(36)}-${++clientEventSequence}`
-      channel.send(JSON.stringify({ type: 'response.create', event_id: pendingResponseCreateEventId }))
-    }
+    send({
+      type: 'RESET',
+      sendContinuation: (eventId) => {
+        if (!active || channel.readyState !== 'open') return false
+        channel.send(JSON.stringify({ type: 'response.create', event_id: eventId }))
+        return true
+      },
+    })
 
     const sendToolOutput = (callId: string, output: string) => {
       if (!active) return
-      pendingToolCalls = Math.max(0, pendingToolCalls - 1)
-      if (channel.readyState === 'open') {
+      const openChannel = channel.readyState === 'open'
+      if (openChannel) {
         channel.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output } }))
-        continuationPending = true
       }
-      continueAfterTools()
+      send({ type: 'TOOL_FINISHED', openChannel })
     }
 
     const execute = async (callId: string, name: unknown, rawArguments: unknown) => {
-      if (handledCalls.has(callId)) return
+      if (actor.getSnapshot().context.handledCalls.has(callId)) return
       let args: unknown
       try { args = typeof rawArguments === 'string' ? JSON.parse(rawArguments) : rawArguments } catch { args = null }
       const request = toolRequest(name, args)
       if (!request) return
-      handledCalls.add(callId)
-      pendingToolCalls += 1
-      setOrbState('thinking')
-      if (request.name === 'start_task') setError('')
+      send({ type: 'TOOL_STARTED', callId, isStartTask: request.name === 'start_task' })
       try {
         const result = await voice.executeTool(request, harnessRef.current)
         sendToolOutput(callId, result.output)
         if (active && result.task) {
-          setTaskReceipt(result.task)
-          setTaskOpened(false)
+          send({ type: 'TASK_STARTED', task: result.task })
           void onTaskStarted(result.task).then(() => {
-            if (active) setTaskOpened(true)
+            if (active) send({ type: 'TASK_OPENED' })
           }).catch((failure) => {
             if (!active) return
-            setError(`The task started, but Apex could not open it: ${failure instanceof Error ? failure.message : 'Unknown error'}`)
+            send({ type: 'TASK_OPEN_FAILED', message: failure instanceof Error ? failure.message : 'Unknown error' })
           })
         }
       } catch (failure) {
         const message = failure instanceof Error ? failure.message : 'Voice tool failed'
         if (active && request.name === 'start_task') {
-          setTaskReceipt(null)
-          setError(`Task was not started: ${message}`)
+          send({ type: 'START_TASK_FAILED', message })
         }
         sendToolOutput(callId, JSON.stringify({ error: message }))
       }
     }
 
-    channel.addEventListener('open', () => { if (active) setOrbState('listening') })
+    channel.addEventListener('open', () => { if (active) send({ type: 'CHANNEL_OPEN' }) })
     channel.addEventListener('message', (event) => {
       let payload: unknown
       try { payload = JSON.parse(String(event.data)) } catch { return }
       if (!payload || typeof payload !== 'object') return
       const message = payload as Record<string, unknown>
-      if (message.type === 'input_audio_buffer.speech_started') setOrbState('user-speaking')
-      else if (message.type === 'input_audio_buffer.speech_stopped') setOrbState('thinking')
-      else if (message.type === 'response.created') {
-        responseActive = true
-        setOrbState('thinking')
-      }
-      else if (message.type === 'response.audio.delta' || message.type === 'output_audio_buffer.started') setOrbState('agent-speaking')
-      else if (message.type === 'output_audio_buffer.stopped') setOrbState('listening')
-      else if (message.type === 'response.done') {
-        responseActive = false
-        pendingResponseCreateEventId = null
-        setOrbState('listening')
-        continueAfterTools()
-      }
+      if (message.type === 'input_audio_buffer.speech_started') send({ type: 'SPEECH_STARTED' })
+      else if (message.type === 'input_audio_buffer.speech_stopped') send({ type: 'SPEECH_STOPPED' })
+      else if (message.type === 'response.created') send({ type: 'RESPONSE_CREATED' })
+      else if (message.type === 'response.audio.delta' || message.type === 'output_audio_buffer.started') send({ type: 'AUDIO_STARTED' })
+      else if (message.type === 'output_audio_buffer.stopped') send({ type: 'AUDIO_STOPPED' })
+      else if (message.type === 'response.done') send({ type: 'RESPONSE_DONE' })
       else if (message.type === 'response.function_call_arguments.done' && typeof message.call_id === 'string') void execute(message.call_id, message.name, message.arguments)
       else if (message.type === 'response.output_item.done' && message.item && typeof message.item === 'object') {
         const item = message.item as Record<string, unknown>
@@ -174,26 +156,15 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
         const detail = realtimeErrorMessage(message)
         const realtimeError = message.error && typeof message.error === 'object' && !Array.isArray(message.error) ? message.error as Record<string, unknown> : {}
         const triggeringEventId = boundedErrorField(realtimeError.event_id)
-        const correlatedResponseCreate = Boolean(triggeringEventId && triggeringEventId === pendingResponseCreateEventId)
+        const code = boundedErrorField(realtimeError.code)
         console.error('[voice] realtime error', {
           type: boundedErrorField(realtimeError.type),
-          code: boundedErrorField(realtimeError.code),
+          code,
           message: boundedErrorField(realtimeError.message),
           param: boundedErrorField(realtimeError.param),
           event_id: triggeringEventId,
         })
-        if (correlatedResponseCreate) {
-          pendingResponseCreateEventId = null
-          if (boundedErrorField(realtimeError.code) === 'conversation_already_has_active_response') {
-            responseActive = true
-            continuationPending = true
-          } else {
-            responseActive = false
-            continuationPending = false
-          }
-        }
-        setError((current) => current.startsWith('Task was not started:') ? current : detail)
-        setOrbState('error')
+        send({ type: 'REALTIME_ERROR', detail, code, eventId: triggeringEventId })
       }
     })
     peer.addEventListener('track', (event) => {
@@ -213,8 +184,7 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
         await peer.setRemoteDescription({ type: 'answer', sdp: answer })
       } catch (failure) {
         if (!active) return
-        setError(failure instanceof Error ? failure.message : 'Could not start realtime voice.')
-        setOrbState('error')
+        send({ type: 'CONNECT_FAILED', message: failure instanceof Error ? failure.message : 'Could not start realtime voice.' })
       }
     })()
 
@@ -227,13 +197,12 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
       streamRef.current = null
       if (audioRef.current) audioRef.current.srcObject = null
     }
-  }, [onTaskStarted, voice])
+  }, [actor, onTaskStarted, send, voice])
 
   const toggleMute = () => {
     const next = !muted
-    setMuted(next)
+    send({ type: 'TOGGLE_MUTE' })
     for (const track of streamRef.current?.getAudioTracks() ?? []) track.enabled = !next
-    if (next) setOrbState('listening')
   }
 
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {

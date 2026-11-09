@@ -45,7 +45,7 @@
 	max-width: 220px;
 	overflow: hidden;
 	color: var(--text);
-	font-weight: 560;
+	font-weight: 550;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -111,7 +111,7 @@
 	gap: 8px;
 	color: var(--text-tertiary);
 	font-size: var(--fs-meta);
-	font-weight: 620;
+	font-weight: 600;
 	letter-spacing: 0.01em;
 }
 .composer-queue__header > span {
@@ -216,7 +216,7 @@
 	background: color-mix(in srgb, var(--surface-raised) 91%, transparent);
 	backdrop-filter: blur(4px);
 	font-size: var(--fs-ui);
-	font-weight: 620;
+	font-weight: 600;
 	pointer-events: none;
 }
 .composer-input {
@@ -335,7 +335,7 @@
 	color: var(--annotation);
 	background: transparent;
 	font-size: var(--fs-meta);
-	font-weight: 650;
+	font-weight: 600;
 	line-height: 1;
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
@@ -402,7 +402,7 @@
 .composer-attachment--terminal .composer-attachment__expand small {
 	color: var(--prime);
 	font-size: var(--fs-micro);
-	font-weight: 650;
+	font-weight: 600;
 }
 .composer-attachment--terminal .composer-attachment__expand svg {
 	flex: 0 0 auto;
@@ -599,7 +599,7 @@
 	height: 100%;
 	padding: 0;
 	font-size: var(--fs-micro);
-	font-weight: 650;
+	font-weight: 600;
 	line-height: 1;
 	text-align: center;
 	transform: translateY(0.25px);
@@ -619,7 +619,7 @@
 	background: var(--surface-raised);
 	box-shadow: var(--shadow-popover);
 	font-size: var(--fs-micro);
-	font-weight: 450;
+	font-weight: 400;
 	line-height: 1.35;
 	white-space: nowrap;
 	opacity: 0;
@@ -746,7 +746,7 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: var(--fs-meta);
-	font-weight: 500;
+	font-weight: 550;
 	cursor: pointer;
 }
 .select-control__trigger:disabled {
@@ -836,7 +836,7 @@
 	padding: 5px 7px 6px;
 	color: var(--text-tertiary);
 	font-size: var(--fs-micro);
-	font-weight: 650;
+	font-weight: 600;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
 }
@@ -880,7 +880,7 @@
 	overflow: hidden;
 	color: var(--text);
 	font-size: var(--fs-ui);
-	font-weight: 580;
+	font-weight: 550;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -999,7 +999,7 @@
 	color: var(--text-tertiary);
 	background: transparent;
 	font-size: var(--fs-micro);
-	font-weight: 560;
+	font-weight: 550;
 }
 .model-picker__providers button:hover {
 	color: var(--text);
@@ -1031,13 +1031,13 @@
 }
 .model-picker__group-heading span {
 	font-size: var(--fs-micro);
-	font-weight: 650;
+	font-weight: 600;
 	letter-spacing: 0.03em;
 }
 .model-picker__group-heading small {
 	color: var(--text-tertiary);
 	font-size: var(--fs-micro);
-	font-weight: 480;
+	font-weight: 400;
 }
 .model-picker__option.is-selected {
 	color: var(--text);
@@ -1139,8 +1139,8 @@
 	flex: 0 0 auto;
 	padding: 0;
 	border-radius: 50%;
-	color: var(--canvas);
-	background: var(--text);
+	color: var(--primary-ink);
+	background: var(--primary-fill);
 	transition:
 		transform 110ms ease-out,
 		opacity 120ms ease-out,
@@ -1210,7 +1210,7 @@
 .composer-menu strong {
 	color: var(--text);
 	font-size: var(--fs-ui);
-	font-weight: 540;
+	font-weight: 550;
 }
 .composer-menu small {
 	overflow: hidden;

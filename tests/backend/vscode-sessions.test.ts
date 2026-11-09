@@ -376,6 +376,50 @@ describe('VS Code mode status', () => {
 })
 
 describe('VS Code saved sessions', () => {
+  it('closes the session picker and surfaces a notice when an explicit refresh fails, while ignoring superseded fetches', async () => {
+    const { createActor } = await import('xstate')
+    const { sessionPickerMachine } = await import('../../packages/vscode/webview/sessionPickerMachine')
+    const onNotice = vi.fn()
+    let resolveFirst!: (value: import('../../packages/vscode/webview/sessionPickerMachine').ListedSessions) => void
+    let rejectSecond!: (error: Error) => void
+
+    const actor = createActor(sessionPickerMachine).start()
+    try {
+      actor.send({ type: 'OPEN' })
+      expect(actor.getSnapshot().matches({ disclosure: 'open' })).toBe(true)
+
+      actor.send({
+        type: 'REFRESH',
+        reportError: true,
+        listSessions: () => new Promise((resolve) => { resolveFirst = resolve }),
+        onNotice,
+      })
+      actor.send({
+        type: 'REFRESH',
+        reportError: true,
+        listSessions: () => new Promise((_, reject) => { rejectSecond = reject }),
+        onNotice,
+      })
+
+      resolveFirst({
+        sessions: [{ path: '/stale.jsonl', id: 'stale', title: 'Stale', preview: '', updatedAt: '2026-01-01T00:00:00.000Z', messageCount: 1 }],
+        currentPath: '/stale.jsonl',
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(actor.getSnapshot().context.items).toEqual([])
+      expect(actor.getSnapshot().matches({ catalog: 'loading' })).toBe(true)
+
+      rejectSecond(new Error('Catalog read failed'))
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(actor.getSnapshot().matches({ disclosure: 'closed', catalog: 'idle' })).toBe(true)
+      expect(onNotice).toHaveBeenCalledExactlyOnceWith('Catalog read failed')
+    } finally {
+      actor.stop()
+    }
+  })
+
   it('reads header, first-user preview, name, timestamps and message count', async () => {
     const { cwd, root, paths } = await fixture()
     expect(await listSessions(cwd, root)).toEqual([{ path: paths[0], id: 'session-0', title: 'Named 0', preview: 'First prompt', updatedAt: '2026-01-01T00:00:00.000Z', messageCount: 2 }])
@@ -611,7 +655,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       state: { isStreaming: true, commands: [], queued: [] },
       update(patch: object) {
         Object.assign(this.state, patch)
@@ -713,7 +756,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       state: { isStreaming: false, commands: [], queued: [] },
       update(patch: object) {
         Object.assign(this.state, patch)
@@ -748,7 +790,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       queuePaused: false,
       state: { isStreaming: true, commands: [], queued: [] },
       update(patch: object) {
@@ -786,7 +827,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       state: { isStreaming: false, commands: [], queued: [] },
       update(patch: object) {
         Object.assign(this.state, patch)
@@ -816,7 +856,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       queuePaused: false,
       state: { isStreaming: false, commands: [], queued: [] },
       update(patch: object) {
@@ -860,7 +899,6 @@ describe('VS Code editor integration', () => {
     Object.assign(session, {
       rpc: { command },
       seq: 0,
-      promptToken: 0,
       queuePaused: false,
       state: { isStreaming: false, commands: [], queued: [] },
       update(patch: object) {
@@ -875,10 +913,14 @@ describe('VS Code editor integration', () => {
 
     // Active run followed by auto-compaction stays streaming until agent_settled.
     session.onRecord({ type: 'agent_start' })
+    expect(session.turnActor.getSnapshot().value).toBe('streaming')
     session.onRecord({ type: 'compaction_start', reason: 'threshold' })
+    expect(session.turnActor.getSnapshot().value).toBe('compacting')
     session.onRecord({ type: 'compaction_end', reason: 'threshold', aborted: false, willRetry: false })
+    expect(session.turnActor.getSnapshot().value).toBe('streaming')
     expect(session.state.isStreaming).toBe(true)
     session.onRecord({ type: 'agent_settled' })
+    expect(session.turnActor.getSnapshot().value).toBe('idle')
     expect(session.state.isStreaming).toBe(false)
 
     // Extension-triggered manual compaction has no host compact promise and no trailing agent_settled,

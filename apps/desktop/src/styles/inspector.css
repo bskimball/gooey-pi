@@ -213,7 +213,7 @@
 .summary-agent-list strong {
 	flex: 0 0 auto;
 	color: var(--text);
-	font-weight: 560;
+	font-weight: 550;
 }
 .summary-agent-list span {
 	flex: 1;
@@ -633,7 +633,7 @@
 	max-width: 100%;
 	flex: 0 0 auto;
 	overflow: hidden;
-	font-weight: 500;
+	font-weight: 550;
 	text-overflow: ellipsis;
 }
 .file-changes small {
@@ -1185,7 +1185,7 @@
 	color: var(--text-secondary);
 	background: var(--surface-raised);
 	font-size: var(--fs-meta);
-	font-weight: 560;
+	font-weight: 550;
 	white-space: nowrap;
 	transition:
 		color 130ms ease-out,
@@ -1256,7 +1256,7 @@
 	overflow: hidden;
 	color: var(--text);
 	font-size: 15px;
-	font-weight: 620;
+	font-weight: 600;
 	line-height: 1.3;
 	text-overflow: ellipsis;
 	text-wrap: balance;
@@ -1283,7 +1283,7 @@
 	margin: 18px 0 0;
 	color: var(--text);
 	font-size: var(--fs-ui);
-	font-weight: 580;
+	font-weight: 550;
 }
 .extension-tab-state__dot {
 	position: relative;
@@ -1661,25 +1661,25 @@
 .run-config__toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .run-config__toggle > .disclosure-caret { color: var(--text-tertiary); }
 .run-config__title { flex: 0 0 auto; }
-.run-config__summary { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-ui); font-weight: 450; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.run-config__summary { min-width: 0; flex: 1; overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-ui); font-weight: 400; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .run-config__alert { flex: 0 0 auto; display: inline-flex; color: var(--warning, var(--text-tertiary)); }
 .run-config__body { display: grid; gap: 10px; padding: 8px 0 4px; animation: disclosure-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .run-config__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
 .run-config__stat { min-width: 0; display: grid; gap: 2px; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-subtle); }
 .run-config__stat--wide { grid-column: 1 / -1; }
-.run-config__stat dt { color: var(--text-tertiary); font-size: var(--fs-micro); font-weight: 520; }
-.run-config__stat dd { margin: 0; overflow: hidden; color: var(--text); font-size: var(--fs-ui); font-weight: 540; text-overflow: ellipsis; white-space: nowrap; }
+.run-config__stat dt { color: var(--text-tertiary); font-size: var(--fs-micro); font-weight: 550; }
+.run-config__stat dd { margin: 0; overflow: hidden; color: var(--text); font-size: var(--fs-ui); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .run-config__subhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 2px; }
 .run-config__subhead h4 { margin: 0; color: var(--text-tertiary); font-size: var(--fs-meta); font-weight: 550; }
 .run-config__subhead span { color: var(--text-tertiary); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
 .run-config__items { display: flex; flex-direction: column; gap: 4px; margin: -4px 0 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: var(--fs-ui); }
 .run-config__items li { min-width: 0; min-height: 22px; display: flex; align-items: center; gap: 6px; }
 .run-config__path { min-width: 0; flex: 1; overflow: hidden; font-family: var(--chat-mono); font-size: var(--fs-meta); text-overflow: ellipsis; white-space: nowrap; }
-.run-config__scope { flex: 0 0 auto; padding: 1px 5px; border-radius: var(--radius-xs); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-micro); font-weight: 530; }
+.run-config__scope { flex: 0 0 auto; padding: 1px 5px; border-radius: var(--radius-xs); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-micro); font-weight: 550; }
 .run-config__scope.is-project, .run-config__scope.is-skills { color: var(--prime); background: var(--prime-soft); }
 .run-config__items small { flex: 0 0 auto; min-width: 38px; color: var(--text-tertiary); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; text-align: right; }
 .run-config__chips { display: flex; flex-wrap: wrap; gap: 5px; margin: -4px 0 0; padding: 0; list-style: none; }
-.run-config__chips li { min-height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 6px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface-subtle); font-size: var(--fs-meta); font-weight: 500; }
+.run-config__chips li { min-height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 6px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface-subtle); font-size: var(--fs-meta); font-weight: 550; }
 .run-config__chips li.is-present svg { color: var(--success); }
 .run-config__chips li.is-missing { border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); color: var(--warning, var(--text-tertiary)); background: var(--warning-soft); }
 .run-config__empty { margin: -4px 0 0; color: var(--text-tertiary); font-size: var(--fs-ui); }

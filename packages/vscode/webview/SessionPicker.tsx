@@ -1,7 +1,9 @@
 import { CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useMachine } from '@xstate/react'
 import type { HostState, SessionSummary } from '../src/protocol'
 import { sessions } from './host'
+import { sessionPickerMachine } from './sessionPickerMachine'
 
 interface SessionPickerProps {
   status?: HostState['status']
@@ -11,50 +13,41 @@ interface SessionPickerProps {
 }
 
 export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPickerProps) {
-  const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [items, setItems] = useState<SessionSummary[]>([])
-  const [currentPath, setCurrentPath] = useState<string | null>(null)
+  const [snapshot, send] = useMachine(sessionPickerMachine)
+  const open = snapshot.matches({ disclosure: 'open' })
+  const loading = snapshot.matches({ catalog: 'loading' })
+  const { items, currentPath } = snapshot.context
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const refreshTokenRef = useRef(0)
   const listId = useId()
 
   const refresh = useCallback((reportError: boolean) => {
-    const token = ++refreshTokenRef.current
-    setLoading(true)
-    void sessions.list().then(
-      ({ sessions: nextSessions, currentPath: nextCurrentPath }) => {
-        if (token !== refreshTokenRef.current) return
-        setItems(nextSessions)
-        setCurrentPath(nextCurrentPath)
-        setLoading(false)
-      },
-      (error: unknown) => {
-        if (token !== refreshTokenRef.current) return
-        setLoading(false)
-        if (reportError) {
-          setOpen(false)
-          onNotice(error instanceof Error ? error.message : String(error))
-        }
-      },
-    )
-  }, [onNotice])
+    send({
+      type: 'REFRESH',
+      reportError,
+      listSessions: () => sessions.list(),
+      onNotice,
+    })
+  }, [onNotice, send])
 
   useEffect(() => {
     const stop = sessions.onCurrent((path) => {
-      setCurrentPath(path)
-      refresh(false)
+      send({
+        type: 'CURRENT_CHANGED',
+        path,
+        listSessions: () => sessions.list(),
+        onNotice,
+      })
     })
     refresh(false)
     return stop
-  }, [refresh])
+  }, [onNotice, refresh, send])
 
   const close = useCallback((restoreFocus = false) => {
-    setOpen(false)
+    send({ type: 'CLOSE' })
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
-  }, [])
+  }, [send])
 
   useEffect(() => {
     if (!open) return
@@ -90,7 +83,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
     if (!open) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
-        setOpen(true)
+        send({ type: 'OPEN' })
       }
       return
     }
@@ -125,7 +118,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => send({ type: 'TOGGLE' })}
       >
         <ClockCounterClockwise size={14} />
         <span className="apex-session-picker__trigger-label">{activeTitle}</span>

@@ -2,13 +2,14 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
-  useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react'
+import { useMachine } from '@xstate/react'
 import { ArrowUp, Check, CircleNotch, WarningCircle } from '@/components/icons'
 import type { SessionRecord } from '@/types/api'
+import { activityReplyMachine, type ReplyFeedbackState } from './activityReplyMachine'
 
 export interface ActivityReplyBoxProps {
   session: SessionRecord
@@ -19,8 +20,6 @@ export interface ActivityReplyBoxProps {
   onSend?(session: SessionRecord, text: string, mode: 'steer' | 'follow-up', runtimeId?: string): Promise<void>
 }
 
-type ReplyFeedbackState = 'idle' | 'sending' | 'sent' | 'failed'
-
 export function ActivityReplyBox({
   session,
   runtimeId,
@@ -29,28 +28,19 @@ export function ActivityReplyBox({
   textareaRef,
   onSend,
 }: ActivityReplyBoxProps) {
-  const [draft, setDraft] = useState('')
-  const [feedback, setFeedback] = useState<ReplyFeedbackState>('idle')
+  const [snapshot, send] = useMachine(activityReplyMachine)
+  const { draft } = snapshot.context
+  const feedback: ReplyFeedbackState = snapshot.matches('sending') ? 'sending'
+    : snapshot.matches('sent') ? 'sent'
+      : snapshot.matches('failed') ? 'failed' : 'idle'
   const internalRef = useRef<HTMLTextAreaElement | null>(null)
-  const sentTimerRef = useRef<number | undefined>(undefined)
 
   const mode: 'steer' | 'follow-up' = isRunning ? 'steer' : 'follow-up'
   const enabled = Boolean(onSend && (isRunning || canFollowUp))
 
   useEffect(() => {
-    setDraft('')
-    setFeedback('idle')
-    if (sentTimerRef.current !== undefined) {
-      window.clearTimeout(sentTimerRef.current)
-      sentTimerRef.current = undefined
-    }
-  }, [session.id])
-
-  useEffect(() => () => {
-    if (sentTimerRef.current !== undefined) {
-      window.clearTimeout(sentTimerRef.current)
-    }
-  }, [])
+    send({ type: 'RESET' })
+  }, [send, session.id])
 
   useLayoutEffect(() => {
     const el = internalRef.current
@@ -66,25 +56,13 @@ export function ActivityReplyBox({
     }
   }
 
-  const submitReply = async () => {
+  const submitReply = () => {
     const trimmed = draft.trim()
     if (!trimmed || !enabled || !onSend || feedback === 'sending') return
-    if (sentTimerRef.current !== undefined) {
-      window.clearTimeout(sentTimerRef.current)
-      sentTimerRef.current = undefined
-    }
-    setFeedback('sending')
-    try {
-      await onSend(session, trimmed, mode, runtimeId)
-      setDraft('')
-      setFeedback('sent')
-      sentTimerRef.current = window.setTimeout(() => {
-        setFeedback('idle')
-        sentTimerRef.current = undefined
-      }, 2_200)
-    } catch {
-      setFeedback('failed')
-    }
+    send({
+      type: 'SUBMIT',
+      sendReply: () => onSend(session, trimmed, mode, runtimeId),
+    })
   }
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -96,13 +74,13 @@ export function ActivityReplyBox({
     }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
-      void submitReply()
+      submitReply()
     }
   }
 
   const handleFormSubmit = (event: FormEvent) => {
     event.preventDefault()
-    void submitReply()
+    submitReply()
   }
 
   const placeholder = !enabled
@@ -127,8 +105,7 @@ export function ActivityReplyBox({
           placeholder={placeholder}
           aria-label={!enabled ? 'Open session to continue' : isRunning ? 'Steer message' : 'Follow-up message'}
           onChange={(event) => {
-            setDraft(event.target.value)
-            if (feedback === 'failed' || feedback === 'sent') setFeedback('idle')
+            send({ type: 'EDIT', draft: event.target.value })
           }}
           onKeyDown={handleKeyDown}
         />

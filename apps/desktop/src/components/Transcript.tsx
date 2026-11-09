@@ -95,7 +95,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
       <div className="transcript__inner">
         {loading ? <div className="transcript-loading"><CircleNotch className="spin" size={16} /> Loading session…</div> : null}
         {!loading && messages.length === 0 ? <div className="session-welcome">
-          <PiWelcomeMark size={88} />
+          <PiWelcomeMark size={112} />
           <h1>What should we work on?</h1>
           <p>{HARNESS_SHORT_NAMES[harness]} can inspect this project, edit files, run tools, and keep working across sessions.</p>
           <div className="prompt-suggestions">

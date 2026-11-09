@@ -9,14 +9,14 @@
 .voice-orb__core i { position: absolute; width: 48px; height: 7px; border-radius: 50%; background: color-mix(in srgb, #fff 32%, transparent); filter: blur(4px); transform: rotate(-26deg) translateY(var(--wave-y, 0)); }
 .voice-orb__core i:nth-child(2) { --wave-y: 16px; width: 64px; opacity: .65; }
 .voice-orb__core i:nth-child(3) { --wave-y: -17px; width: 38px; opacity: .45; }
-.voice-orb__status { position: absolute; bottom: 13px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 999px; color: var(--text-secondary); background: color-mix(in srgb, var(--surface-raised) 88%, transparent); backdrop-filter: blur(10px); font-size: var(--fs-micro); font-weight: 620; letter-spacing: .01em; }
+.voice-orb__status { position: absolute; bottom: 13px; padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 999px; color: var(--text-secondary); background: color-mix(in srgb, var(--surface-raised) 88%, transparent); backdrop-filter: blur(10px); font-size: var(--fs-micro); font-weight: 600; letter-spacing: .01em; }
 .voice-orb__controls { position: absolute; z-index: 2; bottom: -14px; display: flex; gap: 9px; opacity: 0; transform: translateY(-5px); transition: opacity 150ms ease, transform 150ms ease; }
 .voice-orb:hover .voice-orb__controls, .voice-orb:focus-within .voice-orb__controls { opacity: 1; transform: translateY(0); }
 .voice-orb__controls button { width: 31px; height: 31px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-secondary); background: var(--surface-raised); box-shadow: 0 4px 12px color-mix(in srgb, #000 16%, transparent); }
 .voice-orb__controls button:hover { color: var(--text); background: var(--surface-hover); }
 .voice-orb > p { width: 210px; margin: 3px 0 0 50%; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: var(--radius-sm); color: var(--danger); background: var(--surface-raised); font-size: var(--fs-micro); line-height: 1.35; transform: translateX(-50%); }
 .voice-orb__receipt { width: 210px; margin: 3px 0 0 50%; padding: 8px 10px; display: grid; gap: 2px; border: 1px solid color-mix(in srgb, var(--success) 38%, var(--border)); border-radius: var(--radius-md); color: var(--text); background: color-mix(in srgb, var(--surface-raised) 94%, transparent); box-shadow: 0 8px 24px color-mix(in srgb, #000 14%, transparent); transform: translateX(-50%); }
-.voice-orb__receipt strong { color: var(--success); font-size: var(--fs-meta); font-weight: 680; }
+.voice-orb__receipt strong { color: var(--success); font-size: var(--fs-meta); font-weight: 600; }
 .voice-orb__receipt span { overflow: hidden; font-size: var(--fs-micro); text-overflow: ellipsis; white-space: nowrap; }
 .voice-orb__receipt small { color: var(--text-secondary); font-size: var(--fs-micro); }
 .voice-orb--user-speaking .voice-orb__core { animation: orb-user 520ms ease-in-out infinite alternate; }

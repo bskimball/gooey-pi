@@ -11,13 +11,13 @@
 .settings-content { overflow: auto; background: radial-gradient(92% 40% at 50% 0%, color-mix(in srgb, var(--prime-soft) 24%, transparent), transparent 70%), var(--canvas); }
 .settings-content__inner { width: min(100%, 720px); margin: 0 auto; padding: 36px 32px 70px; }
 .settings-content header { margin-bottom: 28px; }
-.settings-content header h1 { margin: 0 0 5px; font-size: 22px; line-height: 1.2; font-weight: 560; letter-spacing: -.015em; }
+.settings-content header h1 { margin: 0 0 5px; font-size: 22px; line-height: 1.2; font-weight: 550; letter-spacing: -.015em; }
 .settings-content header p { margin: 0; color: var(--text-secondary); }
 .settings-group { margin-bottom: 25px; border-top: 1px solid var(--border); }
-.settings-group > h2 { margin: -8px 0 4px; display: table; padding-right: 8px; color: var(--text-secondary); background: var(--canvas); font-size: var(--fs-meta); font-weight: 560; }
+.settings-group > h2 { margin: -8px 0 4px; display: table; padding-right: 8px; color: var(--text-secondary); background: var(--canvas); font-size: var(--fs-meta); font-weight: 550; }
 .settings-toggle, .settings-row, .danger-row { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); }
 .settings-toggle > span, .settings-row > span, .danger-row > span { min-width: 0; display: flex; flex-direction: column; }
-.settings-toggle strong, .settings-row strong, .danger-row strong { font-size: var(--fs-ui); font-weight: 540; }
+.settings-toggle strong, .settings-row strong, .danger-row strong { font-size: var(--fs-ui); font-weight: 550; }
 .settings-toggle small, .settings-row small, .danger-row small { margin-top: 2px; color: var(--text-tertiary); font-size: var(--fs-meta); }
 .settings-toggle input { position: absolute; opacity: 0; pointer-events: none; }
 .settings-toggle > i { width: 34px; height: 20px; position: relative; flex: 0 0 auto; border-radius: var(--radius-lg); background: var(--surface-selected); transition: background 150ms ease-out; }
@@ -44,7 +44,7 @@
 .voice-section { margin: 0 0 28px; }
 .voice-section__heading { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 11px; }
 .voice-section__heading > span { width: 27px; height: 27px; display: grid; flex: 0 0 auto; place-items: center; border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-subtle); }
-.voice-section__heading h2 { margin: 0; font-size: var(--fs-ui); font-weight: 570; }
+.voice-section__heading h2 { margin: 0; font-size: var(--fs-ui); font-weight: 550; }
 .voice-section__heading p { margin: 2px 0 0; color: var(--text-tertiary); font-size: var(--fs-meta); }
 .voice-connection-grid { display: grid; gap: 7px; }
 .voice-connection-card { min-height: 72px; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-subtle); transition: border-color 140ms ease-out, background 140ms ease-out; }
@@ -53,7 +53,7 @@
 .voice-connection-card.is-connected .voice-provider-mark { color: var(--success); }
 .voice-connection-card__body { min-width: 0; flex: 1; }
 .voice-connection-card__title { display: flex; align-items: center; gap: 7px; }
-.voice-connection-card__title strong { font-size: var(--fs-ui); font-weight: 560; }
+.voice-connection-card__title strong { font-size: var(--fs-ui); font-weight: 550; }
 .voice-connection-card__title i { padding: 2px 5px; border-radius: 999px; color: var(--text-tertiary); background: var(--surface-selected); font-size: var(--fs-micro); font-style: normal; }
 .voice-connection-card.is-connected .voice-connection-card__title i { color: var(--success); background: var(--success-soft); }
 .voice-connection-card__body > small { display: block; margin-top: 4px; color: var(--text-tertiary); font-size: var(--fs-micro); line-height: 1.35; }
@@ -94,7 +94,7 @@
 .theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 12px; }
 .theme-options button { min-height: 84px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; gap: 5px; padding: 9px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text-secondary); background: var(--surface-subtle); text-align: left; }
 .theme-options button > span { grid-column: 1 / -1; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--canvas); }
-.theme-options button strong { font-size: var(--fs-meta); font-weight: 520; }
+.theme-options button strong { font-size: var(--fs-meta); font-weight: 550; }
 .theme-options button.is-active { color: var(--text); border-color: var(--prime); }
 .theme-options button.is-active > svg { color: var(--prime); }
 .text-size-options { display: flex; flex: 0 0 auto; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-subtle); }
@@ -105,12 +105,12 @@
 .runtime-card > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--danger); background: var(--danger-soft); }
 .runtime-card > span.is-online { color: var(--success); background: var(--success-soft); }
 .runtime-card > div { min-width: 0; flex: 1; display: flex; flex-direction: column; }
-.runtime-card strong { font-size: var(--fs-ui); font-weight: 540; }
+.runtime-card strong { font-size: var(--fs-ui); font-weight: 550; }
 .runtime-card small { overflow: hidden; color: var(--text-tertiary); font: 9.5px/1.4 "SFMono-Regular", Menlo, monospace; white-space: nowrap; text-overflow: ellipsis; }
 .runtime-card code { font-size: var(--fs-micro); }
 .info-row { display: flex; align-items: flex-start; gap: 9px; padding: 15px 0; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
 .info-row > div { display: flex; flex-direction: column; }
-.info-row strong { color: var(--text); font-size: var(--fs-ui); font-weight: 540; }
+.info-row strong { color: var(--text); font-size: var(--fs-ui); font-weight: 550; }
 .info-row small { margin-top: 2px; color: var(--text-tertiary); font-size: var(--fs-meta); }
 .shortcut-row { min-height: 52px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
 .shortcut-row span { display: flex; align-items: center; gap: 7px; }
@@ -120,10 +120,10 @@
 .about-card { display: flex; align-items: center; gap: 12px; margin-bottom: 30px; }
 .gooeypi-mark { display: inline-grid; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 24%; }
 .gooeypi-mark img { width: 100%; height: 100%; display: block; object-fit: contain; }
-.about-card h2 { margin: 0; font-size: 15px; font-weight: 560; }
+.about-card h2 { margin: 0; font-size: 15px; font-weight: 550; }
 .about-card p { margin: 2px 0 0; color: var(--text-tertiary); font-size: var(--fs-meta); }
 .settings-group__heading { min-height: 34px; display: flex; align-items: center; justify-content: space-between; margin-top: -17px; }
-.settings-group__heading h2 { margin: 0; padding-right: 8px; color: var(--text-secondary); background: var(--canvas); font-size: var(--fs-meta); font-weight: 560; }
+.settings-group__heading h2 { margin: 0; padding-right: 8px; color: var(--text-secondary); background: var(--canvas); font-size: var(--fs-meta); font-weight: 550; }
 .provider-heading-actions { display: flex; align-items: center; gap: 5px; padding-left: 8px; background: var(--canvas); }
 .provider-catalog-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 4px 0 10px; }
 .provider-catalog-summary strong { font-size: var(--fs-ui); font-weight: 550; }
@@ -147,7 +147,7 @@
 .provider-row__toggle input:checked + i span { transform: translateX(12px); }
 .provider-row__toggle input:focus-visible + i { outline: 2px solid var(--focus); outline-offset: 2px; }
 .provider-row__identity { min-width: 0; flex: 1; display: flex; flex-direction: column; }
-.provider-row__identity strong { font-size: var(--fs-ui); font-weight: 540; }
+.provider-row__identity strong { font-size: var(--fs-ui); font-weight: 550; }
 .provider-row__identity small { overflow: hidden; margin-top: 2px; color: var(--text-tertiary); font-size: var(--fs-micro); white-space: nowrap; text-overflow: ellipsis; }
 .provider-row__actions { display: flex; align-items: center; gap: 5px; }
 .provider-row__actions .button { white-space: nowrap; }

@@ -13,6 +13,25 @@
   unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200E, U+2010-2011, U+204F, U+2E41;
 }
 
+/* Figtree is the UI face on every OS. It is weight-variable so the 400/550/600 ladder renders
+   as written instead of snapping to Segoe UI's static regular/semibold/bold. */
+@font-face {
+  font-family: 'Figtree';
+  src: url('/fonts/figtree-latin-var.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  src: url('/fonts/figtree-latin-ext-var.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
   color-scheme: light;
   --canvas: #f8fafc;
@@ -44,6 +63,9 @@
   --diff-remove: #fae8e7;
   --diff-remove-line: #d45d55;
   --annotation: #2d6595;
+  /* The one high-emphasis fill (send, primary buttons, New session). */
+  --primary-fill: #0f172a;
+  --primary-ink: #f8fafc;
   --terminal-bg: #f8fafc;
   --terminal-text: #0f172a;
   --terminal-toolbar-bg: #eff4f8;
@@ -72,10 +94,10 @@
   --terminal-bright-white: #0f172a;
   --shadow-popover: 0 12px 34px rgba(9, 20, 36, .12), 0 2px 8px rgba(9, 20, 36, .06);
   /* One small scale for the whole UI. The transcript keeps its own --chat-* reading scale. */
-  --fs-micro: 10px;
-  --fs-meta: 11px;
-  --fs-ui: 12px;
-  --fs-body: 13px;
+  --fs-micro: 11px;
+  --fs-meta: 12px;
+  --fs-ui: 13px;
+  --fs-body: 14px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -89,31 +111,33 @@
      positioned surfaces resolve identically even when the scroll area loses
      width to a non-overlay scrollbar. */
   --transcript-measure: clamp(760px, 85cqi, 1240px);
-  font-family: Vazirmatn, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-family: Vazirmatn, Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: var(--fs-body);
   font-synthesis: none;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #0a0b0d;
-  --sidebar: #0e1013;
-  --surface: #121418;
-  --surface-subtle: #121418;
-  --surface-hover: #181b20;
-  --surface-selected: #1d222a;
-  --surface-raised: #14171b;
-  --text: #f1f5f9;
-  --text-primary: #f1f5f9;
-  --text-secondary: #b4c3d4;
-  --text-tertiary: #90a3b8;
-  --border: #1d2026;
-  --border-subtle: #15181c;
-  --border-strong: #2a2f37;
-  --focus: #93bde3;
-  --prime: #7eb0dc;
-  --prime-soft: #16212c;
-  --accent: #7eb0dc;
+  /* One deep blue-black for canvas, sidebar and toolbar; depth comes from small lightness
+     steps, not borders. The accent is warm amber so it reads against the cool ground. */
+  --canvas: #080c15;
+  --sidebar: #080c15;
+  --surface: #0e1320;
+  --surface-subtle: #0e1320;
+  --surface-hover: #131a29;
+  --surface-selected: #1a2234;
+  --surface-raised: #101624;
+  --text: #edf1f8;
+  --text-primary: #edf1f8;
+  --text-secondary: #b1bccf;
+  --text-tertiary: #8390a8;
+  --border: #172033;
+  --border-subtle: #111827;
+  --border-strong: #232e46;
+  --focus: #f0b45e;
+  --prime: #f0b45e;
+  --prime-soft: #261d10;
+  --accent: #f0b45e;
   --success: #4ade80;
   --success-soft: #0f2e28;
   --warning: #fbbf24;
@@ -124,18 +148,20 @@
   --diff-add-line: #34d399;
   --diff-remove: #331c20;
   --diff-remove-line: #f87171;
-  --annotation: #7eb0dc;
-  --terminal-bg: #07080a;
+  --annotation: #f0b45e;
+  --primary-fill: #e6ecf7;
+  --primary-ink: #080c15;
+  --terminal-bg: #060912;
   --terminal-text: #e2e8f0;
-  --terminal-toolbar-bg: #0e1013;
-  --terminal-border: #1d2026;
+  --terminal-toolbar-bg: #080c15;
+  --terminal-border: #172033;
   --terminal-control: #94a3b8;
-  --terminal-control-active: #f1f5f9;
-  --terminal-control-bg: #1d222a;
-  --terminal-control-hover: #252a33;
-  --terminal-resize: #2a2f37;
+  --terminal-control-active: #edf1f8;
+  --terminal-control-bg: #1a2234;
+  --terminal-control-hover: #222c41;
+  --terminal-resize: #232e46;
   --terminal-selection: #38bdf838;
-  --terminal-black: #0e1013;
+  --terminal-black: #080c15;
   --terminal-red: #f87171;
   --terminal-green: #34d399;
   --terminal-yellow: #fbbf24;
@@ -151,7 +177,7 @@
   --terminal-bright-magenta: #a5b4fc;
   --terminal-bright-cyan: #a5f3fc;
   --terminal-bright-white: #f1f5f9;
-  --shadow-popover: 0 16px 40px rgba(2, 8, 18, .52), 0 2px 10px rgba(2, 8, 18, .32);
+  --shadow-popover: 0 16px 40px rgba(1, 4, 12, .6), 0 2px 10px rgba(1, 4, 12, .36);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
