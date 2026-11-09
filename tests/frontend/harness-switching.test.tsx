@@ -795,10 +795,18 @@ describe('Pi provider catalog authority', () => {
     expect(state.effort).toBe('low')
   })
 
-  it('reconciles a runtime that reports an unavailable model back to a usable fallback model', async () => {
+  const disabledBridgeCatalog: PrimeModelCatalog = {
+    ...primeCatalog,
+    providers: [
+      { id: 'claude-bridge', name: 'Claude Bridge', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 0, enabled: false },
+      ...primeCatalog.providers,
+    ],
+  }
+
+  it('reconciles a runtime whose model the catalog lists as disabled back to a usable fallback model', async () => {
     const command = vi.fn(async () => ({ type: 'response', success: true }))
     const bridge = {
-      providers: { catalog: vi.fn(async () => primeCatalog) },
+      providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
       agent: { command },
     } as unknown as PrimeWorkApi
     const syncRuntime = vi.fn(async () => undefined)
@@ -839,9 +847,106 @@ describe('Pi provider catalog authority', () => {
       level: 'medium',
     })
     expect(syncRuntime).toHaveBeenCalledWith('runtime-unavailable')
+    expect(command).toHaveBeenCalledTimes(2)
   })
 
-  it('reconciles the same live runtime when a catalog refresh removes its active model', async () => {
+  it('keeps a live runtime model that the catalog merely omits, or while the runtime streams', async () => {
+    const command = vi.fn(async () => ({ type: 'response', success: true }))
+    const bridge = {
+      providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    let state!: ReturnType<typeof useProviderCatalog>
+    const syncRuntime = async () => undefined
+    const reportError = vi.fn()
+    function CatalogProbe({ runtime, catalogBridge }: { runtime: RuntimeInfo; catalogBridge: PrimeWorkApi }) {
+      state = useProviderCatalog({ bridge: catalogBridge, harness: 'pi', runtime, activeSession: primeSession, syncRuntime, reportError })
+      return <Probe />
+    }
+    // Provider absent from the catalog: e.g. supplied by a project extension the probe does not load.
+    const omittedBridge = { providers: { catalog: vi.fn(async () => primeCatalog) }, agent: { command } } as unknown as PrimeWorkApi
+    await act(async () => {
+      root.render(<CatalogProbe catalogBridge={omittedBridge} runtime={{ ...primeRuntime, runtimeId: 'runtime-extension', model: { provider: 'project-ext', id: 'local-model' } }} />)
+      await Promise.resolve(); await Promise.resolve()
+    })
+    expect(command).not.toHaveBeenCalled()
+    expect(state.model).not.toBe('project-ext/local-model')
+
+    await act(async () => { root.unmount() })
+    root = createRoot(container)
+    await act(async () => {
+      root.render(<CatalogProbe catalogBridge={bridge} runtime={{ ...primeRuntime, runtimeId: 'runtime-streaming', isStreaming: true, model: { provider: 'claude-bridge', id: 'claude-opus-5-5' } }} />)
+      await Promise.resolve(); await Promise.resolve()
+    })
+    expect(command).not.toHaveBeenCalled()
+  })
+
+  it('restores the runtime model and effort and leaves session metadata when reconciliation is rejected', async () => {
+    const command = vi.fn(async () => { throw new Error('set_model rejected') })
+    const bridge = {
+      providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    const setSessions = vi.fn()
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useProviderCatalog>
+    const session: SessionRecord = { ...primeSession, id: 'session-rejected', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
+    const runtime: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-rejected', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
+    const syncRuntime = async () => undefined
+    function CatalogProbe() {
+      state = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession: session, setSessions, syncRuntime, reportError })
+      return <Probe />
+    }
+    await act(async () => {
+      root.render(<CatalogProbe />)
+      for (let index = 0; index < 6; index += 1) await Promise.resolve()
+    })
+    expect(command).toHaveBeenCalledTimes(1)
+    expect(reportError).toHaveBeenCalled()
+    expect(state.model).toBe('claude-bridge/claude-opus-5-5')
+    expect(state.effort).toBe('high')
+    const sessionWrites = setSessions.mock.calls.map(([update]) => (update as (items: SessionRecord[]) => SessionRecord[])([session])[0])
+    expect(sessionWrites.every((item) => item.provider === 'claude-bridge' && item.model === 'claude-opus-5-5')).toBe(true)
+  })
+
+  it('does not write a reconciliation that finishes after a tab switch onto the new session', async () => {
+    const setModel = deferred<void>()
+    const command = vi.fn(async (_runtimeId: string, message: { type: string }) => {
+      if (message.type === 'set_model') await setModel.promise
+      return { type: 'response', success: true }
+    })
+    const bridge = {
+      providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
+      agent: { command },
+    } as unknown as PrimeWorkApi
+    const setSessions = vi.fn()
+    const syncRuntime = async () => undefined
+    const reportError = vi.fn()
+    const sessionA: SessionRecord = { ...primeSession, id: 'session-a', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
+    const sessionB: SessionRecord = { ...primeSession, id: 'session-b', provider: 'openai-codex', model: 'gpt-5.6', thinkingLevel: 'high' }
+    const runtimeA: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-a', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
+    function CatalogProbe({ runtime, activeSession }: { runtime: RuntimeInfo | null; activeSession: SessionRecord }) {
+      useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession, setSessions, syncRuntime, reportError })
+      return <Probe />
+    }
+    await act(async () => {
+      root.render(<CatalogProbe runtime={runtimeA} activeSession={sessionA} />)
+      await Promise.resolve(); await Promise.resolve()
+    })
+    expect(command).toHaveBeenCalledWith('runtime-a', expect.objectContaining({ type: 'set_model' }))
+    await act(async () => {
+      root.render(<CatalogProbe runtime={null} activeSession={sessionB} />)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      setModel.resolve()
+      for (let index = 0; index < 6; index += 1) await Promise.resolve()
+    })
+    const writes = setSessions.mock.calls.map(([update]) => (update as (items: SessionRecord[]) => SessionRecord[])([sessionA, sessionB]))
+    expect(writes.every(([, b]) => b.provider === 'openai-codex' && b.model === 'gpt-5.6' && b.thinkingLevel === 'high')).toBe(true)
+  })
+
+  it('reconciles the same live runtime when a catalog refresh disables its active model', async () => {
     const transientModel = { ...primeCatalog.models[0], key: 'claude-bridge/claude-opus-5-5', provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' }
     const initialCatalog: PrimeModelCatalog = {
       ...primeCatalog,
@@ -879,7 +984,10 @@ describe('Pi provider catalog authority', () => {
     expect(state.model).toBe('claude-bridge/claude-opus-5-5')
     expect(command).not.toHaveBeenCalled()
 
-    currentCatalog = primeCatalog
+    currentCatalog = {
+      ...initialCatalog,
+      models: initialCatalog.models.map((model) => model.provider === 'claude-bridge' ? { ...model, enabled: false } : model),
+    }
     await act(async () => {
       await state.refresh(true)
       await Promise.resolve()

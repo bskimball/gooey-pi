@@ -85,8 +85,11 @@ function runModelProbe(executable: string, options: { timeoutMs: number; maxOutp
     let cleanedCwd = false
     const cleanProbeCwd = (): void => {
       if (cleanedCwd) return
-      cleanedCwd = true
-      try { rmSync(probeCwd, { recursive: true, force: true }) } catch { /* best-effort temp cleanup */ }
+      // Only mark done once removal succeeds; Windows refuses while the child still holds the cwd, so close retries.
+      try {
+        rmSync(probeCwd, { recursive: true, force: true })
+        cleanedCwd = true
+      } catch { /* best-effort temp cleanup */ }
     }
     let invocation: ReturnType<typeof prepareExecutableSpawn>
     try {

@@ -8,6 +8,15 @@ function isUsable(candidate: PrimeModelDescriptor): boolean {
   return candidate.enabled !== false && candidate.available
 }
 
+/** True only when a warning-free catalog lists the model or its provider as disabled/unavailable. */
+function runtimeModelKnownUnavailable(catalog: PrimeModelCatalog, provider: string, id: string): boolean {
+  if (catalog.warning) return false
+  const listed = catalog.models.find((candidate) => candidate.provider === provider && candidate.id === id)
+  if (listed) return !isUsable(listed)
+  const listedProvider = catalog.providers.find((candidate) => candidate.id === provider)
+  return Boolean(listedProvider && (!listedProvider.enabled || !listedProvider.configured))
+}
+
 /** Resolve a session's persisted model against the catalog, matching either the model id or the full key. */
 function findSessionModel(catalog: PrimeModelCatalog, session: Pick<SessionRecord, 'model' | 'provider'> | undefined): PrimeModelDescriptor | undefined {
   if (!session?.provider || !session.model) return undefined
@@ -263,6 +272,9 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   // Starts undefined so the first render with a catalog counts as a switch and
   // restores the initial session's effort as well as its model.
   const activeSessionIdRef = useRef<string | undefined>(undefined)
+  // One automatic reconciliation per runtime/model/target, so a runtime that keeps reporting
+  // its old model cannot drive a set_model loop.
+  const reconcileAttemptRef = useRef<string | null>(null)
   useEffect(() => {
     if (!catalog) return
     const sessionChanged = activeSessionIdRef.current !== activeSession?.id
@@ -276,6 +288,9 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     const runtimeModel = runtime?.model?.provider && runtime.model.id
       ? catalog.models.find((candidate) => candidate.provider === runtime.model?.provider && candidate.id === runtime.model?.id && isUsable(candidate))
       : undefined
+    // A model missing from the catalog is not proof it is unavailable (project extensions, partial or
+    // stale catalogs), so the live runtime stays authoritative unless the catalog positively disables it.
+    if (runtime?.model?.provider && runtime.model.id && !runtimeModel && !runtimeModelKnownUnavailable(catalog, runtime.model.provider, runtime.model.id)) return
     if (runtimeModel) {
       if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
       rememberSelectionRef.current(runtimeModel.key)
@@ -309,27 +324,29 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
               ? effortRef.current
               : inherited.availableThinkingLevels.includes('medium') ? 'medium' : inherited.availableThinkingLevels[0] ?? 'off'
             if (effortRef.current !== inheritedEffort) updateEffort(inheritedEffort)
-            syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
+            // With a live runtime, the session records the fallback only once the runtime accepts it below.
+            if (!runtime) syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
           }
         }
       }
     }
-    if (runtime) {
+    // Never retarget a streaming runtime; the effect re-runs when the runtime settles.
+    if (runtime && !runtime.isStreaming) {
       const targetModelKey = modelRef.current || fallbackModel(catalog)?.key || ''
       const targetModel = catalog.models.find((candidate) => candidate.key === targetModelKey && isUsable(candidate))
-      if (targetModel && (runtime.model?.provider !== targetModel.provider || runtime.model?.id !== targetModel.id)) {
+      const attempt = `${runtime.runtimeId}:${runtime.model?.provider}/${runtime.model?.id}->${targetModel?.key}`
+      if (targetModel && (runtime.model?.provider !== targetModel.provider || runtime.model?.id !== targetModel.id) && reconcileAttemptRef.current !== attempt) {
+        reconcileAttemptRef.current = attempt
+        const previousModel = modelRef.current
+        const previousEffort = effortRef.current
         if (modelRef.current !== targetModel.key) updateModel(targetModel.key)
         const targetEffort = targetModel.availableThinkingLevels.includes(effortRef.current)
           ? effortRef.current
           : targetModel.availableThinkingLevels.includes('medium') ? 'medium' : targetModel.availableThinkingLevels[0] ?? 'off'
         if (effortRef.current !== targetEffort) updateEffort(targetEffort)
-        syncActiveSessionChoice(targetModel.provider, targetModel.id, targetEffort)
-        const previousModel = runtime.model?.provider && runtime.model.id
-          ? `${runtime.model.provider}/${runtime.model.id}`
-          : targetModelKey
-        const previousEffort = (runtime.thinkingLevel && targetModel.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
-          ? runtime.thinkingLevel
-          : targetEffort) as PrimeThinkingLevel
+        const runtimeModelKey = runtime.model?.provider && runtime.model.id ? `${runtime.model.provider}/${runtime.model.id}` : previousModel
+        const runtimeEffort = (runtime.thinkingLevel as PrimeThinkingLevel | undefined) ?? previousEffort
+        const originSessionKey = sessionKeyRef.current
         queueRuntimeMutation(
           runtime.runtimeId,
           async () => {
@@ -337,8 +354,10 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
             await bridge.agent.command(runtime.runtimeId, { type: 'set_model', provider: targetModel.provider, modelId: targetModel.id })
             await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: targetEffort })
             rememberSelectionRef.current(targetModel.key)
+            // A tab switch while the commands ran must not write this session's fallback onto the new tab.
+            if (sessionKeyRef.current === originSessionKey) syncActiveSessionChoice(targetModel.provider, targetModel.id, targetEffort)
           },
-          () => { updateModel(previousModel); updateEffort(previousEffort) },
+          () => { updateModel(runtimeModelKey); updateEffort(runtimeEffort) },
         )
       }
     }
