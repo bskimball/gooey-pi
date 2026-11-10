@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { specialistOutcome, specialistStepStatus, specialistStatusLabel } from '@/lib/specialist-status'
-import { CaretDown, CaretRight, Question, WarningCircle } from '../icons'
+import { CaretRight, Question, WarningCircle } from '../icons'
 import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { coalesceAssistantTurns } from '../transcript/grouping'
@@ -419,20 +419,31 @@ interface SpecialistsPanelProps {
 
 function WorkOrderTurn({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
+  const { label, body, lineCount } = useMemo(() => {
+    const modeMatch = /^\*\*\[([^\]]+)\]\*\*\n\n([\s\S]*)$/.exec(text)
+    const rawBody = (modeMatch ? modeMatch[2] : text) ?? text
+    const trimmed = rawBody.trim()
+    return {
+      label: modeMatch?.[1] ? `Follow-up · ${modeMatch[1]}` : 'Work order',
+      body: rawBody,
+      lineCount: trimmed ? trimmed.split(/\r?\n/).length : 0,
+    }
+  }, [text])
   return (
-    <article className="specialist-turn specialist-turn--user">
+    <article className={`specialist-turn specialist-turn--user${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="specialist-turn__toggle"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? <CaretDown size={12} aria-hidden="true" /> : <CaretRight size={12} aria-hidden="true" />}
-        <span className="specialist-turn__label">Work order</span>
+        <CaretRight size={12} aria-hidden="true" className="disclosure-caret" />
+        <span className="specialist-turn__label">{label}</span>
+        {lineCount > 0 ? <span className="specialist-turn__meta">{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span> : null}
       </button>
       {open ? (
-        <div className="specialist-turn__content">
-          <MarkdownText text={text} />
+        <div className="specialist-turn__content scroll-area">
+          <MarkdownText text={body} />
         </div>
       ) : null}
     </article>
@@ -516,6 +527,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     }
   }, [active?.id, active?.status, active?.activity, active?.turns, candidateSessionPath, sessionKey])
 
+  const tabstripRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLElement>(null)
   const pinnedToBottomRef = useRef(true)
@@ -582,6 +594,11 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     return () => cancelAnimationFrame(frame)
   }, [scrollTargetKey, renderedMessages, active?.activity, active?.status, finalReport, candidateSessionPath, matchedDiskTranscript, diskTranscript?.status])
 
+  useEffect(() => {
+    const activeTab = tabstripRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    activeTab?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [active?.id])
+
   if (!specialists.length || !active) {
     return (
       <div className="inspector-scroll scroll-area specialists-panel">
@@ -594,20 +611,33 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   }
 
   const failure = active.status === 'error' ? active.killReason ?? [...rawTranscript].reverse().find((message) => message.errorMessage)?.errorMessage : active.killReason
-  const metaBadges = [
+  const turnsBadge = active.turns !== undefined
+    ? active.maxTurns !== undefined ? `${active.turns}/${active.maxTurns} turns` : `${active.turns} ${active.turns === 1 ? 'turn' : 'turns'}`
+    : undefined
+  const detailBadges = [
+    !/^task_\d+$/.test(active.id) ? active.id : undefined,
     active.model,
     active.thinking ? `think:${active.thinking}` : undefined,
     active.generation !== undefined ? `gen ${active.generation}` : undefined,
-    active.turns !== undefined
-      ? active.maxTurns !== undefined ? `${active.turns}/${active.maxTurns} turns` : `${active.turns} turns`
-      : undefined,
   ].filter((item): item is string => Boolean(item))
-
+  const hasUserTurn = renderedMessages.some((m) => m.role === 'user' && m.parts.some((p) => p.type === 'text' && Boolean(p.text.trim())))
   const activeStatus = active.waitingForInput ? 'Waiting for input' : specialistStatusLabel[active.status]
+  let assistantTurnCount = 0
 
   return (
     <div className="specialists-panel">
-      <div className="specialist-tabstrip" role="tablist" aria-label="Session specialists">
+      <div
+        ref={tabstripRef}
+        className="specialist-tabstrip scroll-area"
+        role="tablist"
+        aria-label="Session specialists"
+        onWheel={(event) => {
+          const strip = event.currentTarget
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && strip.scrollWidth > strip.clientWidth) {
+            strip.scrollLeft += event.deltaY
+          }
+        }}
+      >
         {specialists.map((spec, index) => {
           const isSelected = spec.id === active.id
           const status = spec.waitingForInput ? 'Waiting for input' : specialistStatusLabel[spec.status]
@@ -633,30 +663,34 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
             >
               {spec.waitingForInput && spec.status !== 'done' && spec.status !== 'error' ? <Question size={12} /> : <StatusMark state={specialistMark(spec.status)} size={12} />}
               <strong>{spec.agent}</strong>
-              {/^task_\d+$/.test(spec.id) ? <span>({spec.id})</span> : null}
+              {/^task_\d+$/.test(spec.id) ? <span>{spec.id}</span> : null}
             </button>
           )
         })}
       </div>
-      <header className="specialist-header" key={active.id}>
+      <header className="specialist-header scroll-area" key={active.id}>
         <details className="specialist-header__details">
-          <summary title="Show work order and details">
+          <summary title="Show run details">
             <CaretRight size={12} aria-hidden="true" className="specialist-header__caret" />
-            <strong>{active.agent}</strong>
+            <strong className="specialist-header__agent">{active.agent}</strong>
+            {/^task_\d+$/.test(active.id) ? <span className="specialist-header__handle mono">{active.id}</span> : null}
+            {turnsBadge ? <span className="specialist-header__turns">{turnsBadge}</span> : null}
             <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{active.status === 'running' && !active.waitingForInput ? <StatusMark state="running" size={11} /> : null}{activeStatus}</span>
-            {active.mission ? <span className="specialist-header__preview">{active.mission}</span> : null}
           </summary>
-          <div className="specialist-header__top">
-            <div className="specialist-header__title"><span className="mono">{active.id}</span></div>
+          <div className="specialist-header__body">
+            {detailBadges.length > 0 ? (
+              <div className="specialist-header__meta">
+                {detailBadges.map((badge) => <span key={badge} className={badge === active.id ? 'mono' : undefined}>{badge}</span>)}
+              </div>
+            ) : null}
+            {active.mission ? <p className="specialist-header__mission" title={active.mission}>{active.mission}</p> : null}
+            {!matchedDiskTranscript ? <small className="specialist-header__source">Showing the parent session's recorded activity, not a live worker status.</small> : null}
+            {!hasUserTurn && active.prompt ? <div className="specialist-header__prompt scroll-area"><MarkdownText text={active.prompt} /></div> : null}
           </div>
-          <p className="specialist-header__mission" title={active.mission}>{active.mission}</p>
-          <div className="specialist-header__meta">{metaBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
-          {!matchedDiskTranscript ? <small className="specialist-header__source">Showing the parent session's recorded activity, not a live worker status.</small> : null}
-          <strong className="specialist-turn__label">Work order</strong><MarkdownText text={active.prompt} />
         </details>
         <SpecialistFiles key={active.id} messages={rawTranscript} cwd={active.cwd ? observedPath(active.cwd, cwd) : cwd} />
         {failure ? <div className="specialist-header__error"><WarningCircle size={12} /><span>{failure}</span></div> : null}
-        {active.status === 'running' && active.activity ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
+        {active.status === 'running' && active.activity && !matchedDiskTranscript ? <div className="specialist-header__activity" title="Activity from the parent's last recorded update"><span>Last observed</span><code>{active.activity}</code></div> : null}
       </header>
       <div
         ref={scrollRef}
@@ -684,11 +718,13 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               return <WorkOrderTurn key={`${active.id}:${message.id}`} text={text} />
             }
             if (message.parts.every((part) => part.type === 'text' && !part.text.trim()) && !message.streaming && !message.errorMessage) return null
+            const isAssistant = message.role === 'assistant'
+            if (isAssistant) assistantTurnCount += 1
             const reportIndex = report?.messageId === message.id ? report.partIndex : -1
             const reportPart = message.parts[reportIndex]
             return (
               <article key={message.id} className="specialist-turn specialist-turn--assistant">
-                <div className="specialist-turn__label">{active.agent}</div>
+                {isAssistant && assistantTurnCount > 1 ? <div className="specialist-turn__divider"><span>Turn {assistantTurnCount}</span></div> : null}
                 {message.errorMessage ? <div className="specialist-header__error" role="alert">{message.errorMessage}</div> : null}
                 <div className="specialist-turn__content">
                   {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, Boolean(matchedDiskTranscript && message.streaming))}

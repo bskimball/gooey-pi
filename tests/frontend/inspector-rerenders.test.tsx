@@ -389,6 +389,7 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     expect(container.textContent).toContain('Chain step 1 full disk transcript')
     expect(container.textContent).toContain('Branch summary notice')
     expect(container.querySelector('.specialist-header__source')).toBeNull()
+    expect(container.querySelector('.specialist-turn__divider')).toBeNull()
 
     const bodyScroller = container.querySelector<HTMLDivElement>('.specialists-panel__body')
     expect(bodyScroller).not.toBeNull()
