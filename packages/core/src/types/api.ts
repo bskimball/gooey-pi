@@ -131,6 +131,8 @@ export interface BrowserAnnotationRect {
 
 /** Element info captured from the embedded browser page. Every field is untrusted page data: bounded on capture, rendered as plain text only. */
 export interface BrowserAnnotationElement {
+  /** Distinguishes repeated user captures of the same DOM element. */
+  captureId?: string
   selector: string
   tagName: string
   id: string
@@ -141,13 +143,16 @@ export interface BrowserAnnotationElement {
   component?: string
   sourceHint?: BrowserSourceHint
   rect: BrowserAnnotationRect
+  preview?: PromptImage
 }
 
 export interface BrowserAnnotation {
   id: string
+  tabId?: string
   comment: string
   element: BrowserAnnotationElement
   source?: BrowserSourceResult
+  preview?: PromptImage
   pageUrl: string
   pageTitle: string
   /** True once the page navigated away after capture: the live marker is gone but the captured info remains valid. */
@@ -163,7 +168,16 @@ export type MessagePart =
   | { type: 'text'; partId?: string; text: string }
   | { type: 'thinking'; partId?: string; text: string }
   | { type: 'toolCall'; partId?: string; id?: string; name: string; args?: unknown }
-  | { type: 'toolResult'; partId?: string; name?: string; text: string; isError?: boolean; streaming?: boolean; details?: unknown }
+  | {
+      type: 'toolResult'
+      partId?: string
+      name?: string
+      text: string
+      images?: Array<{ type: 'image'; partId?: string; mimeType?: string; data?: string; dataTruncated?: boolean }>
+      isError?: boolean
+      streaming?: boolean
+      details?: unknown
+    }
   | { type: 'agentMessage'; partId?: string; text: string; agentName?: string }
   | { type: 'image'; partId?: string; mimeType?: string; data?: string; dataTruncated?: boolean }
   | {
@@ -724,6 +738,10 @@ export interface AgentBrowserTabRecord {
   active: boolean
   canGoBack: boolean
   canGoForward: boolean
+  /** True while the user is clicking an element in a shared Chrome tab. */
+  picking?: boolean
+  /** Last element the user selected in a shared Chrome tab. Untrusted page data. */
+  selection?: BrowserAnnotationElement
 }
 
 export interface AgentBrowserExtensionStatus {
@@ -757,7 +775,7 @@ export interface AgentBrowserPointerEvent {
 }
 
 export interface PrimeWorkApi {
-  app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
+  app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
     getState(): Promise<AppUpdateState>
     check(): Promise<AppUpdateState>
@@ -849,8 +867,12 @@ export interface PrimeWorkApi {
     onExtensionStatusChanged(callback: (status: AgentBrowserExtensionStatus) => void): () => void
     setActiveSession(sessionKey: string | null): Promise<void>
     setTabPaused(sessionKey: string, tabId: string, paused: boolean): Promise<AgentBrowserTabRecord | null>
+    setTabPicking(sessionKey: string, tabId: string, picking: boolean): Promise<AgentBrowserTabRecord | null>
     popOutTab(sessionKey: string, tabId: string): Promise<AgentBrowserTabRecord | null>
     focusExtensionTab(sessionKey: string, tabId: string): Promise<boolean>
+    captureSelection(sessionKey: string, tabId: string, pageUrl: string, selector: string): Promise<PromptImage>
+    revealSelection(sessionKey: string, tabId: string, pageUrl: string, selector: string): Promise<boolean>
+    clearSelection(sessionKey: string, tabId: string, captureId?: string): Promise<boolean>
     state(): Promise<AgentBrowserState>
     attachTab(tabId: string, webContentsId: number): Promise<boolean>
     selectTab(tabId: string): Promise<boolean>

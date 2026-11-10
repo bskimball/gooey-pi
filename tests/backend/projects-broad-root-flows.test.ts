@@ -1,6 +1,7 @@
-import { lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +25,12 @@ vi.mock('../../apps/desktop/electron/main/git', () => ({
 
 import { ProjectService } from '../../apps/desktop/electron/main/projects'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { MAX_WORKSPACE_IMAGE_BYTES, readWorkspaceImage } from '../../apps/desktop/electron/main/workspace-image'
+
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+)
 
 const dirs: string[] = []
 
@@ -101,5 +108,79 @@ describe('broad-root flow boundaries', () => {
     await expect(service.chooseCheckoutWorktreePath(root, 'feature', await mocks.listGitWorktrees())).rejects.toThrow(/Broad filesystem roots cannot be added as worktrees/)
     expect(mocks.createGitWorktree).not.toHaveBeenCalled()
     expect(store.snapshot().projects).toHaveLength(1)
+  })
+})
+
+describe('readWorkspaceImage workspace boundaries', () => {
+  it('reads authorized workspace images via relative path, absolute/file URL, and percent-encoded query/hash path', async () => {
+    const { root, service, store } = setup()
+    await authorizeNarrowProject(root, service, store)
+    const assetsDir = join(root, 'assets')
+    mkdirSync(assetsDir, { recursive: true })
+    const plainPng = join(assetsDir, 'tiny.png')
+    const spacedPng = join(assetsDir, 'tiny icon.png')
+    writeFileSync(plainPng, TINY_PNG)
+    writeFileSync(spacedPng, TINY_PNG)
+
+    const expected = {
+      type: 'image',
+      mimeType: 'image/png',
+      data: TINY_PNG.toString('base64'),
+    }
+
+    for (const input of [
+      'assets/tiny.png',
+      plainPng,
+      pathToFileURL(plainPng).href,
+      'assets/tiny%20icon.png?v=1#preview',
+      'assets/bad%ZZ.png',
+    ]) {
+      if (input === 'assets/bad%ZZ.png') writeFileSync(join(assetsDir, 'bad%ZZ.png'), TINY_PNG)
+      await expect(readWorkspaceImage(service, root, input)).resolves.toEqual(expected)
+    }
+  })
+
+  it('rejects unauthorized cwd, lexical/junction workspace escapes, invalid URLs, and invalid image targets', async () => {
+    const { dataDir, root, service, store } = setup()
+    await authorizeNarrowProject(root, service, store)
+
+    const outsideDir = join(dataDir, 'outside')
+    mkdirSync(outsideDir, { recursive: true })
+    const outsidePng = join(outsideDir, 'secret.png')
+    writeFileSync(outsidePng, TINY_PNG)
+
+    const escapeLink = join(root, 'escape-link')
+    symlinkSync(outsideDir, escapeLink, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const noteSvg = join(root, 'vector.svg')
+    writeFileSync(noteSvg, '<svg/>')
+
+    const emptyPng = join(root, 'empty.png')
+    writeFileSync(emptyPng, '')
+
+    const hugePng = join(root, 'huge.png')
+    writeFileSync(hugePng, TINY_PNG)
+    truncateSync(hugePng, MAX_WORKSPACE_IMAGE_BYTES + 1)
+
+    const dirPng = join(root, 'folder.png')
+    mkdirSync(dirPng)
+
+    const cases: Array<[string, string, string, RegExp]> = [
+      ['unauthorized cwd', outsideDir, outsidePng, /path is not inside an added Pi Work project/],
+      ['empty query-only path', root, '?only-query', /The image path is empty/],
+      ['outside lexical path', root, '../outside/secret.png', /The image path is outside the active workspace/],
+      ['directory junction/symlink escaping workspace', root, 'escape-link/secret.png', /The image path resolves outside the active workspace/],
+      ['remote URL', root, 'https://example.com/tiny.png', /Remote or non-file image URLs are not supported/],
+      ['invalid file URL', root, 'file://bad%ZZ/tiny.png', /The image URL is not a valid local file URL/],
+      ['NUL byte path', root, 'tiny%00.png', /The image path contains a NUL byte/],
+      ['unsupported extension', root, noteSvg, /Unsupported workspace image extension/],
+      ['directory with raster suffix', root, dirPng, /The image path is not a regular file/],
+      ['empty file', root, emptyPng, /The workspace image file is empty/],
+      ['oversized file', root, hugePng, /The workspace image is too large to display/],
+    ]
+
+    for (const [label, cwd, target, pattern] of cases) {
+      await expect(readWorkspaceImage(service, cwd, target), label).rejects.toThrow(pattern)
+    }
   })
 })

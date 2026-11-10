@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { NativeImage, WebContents } from "electron";
+import { applySharedTabEvent } from "apex-core/browser/element-selection";
 import {
 	extensionGuest,
 	isLocalPreviewUrl,
@@ -14,7 +15,14 @@ import type {
 	AgentBrowserPointerEvent,
 	AgentBrowserState,
 	AgentBrowserTabRecord,
+	PromptImage,
 } from "../../../src/types/api";
+import {
+	captureSelectionImage,
+	clearTabSelection,
+	revealSelectedElement,
+	type SelectionActionHost,
+} from "./selection";
 import { canonicalSessionPath } from "apex-core/session-paths";
 import { requireString } from "apex-core/validation";
 import {
@@ -187,6 +195,30 @@ export class AgentBrowserService {
 		});
 		return this.state().tabs.find((item) => item.tabId === id) ?? null;
 	}
+	async setTabPicking(
+		session: string,
+		id: string,
+		picking: unknown,
+	): Promise<AgentBrowserTabRecord | null> {
+		if (typeof picking !== "boolean")
+			throw new TypeError("picking must be a boolean");
+		const tab = this.requireSessionTab(canonicalSessionPath(session), id);
+		if (tab.backend !== "extension" || tab.chromeTabId === undefined)
+			return null;
+		await this.options.extensionBridge?.call("set_picking", {
+			chromeTabId: tab.chromeTabId,
+			picking,
+		});
+		tab.picking = picking;
+		tab.generation = this.nextGeneration++;
+		this.push();
+		if (picking) {
+			await this.options.extensionBridge
+				?.call("focus_tab", { chromeTabId: tab.chromeTabId })
+				.catch(() => undefined);
+		}
+		return this.state().tabs.find((item) => item.tabId === id) ?? null;
+	}
 	async focusExtensionTab(session: string, id: string): Promise<boolean> {
 		const tab = this.requireSessionTab(canonicalSessionPath(session), id);
 		if (tab.chromeTabId === undefined) return false;
@@ -194,6 +226,45 @@ export class AgentBrowserService {
 			chromeTabId: tab.chromeTabId,
 		});
 		return true;
+	}
+	async captureSelection(
+		session: unknown,
+		id: unknown,
+		pageUrl: unknown,
+		selector: unknown,
+	): Promise<PromptImage> {
+		const tab = this.requireUserTab(session, id);
+		const captureId = tab.selection?.captureId;
+		const preview = await captureSelectionImage(tab, this.selectionHost(), pageUrl, selector);
+		if (tab.selection && tab.selection.captureId === captureId && tab.selection.selector === selector) {
+			tab.selection = { ...tab.selection, preview };
+			this.push();
+		}
+		return preview;
+	}
+	async revealSelection(
+		session: unknown,
+		id: unknown,
+		pageUrl: unknown,
+		selector: unknown,
+	): Promise<boolean> {
+		return revealSelectedElement(
+			this.requireUserTab(session, id),
+			this.selectionHost(),
+			pageUrl,
+			selector,
+		);
+	}
+	async clearSelection(
+		session: unknown,
+		id: unknown,
+		captureId?: unknown,
+	): Promise<boolean> {
+		return clearTabSelection(
+			this.requireUserTab(session, id),
+			this.selectionHost(),
+			captureId,
+		);
 	}
 	async popOutTab(
 		session: string,
@@ -248,6 +319,7 @@ export class AgentBrowserService {
 			this.removeTab(tab);
 			return;
 		}
+		applySharedTabEvent(tab, event);
 		if (typeof event.url === "string") tab.url = event.url;
 		if (typeof event.title === "string") tab.title = event.title;
 		if (event.type === "tab_pause_changed") {
@@ -358,6 +430,8 @@ export class AgentBrowserService {
 				active: this.activeBySession.get(tab.sessionKey) === tab.tabId,
 				canGoBack: alive && guest.canGoBack(),
 				canGoForward: alive && guest.canGoForward(),
+				...(tab.picking ? { picking: true } : {}),
+				...(tab.selection ? { selection: tab.selection } : {}),
 			};
 		});
 		return { tabs };
@@ -655,6 +729,8 @@ export class AgentBrowserService {
 				title: tab.title,
 				attached: tab.webContentsId !== null,
 				active: active === tab.tabId,
+				...(tab.selection ? { selection: { ...tab.selection, preview: undefined } } : {}),
+				...(tab.picking ? { picking: true } : {}),
 			}));
 		const preview = this.previewFor(sessionKey);
 		if (preview) {
@@ -1102,6 +1178,33 @@ export class AgentBrowserService {
 		if (!tab || tab.sessionKey !== sessionKey)
 			throw new Error("That browser tab does not belong to this thread");
 		return tab;
+	}
+
+	private requireUserTab(sessionValue: unknown, tabIdValue: unknown): TabState {
+		this.requireOpen();
+		const sessionKey = canonicalSessionPath(
+			requireString(sessionValue, "sessionKey", { min: 1, max: 4096 }),
+		);
+		const tabId = requireString(tabIdValue, "tabId", { min: 1, max: 64 });
+		if (tabId === PREVIEW_TAB_ID) {
+			const preview = this.previewFor(sessionKey);
+			if (!preview)
+				throw new Error(
+					"The user's Preview tab is not open for this thread right now",
+				);
+			return preview.tab;
+		}
+		return this.requireSessionTab(sessionKey, tabId);
+	}
+
+	private selectionHost(): SelectionActionHost {
+		return {
+			extensionBridge: this.options.extensionBridge,
+			imageFromDataURL: this.options.imageFromDataURL,
+			actionTimeoutMs: this.actionTimeoutMs,
+			waitForWebviewGuest: (tab) => this.waitForGuest(tab),
+			push: () => this.push(),
+		};
 	}
 
 	private async withTab(

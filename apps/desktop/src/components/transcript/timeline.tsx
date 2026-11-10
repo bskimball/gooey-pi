@@ -1,11 +1,10 @@
-import { memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Fragment, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   Brain,
   CaretRight,
   ChatCircle,
   ChatCircleDots,
   Check,
-  CircleNotch,
   Copy,
   FileCode,
   GitFork,
@@ -20,6 +19,8 @@ import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
+import { ImageParts } from './TranscriptImage'
+import { StatusMark } from '../activity/StatusMark'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
 import { diffCounts, EditDiff, editDiffLines, isEditTool } from './edit-diff'
@@ -94,7 +95,7 @@ function ToolRun({ members, children }: { members: RunMember[]; children: ReactE
   return (
     <div className={`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`}>
       <button type="button" className="activity-run__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-        <span className="activity-line__icon">{running ? <CircleNotch className="spin" size={14} /> : toolIcon('file')}</span>
+        <span className="activity-line__icon">{running ? <StatusMark state="running" size={14} /> : toolIcon('file')}</span>
         <span className="activity-run__label">{label}</span>
         {names.length ? <span className="activity-run__names">{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
         {failed ? <span className="activity-run__failed"><WarningCircle size={12} /> {failed} failed</span> : null}
@@ -240,7 +241,7 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
   }
 
   return (
-    <div className={`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`}>
+    <><div className={`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`}>
       <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setToggled((value) => !value)} aria-expanded={canExpand ? open : undefined} aria-controls={canExpand && open ? detailsId : undefined}>
         <span className="activity-line__icon">{command ? <Terminal size={14} /> : toolIcon(kind)}</span>
         {command
@@ -251,7 +252,7 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
             {range ? <span className="activity-tool__range">{range}</span> : null}
           </>}
         {showDiff ? <span className="activity-tool__diff-counts"><span className="diff-count diff-count--add">+{additions}</span><span className="diff-count diff-count--remove">−{deletions}</span></span> : null}
-        <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><CircleNotch className="spin" size={12} /> running</>}</span>
+        <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><StatusMark state="running" size={12} /> running</>}</span>
         {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
       </button>
       {showDiff && open ? <EditDiff id={detailsId} diff={diff} /> : null}
@@ -267,11 +268,12 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
         </div>
       ) : null}
     </div>
+    <ImageParts images={result?.images} /></>
   )
 })
 
 function StandaloneToolResult({ part }: { part: Extract<MessagePart, { type: 'toolResult' }> }) {
-  return <div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div>
+  return <><div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div><ImageParts images={part.images} /></>
 }
 
 function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agentMessage' }> }) {
@@ -305,7 +307,7 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
       ? 'Context compacted'
       : part.status === 'cancelled' ? 'Context compaction cancelled' : part.outcome === 'skipped' ? 'Context compaction skipped' : 'Context compaction failed'
   const state = part.status === 'running'
-    ? <><CircleNotch className="spin" size={12} /> running</>
+    ? <><StatusMark state="running" size={12} /> running</>
     : part.status === 'done'
       ? <><Check size={12} /> {part.willRetry ? 'continuing' : 'done'}</>
       : <><WarningCircle size={12} /> {part.status === 'cancelled' ? 'cancelled' : 'needs attention'}</>
@@ -313,7 +315,7 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
   const tokenLabel = part.tokensBefore === undefined ? '' : `${part.tokensBefore.toLocaleString()} tokens before`
   return <div className={`activity-line activity-line--compaction is-${part.status}`}>
     <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className="activity-line__icon">{part.status === 'running' ? <CircleNotch className="spin" size={13} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
+      <span className="activity-line__icon">{part.status === 'running' ? <StatusMark state="running" size={14} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
       <span className="activity-line__kind">{label}</span>
       <span className="activity-compaction__reason">{compactionReasonLabel(part.reason)}</span>
       {tokenLabel ? <span className="activity-compaction__tokens">{tokenLabel}</span> : null}
@@ -356,14 +358,15 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
       const result = next?.type === 'toolResult' ? next : undefined
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
-      if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <SubagentLane key={key} part={part} result={result} followUps={followUps.get(part)} />
+      if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <Fragment key={key}><SubagentLane part={part} result={result} followUps={followUps.get(part)} /><ImageParts images={result?.images} /></Fragment>
       if (isExploreTool(part.name)) {
         const running = streaming && (!result || Boolean(result.streaming))
         runMembers.set(key, { failed: Boolean(result?.isError), running, search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
       }
       return <ToolPart key={key} part={part} result={result} />
     }
-    if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : null
+    if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : <ImageParts key={key} images={part.images} />
+    if (part.type === 'image') return <ImageParts key={key} images={[part]} />
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
     if (part.type === 'text') return part.text.trim() || !streaming ? <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={isTailPart} /></div> : null
     return null

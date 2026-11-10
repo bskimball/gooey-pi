@@ -168,6 +168,7 @@ describe('ChangesPanel status states', () => {
     function Harness({ rowWidth }: { rowWidth: number }) {
       const layout = usePanelLayout({
         sidebarOpen: true,
+        setSidebarOpen: vi.fn(),
         inspectorOpen: true,
         setInspectorOpen: vi.fn(),
         closeSmallestPanels: vi.fn(),

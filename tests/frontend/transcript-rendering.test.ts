@@ -58,8 +58,9 @@ describe('transcript rendering', () => {
       onOpenSpecialist.mockClear()
       await act(async () => first.querySelector<HTMLElement>('.subagent-lane__summary.is-clickable')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
-      expect(first.querySelector('.spin')).toBeNull()
-      expect(container.querySelector('.subagent-lane.is-running .spin')).not.toBeNull()
+      expect(first.querySelector('.status-mark--running')).toBeNull()
+      expect(first.querySelector('.subagent-lane__status .status-mark--failed')).not.toBeNull()
+      expect(container.querySelector('.subagent-lane.is-running .status-mark--running')).not.toBeNull()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -317,6 +318,22 @@ describe('transcript rendering', () => {
     expect(html).toContain('1 file changed')
   })
 
+  it('renders streamed tool images inline even when tool logs are hidden', () => {
+    const data = 'iVBORw0KGgo='
+    const messages = replayPrimeEvents([], [
+      { type: 'agent_start' },
+      { type: 'tool_execution_start', toolCallId: 'capture', toolName: 'browser_screenshot' },
+      { type: 'tool_execution_end', toolCallId: 'capture', toolName: 'browser_screenshot', result: { content: [{ type: 'text', text: 'Captured page' }, { type: 'image', mimeType: 'image/png', data }] } },
+      { type: 'agent_end' },
+    ])
+    expect(messages[0].parts.find((part) => part.type === 'toolResult')).toMatchObject({ images: [{ type: 'image', mimeType: 'image/png', data }] })
+    for (const showTools of [true, false]) {
+      const html = render(messages, false, showTools)
+      expect(html.match(/src="data:image\/png;base64,iVBORw0KGgo="/g)).toHaveLength(1)
+      expect(html).toContain('aria-label="Expand image"')
+    }
+  })
+
   it('renders valid user images and keeps truncated history as a safe placeholder', () => {
     const html = render([{
       id: 'user-image', role: 'user', parts: [
@@ -327,7 +344,7 @@ describe('transcript rendering', () => {
     }])
 
     expect(html).toContain('src="data:image/png;base64,iVBORw0KGgo="')
-    expect(html).toContain('aria-label="Expand pasted image"')
+    expect(html).toContain('aria-label="Expand image"')
     expect(html).toContain('Image attachment unavailable')
     expect(html).not.toContain('src="data:image/png;base64,truncated"')
   })
@@ -469,7 +486,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
-    expect(html).toContain('ph-circle-notch spin')
+    expect(html).toContain('class="status-mark status-mark--running"')
     // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
     expect(html).toContain('├─</span><span class="subagent-lane__leaf">Transcript lives in messages.tsx</span>')
     expect(html).toContain('View full report')

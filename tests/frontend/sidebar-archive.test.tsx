@@ -78,13 +78,13 @@ describe('sidebar project working set', () => {
   it('keeps all pinned projects and five recent projects, including the current project', async () => {
     const projects = [...library, { ...project, pinned: true, name: 'Pinned' }]
     await renderSidebar({ projects, activeProjectId: 'project-0' })
-    expect(projectNames('[aria-label="Pinned"] .project-row__main')).toEqual(['Pinned'])
-    expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 7', 'Project 6', 'Project 5', 'Project 4', 'Project 0'])
+    expect(projectNames()).toEqual(['Pinned', 'Project 7', 'Project 6', 'Project 5', 'Project 4', 'Project 0'])
+    expect(container.querySelector('.project-row .project-row__pin')).not.toBeNull()
     expect(container.querySelector('[aria-label="Collapse Project 0"]')?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('[aria-expanded="false"].project-row__collapse')).toHaveLength(5)
 
     await renderSidebar({ projects, activeProjectId: 'project-0', projectSortMode: 'alphabetical' })
-    expect(projectNames('[aria-label="Recent"] .project-row__main')).toEqual(['Project 0', 'Project 4', 'Project 5', 'Project 6', 'Project 7'])
+    expect(projectNames()).toEqual(['Pinned', 'Project 0', 'Project 4', 'Project 5', 'Project 6', 'Project 7'])
   })
 
   it('remembers explicit expansion and collapse across remounts, including collapse all', async () => {
@@ -206,42 +206,46 @@ describe('sidebar project working set', () => {
     expect(container.querySelector('.session-row-wrap.is-selected')?.textContent).toContain('Session')
   })
 
-  it('shows concise recency for completed sessions and explicit input status for waiting sessions', async () => {
+  it('shows concise recency in session meta and trailing status glyphs for attention and running states', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:10:00.000Z'))
     await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'complete' }] })
     expect(container.querySelector('.session-row__meta')?.textContent).not.toBe('Finished')
     expect(container.querySelector('.session-row__meta')?.textContent).toContain('10')
     expect(container.querySelector('.session-row__meta')?.getAttribute('title')).toBe('10 minutes ago')
+    expect(container.querySelector('.session-row-wrap .session-row__trail')?.childElementCount).toBe(0)
     await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'waiting' }] })
-    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Needs input')
+    expect(container.querySelector('.session-row-wrap .session-row .sr-only')?.textContent).toBe('Waiting for input: ')
+    expect(container.querySelector('.session-row-wrap .session-row__dot')).not.toBeNull()
     await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'complete', unread: true }] })
-    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Review')
+    expect(container.querySelector('.session-row-wrap .session-row__dot')).not.toBeNull()
     await renderSidebar({ activeProjectId: project.id, sessions: [{ ...session, status: 'failed' }] })
-    expect(container.querySelector('.session-row__meta')?.textContent).toBe('Failed')
+    expect(container.querySelector('.session-row-wrap .session-row .sr-only')?.textContent).toBe('Failed: ')
+    expect(container.querySelector('.session-row-wrap .status-mark--failed')).not.toBeNull()
   })
 
-  it('keeps activity indicators visible while collapsed and links to work outside the recent list', async () => {
+  it('keeps activity indicators visible while collapsed and surfaces cross-project attention and running groups', async () => {
     const sessions: SessionRecord[] = [
-      { ...session, id: 'running', projectPath: '/project-7', status: 'running' },
-      { ...session, id: 'waiting', projectPath: '/project-7', status: 'waiting' },
-      { ...session, id: 'other-running', projectPath: '/project-0', status: 'running' },
-      { ...session, id: 'other-failed', projectPath: '/project-0', status: 'failed' },
+      { ...session, id: 'running', title: 'Recent running', projectPath: '/project-7', status: 'running' },
+      { ...session, id: 'waiting', title: 'Recent waiting', projectPath: '/project-7', status: 'waiting' },
+      { ...session, id: 'other-running', title: 'Other running', projectPath: '/project-0', status: 'running' },
+      { ...session, id: 'other-failed', title: 'Other failed', projectPath: '/project-0', status: 'failed' },
     ]
-    const onNavigate = vi.fn()
-    await renderSidebar({ projects: library, sessions, onNavigate })
+    const onSelectSession = vi.fn()
+    await renderSidebar({ projects: library, sessions, onSelectSession })
     const before = projectNames()
     expect(container.querySelector('.session-list')).toBeNull()
     expect(container.querySelector('.project-working')).not.toBeNull()
     expect(container.querySelector('.project-attention')?.textContent).toBe('1')
-    expect(container.querySelector('.sidebar__other-activity')?.textContent).toBe('Elsewhere: 1 working · 1 to review')
-    await press(container.querySelector('.sidebar__other-activity')!)
-    expect(onNavigate).toHaveBeenCalledWith('activity')
+    expect(container.querySelectorAll('[aria-label="Needs you"] .sidebar-attention__row')).toHaveLength(2)
+    expect(container.querySelectorAll('[aria-label="Running"] .sidebar-attention__row')).toHaveLength(2)
+    await press(container.querySelector('[aria-label="Needs you"] .sidebar-attention__row')!)
+    expect(onSelectSession).toHaveBeenCalled()
     expect(container.textContent).not.toContain('All projects')
 
-    await renderSidebar({ projects: library, sessions, clearedAttention: { waiting: sessionAttentionSignature(sessions[1])! } })
+    await renderSidebar({ projects: library, sessions, clearedAttention: { waiting: sessionAttentionSignature(sessions[1])!, 'other-failed': sessionAttentionSignature(sessions[3])! } })
     expect(container.querySelector('.project-attention')).toBeNull()
+    expect(container.querySelectorAll('[aria-label="Needs you"] .sidebar-attention__row')).toHaveLength(1)
     expect(projectNames()).toEqual(before)
-    expect(container.querySelector('.session-list')).toBeNull()
   })
 
   it('ignores invalid stored collapse data and stays usable when storage is unavailable', async () => {
@@ -526,6 +530,8 @@ describe('sidebar session notifications', () => {
     const signature = sessionAttentionSignature(failedSession)!
     await act(async () => { root.render(<Sidebar {...props} clearedAttention={{ [failedSession.id]: signature }} />) })
     expect(container.querySelector('.session-row-wrap')?.classList.contains('has-attention')).toBe(false)
-    expect(container.querySelector('.session-status-mark--failed')?.getAttribute('title')).toBe('Failed — notification cleared')
+    const row = container.querySelector('.session-row-wrap')
+    expect(row?.classList.contains('session-row-wrap--failed')).toBe(true)
+    expect(row?.querySelector('.session-row .sr-only')?.textContent).toBe('Failed: ')
   })
 })

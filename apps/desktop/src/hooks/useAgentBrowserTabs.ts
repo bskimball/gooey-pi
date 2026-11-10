@@ -18,6 +18,8 @@ interface UseAgentBrowserTabsOptions {
 export interface ExtensionTabControls {
 	status: AgentBrowserExtensionStatus | null;
 	setPaused(tab: AgentBrowserTabRecord, paused: boolean): void;
+	/** Arms or disarms element selection in a shared Chrome tab. Optional for hosts that do not expose it. */
+	setPicking?(tab: AgentBrowserTabRecord, picking: boolean): void;
 	/** Moves an in-app webview tab into a real Chrome tab driven through the extension. */
 	popOut(tab: AgentBrowserTabRecord): void;
 	focus(tab: AgentBrowserTabRecord): void;
@@ -133,6 +135,7 @@ export function useAgentBrowserTabs({
 		[bridge, reportError],
 	);
 
+	const setTabPicking = bridge?.browser.setTabPicking;
 	const extension = useMemo<ExtensionTabControls>(
 		() => ({
 			status: extensionStatus,
@@ -154,8 +157,17 @@ export function useAgentBrowserTabs({
 						.focusExtensionTab(tab.sessionFile, tab.tabId)
 						.catch(reportError);
 			},
+			...(setTabPicking
+				? {
+						setPicking: (tab: AgentBrowserTabRecord, picking: boolean) => {
+							void setTabPicking(tab.sessionFile, tab.tabId, picking).catch(
+								reportError,
+							);
+						},
+					}
+				: {}),
 		}),
-		[bridge, extensionStatus, reportError],
+		[bridge, extensionStatus, reportError, setTabPicking],
 	);
 
 	return {

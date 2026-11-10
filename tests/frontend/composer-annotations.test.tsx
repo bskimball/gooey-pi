@@ -243,6 +243,68 @@ const pressKey = async (key: string, init: KeyboardEventInit = {}) => {
 	return event.defaultPrevented;
 };
 
+describe("Composer shared browser selection", () => {
+	it("reuses a captured Chrome preview and treats a superseded clear as a no-op", async () => {
+		const previous = window.prime;
+		const descriptor = Object.getOwnPropertyDescriptor(window, 'prime');
+		const preview = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+		const captureSelection = vi.fn(async () => preview);
+		const clearSelection = vi.fn(async () => false);
+		Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { ...previous, browser: { ...previous?.browser, captureSelection, clearSelection } } });
+		try {
+			const { onSend } = renderComposer({ composerProps: { extensionTab: {
+				tabId: 'cached-preview', sessionFile: '/sessions/cached.jsonl', backend: 'extension',
+				attached: false, active: true, paused: true, canGoBack: false, canGoForward: false,
+				url: 'https://example.com/', title: 'Captured page',
+				selection: { ...annotation('cached').element, captureId: 'cached-capture', preview },
+			} } });
+			expect(container.querySelector('.browser-selection-card img')).not.toBeNull();
+			expect(captureSelection).not.toHaveBeenCalled();
+			await setDraft('Update this selected element');
+			await clickSend();
+			expect(onSend.mock.calls[0][1]).toEqual([preview]);
+			expect(clearSelection).toHaveBeenCalledWith('/sessions/cached.jsonl', 'cached-preview', 'cached-capture');
+			expect(container.querySelector('[aria-label="Selected browser elements"]')).toBeNull();
+		} finally {
+			if (descriptor) Object.defineProperty(window, 'prime', descriptor);
+			else Reflect.deleteProperty(window, 'prime');
+		}
+	});
+
+	it("attaches the selected container to a UI edit request without a screenshot", async () => {
+		const { onSend } = renderComposer({ composerProps: {
+			extensionTab: {
+				tabId: "shared", sessionFile: "/sessions/a.jsonl", backend: "extension",
+				attached: false, active: true, canGoBack: false, canGoForward: false,
+				url: "http://localhost:8317/management.html#/quota", title: "Quota Management",
+				selection: { ...annotation("quota").element, tagName: "article", component: "QuotaCard", text: "Weekly limit 55%" },
+			},
+		} });
+		await setDraft("Make this container more compact");
+		await clickSend();
+		expect(onSend).toHaveBeenCalledOnce();
+		const [prompt, images] = onSend.mock.calls[0];
+		expect(prompt).toContain("Make this container more compact");
+		expect(prompt).toContain("Selector: #quota");
+		expect(prompt).toContain("Component reported by page: QuotaCard");
+		expect(prompt).toContain("Text snippet: Weekly limit 55%");
+		expect(prompt).toContain("Source: unknown");
+		expect(prompt).toContain("untrusted page content");
+		expect(images).toEqual([]);
+		await act(async () => root.unmount());
+		root = createRoot(container);
+		renderComposer({ onSend, composerProps: { extensionTab: {
+			tabId: "shared", sessionFile: "/sessions/a.jsonl", backend: "extension",
+			attached: false, active: true, canGoBack: false, canGoForward: false,
+			url: "http://localhost:8317/management.html#/quota", title: "Quota Management",
+			selection: { ...annotation("quota").element, tagName: "article", component: "QuotaCard", text: "Weekly limit 55%" },
+		} } });
+		await setDraft("Now adjust the footer instead");
+		await clickSend();
+		expect(onSend.mock.calls[1][0]).toBe("Now adjust the footer instead");
+	});
+});
+
 describe("Composer skill mentions", () => {
 	it("invokes the selected $skill file without requiring catalog-ID verification", async () => {
 		const skill = skillRecord("improve-codebase-architecture", {
@@ -806,17 +868,12 @@ describe("Composer session mentions", () => {
 });
 
 describe("Composer annotation attachment", () => {
-	it("auto-attaches a chip showing the annotation count while any exist", () => {
+	it("shows each selected element and its identity directly above the composer", () => {
 		renderComposer({ annotations: [annotation("a"), annotation("b")] });
-		const chip = container.querySelector(".composer-attachment--annotations");
-		expect(chip?.textContent).toContain("2");
-		expect(chip?.getAttribute("title")).toBe("2 page annotations");
-		expect(
-			chip
-				?.querySelector(".composer-attachment__expand")
-				?.getAttribute("aria-label"),
-		).toContain("2 page annotations");
-		expect(container.querySelector(".composer-annotations")).toBeNull();
+		const tray = container.querySelector('[aria-label="Selected browser elements"]');
+		expect(tray?.textContent).toContain("2 selected elements");
+		expect(tray?.querySelectorAll(".browser-selection-card")).toHaveLength(2);
+		expect(tray?.textContent).toContain("button#a.btn");
 	});
 
 	it("expands to inspect each annotation as plain text and deletes individually", async () => {
@@ -827,23 +884,16 @@ describe("Composer annotation attachment", () => {
 			annotations: [hostile, annotation("b", { stale: true })],
 		});
 
-		await act(async () => {
-			(
-				container.querySelector(
-					".composer-attachment__expand",
-				) as HTMLButtonElement
-			).click();
-		});
-		const panel = container.querySelector(".composer-annotations");
+		const panel = container.querySelector('[aria-label="Selected browser elements"]');
+		await act(async () => { panel?.querySelector("details")?.setAttribute("open", ""); });
 		expect(panel).not.toBeNull();
 		// Untrusted text renders as text, never as markup.
 		expect(panel?.querySelector("img")).toBeNull();
 		expect(panel?.textContent).toContain(
 			"<img src=x onerror=alert(1)> fix this",
 		);
-		// Rows show only the comment (plus staleness); DOM labels are intentionally omitted.
-		expect(panel?.textContent).not.toContain("button#a.btn");
-		expect(panel?.textContent).toContain("page changed");
+		expect(panel?.textContent).toContain("button#a.btn");
+		expect(panel?.textContent).toContain("Page changed");
 
 		await act(async () => {
 			(
@@ -855,7 +905,7 @@ describe("Composer annotation attachment", () => {
 		expect(onRemoveAnnotation).toHaveBeenCalledWith("b");
 	});
 
-	it("removes the whole attachment through the chip control", async () => {
+	it("clears the selected-element tray", async () => {
 		const { onClearAnnotations } = renderComposer({
 			annotations: [annotation("a")],
 		});
@@ -892,6 +942,18 @@ describe("Composer annotation attachment", () => {
 		expect(onClearAnnotations).toHaveBeenCalledTimes(1);
 	});
 
+	it("sends the selected-element image with its prompt reference", async () => {
+		const preview = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+		const { onSend } = renderComposer({ annotations: [annotation('a', { preview, tabId: 'preview' })] });
+		expect(container.querySelector('.browser-selection-card img')?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo=');
+		await setDraft('Make this button larger');
+		await clickSend();
+		const [prompt, images] = onSend.mock.calls[0];
+		expect(images).toEqual([preview]);
+		expect(prompt).toContain('Image attachment: 1');
+		expect(prompt).toContain('Browser tab: preview');
+	});
+
 	it("allows sending with annotations alone using a placeholder prompt", async () => {
 		const { onSend } = renderComposer({ annotations: [annotation("a")] });
 		const send = container.querySelector(
@@ -920,16 +982,12 @@ describe("Composer annotation attachment", () => {
 
 		expect(onSend).toHaveBeenCalledTimes(1);
 		expect(onClearAnnotations).not.toHaveBeenCalled();
-		expect(
-			container.querySelector(".composer-attachment--annotations"),
-		).not.toBeNull();
+		expect(container.querySelector('[aria-label="Selected browser elements"]')).not.toBeNull();
 	});
 
-	it("disables send and hides the chip without annotations", () => {
+	it("disables send and hides the tray without annotations", () => {
 		renderComposer();
-		expect(
-			container.querySelector(".composer-attachment--annotations"),
-		).toBeNull();
+		expect(container.querySelector('[aria-label="Selected browser elements"]')).toBeNull();
 		expect(
 			container.querySelector<HTMLButtonElement>(
 				'button[aria-label="Send message"]',

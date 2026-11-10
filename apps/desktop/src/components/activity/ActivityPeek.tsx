@@ -12,7 +12,6 @@ import {
   ChatCircleDots,
   Check,
   CheckCircle,
-  CircleNotch,
   Clock,
   Robot,
   Square,
@@ -20,6 +19,7 @@ import {
   WarningCircle,
 } from '@/components/icons'
 import { ContextUsageRing } from '@/components/ContextUsageRing'
+import { StatusMark } from './StatusMark'
 import { resolveRunStart, runningPhaseLabel, type ActivitySectionKind } from './ActivityRow'
 import {
   formatElapsedClock,
@@ -391,7 +391,7 @@ export function ActivityPeek({
           <div className="activity-peek__subrow">
             {isRunning && phase ? (
               <span className={`activity-peek__phase ${phase.isTool ? 'activity-peek__phase--tool mono' : ''}`}>
-                <CircleNotch className="spin" size={12} />
+                <StatusMark state="running" size={12} />
                 <span>{phase.text}</span>
               </span>
             ) : isQuestion ? (
@@ -553,7 +553,7 @@ export function ActivityPeek({
                     {entry.tools.map((tool) => (
                       <div key={tool.key} className={`activity-tail-tool activity-tail-tool--${tool.status}`}>
                         {tool.status === 'running' ? (
-                          <CircleNotch className="spin" size={11} />
+                          <StatusMark state="running" size={11} />
                         ) : tool.status === 'error' ? (
                           <WarningCircle size={11} />
                         ) : (
@@ -572,7 +572,7 @@ export function ActivityPeek({
             {liveActiveTool ? (
               <div className="activity-tail-tools">
                 <div className="activity-tail-tool activity-tail-tool--running activity-tail-tool--live">
-                  <CircleNotch className="spin" size={11} />
+                  <StatusMark state="running" size={11} />
                   <strong className="activity-tail-tool__name mono">{liveActiveTool.name}</strong>
                   {liveActiveTool.summary ? <span className="activity-tail-tool__summary mono">{liveActiveTool.summary}</span> : null}
                   <span className="activity-tail-tool__status">running</span>

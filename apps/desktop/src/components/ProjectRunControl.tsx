@@ -1,4 +1,5 @@
 import { ArrowCounterClockwise, CaretDown, CheckCircle, CircleNotch, Play, Square, WarningCircle } from './icons'
+import { StatusMark } from './activity/StatusMark'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ProjectRecord } from '@/types/api'
 
@@ -80,7 +81,7 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }
   const setupStatus = (() => {
     const scripts = project.scripts
     if (!setup.trim()) return null
-    if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><CircleNotch className="spin" size={12} /> Setup running</span>
+    if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><StatusMark state="running" size={12} /> Setup running</span>
     if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className="project-run-menu__status">Runs automatically after save</span>
     if (scripts.setupLastExitCode === 0) return <span className="project-run-menu__status is-success"><CheckCircle size={12} /> Setup completed</span>
     if (scripts.setupLastExitCode !== undefined) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>

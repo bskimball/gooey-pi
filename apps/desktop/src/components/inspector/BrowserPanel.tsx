@@ -5,6 +5,7 @@ import type {
 	StampedPointerEvent,
 } from "@/hooks/useAgentBrowserTabs";
 import type { BrowserAnnotationsApi } from "@/hooks/useBrowserAnnotations";
+import { captureBrowserSelection } from "@/lib/capture-browser-selection";
 import {
 	annotationMarkersScript,
 	annotationPickerScript,
@@ -34,6 +35,7 @@ import {
 	ArrowsClockwise,
 	ChatCircleText,
 	ClockCounterClockwise,
+	Crosshair,
 	Globe,
 	Robot,
 	ShieldCheck,
@@ -120,6 +122,7 @@ interface BrowserPanelProps {
 	extension?: ExtensionTabControls;
 	/** Test hook: how often to poll the page for a clicked element while picking. */
 	pollIntervalMs?: number;
+	visible?: boolean;
 }
 
 function agentTabLabel(tab: AgentBrowserTabRecord): string {
@@ -153,6 +156,7 @@ export function BrowserPanel({
 	onNavigateAgentTab,
 	extension,
 	pollIntervalMs = 350,
+	visible = true,
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
@@ -167,6 +171,8 @@ export function BrowserPanel({
 	const { pendingElement, annotationText, notice } = annotationSnapshot.context;
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [history, setHistory] = useState<string[]>(() => [home]);
+	const directCaptureRef = useRef(false);
+	const [capturingSelection, setCapturingSelection] = useState(false);
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
 	const lastMarkersRef = useRef("");
@@ -175,7 +181,11 @@ export function BrowserPanel({
 	const showAgentTab = !previewSelected && activeAgentTab !== null;
 	const showExtensionTab =
 		showAgentTab && activeAgentTab?.backend === "extension";
-	const showAgentWebview = showAgentTab && !showExtensionTab;
+	const showAgentWebview = visible && showAgentTab && !showExtensionTab;
+	useEffect(() => {
+		if (!visible || !agentSessionKey) return;
+		annotationsRef.current.setTarget?.(showAgentTab && activeAgentTab ? activeAgentTab : { tabId: "preview", url: currentUrl, title: address, sessionFile: agentSessionKey, backend: "webview" });
+	}, [visible, agentSessionKey, showAgentTab, activeAgentTab, currentUrl, address]);
 	const slotRef = useRef<HTMLDivElement | null>(null);
 	const onAgentSlotRectRef = useRef(onAgentSlotRect);
 	onAgentSlotRectRef.current = onAgentSlotRect;
@@ -322,7 +332,7 @@ export function BrowserPanel({
 	// the element the user clicked. Stopping cleans up the page-side listeners.
 	useEffect(() => {
 		const view = webviewRef.current;
-		if (!picking || !view || !domReady) return;
+		if (!visible || !picking || !view || !domReady) return;
 		let disposed = false;
 		let inFlight = false;
 		void runInPage(view, annotationPickerScript("start"));
@@ -339,11 +349,23 @@ export function BrowserPanel({
 					} catch {
 						return;
 					}
+					const first = Array.isArray(parsed) ? parsed[0] : null;
+					if (first && typeof first === "object" && "cancelled" in first && first.cancelled === true) { sendAnnotation({ type: "CANCEL" }); return; }
 					const element = Array.isArray(parsed)
 						? sanitizeCapturedElement(parsed[0])
 						: null;
 					if (!element) return;
-					sendAnnotation({ type: "ELEMENT_CAPTURED", element });
+					if (directCaptureRef.current && agentSessionKey && window.prime) {
+						const owner = annotationsRef.current;
+						const pageUrl = view.getURL();
+						setCapturingSelection(true);
+						sendAnnotation({ type: "CANCEL" });
+						void captureBrowserSelection({ bridge: window.prime, sessionKey: agentSessionKey, tabId: "preview", pageUrl, pageTitle: view.getTitle(), cwd, element }).then(({ input, warning }) => {
+							if (view.getURL() !== pageUrl || annotationsRef.current.add !== owner.add) return;
+							if (owner.add(input)) owner.focusComposer?.();
+							if (warning) sendAnnotation({ type: "CAPACITY_BLOCKED", notice: warning });
+						}).catch(() => sendAnnotation({ type: "CAPACITY_BLOCKED", notice: "The selected page is no longer available. Select the element again." })).finally(() => setCapturingSelection(false));
+					} else sendAnnotation({ type: "ELEMENT_CAPTURED", element });
 				})
 				.catch(() => {
 					inFlight = false;
@@ -354,7 +376,7 @@ export function BrowserPanel({
 			window.clearInterval(interval);
 			void runInPage(view, annotationPickerScript("stop"));
 		};
-	}, [picking, pollIntervalMs, domReady, sendAnnotation]);
+	}, [visible, picking, pollIntervalMs, domReady, sendAnnotation, agentSessionKey, cwd]);
 
 	// Persistent numbered markers for every live annotation on the current page.
 	const markers = annotations.annotations.flatMap((annotation, index) =>
@@ -394,6 +416,7 @@ export function BrowserPanel({
 	const capacityNotice = `Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`;
 
 	const toggleAnnotation = () => {
+		directCaptureRef.current = false;
 		sendAnnotation({
 			type: "TOGGLE",
 			atCapacity: annotationsRef.current.atCapacity,
@@ -549,6 +572,7 @@ export function BrowserPanel({
 							<ClockCounterClockwise size={13} />
 						</button>
 					</form>
+					<IconButton label={picking && directCaptureRef.current ? "Stop selecting" : "Select element"} aria-pressed={picking && directCaptureRef.current} className={picking && directCaptureRef.current ? "is-active" : ""} onClick={() => { directCaptureRef.current = true; sendAnnotation({ type: "TOGGLE", atCapacity: annotationsRef.current.atCapacity, capacityNotice }); }}><Crosshair size={15} /></IconButton>
 					<IconButton
 						className={
 							picking || pendingElement ? "is-active annotation-active" : ""
@@ -594,10 +618,9 @@ export function BrowserPanel({
 				) : null}
 				<div className={`browser-viewport ${picking ? "is-annotating" : ""}`}>
 					{webview}
-					{picking ? (
+					{picking || capturingSelection ? (
 						<div className="annotation-hint" role="status">
-							<ChatCircleText size={12} /> Click an element in the page to
-							comment on it
+							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : directCaptureRef.current ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}
 						</div>
 					) : null}
 					{pendingElement ? (

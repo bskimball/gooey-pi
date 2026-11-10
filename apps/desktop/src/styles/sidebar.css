@@ -23,9 +23,11 @@
 .brand-switcher__option small { margin-top: 1px; color: var(--text-tertiary); font-size: var(--fs-micro); }
 .sidebar__title-actions { display: flex; margin-left: auto; gap: 2px; }
 .sidebar__primary { padding: 2px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
-/* The one filled control in the sidebar, like the composer's send button. */
-.sidebar__new-session.icon-button { border-radius: 50%; color: var(--primary-ink); background: var(--primary-fill); }
-.sidebar__new-session.icon-button:hover { color: var(--primary-ink); background: color-mix(in srgb, var(--primary-fill) 86%, var(--canvas)); }
+/* Neutral surface tokens, matching the search field and destination buttons beside it. */
+.sidebar__new-session.icon-button { border-radius: 50%; color: var(--text-secondary); background: var(--surface); }
+.sidebar__new-session.icon-button:hover { color: var(--text); background: var(--surface-hover); }
+.sidebar__new-session.icon-button:active:not(:disabled) { color: var(--text); background: var(--surface-selected); }
+.sidebar__new-session.icon-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .sidebar__footer > button { width: 100%; height: 33px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border-radius: var(--radius-md); color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
 .sidebar__footer > button:hover { color: var(--text); background: var(--surface-hover); }
 .sidebar__footer > button.is-active { color: var(--text); background: var(--surface-selected); }
@@ -53,12 +55,11 @@
 .sidebar-search:focus-within { border-color: var(--border-strong); color: var(--text-secondary); background: var(--surface-raised); }
 .sidebar-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: var(--fs-ui); }
 .sidebar-search button { width: 18px; height: 18px; padding: 0; color: var(--text-tertiary); background: transparent; animation: badge-in 160ms ease-out; }
-.sidebar__scroll { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px 12px; }
-.sidebar__section-heading { position: sticky; z-index: 20; top: -8px; height: 30px; display: flex; align-items: center; justify-content: space-between; margin: -4px -2px 4px; padding: 0 4px 0 8px; color: var(--text-tertiary); background: color-mix(in srgb, var(--sidebar) 92%, transparent); backdrop-filter: blur(8px); font-size: var(--fs-meta); font-weight: 550; }
-/* Label, then a hairline filling the row, then the actions. */
-.sidebar__section-heading::after, .sidebar__group-heading::after { order: 1; height: 1px; flex: 1 1 auto; margin: 0 8px; content: ""; background: var(--border); }
-/* Actions float over the end of the rule so the hairline spans the row while they are hidden. */
-.sidebar__section-heading-actions { order: 2; position: absolute; right: 4px; padding-left: 4px; background: var(--sidebar); display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--duration-fast) ease-out; }
+.sidebar__scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px 12px; }
+.sidebar__label, .sidebar__section-heading, .sidebar__group-heading { position: relative; height: 24px; display: flex; align-items: center; gap: 6px; margin: 14px 0 2px; padding: 0 6px; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); font-size: 10.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
+.sidebar__scroll > :first-child > .sidebar__label, .sidebar__scroll > .sidebar__section-heading:first-child { margin-top: 6px; }
+.sidebar__label .n { color: var(--text-tertiary); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.sidebar__section-heading-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--duration-fast) ease-out; }
 .sidebar:hover .sidebar__section-heading-actions, .sidebar__section-heading-actions:focus-within, .sidebar__section-heading-actions:has(.is-sorted, [aria-expanded='true']) { opacity: 1; }
 .sidebar__sort-toggle.is-sorted { color: var(--prime); }
 .sidebar__sort-toggle[aria-expanded='true'], .session-row__more[aria-expanded='true'] { color: var(--text); background: var(--surface-selected); }
@@ -78,39 +79,39 @@
 .project-row__menu button.is-danger:hover, .project-row__menu button.is-danger:focus-visible, .project-row__menu button:last-child:hover, .project-row__menu button:last-child:focus-visible { color: var(--danger); background: var(--danger-soft); }
 .sidebar__empty { margin: 12px 8px; color: var(--text-tertiary); font-size: var(--fs-ui); }
 .sidebar__project-section + .sidebar__project-section { margin-top: 12px; }
-.sidebar__group-heading { display: flex; align-items: center; margin: 6px 0 4px 8px; color: var(--text-tertiary); font-size: var(--fs-meta); font-weight: 550; }
-.sidebar__library { flex: 0 0 auto; padding: 4px 10px 8px; }
-.sidebar__library > button { width: 100%; min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: var(--radius-md); color: var(--text-secondary); background: transparent; text-align: left; font-size: var(--fs-ui); }
-.sidebar__library > button:hover, .sidebar__library > button:focus-visible { color: var(--text); background: var(--surface-hover); }
-.sidebar__library > button > svg { flex: 0 0 auto; }
-.sidebar__library > button > span:first-of-type { flex: 1; }
-.sidebar__library > .sidebar__other-activity { min-height: 30px; color: var(--text-tertiary); font-size: var(--fs-meta); }
-.project-group { margin-bottom: 2px; }
-.project-group:has(> .session-list) { margin-bottom: 7px; }
-.project-row.project-row--search { padding-left: 26px; }
-.project-row { position: relative; height: 34px; display: flex; align-items: center; gap: 1px; padding: 0 4px 0 3px; border-radius: var(--radius-md); color: var(--text); transition: color 120ms ease-out, background 120ms ease-out; }
+.sidebar-attention__row { width: 100%; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font-size: var(--fs-ui); text-align: left; transition: color 100ms ease-out, background 100ms ease-out; }
+.sidebar-attention__row:hover, .sidebar-attention__row:focus-visible { color: var(--text); background: var(--surface-hover); }
+.sidebar-attention__row.is-selected { color: var(--text); font-weight: 550; }
+.sidebar-attention__title { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-attention__project { max-width: 80px; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); font-size: var(--fs-micro); }
+.session-row__trail { width: 14px; height: 14px; display: inline-grid; place-items: center; flex: 0 0 14px; }
+.session-row__trail:empty { display: none; }
+.session-row__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
+.project-group { margin-bottom: 1px; }
+.project-row { position: relative; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--text); transition: color 120ms ease-out, background 120ms ease-out; }
 .project-row:hover, .project-row.is-menu-open { background: var(--surface-hover); }
-.project-row.is-selected { color: var(--text); background: var(--surface-selected); }
-.project-group:has(.session-row-wrap.is-selected) > .project-row.is-selected { background: color-mix(in srgb, var(--surface-selected) 48%, transparent); box-shadow: none; }
-.project-group:has(.session-row-wrap.is-selected) > .project-row.is-selected:hover { background: var(--surface-hover); }
-.project-row__collapse { width: 22px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; padding: 0; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; transition: color 120ms ease-out, background 120ms ease-out; }
-.project-row__collapse:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
-.project-row__main { min-width: 0; height: 100%; flex: 1; display: flex; align-items: center; gap: 7px; padding: 0 2px; color: inherit; background: transparent; text-align: left; }
-.project-row__main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-body); font-weight: 550; letter-spacing: -.008em; }
-.project-row__pin { flex: 0 0 auto; color: var(--prime); }
+.project-row__collapse { width: 16px; height: 22px; display: grid; place-items: center; flex: 0 0 auto; padding: 0; border-radius: var(--radius-sm); color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); background: transparent; transition: color 120ms ease-out; }
+.project-row__collapse:hover { color: var(--text); }
+.project-row__collapse svg { transition: transform 150ms ease; }
+.project-row__collapse[aria-expanded='false'] svg { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .project-row__collapse svg { transition: none; } }
+.reduce-motion .project-row__collapse svg { transition: none; }
+.project-row__main { min-width: 0; height: 100%; flex: 1; display: flex; align-items: center; gap: 6px; padding: 0; color: inherit; background: transparent; text-align: left; }
+.project-row__main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-ui); font-weight: 600; color: var(--text); }
+.project-row__pin { flex: 0 0 auto; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); }
 .row-action { opacity: 0; transition: opacity 130ms ease-out; }
 .project-row:hover .row-action, .project-row:focus-within .row-action { opacity: 1; }
 .project-row__new-session { flex: 0 0 auto; color: var(--text-tertiary); }
-.session-list { position: relative; margin: 2px 0 0 13px; padding-left: 9px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; transition: border-color 120ms ease-out; }
-.project-group:hover > .session-list, .project-group:has(.is-selected) > .session-list { border-left-color: var(--border-strong); }
-.session-row-wrap { position: relative; border-radius: var(--radius-md); transition: background 120ms ease-out; }
-.session-row-wrap:hover, .session-row-wrap:focus-within, .session-row-wrap.is-menu-open { background: var(--surface-hover); }
-.session-row-wrap.has-attention:not(.is-selected) { background: color-mix(in srgb, var(--prime-soft) 88%, var(--sidebar)); }
-.session-row-wrap.has-attention:not(.is-selected):hover, .session-row-wrap.has-attention:not(.is-selected):focus-within { background: color-mix(in srgb, var(--prime-soft) 72%, var(--surface-hover)); }
-.session-row-wrap.is-selected { color: var(--text); background: var(--surface-selected); }
+.session-list { position: relative; margin: 1px 0 6px 12px; padding-left: 0; display: flex; flex-direction: column; gap: 0; }
+.session-list::before { position: absolute; left: 0; top: 2px; bottom: 2px; width: 1px; content: ""; background: var(--border); pointer-events: none; }
+.session-row-wrap { position: relative; background: transparent; }
+.session-row-wrap.is-selected { color: var(--text); }
+.session-row-wrap.is-selected::before { position: absolute; left: 0; top: 6px; bottom: 6px; width: 1px; content: ""; background: var(--prime); pointer-events: none; }
 
-/* Actions take over a fixed-width meta slot on hover/focus/menu, so the title width and row height never change. */
-.session-row-wrap:hover .session-row__meta, .session-row-wrap:focus-within .session-row__meta, .session-row-wrap.is-menu-open .session-row__meta { visibility: hidden; }
+/* Status glyph takes the trailing slot where the time normally sits; hover actions replace whichever is shown. */
+.session-row:has(> .session-row__trail:not(:empty)) .session-row__meta { display: none; }
+.session-row-wrap:hover .session-row__meta, .session-row-wrap:focus-within .session-row__meta, .session-row-wrap.is-menu-open .session-row__meta,
+.session-row-wrap:hover .session-row__trail, .session-row-wrap:focus-within .session-row__trail, .session-row-wrap.is-menu-open .session-row__trail { visibility: hidden; }
 .session-row__archive, .session-row__more { position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); opacity: 0; pointer-events: none; transition: opacity 120ms ease-out; }
 .session-row-wrap:hover > .icon-button, .session-row-wrap:focus-within > .icon-button, .session-row-wrap.is-menu-open > .icon-button { opacity: 1; pointer-events: auto; }
 .session-row__archive:active:not(:disabled), .session-row__more:active:not(:disabled) { transform: translateY(-50%) scale(.96); }
@@ -118,26 +119,16 @@
 .session-row__archive.is-confirming { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
 .session-row__more { right: 3px; }
 
-.session-row { width: 100%; min-height: 30px; display: flex; align-items: flex-start; gap: 7px; padding: 6px 7px; border-radius: var(--radius-md); color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
-.session-row > .session-status-mark, .session-row > .project-working { margin-top: 2px; }
-.session-row.is-selected { color: var(--text); background: var(--surface-selected); }
-.session-row__text { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 55px; align-items: start; column-gap: 8px; }
-.session-row__meta { max-width: 55px; justify-self: end; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-row__title { display: -webkit-box; min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-size: var(--fs-ui); font-weight: 400; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; transition: color 120ms ease-out; }
+.session-row { width: 100%; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 14px; color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out; }
+.session-row__text { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
+.session-row__title { display: block; min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-size: var(--fs-ui); font-weight: 400; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; transition: color 120ms ease-out; }
 .session-row-wrap:hover .session-row__title, .session-row-wrap:focus-within .session-row__title, .session-row-wrap.is-menu-open .session-row__title, .session-row-wrap.has-attention .session-row__title { color: var(--text); }
 .session-row-wrap.is-selected .session-row__title { color: var(--text); font-weight: 550; }
-.session-row__meta { flex: 0 0 auto; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); font-size: var(--fs-meta); line-height: 1.25; font-variant-numeric: tabular-nums; }
-.session-row--empty { min-height: 31px; align-items: center; gap: 6px; padding: 0 8px; color: var(--text-tertiary); font-size: var(--fs-ui); }
-.session-row--empty:hover { color: var(--text); background: var(--surface-hover); }
+.session-row__meta { flex: 0 0 auto; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); font-size: var(--fs-micro); line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.session-row--empty { height: 24px; padding: 0 6px 0 14px; gap: 6px; color: color-mix(in srgb, var(--text-tertiary) 72%, transparent); font-size: var(--fs-meta); }
+.session-row--empty:hover { color: var(--text-secondary); background: transparent; }
+.sidebar-attention__row:focus-visible, .session-row:focus-visible, .project-row__main:focus-visible, .project-row__collapse:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
 @keyframes sidebar-menu-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } }
-.project-working, .session-status-mark { width: 16px; height: 16px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; }
-.project-working, .session-status-mark--running { color: var(--prime); }
-.project-attention { flex: 0 0 auto; min-width: 17px; height: 17px; display: inline-grid; place-items: center; padding: 0 4px; border-radius: var(--radius-md); color: var(--prime); background: var(--prime-soft); font-size: var(--fs-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
-.session-status-mark--waiting, .session-status-mark--complete { color: var(--text-tertiary); }
-/* Settled sessions keep their slot but show no mark; only live or attention states draw the eye. */
-.session-status-mark { transition: opacity var(--duration-fast) ease-out; }
-.session-row-wrap:not(.has-attention) :is(.session-status-mark--complete, .session-status-mark--idle, .session-status-mark--unknown, .session-status-mark--failed) { opacity: 0; }
-.session-row-wrap:not(.has-attention):is(:hover, :focus-within) .session-status-mark { opacity: 1; }
-.session-status-mark--idle > span, .session-status-mark--unknown > span, .session-status-mark--failed > span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); }
-.session-row-wrap.has-attention .session-status-mark--failed > span { background: var(--danger); }
+.project-working { width: 14px; height: 14px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--prime); }
+.project-attention { flex: 0 0 auto; min-width: 16px; height: 16px; display: inline-grid; place-items: center; padding: 0 4px; border-radius: 999px; color: var(--canvas); background: var(--warning); font-size: 10px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .sidebar__footer { flex: 0 0 auto; padding: 8px 10px 10px; }

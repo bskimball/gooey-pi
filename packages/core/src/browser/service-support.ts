@@ -1,3 +1,4 @@
+import type { BrowserAnnotationElement } from '../types/api'
 import { requireRecord } from '../validation'
 import type { ExtensionBrowserBridge } from './extension-bridge'
 import type { NativeImageLike, WebContentsLike } from './web-contents'
@@ -59,6 +60,10 @@ export interface TabState {
   chromeTabId?: number
   pairedByUser?: boolean
   paused?: boolean
+  /** User is choosing an element in this shared Chrome tab. */
+  picking?: boolean
+  /** Last element selected in this shared Chrome tab. Untrusted page data. */
+  selection?: BrowserAnnotationElement
   tabId: string
   sessionKey: string
   webContentsId: number | null

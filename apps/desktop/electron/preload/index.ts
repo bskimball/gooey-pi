@@ -69,6 +69,7 @@ const api: PrimeWorkApi = {
 		revealPath: (path) => invoke("app:reveal-path", path),
 		openInVsCode: (path, line) => line === undefined ? invoke("app:open-in-vscode", path) : invoke("app:open-in-vscode", path, line),
 		resolveBrowserSource: (cwd, hint) => invoke("app:resolve-browser-source", cwd, hint),
+		readWorkspaceImage: (cwd, path) => invoke("app:read-workspace-image", cwd, path),
 		popupMenu: (menu, x, y) => invoke("app:popup-menu", menu, x, y),
 		setTitleBarTheme: (theme) => invoke("app:set-title-bar-theme", theme),
 		onOpenSettings: (callback) =>
@@ -221,10 +222,32 @@ const api: PrimeWorkApi = {
 			invoke("browser:set-active-session", sessionKey),
 		setTabPaused: (sessionKey, tabId, paused) =>
 			invoke("browser:set-tab-paused", sessionKey, tabId, paused),
+		setTabPicking: (sessionKey, tabId, picking) =>
+			invoke("browser:set-tab-picking", sessionKey, tabId, picking),
 		popOutTab: (sessionKey, tabId) =>
 			invoke("browser:pop-out-tab", sessionKey, tabId),
 		focusExtensionTab: (sessionKey, tabId) =>
 			invoke("browser:focus-extension-tab", sessionKey, tabId),
+		captureSelection: (sessionKey, tabId, pageUrl, selector) =>
+			invoke(
+				"browser:capture-selection",
+				sessionKey,
+				tabId,
+				pageUrl,
+				selector,
+			),
+		revealSelection: (sessionKey, tabId, pageUrl, selector) =>
+			invoke(
+				"browser:reveal-selection",
+				sessionKey,
+				tabId,
+				pageUrl,
+				selector,
+			),
+		clearSelection: (sessionKey, tabId, captureId) =>
+			captureId === undefined
+				? invoke("browser:clear-selection", sessionKey, tabId)
+				: invoke("browser:clear-selection", sessionKey, tabId, captureId),
 		state: () => invoke("browser:state"),
 		attachTab: (tabId, webContentsId) =>
 			invoke("browser:attach-tab", tabId, webContentsId),

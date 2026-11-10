@@ -1,5 +1,6 @@
 import { useEffect, useState, type RefObject } from 'react'
-import { ArrowUp, CircleNotch } from '../icons'
+import { ArrowUp } from '../icons'
+import { StatusMark } from '../activity/StatusMark'
 import { isOverlayOpen } from '@/lib/app-shortcuts'
 import { shortcutLabel, detectRendererPlatform } from '@/lib/platform-shortcuts'
 
@@ -95,7 +96,7 @@ export function TurnNavigator({ scrollRef, active }: { scrollRef: RefObject<HTML
   return (
     <div className="turn-header" role="navigation" aria-label="Current turn">
       <span className="turn-header__prompt" title={current.text}>{current.text}</span>
-      {running ? <span className="turn-header__state"><CircleNotch className="spin" size={12} /> running</span> : null}
+      {running ? <span className="turn-header__state"><StatusMark state="running" size={12} /> running</span> : null}
       <button
         type="button"
         className="turn-header__jump"

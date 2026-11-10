@@ -2,7 +2,7 @@ import type { MessagePart, QueuedPrompt, TranscriptMessage } from 'apex-core/typ
 import { applyCompactionEvent, isCompactionEvent } from './compaction'
 import { nextTranscriptId, withPartId } from './ids'
 import { fallbackModelFromRecord, fallbackNoticeText } from './model-fallback'
-import { agentMessagePart, record, resultDetails, resultText, string } from './parse'
+import { agentMessagePart, record, resultDetails, resultImages, resultText, string } from './parse'
 
 export interface PrimeEventReplayStats {
   messageScans: number
@@ -287,6 +287,11 @@ export function replayPrimeEvents(
       const message = record(raw.message)
       if (message?.role !== 'assistant') continue
       const index = assistantIndex()
+      const images = resultImages(message)
+      if (images.length) {
+        const draft = draftParts(index)
+        for (const image of images) appendNode(draft, withPartId(image))
+      }
       draftMessage(index).errorMessage = message.stopReason === 'error'
         ? string(message.errorMessage)?.slice(0, MAX_ERROR_CHARS) : undefined
       if (message.stopReason === 'error') {
@@ -338,7 +343,17 @@ export function replayPrimeEvents(
       const draft = draftParts(index)
       const call = draft.firstToolById.get(id)
       const details = resultDetails(raw.partialResult)
-      if (call) setToolResult(draft, call, { type: 'toolResult', name, text: resultText(raw.partialResult), streaming: true, ...(details ? { details } : {}) })
+      const images = resultImages(raw.partialResult)
+      if (call) {
+        setToolResult(draft, call, {
+          type: 'toolResult',
+          name,
+          text: resultText(raw.partialResult),
+          ...(images.length ? { images } : {}),
+          streaming: true,
+          ...(details ? { details } : {}),
+        })
+      }
       continue
     }
     if (type === 'tool_execution_end') {
@@ -348,7 +363,15 @@ export function replayPrimeEvents(
       const draft = draftParts(index)
       const call = draft.firstToolById.get(id)
       const details = resultDetails(raw.result)
-      const resultPart: MessagePart = { type: 'toolResult', name, text: resultText(raw.result), isError: raw.isError === true, ...(details ? { details } : {}) }
+      const images = resultImages(raw.result)
+      const resultPart: MessagePart = {
+        type: 'toolResult',
+        name,
+        text: resultText(raw.result),
+        ...(images.length ? { images } : {}),
+        isError: raw.isError === true,
+        ...(details ? { details } : {}),
+      }
       if (call) setToolResult(draft, call, resultPart)
       else {
         appendNode(draft, withPartId({ type: 'toolCall', id, name }))

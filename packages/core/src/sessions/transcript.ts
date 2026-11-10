@@ -146,12 +146,14 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
       .filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text')
       .map((part) => part.text)
       .join('\n')
+    const images = parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
     const details = isRecord(message.details) ? boundedArgs(message.details) : undefined
     return [
       {
         type: 'toolResult',
         name: typeof message.toolName === 'string' ? boundedString(message.toolName, 512) : undefined,
         text: boundedString(text, MAX_PART_TOOL_CHARS),
+        ...(images.length ? { images } : {}),
         isError: message.isError === true,
         ...(details !== undefined ? { details } : {}),
       },
@@ -179,6 +181,14 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
   let imageBudget = MAX_TRANSCRIPT_IMAGE_CHARS
   let partBudget = MAX_TRANSCRIPT_PARTS
   const bounded: TranscriptMessage[] = []
+  const boundImagePart = (part: Extract<MessagePart, { type: 'image' }>): Extract<MessagePart, { type: 'image' }> => {
+    let data: string | undefined
+    if (part.data && imageBudget > 0) {
+      data = boundedString(part.data, imageBudget)
+      imageBudget -= Math.min(part.data.length, imageBudget)
+    }
+    return { ...part, data, dataTruncated: part.dataTruncated || Boolean(part.data && data !== part.data) || undefined }
+  }
 
   for (const message of transcript.slice(-MAX_TRANSCRIPT_MESSAGES).reverse()) {
     const errorMessage = message.errorMessage === undefined ? undefined : boundedString(message.errorMessage, Math.min(MAX_PART_TEXT_CHARS, textBudget))
@@ -194,8 +204,11 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
           next = part.type === 'agentMessage' ? { ...part, text, agentName: part.agentName ? boundedString(part.agentName, 200) : undefined } : { ...part, text }
         }
       } else if (part.type === 'toolResult') {
-        if (toolBudget > 0) {
-          const text = boundedString(part.text, toolBudget)
+        const images = part.images?.length
+          ? [...part.images].reverse().map(boundImagePart).reverse()
+          : undefined
+        if (toolBudget > 0 || images?.length) {
+          const text = toolBudget > 0 ? boundedString(part.text, toolBudget) : ''
           toolBudget -= text.length
           let details: unknown
           if (part.details !== undefined && argsBudget > 0) {
@@ -204,7 +217,12 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
             else details = boundedString(serialized, argsBudget)
             argsBudget -= Math.min(serialized.length, argsBudget)
           }
-          next = { ...part, text, ...(details !== undefined ? { details } : { details: undefined }) }
+          next = {
+            ...part,
+            text,
+            ...(images ? { images } : part.images !== undefined ? { images: undefined } : {}),
+            ...(details !== undefined ? { details } : { details: undefined }),
+          }
         }
       } else if (part.type === 'toolCall') {
         let args: unknown
@@ -229,12 +247,7 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
           customInstructions: boundedText(part.customInstructions),
         }
       } else if (part.type === 'image') {
-        let data: string | undefined
-        if (part.data && imageBudget > 0) {
-          data = boundedString(part.data, imageBudget)
-          imageBudget -= Math.min(part.data.length, imageBudget)
-        }
-        next = { ...part, data, dataTruncated: part.dataTruncated || Boolean(part.data && data !== part.data) || undefined }
+        next = boundImagePart(part)
       }
       if (next) {
         parts.push(next)

@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { specialistOutcome, specialistStepStatus, specialistStatusLabel } from '@/lib/specialist-status'
-import { CaretDown, CaretRight, Check, Record as RecordIcon, WarningCircle } from '../icons'
+import { CaretDown, CaretRight, Question, WarningCircle } from '../icons'
+import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { coalesceAssistantTurns } from '../transcript/grouping'
 import { MarkdownText } from '../MarkdownText'
@@ -8,6 +9,8 @@ import { renderNarrativeWithActivity } from '../transcript/messages'
 import type { PiSpecialistSummary } from './SummaryPanel'
 import { SpecialistFiles } from './SpecialistMatrix'
 import { observedPath } from '@/lib/specialist-evidence'
+
+const specialistMark = (status: string): StatusMarkState => status === 'running' ? 'running' : status === 'done' ? 'done' : status === 'error' ? 'failed' : 'pending'
 
 export interface PiSpecialistSession extends PiSpecialistSummary {
   prompt: string
@@ -628,7 +631,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               className={`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.waitingForInput ? 'waiting' : spec.status}`}
               onClick={() => onSelect(spec.id)}
             >
-              {spec.status === 'done' ? <Check size={12} /> : spec.status === 'error' ? <WarningCircle size={12} /> : <RecordIcon size={12} />}
+              {spec.waitingForInput && spec.status !== 'done' && spec.status !== 'error' ? <Question size={12} /> : <StatusMark state={specialistMark(spec.status)} size={12} />}
               <strong>{spec.agent}</strong>
               {/^task_\d+$/.test(spec.id) ? <span>({spec.id})</span> : null}
             </button>
@@ -640,7 +643,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           <summary title="Show work order and details">
             <CaretRight size={12} aria-hidden="true" className="specialist-header__caret" />
             <strong>{active.agent}</strong>
-            <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{activeStatus}</span>
+            <span className={`run-state is-${active.waitingForInput ? 'waiting' : active.status}`}>{active.status === 'running' && !active.waitingForInput ? <StatusMark state="running" size={11} /> : null}{activeStatus}</span>
             {active.mission ? <span className="specialist-header__preview">{active.mission}</span> : null}
           </summary>
           <div className="specialist-header__top">
@@ -693,7 +696,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
                 </div>
                 {message.streaming && !message.parts.length ? (
                   <div className="specialist-turn__working">
-                    <RecordIcon size={13} />
+                    <StatusMark state="running" size={13} />
                     <span>Awaiting a recorded update…</span>
                   </div>
                 ) : null}

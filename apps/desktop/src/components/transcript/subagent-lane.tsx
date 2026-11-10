@@ -1,7 +1,8 @@
 import { createContext, memo, useContext, useId, useState } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
 import { specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
-import { CaretRight, Check, CircleNotch, Robot, WarningCircle } from '../icons'
+import { CaretRight, Check, Robot } from '../icons'
+import { StatusMark } from '../activity/StatusMark'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
@@ -109,7 +110,7 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
       className={`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`}
       onClick={onOpen && singleTarget ? () => onOpen(singleTarget.id) : undefined}
     >
-      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <CircleNotch className="spin" size={13} /> : state === 'error' ? <WarningCircle size={13} /> : state === 'done' ? <Check size={13} /> : <Robot size={13} />}</span>
+      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
       {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
       {roles.length
         ? roles.map((role, index) => <span key={`${role}-${index}`} className="subagent-lane__role">{role}</span>)

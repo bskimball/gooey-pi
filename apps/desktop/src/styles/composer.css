@@ -70,6 +70,19 @@
 	color: var(--warning);
 	background: var(--warning-soft);
 }
+.composer-extension-pill.is-selecting .composer-extension-pill__state {
+	color: var(--prime);
+	background: var(--prime-soft);
+}
+.composer-extension-pill__selection {
+	min-width: 0;
+	max-width: 140px;
+	overflow: hidden;
+	color: var(--text);
+	font-weight: 550;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .composer-extension-pill button {
 	position: relative;
 	flex: 0 0 20px;

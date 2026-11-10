@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { CalendarDots, CaretRight, Check, CircleNotch, Record as RecordIcon, WarningCircle } from '../icons'
+import { CalendarDots, CaretRight } from '../icons'
+import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
 import type { AutomationScheduleRecord, GitStatus, RuntimeInfo } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { RunConfigSection } from "./RunConfigSection"
@@ -24,6 +25,10 @@ function checkState({ outcome, changesSince }: ReadinessCheck): string {
 function reviewState({ verdict, changesSince }: Review): string {
   return `Verdict ${verdict}${staleSuffix(changesSince)}`
 }
+
+const checkMark = (outcome: ReadinessCheck['outcome']): StatusMarkState => outcome === 'passed' ? 'done' : outcome === 'failed' ? 'failed' : outcome === 'running' ? 'running' : 'stale'
+const todoMark = (status: string): StatusMarkState => status === 'completed' ? 'done' : status === 'in_progress' ? 'running' : 'pending'
+const specialistMark = (status: string): StatusMarkState => status === 'running' ? 'running' : status === 'done' ? 'done' : status === 'error' ? 'failed' : 'pending'
 
 function deliveryLine(git: GitStatus): string {
   if (!git.isRepo) return 'Git repository not detected'
@@ -65,7 +70,7 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
           <div className="progress-list">
             {todos.map((todo) => (
               <div key={todo.id} className={todo.status === 'in_progress' ? 'is-current' : ''}>
-                {todo.status === 'completed' ? <Check size={13} /> : todo.status === 'in_progress' ? <CircleNotch className="spin" size={13} /> : <RecordIcon size={13} />}
+                <StatusMark state={todoMark(todo.status)} size={14} />
                 <span>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
               </div>
             ))}
@@ -78,7 +83,7 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
           <div className="summary-agent-list">
             {specialists.map((specialist) => (
               <button type="button" key={specialist.id} className={`is-${specialist.status}`} title={specialistStatusLabel[specialist.status]} onClick={() => onOpenSpecialist(specialist.id)}>
-                {specialist.status === 'done' ? <Check size={13} /> : specialist.status === 'error' ? <WarningCircle size={13} /> : <RecordIcon size={13} />}
+                <StatusMark state={specialistMark(specialist.status)} size={14} />
                 <strong>{specialist.agent}</strong>
                 <span>{specialist.activity || specialist.mission}</span>
                 <CaretRight size={11} aria-hidden="true" />
@@ -88,11 +93,11 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
         </section>
       ) : null}
       <section className="summary-section"><h3>Readiness</h3><div className="progress-list readiness-list">
-        {readiness.checks.length || readiness.reviews.length ? null : <div><RecordIcon size={13} /><span>No checks detected in this session</span></div>}
-        {readiness.checks.map((check) => <div key={check.kind} className={`${check.outcome === 'failed' ? 'is-failed' : check.outcome === 'running' ? 'is-current' : ''}${check.changesSince > 0 || check.outcome === 'unknown' ? ' is-stale' : ''}`}>{check.outcome === 'passed' ? <Check size={13} /> : check.outcome === 'failed' ? <WarningCircle size={13} /> : check.outcome === 'unknown' ? <RecordIcon size={13} /> : <CircleNotch className="spin" size={13} />}<span>{CHECK_LABELS[check.kind]} · {checkState(check)}</span></div>)}
-        {readiness.reviews.map((review) => <div key={review.agent} className={`${review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? '' : 'is-failed'}${review.changesSince > 0 ? ' is-stale' : ''}`}>{review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? <Check size={13} /> : <WarningCircle size={13} />}<span>{REVIEW_LABELS[review.agent]} · {reviewState(review)}</span></div>)}
-        <div className={git.files.length ? 'is-current' : ''}><RecordIcon size={13} /><span>{deliveryLine(git)}</span></div>
-        <div><RecordIcon size={13} /><span>{toolCount} tool {toolCount === 1 ? 'call' : 'calls'} recorded</span></div>
+        {readiness.checks.length || readiness.reviews.length ? null : <div><StatusMark state="pending" size={14} /><span>No checks detected in this session</span></div>}
+        {readiness.checks.map((check) => <div key={check.kind} className={`${check.outcome === 'failed' ? 'is-failed' : check.outcome === 'running' ? 'is-current' : ''}${check.changesSince > 0 || check.outcome === 'unknown' ? ' is-stale' : ''}`}><StatusMark state={checkMark(check.outcome)} size={14} /><span>{CHECK_LABELS[check.kind]} · {checkState(check)}</span></div>)}
+        {readiness.reviews.map((review) => <div key={review.agent} className={`${review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? '' : 'is-failed'}${review.changesSince > 0 ? ' is-stale' : ''}`}><StatusMark state={review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? 'done' : 'failed'} size={14} /><span>{REVIEW_LABELS[review.agent]} · {reviewState(review)}</span></div>)}
+        <div className={git.files.length ? 'is-current' : ''}><span className="status-mark-spacer" aria-hidden="true" /><span>{deliveryLine(git)}</span></div>
+        <div><span className="status-mark-spacer" aria-hidden="true" /><span>{toolCount} tool {toolCount === 1 ? 'call' : 'calls'} recorded</span></div>
       </div></section>
       {automations.length ? <section className="summary-section"><h3>Automations</h3><div className="summary-automation-list">
         {automations.slice(0, 2).map((task) => <button type="button" key={task.id} onClick={() => onOpenAutomation(task.id)}>

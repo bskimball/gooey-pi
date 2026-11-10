@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react'
-import type { Components } from 'react-markdown'
+import type { Components, UrlTransform } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openExternalUrl } from '@/lib/desktop-actions'
+import { WorkspaceImage } from './WorkspaceImage'
 
 interface MarkdownTextProps {
   text: string
@@ -33,8 +34,12 @@ function MarkdownLink({ href, children, ...props }: ComponentProps<'a'>) {
   </>
 }
 
-function markdownUrlTransform(url: string): string {
-  return /^file:/i.test(url) ? url : defaultUrlTransform(url)
+const markdownUrlTransform: UrlTransform = (url, key, node) => {
+  if (/^file:/i.test(url)) return url
+  if (node.tagName === 'img' && key === 'src') {
+    if (/^[a-z]:[\\/]/i.test(url) || /^data:image\/(png|jpeg|gif|webp);base64,/i.test(url)) return url
+  }
+  return defaultUrlTransform(url)
 }
 
 const markdownPlugins = [remarkGfm]
@@ -54,7 +59,7 @@ const markdownComponents: Components = {
   h4: ({ node: _node, ...props }) => <h4 {...props} dir="auto" />,
   h5: ({ node: _node, ...props }) => <h5 {...props} dir="auto" />,
   h6: ({ node: _node, ...props }) => <h6 {...props} dir="auto" />,
-  img: ({ alt }) => <span className="markdown-image-placeholder">[Image: {alt || 'attachment'}]</span>,
+  img: ({ node: _node, ...props }) => <WorkspaceImage {...props} />,
   li: ({ node: _node, ...props }) => <li {...props} dir="auto" />,
   ol: ({ node: _node, ...props }) => <ol {...props} dir="auto" />,
   p: ({ node: _node, ...props }) => <p {...props} dir="auto" />,

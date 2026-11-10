@@ -3,6 +3,7 @@ import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createServer } from 'node:http'
 import { CURRENT_DESKTOP_STATE_FILENAME, LEGACY_DESKTOP_STATE_FILENAME } from '../../apps/desktop/electron/main/store'
 
 let app: ElectronApplication | undefined
@@ -558,6 +559,25 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.composer p[role="status"]')).toHaveText('1 file attached.')
     await page.getByRole('button', { name: 'Remove picker.png' }).click()
     await expect(page.locator('.composer-attachment').filter({ hasText: 'picker.png' })).toHaveCount(0)
+
+    const cwd = JSON.parse(readFileSync(fixtureSessionFile, 'utf8').split('\n')[0]).cwd as string
+    writeFileSync(join(cwd, 'design.png'), readFileSync(imagePath))
+    await expect(page.evaluate(async ({ cwd, path }) => window.prime.app.readWorkspaceImage(cwd, path), { cwd, path: imagePath })).rejects.toThrow(/outside/)
+    const imageData = readFileSync(imagePath).toString('base64')
+    appendFileSync(fixtureSessionFile, [
+      JSON.stringify({ type: 'message', id: 'visual-assistant', parentId: 'fixture-goal-summary', message: { role: 'assistant', content: [{ type: 'text', text: 'Design preview\n\n![Workspace design](design.png)' }, { type: 'toolCall', id: 'visual-capture', name: 'browser_screenshot' }] } }),
+      JSON.stringify({ type: 'message', id: 'visual-result', parentId: 'visual-assistant', message: { role: 'toolResult', toolCallId: 'visual-capture', toolName: 'browser_screenshot', content: [{ type: 'text', text: 'Captured page' }, { type: 'image', mimeType: 'image/png', data: imageData }] } }),
+      '',
+    ].join('\n'))
+    await page.reload()
+    await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+    const design = page.getByAltText('Workspace design')
+    await expect(design).toBeVisible()
+    await expect.poll(() => design.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+    await expect(page.locator('.message--assistant .image-part')).toHaveCount(2)
+    await design.click()
+    await expect(page.getByRole('dialog', { name: 'Expanded image' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close expanded image' }).click()
   })
 
   test('collapses composer selectors and keeps the checkout menu inside a narrow conversation pane', async () => {
@@ -936,18 +956,16 @@ test.describe('Prime Work desktop smoke', () => {
     const activityCount = page.locator('.sidebar__primary button[title="Activity"] .nav-count')
     await expect(activityCount).toHaveText('1')
     await expect(titles.nth(0)).toHaveText('Hermetic desktop fixture')
-    const attentionColor = await primaryRow.evaluate((node) => getComputedStyle(node).backgroundColor)
-    const neutralColor = await page.locator('.session-row-wrap:not(.has-attention)').first().evaluate((node) => getComputedStyle(node).backgroundColor)
-    expect(attentionColor).not.toBe(neutralColor)
+    await expect(primaryRow.locator('.session-row__trail .status-mark--failed')).toHaveCount(1)
 
-    const failureMark = primaryRow.locator('.session-status-mark--failed')
-    const activeFailureColor = await failureMark.locator('> span').evaluate((node) => getComputedStyle(node).backgroundColor)
+    const failureRule = primaryRow.locator('.session-row')
+    expect(await failureRule.evaluate((node) => getComputedStyle(node, '::before').boxShadow)).toBe('none')
 
     await primaryRow.locator('.session-row').click()
     await expect(primaryRow).not.toHaveClass(/has-attention/)
     await expect(primaryRow).toHaveClass(/session-row-wrap--failed/)
-    await expect(failureMark).toHaveAttribute('title', 'Failed — notification cleared')
-    await expect.poll(() => failureMark.locator('> span').evaluate((node) => getComputedStyle(node).backgroundColor)).not.toBe(activeFailureColor)
+    await expect(primaryRow.locator('.session-row .sr-only')).toHaveText('Failed:')
+    await expect(primaryRow.locator('.session-row__trail .status-mark--failed')).toHaveCount(0)
     await expect(activityCount).toHaveCount(0)
     appendFileSync(primaryFile, `${JSON.stringify({
       type: 'message', id: 'primary-new-user', parentId: 'primary-background-assistant', timestamp: '2028-01-01T00:00:00.000Z',
@@ -1094,10 +1112,10 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.conversation-pane')).toBeVisible()
   })
 
-  test('destroys an open session browser guest when its thread is archived', async () => {
+  test('selects visual Preview references, preserves the guest across views, and destroys it on archive', async () => {
     const sessionRow = page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' })
     await sessionRow.locator('.session-row').click()
-    if (!(await page.locator('.inspector').count())) await page.getByRole('button', { name: 'Toggle inspector' }).click()
+    if (!(await page.locator('.inspector').isVisible())) await page.getByRole('button', { name: 'Toggle inspector' }).click()
     await page.getByRole('tab', { name: 'Browser' }).click()
     const preview = page.locator('.browser-preview webview[partition="persist:prime-work-browser"]')
     await expect(preview).toHaveCount(1)
@@ -1112,8 +1130,72 @@ test.describe('Prime Work desktop smoke', () => {
     const guestId = await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())
     expect(await app!.evaluate(({ webContents }, id) => Boolean(webContents.fromId(id)), guestId)).toBe(true)
 
-    await sessionRow.getByTitle('Archive Hermetic desktop fixture').click()
-    await sessionRow.getByTitle('Confirm archive Hermetic desktop fixture').click()
+    const visualServer = createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'text/html' })
+      response.end('<html><body style="padding:40px;background:#f6f4ef"><button id="visual-cta" style="padding:24px;background:#254f46;color:white;border:0;font-size:20px">Design target</button><script>window.__errors=[]; window.addEventListener("error",event=>window.__errors.push(event.message)); </script></body></html>')
+    })
+    await new Promise<void>((resolve) => visualServer.listen(0, '127.0.0.1', resolve))
+    try {
+      const address = visualServer.address()
+      if (!address || typeof address === 'string') throw new Error('Missing visual fixture address')
+      const url = `http://127.0.0.1:${address.port}`
+      await preview.evaluate(async (node, target) => (node as HTMLElement & { loadURL(url: string): Promise<void> }).loadURL(target), url)
+      await expect.poll(() => preview.evaluate((node) => (node as HTMLElement & { getURL(): string }).getURL())).toBe(`${url}/`)
+      await page.getByRole('button', { name: 'Select element', exact: true }).click()
+      await expect(page.getByRole('button', { name: 'Stop selecting', exact: true })).toBeVisible()
+      const point = await preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<{ x: number; y: number }> }).executeJavaScript('(() => { const r = document.getElementById("visual-cta").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()'))
+      await expect.poll(() => preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<boolean> }).executeJavaScript('Array.from(document.querySelectorAll("div")).some(el => el.style.zIndex === "2147483646")'))).toBe(true)
+      await app!.evaluate(({ webContents }, { id, point }) => {
+        const guest = webContents.fromId(id)!
+        guest.sendInputEvent({ type: 'mouseMove', x: point.x, y: point.y })
+        guest.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        guest.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+      }, { id: guestId, point })
+      expect(await preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<string[]> }).executeJavaScript('window.__errors'))).toEqual([])
+      const selection = page.locator('.browser-selection-card')
+      await expect(selection.locator('img')).toBeVisible()
+      await expect.poll(() => selection.locator('img').evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+      const crop = await selection.locator('img').getAttribute('src')
+      expect(await app!.evaluate(({ nativeImage }, data) => {
+        const pixels = nativeImage.createFromDataURL(data!).toBitmap()
+        let green = 0
+        for (let index = 0; index < pixels.length; index += 4) {
+          if (pixels[index + 1] > pixels[index + 2] + 20 && pixels[index + 1] > pixels[index] + 3) green += 1
+        }
+        return green / (pixels.length / 4)
+      }, crop)).toBeGreaterThan(0.3)
+      await expect(page.getByRole('combobox', { name: 'Message Pi' })).toBeFocused()
+      await page.screenshot({ path: test.info().outputPath('visual-workbench.png') })
+      expect(await page.getByRole('button', { name: 'Expand inspector', exact: true }).evaluate((node) => node.getBoundingClientRect().right - window.innerWidth)).toBeLessThanOrEqual(1)
+      await selection.locator('.browser-selection-card__target').click()
+      await expect.poll(() => preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<boolean> }).executeJavaScript('Boolean(document.getElementById("__primeWorkRevealOutline"))'))).toBe(true)
+      await page.getByRole('button', { name: 'Remove annotation 1', exact: true }).click()
+      await expect(selection).toHaveCount(0)
+    } finally {
+      visualServer.closeAllConnections()
+      await new Promise<void>((resolve, reject) => visualServer.close((error) => error ? reject(error) : resolve()))
+    }
+
+    const browserWidth = await page.locator('.inspector').evaluate((node) => node.getBoundingClientRect().width)
+    await page.getByRole('button', { name: 'Expand inspector', exact: true }).click()
+    await expect(page.locator('.sidebar')).toHaveCount(0)
+    await expect.poll(() => page.locator('.inspector').evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(browserWidth)
+    expect(await page.locator('.conversation-pane').evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThanOrEqual(359)
+    await page.getByRole('button', { name: 'Restore inspector width', exact: true }).click()
+    await expect.poll(async () => Math.abs(await page.locator('.inspector').evaluate((node) => node.getBoundingClientRect().width) - browserWidth)).toBeLessThanOrEqual(1)
+
+    await page.getByRole('tab', { name: 'Files', exact: true }).click()
+    await expect(preview).toHaveCount(1)
+    await page.getByRole('tab', { name: 'Browser', exact: true }).click()
+    expect(await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).toBe(guestId)
+    await page.getByRole('button', { name: 'Close inspector', exact: true }).click()
+    await expect(preview).toHaveCount(1)
+    await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
+    expect(await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).toBe(guestId)
+
+    await sessionRow.getByTitle('Archive Hermetic desktop fixture').focus()
+    await page.keyboard.press('Enter')
+    await sessionRow.getByTitle('Confirm archive Hermetic desktop fixture').press('Enter')
 
     await expect(sessionRow).toHaveCount(0)
     await expect.poll(() => app!.evaluate(({ webContents }, id) => {
@@ -1535,7 +1617,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('keeps transcript text from showing through the composer disclaimer', async () => {
-    if (await page.locator('.inspector').count()) await page.getByRole('button', { name: 'Toggle inspector' }).click()
+    if (await page.locator('.inspector').isVisible()) await page.getByRole('button', { name: 'Toggle inspector' }).click()
     await expect(page.locator('.composer-note')).toBeVisible()
     const colors = await page.locator('.composer-note').evaluate((node) => {
       const probe = document.createElement('div')
@@ -1743,7 +1825,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: /^New session/ }).first().click()
     await page.setViewportSize({ width: 960, height: 700 })
     await expect.poll(() => page.locator('.sidebar').evaluate((node) => getComputedStyle(node).position)).toBe('fixed')
-    await expect(page.locator('.inspector')).toHaveCount(0)
+    await expect(page.locator('.inspector')).toBeHidden()
     const sidebarScrim = page.getByRole('button', { name: 'Close sidebar' })
     await expect(page.locator('.panel-scrim--sidebar')).toBeVisible()
     await expect(sidebarScrim).toBeVisible()
@@ -1753,9 +1835,9 @@ test.describe('Prime Work desktop smoke', () => {
     // Panel reconciliation may restore a confirmed inspector preference after
     // the sidebar closes. Normalize either valid state before testing the toggle.
     await page.waitForTimeout(250)
-    if (await page.locator('.inspector').count()) {
+    if (await page.locator('.inspector').isVisible()) {
       await page.locator('.inspector').getByRole('button', { name: 'Close inspector' }).click()
-      await expect(page.locator('.inspector')).toHaveCount(0)
+      await expect(page.locator('.inspector')).toBeHidden()
     }
     await expect(page.locator('.workbench')).not.toHaveAttribute('inert')
     await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
@@ -1767,7 +1849,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.panel-scrim--inspector')).toBeVisible()
     await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
     await inspectorToggle.click()
-    await expect(page.locator('.inspector')).toHaveCount(0)
+    await expect(page.locator('.inspector')).toBeHidden()
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeVisible()
 
@@ -1794,9 +1876,9 @@ test.describe('Prime Work desktop smoke', () => {
   test('grows the transcript column on a wide pane and keeps the docked surfaces aligned', async () => {
     await page.getByRole('button', { name: /^New session/ }).first().click()
     await page.setViewportSize({ width: 1800, height: 900 })
-    if (await page.locator('.inspector').count()) {
+    if (await page.locator('.inspector').isVisible()) {
       await page.locator('.inspector').getByRole('button', { name: 'Close inspector' }).click()
-      await expect(page.locator('.inspector')).toHaveCount(0)
+      await expect(page.locator('.inspector')).toBeHidden()
     }
     const measure = () => page.evaluate(() => {
       const width = (selector: string) => document.querySelector(selector)?.getBoundingClientRect().width ?? 0
@@ -1850,14 +1932,14 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.inspector')).toBeVisible()
     await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
     await inspectorToggle.click()
-    await expect(page.locator('.inspector')).toHaveCount(0)
+    await expect(page.locator('.inspector')).toBeHidden()
     await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).inspectorOpen)).toBe(false)
 
     await page.setViewportSize({ width: 721, height: 700 })
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeVisible()
     await page.setViewportSize({ width: 720, height: 700 })
-    await expect(page.locator('.inspector')).toHaveCount(0)
+    await expect(page.locator('.inspector')).toBeHidden()
     await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).inspectorOpen)).toBe(false)
   })
 

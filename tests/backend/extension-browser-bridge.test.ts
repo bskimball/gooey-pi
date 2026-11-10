@@ -204,6 +204,59 @@ describe("ExtensionBrowserBridge", () => {
 		});
 	});
 
+	it("records the element selected in a shared tab and drops it when the page changes", async () => {
+		const { service, post, base, headers } = await fixture();
+		await service.setActiveSession(sessionA);
+		await post("event", {
+			type: "tab_paired",
+			chromeTabId: 7,
+			url: "https://docs.example/",
+			title: "Docs",
+		});
+		expect((await post("event", {
+			type: "element_selected",
+			chromeTabId: 7,
+			element: {
+				selector: "button#save",
+				tagName: "BUTTON",
+				id: "save",
+				classes: ["primary"],
+				text: "Save\nnow",
+				component: "SaveButton",
+				rect: { x: 1.2, y: 2, width: 10, height: 11 },
+			},
+		})).status).toBe(200);
+		expect(service.state().tabs[0]?.selection).toEqual({
+			selector: "button#save",
+			tagName: "button",
+			id: "save",
+			classes: ["primary"],
+			text: "Save now",
+			component: "SaveButton",
+			rect: { x: 1, y: 2, width: 10, height: 11 },
+		});
+		const listed = await service.listTabs(sessionA);
+		expect(listed.tabs).toEqual([
+			expect.objectContaining({
+				selection: expect.objectContaining({ selector: "button#save", component: "SaveButton" }),
+			}),
+		]);
+		await post("event", { type: "element_selected", chromeTabId: 7, element: { tagName: "div" } });
+		expect(service.state().tabs[0]?.selection?.selector).toBe("button#save");
+		await post("event", {
+			type: "element_selected",
+			chromeTabId: 7,
+			pageUrl: "https://docs.example/#section",
+			element: { selector: "#next", tagName: "a", id: "next", classes: [], text: "Next", rect: { x: 0, y: 0, width: 1, height: 1 } },
+		});
+		expect(service.state().tabs[0]?.selection?.selector).toBe("#next");
+		const snapshot = (await (await fetch(`${base}/tab-state`, { headers })).json()) as { tabs: Array<Record<string, unknown>> };
+		expect(snapshot.tabs.find((tab) => tab.chromeTabId === 7)).not.toHaveProperty("element");
+		await post("event", { type: "tab_updated", chromeTabId: 7, url: "https://docs.example/next", title: "Next" });
+		expect(service.state().tabs[0]?.url).toBe("https://docs.example/next");
+		expect(service.state().tabs[0]?.selection).toBeUndefined();
+	});
+
 	it("keeps a user-paired tab in Chrome when navigating to a local preview", async () => {
 		const { service, post, commands } = await fixture();
 		await post("event", {
@@ -392,7 +445,13 @@ function workerFixture() {
 				},
 			},
 		},
-		tabs: { onUpdated: eventSource(), onRemoved: eventSource() },
+		tabs: {
+			onUpdated: eventSource(),
+			onRemoved: eventSource(),
+			get: vi.fn(async () => ({ id: 42, url: "https://example.test/" })),
+			sendMessage: vi.fn(async (_id: number, _message: Record<string, unknown>) => undefined),
+		},
+		scripting: { executeScript: vi.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue([{ result: null }]) },
 		debugger: { attach: vi.fn(), sendCommand, onDetach: eventSource() },
 		storage: { local: { get: () => new Promise(() => undefined) } },
 		alarms: { create: vi.fn(), onAlarm: eventSource() },
@@ -403,6 +462,7 @@ function workerFixture() {
 	);
 	const worker = runInNewContext(`${source}\n;({ execute, tabs })`, {
 		chrome,
+		URL,
 		Date: { now: () => now },
 		setTimeout: vi.fn(),
 		fetch: async (_url: string, options: { body: string }) => {
@@ -414,7 +474,7 @@ function workerFixture() {
 			method: string;
 			params: Record<string, unknown>;
 		}): Promise<unknown>;
-		tabs: Map<number, { paused: boolean }>;
+		tabs: Map<number, { paused: boolean; picking?: boolean }>;
 	};
 	worker.tabs.set(42, { paused: false });
 	const message = (payload: Record<string, unknown>) =>
@@ -430,6 +490,7 @@ function workerFixture() {
 		message,
 		events,
 		sendCommand,
+		chrome,
 		expire: () => {
 			now += 2000;
 		},
@@ -633,5 +694,63 @@ describe("extension worker input and physical-tab queues", () => {
 		}
 		listeners.get("mousedown")!({ isTrusted: false });
 		expect(sendMessage).toHaveBeenCalledTimes(3);
+	});
+
+	it("keeps a selection when the page address differs from the Chrome tab URL", async () => {
+		const worker = workerFixture();
+		worker.tabs.set(42, { paused: false, picking: true });
+		worker.chrome.tabs.get.mockResolvedValueOnce({ id: 42, url: "https://a.test/app" }).mockResolvedValueOnce({ id: 42, url: "https://a.test/app#later" });
+		worker.chrome.tabs.sendMessage.mockImplementation(async (_id, message) => {
+			expect(message).toEqual({ type: 'APEX_TAB_STATE_CHANGED', picking: false });
+			expect(worker.events.some((event) => event.type === 'element_selected')).toBe(false);
+			return undefined;
+		});
+		const pending = await worker.message({
+			type: "ELEMENT_SELECTED",
+			capturedUrl: "https://a.test/app#section",
+			element: { selector: "#save", tagName: "button", id: "save" },
+		});
+		expect(pending.result).toBe(true);
+		expect(worker.chrome.tabs.sendMessage).toHaveBeenCalledWith(42, { type: 'APEX_TAB_STATE_CHANGED', picking: false });
+		expect(worker.events.at(-1)).toMatchObject({
+			type: "element_selected",
+			pageUrl: "https://a.test/app",
+			element: { selector: "#save" },
+		});
+	});
+
+	it("drops a selection whose page-world lookup finishes after navigation", async () => {
+		const worker = workerFixture();
+		worker.tabs.set(42, { paused: false, picking: true });
+		let release!: (value: unknown) => void;
+		worker.chrome.scripting.executeScript.mockImplementation(
+			() => new Promise((resolve) => {
+				release = resolve;
+			}),
+		);
+		worker.chrome.tabs.get
+			.mockResolvedValueOnce({ id: 42, url: "https://a.test/" })
+			.mockResolvedValueOnce({ id: 42, url: "https://b.test/" });
+		const pending = worker.message({
+			type: "ELEMENT_SELECTED",
+			element: { selector: "#save", tagName: "button" },
+		});
+		await vi.waitFor(() => expect(worker.chrome.scripting.executeScript).toHaveBeenCalled());
+		release([{ result: { component: "Late" } }]);
+		expect((await pending).result).toBe(false);
+		expect(worker.events.some((event) => event.type === "element_selected")).toBe(false);
+	});
+
+	it("drops a selection when the tab has navigated before its URL is read", async () => {
+		const worker = workerFixture();
+		worker.tabs.set(42, { paused: false, picking: true });
+		worker.chrome.tabs.get.mockResolvedValue({ id: 42, url: "https://b.test/" });
+		const pending = await worker.message({
+			type: "ELEMENT_SELECTED",
+			capturedUrl: "https://a.test/",
+			element: { selector: "#old", tagName: "button" },
+		});
+		expect(pending.result).toBe(false);
+		expect(worker.events.some((event) => event.type === "element_selected")).toBe(false);
 	});
 });

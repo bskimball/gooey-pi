@@ -4,16 +4,18 @@ import { MAX_BROWSER_ANNOTATIONS, MAX_SELECTOR_LENGTH, MAX_SNIPPET_LENGTH } from
 // The picker runs inside the guest page via webview.executeJavaScript. The
 // helpers below are embedded into that script with Function.prototype.toString,
 // so each one must stay fully self-contained: no references to module bindings,
-// only standard browser globals. They are exported so tests can exercise them
-// directly against a DOM.
+// only standard browser globals. Nested helpers use object methods so keepNames
+// cannot inject renderer-only bindings. Exports let tests exercise the DOM logic.
 
 /** Builds a robust CSS selector path for an element: nearest unique id, then tag:nth-of-type segments. */
 export function buildSelectorPath(element: Element): string {
-  const escapeAttr = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  const idSelector = (value: string) => {
-    if (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(value)) return `#${value}`
-    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return `#${CSS.escape(value)}`
-    return `[id="${escapeAttr(value)}"]`
+  const helpers = {
+    escapeAttr(value: string) { return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') },
+    idSelector(value: string) {
+      if (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(value)) return `#${value}`
+      if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return `#${CSS.escape(value)}`
+      return `[id="${helpers.escapeAttr(value)}"]`
+    },
   }
   const parts: string[] = []
   let node: Element | null = element
@@ -24,8 +26,8 @@ export function buildSelectorPath(element: Element): string {
       break
     }
     const id = node.getAttribute('id')
-    if (id && node.ownerDocument && node.ownerDocument.querySelectorAll(`[id="${escapeAttr(id)}"]`).length === 1) {
-      parts.unshift(idSelector(id))
+    if (id && node.ownerDocument && node.ownerDocument.querySelectorAll(`[id="${helpers.escapeAttr(id)}"]`).length === 1) {
+      parts.unshift(helpers.idSelector(id))
       break
     }
     let index = 1
@@ -58,29 +60,31 @@ export function boundInnerText(value: string | null | undefined, maxLength: numb
 /** Reads only original-source stamps. React owner stacks describe generated code, not TSX positions. */
 export function captureSourceMetadata(element: Element): Pick<BrowserAnnotationElement, 'sourceHint' | 'component'> {
   const result: Pick<BrowserAnnotationElement, 'sourceHint' | 'component'> = {}
-  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object'
-  const hint = (kind: BrowserSourceHint['kind'], path: unknown, rawLine: unknown): BrowserSourceHint | undefined => {
-    if (typeof path !== 'string' || !path.trim() || path.length > 4096 || /[\x00-\x1f\x7f]/.test(path)) return undefined
-    let line: number | undefined
-    if (rawLine !== null && rawLine !== undefined && rawLine !== '') {
-      if (typeof rawLine === 'number') line = rawLine
-      else if (typeof rawLine === 'string' && /^\d+$/.test(rawLine)) line = Number(rawLine)
-      else return undefined
-      if (!Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647) return undefined
-    }
-    return { kind, path, ...(line !== undefined ? { line } : {}) }
+  const helpers = {
+    record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' },
+    hint(kind: BrowserSourceHint['kind'], path: unknown, rawLine: unknown): BrowserSourceHint | undefined {
+      if (typeof path !== 'string' || !path.trim() || path.length > 4096 || /[\x00-\x1f\x7f]/.test(path)) return undefined
+      let line: number | undefined
+      if (rawLine !== null && rawLine !== undefined && rawLine !== '') {
+        if (typeof rawLine === 'number') line = rawLine
+        else if (typeof rawLine === 'string' && /^\d+$/.test(rawLine)) line = Number(rawLine)
+        else return undefined
+        if (!Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647) return undefined
+      }
+      return { kind, path, ...(line !== undefined ? { line } : {}) }
+    },
   }
   try {
-    result.sourceHint = hint('explicit', element.getAttribute('data-source-file'), element.getAttribute('data-source-line'))
+    result.sourceHint = helpers.hint('explicit', element.getAttribute('data-source-file'), element.getAttribute('data-source-line'))
     const astroLocation = element.getAttribute('data-astro-source-loc')
     if (!result.sourceHint && (astroLocation === null || /^\d+:\d+$/.test(astroLocation))) {
-      result.sourceHint = hint('astro', element.getAttribute('data-astro-source-file'), astroLocation?.split(':')[0])
+      result.sourceHint = helpers.hint('astro', element.getAttribute('data-astro-source-file'), astroLocation?.split(':')[0])
     }
     const svelte: unknown = Reflect.get(element, '__svelte_meta')
-    if (!result.sourceHint && record(svelte) && record(svelte.loc)) {
+    if (!result.sourceHint && helpers.record(svelte) && helpers.record(svelte.loc)) {
       const line = svelte.loc.line
       if (typeof line === 'number' && Number.isSafeInteger(line) && line >= 0) {
-        result.sourceHint = hint('svelte', svelte.loc.file, line + 1)
+        result.sourceHint = helpers.hint('svelte', svelte.loc.file, line + 1)
       }
     }
     const explicitComponent = element.getAttribute('data-source-component')
@@ -88,10 +92,10 @@ export function captureSourceMetadata(element: Element): Pick<BrowserAnnotationE
     if (!result.component) {
       const key = Object.getOwnPropertyNames(element).find((name) => name.startsWith('__reactFiber$'))
       const fiber: unknown = key ? Reflect.get(element, key) : undefined
-      let owner: unknown = record(fiber) ? fiber._debugOwner : undefined
-      for (let depth = 0; record(owner) && depth < 32; depth += 1) {
+      let owner: unknown = helpers.record(fiber) ? fiber._debugOwner : undefined
+      for (let depth = 0; helpers.record(owner) && depth < 32; depth += 1) {
         const type = owner.type
-        if (typeof type === 'function' || record(type)) {
+        if (typeof type === 'function' || helpers.record(type)) {
           const name: unknown = Reflect.get(type, 'displayName') || Reflect.get(type, 'name')
           if (typeof name === 'string' && name) { result.component = name.slice(0, 120); break }
         }
@@ -112,7 +116,7 @@ const ENSURE_SCRIPT = `(function () {
   var buildSelectorPath = ${buildSelectorPath.toString()};
   var boundInnerText = ${boundInnerText.toString()};
   var captureSourceMetadata = ${captureSourceMetadata.toString()};
-  var state = { picking: false, pending: [], hover: null, onMove: null, onClick: null, markerRoot: null, markers: [], reposition: null, raf: 0 };
+  var state = { picking: false, pending: [], hover: null, onMove: null, onClick: null, onKey: null, markerRoot: null, markers: [], reposition: null, raf: 0 };
   function ownedNode(target) {
     return target === state.hover || (state.markerRoot && state.markerRoot.contains(target));
   }
@@ -169,6 +173,13 @@ const ENSURE_SCRIPT = `(function () {
         if (state.pending.length < ${MAX_BROWSER_ANNOTATIONS}) state.pending.push(capture(target));
         hover.style.display = 'none';
       };
+      state.onKey = function (event) {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        state.pending = [{ cancelled: true }];
+        ns.stop();
+      };
+      document.addEventListener('keydown', state.onKey, true);
       document.addEventListener('mousemove', state.onMove, true);
       document.addEventListener('click', state.onClick, true);
     },
@@ -177,6 +188,8 @@ const ENSURE_SCRIPT = `(function () {
       state.picking = false;
       if (state.onMove) document.removeEventListener('mousemove', state.onMove, true);
       if (state.onClick) document.removeEventListener('click', state.onClick, true);
+      if (state.onKey) document.removeEventListener('keydown', state.onKey, true);
+      state.onKey = null;
       state.onMove = null;
       state.onClick = null;
       if (state.hover && state.hover.parentNode) state.hover.parentNode.removeChild(state.hover);

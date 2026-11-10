@@ -150,6 +150,7 @@
 .activity-tool__state { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--text-tertiary); font-size: var(--chat-meta); white-space: nowrap; }
 /* A running call stays neutral: the spinner and a brighter name carry the state. */
 .activity-line.is-running .activity-line__icon, .activity-line.is-running .activity-tool__state { color: var(--text-secondary); }
+.activity-run.is-running .activity-line__icon { color: var(--prime); }
 .activity-line--tool.is-running .activity-line__kind { color: var(--text); }
 /* Every call stays listed; a settled call's "done" only surfaces on hover so failures and live work stand out. */
 .activity-line--tool.is-done .activity-tool__state { color: var(--text-tertiary); opacity: 0; transition: opacity var(--duration-fast) ease-out; }
@@ -264,10 +265,10 @@
 .syntax-string { color: var(--success); }
 .syntax-keyword { color: var(--prime); }
 .syntax-number { color: var(--warning); }
-.image-part__preview { display: block; max-width: min(100%, 420px); margin: 7px 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--canvas); line-height: 0; cursor: zoom-in; }
+.image-part__preview { display: block; max-width: 100%; margin: 10px 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--canvas); line-height: 0; cursor: zoom-in; }
 .image-part__preview:hover { border-color: var(--border-strong); box-shadow: 0 3px 14px color-mix(in srgb, #000 12%, transparent); }
 .image-part__preview:focus-visible { outline: 2px solid var(--annotation); outline-offset: 3px; }
-.image-part { display: block; max-width: 100%; max-height: 320px; margin: 0; object-fit: contain; }
+.image-part { display: block; max-width: 100%; max-height: 440px; margin: 0; object-fit: contain; }
 .image-part--unavailable { max-width: min(100%, 420px); margin: 7px 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text-tertiary); text-align: center; }
 .image-lightbox { position: fixed; z-index: 240; inset: 0; display: flex; align-items: center; justify-content: center; padding: 32px; overflow: auto; background: color-mix(in srgb, #090909 78%, transparent); backdrop-filter: blur(5px); animation: fade-in 130ms ease-out; }
 .image-lightbox__panel { position: relative; display: flex; max-width: 100%; max-height: 100%; align-items: center; justify-content: center; outline: none; }

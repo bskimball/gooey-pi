@@ -17,6 +17,7 @@ import type {
 import type { AgentRpcManager } from "./agent-rpc";
 import type { AgentBrowserService } from "./browser/agent-service";
 import { resolveBrowserSource } from "./browser/source";
+import { readWorkspaceImage } from "./workspace-image";
 import type { CheckoutService } from "./checkouts";
 import type { CuaDriverService } from "./cua-driver";
 import { describeEffectiveRunConfig } from "./effective-run-config";
@@ -310,6 +311,7 @@ export function registerIpc(
 		return false;
 	});
 	handle("app:resolve-browser-source", (_event, cwd, hint) => resolveBrowserSource(services.projects, cwd, hint));
+	handle("app:read-workspace-image", (_event, cwd, path) => readWorkspaceImage(services.projects, cwd, path));
 	handle("app:open-in-vscode", async (_event, path, line) => {
 		try {
 			if (line !== undefined && (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1 || line > 2_147_483_647)) {
@@ -692,6 +694,15 @@ export function registerIpc(
 			paused,
 		);
 	});
+	handle("browser:set-tab-picking", (_event, sessionKey, tabId, picking) => {
+		if (typeof picking !== "boolean")
+			throw new TypeError("picking must be a boolean");
+		return services.browser.setTabPicking(
+			browserSession(sessionKey),
+			browserTab(tabId),
+			picking,
+		);
+	});
 	handle("browser:pop-out-tab", (_event, sessionKey, tabId) =>
 		services.browser.popOutTab(browserSession(sessionKey), browserTab(tabId)),
 	);
@@ -699,6 +710,33 @@ export function registerIpc(
 		services.browser.focusExtensionTab(
 			browserSession(sessionKey),
 			browserTab(tabId),
+		),
+	);
+	handle(
+		"browser:capture-selection",
+		(_event, sessionKey, tabId, pageUrl, selector) =>
+			services.browser.captureSelection(
+				browserSession(sessionKey),
+				browserTab(tabId),
+				pageUrl,
+				selector,
+			),
+	);
+	handle(
+		"browser:reveal-selection",
+		(_event, sessionKey, tabId, pageUrl, selector) =>
+			services.browser.revealSelection(
+				browserSession(sessionKey),
+				browserTab(tabId),
+				pageUrl,
+				selector,
+			),
+	);
+	handle("browser:clear-selection", (_event, sessionKey, tabId, captureId) =>
+		services.browser.clearSelection(
+			browserSession(sessionKey),
+			browserTab(tabId),
+			captureId,
 		),
 	);
 	handle("browser:state", () => services.browser.state());

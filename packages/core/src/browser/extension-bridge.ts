@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { callMethod, probeBroker } from './extension-bridge-client'
+import { applySharedTabEvent, sanitizeBrowserElement } from './element-selection'
 
 export interface ExtensionCommand {
   id: string
@@ -99,6 +100,7 @@ export class ExtensionBrowserBridge {
         if (!existing) this.emitEvent({ ...tab, type: 'tab_paired' })
         this.emitEvent({ ...tab, type: 'tab_updated' })
         if (typeof tab.paused === 'boolean' && existing?.paused !== tab.paused) this.emitEvent({ ...tab, type: 'tab_pause_changed' })
+        this.emitSelectionSnapshot(tab, existing)
       }
       for (const tab of ownTabs) {
         if (typeof tab.chromeTabId === 'number' && !seen.has(tab.chromeTabId)) this.emitEvent({ ...tab, type: 'tab_closed' })
@@ -136,12 +138,55 @@ export class ExtensionBrowserBridge {
     for (const tab of tabs) {
       if (!tab || typeof tab !== 'object' || !('chromeTabId' in tab) || typeof tab.chromeTabId !== 'number') continue
       if (this.releasedTabs.has(tab.chromeTabId)) continue
-      if (!remote && this.remoteTabs.has(tab.chromeTabId)) continue
+      if (!remote && this.remoteTabs.has(tab.chromeTabId)) {
+        // A remote sync marks the tab, but the owner still owns selection.
+        this.applyOwnedSelection(tab.chromeTabId, tab as Record<string, unknown>)
+        continue
+      }
       if (remote) this.remoteTabs.add(tab.chromeTabId)
       const record = tab as Record<string, unknown>
       const previous = this.tabState.get(tab.chromeTabId)
-      this.tabState.set(tab.chromeTabId, { ...previous, ...record, paused: previous?.paused ?? record.paused, sessionKey: previous?.sessionKey ?? record.sessionKey ?? record.sessionFile })
+      const next: Record<string, unknown> = { ...previous, ...record, paused: previous?.paused ?? record.paused, sessionKey: previous?.sessionKey ?? record.sessionKey ?? record.sessionFile }
+      // Only the owning app's snapshot may set or clear a selection. A remote
+      // client has not seen it yet, so its omitted field must not wipe it.
+      if (remote) {
+        if (previous?.selection) next.selection = previous.selection
+        else delete next.selection
+        if (previous?.picking === true) next.picking = true
+        else delete next.picking
+      } else {
+        if (!record.selection) delete next.selection
+        if (record.picking !== true) delete next.picking
+      }
+      this.tabState.set(tab.chromeTabId, next)
     }
+  }
+
+  private applyOwnedSelection(chromeTabId: number, record: Record<string, unknown>): void {
+    const previous = this.tabState.get(chromeTabId)
+    if (!previous) return
+    if (typeof record.url === 'string') previous.url = record.url
+    if (typeof record.title === 'string') previous.title = record.title
+    if (record.selection) previous.selection = record.selection
+    else delete previous.selection
+    if (record.picking === true) previous.picking = true
+    else delete previous.picking
+  }
+
+  private emitSelectionSnapshot(tab: Record<string, unknown>, existing: Record<string, unknown> | undefined): void {
+    const picking = tab.picking === true
+    if (picking !== (existing?.picking === true)) {
+      this.emitEvent({ type: 'tab_picking_changed', chromeTabId: tab.chromeTabId, sessionKey: tab.sessionKey, picking })
+    }
+    const sameSelection = JSON.stringify(tab.selection ?? null) === JSON.stringify(existing?.selection ?? null)
+    if (sameSelection) return
+    this.emitEvent({
+      type: 'element_selected',
+      chromeTabId: tab.chromeTabId,
+      sessionKey: tab.sessionKey,
+      pageUrl: tab.url,
+      ...(tab.selection ? { element: tab.selection } : { cleared: true }),
+    })
   }
 
   constructor(private readonly options: ExtensionBridgeOptions = {}) {}
@@ -395,7 +440,26 @@ export class ExtensionBrowserBridge {
             this.releasedTabs.add(body.chromeTabId)
             this.tabState.delete(body.chromeTabId)
             this.remoteTabs.delete(body.chromeTabId)
-          } else if (!this.releasedTabs.has(body.chromeTabId)) this.tabState.set(body.chromeTabId, { ...previous, ...body })
+          } else if (!this.releasedTabs.has(body.chromeTabId)) {
+            // Retain only sanitized selection state so polling clients see captures
+            // even when the broker's local service does not own this tab.
+            const stored = { ...body }
+            delete stored.element
+            delete stored.type
+            const next = { ...previous, ...stored }
+            delete next.element
+            delete next.type
+            const selectionState = {
+              url: typeof previous?.url === 'string' ? previous.url : '',
+              selection: sanitizeBrowserElement(previous?.selection) ?? undefined,
+              picking: previous?.picking === true,
+            }
+            applySharedTabEvent(selectionState, body)
+            if (selectionState.selection) next.selection = selectionState.selection
+            else delete next.selection
+            next.picking = selectionState.picking
+            this.tabState.set(body.chromeTabId, next)
+          }
         }
         this.emitEvent(body)
       } else {

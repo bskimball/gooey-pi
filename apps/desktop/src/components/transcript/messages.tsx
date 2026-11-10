@@ -1,7 +1,8 @@
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { CaretRight, Check, Copy, Crosshair, X } from '../icons'
 import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
-import { splitAnnotationBlock } from '@/lib/browser-annotations'
+import { parseAnnotationReferences, splitAnnotationBlock } from '@/lib/browser-annotations'
+import { BrowserReferenceCards } from './BrowserReferenceCards'
 import { splitCapabilityRouting } from '@/lib/capability-mentions'
 import { routedSessionReferences, splitSessionRouting, type RoutedSessionReference } from '@/lib/session-mentions'
 import { splitTerminalContextBlock } from '@/lib/terminal-context'
@@ -11,25 +12,13 @@ import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { MarkdownText } from '../MarkdownText'
 import { PiMark } from '../ui'
 import { InlineText } from './syntax'
-import { TranscriptImage } from './TranscriptImage'
+import { ImageParts } from './TranscriptImage'
 import { pairSubagentCalls } from './subagent-lane'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 
-function imageSource(part: Extract<MessagePart, { type: 'image' }>): string | undefined {
-  if (part.dataTruncated || !part.data || !part.mimeType || !/^image\/(png|jpeg|gif|webp)$/i.test(part.mimeType) || !/^[a-z\d+/=\s]+$/i.test(part.data)) return undefined
-  return `data:${part.mimeType};base64,${part.data.replace(/\s/g, '')}`
-}
-
 function renderImage(part: Extract<MessagePart, { type: 'image' }>, key: string) {
-  const source = imageSource(part)
-  return source ? (
-    <TranscriptImage key={key} source={source} alt="User attachment" />
-  ) : (
-    <div key={key} className="image-part image-part--unavailable">
-      Image attachment unavailable
-    </div>
-  )
+  return <ImageParts key={key} images={[part]} />
 }
 
 export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false) {
@@ -39,6 +28,7 @@ export function renderNarrative(parts: MessagePart[], keyPrefix: string, streami
       return <MarkdownText key={`${keyPrefix}-${index}`} text={part.text} streaming={streaming && index === parts.length - 1} />
     }
     if (part.type === 'image') return renderImage(part, `${keyPrefix}-${index}`)
+    if (part.type === 'toolResult') return <ImageParts key={`${keyPrefix}-${index}`} images={part.images} />
     return null
   })
 }
@@ -200,7 +190,7 @@ function visibleUserText(text: string): string {
   return splitSessionRouting(capability.text).text
 }
 
-function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+function UserText({ text, images, onOpenSessionReference }: { text: string; images: Extract<MessagePart, { type: 'image' }>[]; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   // Sent prompts can carry verbose model-facing context blocks. Keep both
   // attachments collapsed and capability routing hidden while preserving the
   // user's own message.
@@ -213,6 +203,7 @@ function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessio
   return (
     <>
       {sessions.text && sessions.text !== '[Page annotations]' && sessions.text !== '[Terminal selection]' ? <SessionReferenceText text={sessions.text} references={references} onOpen={onOpenSessionReference} /> : null}
+      {annotations.block ? <BrowserReferenceCards references={parseAnnotationReferences(annotations.block)} images={images} /> : null}
       {annotations.block ? (
         <details className="user-annotations">
           <summary>{annotations.count > 0 ? `${annotations.count} page annotation${annotations.count === 1 ? '' : 's'}` : 'Page annotations'}</summary>
@@ -232,10 +223,12 @@ function UserText({ text, onOpenSessionReference }: { text: string; onOpenSessio
 export const UserMessage = memo(function UserMessage({ message, turnLabel, turnSince, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnSince?: string | number; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
   const turnState = turnRunning ? 'running' : turnFailed ? 'failed' : turnLabel ? 'done' : undefined
+  const images = message.parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
+  const referencedImages = new Set(message.parts.flatMap((part) => part.type === 'text' ? parseAnnotationReferences(splitAnnotationBlock(splitTerminalContextBlock(part.text).text).block ?? '').flatMap((reference) => reference.imageIndex === undefined ? [] : [reference.imageIndex]) : []))
   return (
     <article className="message message--user">
       <div className="user-bubble">
-        {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' ? renderImage(part, `user-${index}`) : null))}
+        {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} images={images} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' && !referencedImages.has(images.indexOf(part)) ? renderImage(part, `user-${index}`) : null))}
       </div>
       {turnState ? (
         <span className={`message__turn-status is-${turnState}`}>

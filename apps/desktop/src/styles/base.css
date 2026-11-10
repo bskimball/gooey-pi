@@ -51,6 +51,7 @@
   --focus: #3b7fb5;
   --prime: #2d6595;
   --prime-soft: #e8eff6;
+  --canvas-glow: color-mix(in srgb, var(--prime) 7%, transparent);
   --accent: #2d6595;
   --success: #0d755a;
   --success-soft: #e6f6f1;
@@ -119,7 +120,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   /* One deep blue-black for canvas, sidebar and toolbar; depth comes from small lightness
-     steps, not borders. The accent is warm amber so it reads against the cool ground. */
+     steps, not borders. */
   --canvas: #080c15;
   --sidebar: #080c15;
   --surface: #0e1320;
@@ -134,10 +135,11 @@
   --border: #172033;
   --border-subtle: #111827;
   --border-strong: #232e46;
-  --focus: #f0b45e;
-  --prime: #f0b45e;
-  --prime-soft: #261d10;
-  --accent: #f0b45e;
+  --focus: #93bde3;
+  --prime: #7eb0dc;
+  --prime-soft: #16212c;
+  --canvas-glow: color-mix(in srgb, var(--prime) 14%, transparent);
+  --accent: #7eb0dc;
   --success: #4ade80;
   --success-soft: #0f2e28;
   --warning: #fbbf24;
@@ -148,7 +150,7 @@
   --diff-add-line: #34d399;
   --diff-remove: #331c20;
   --diff-remove-line: #f87171;
-  --annotation: #f0b45e;
+  --annotation: #7eb0dc;
   --primary-fill: #e6ecf7;
   --primary-ink: #080c15;
   --terminal-bg: #060912;

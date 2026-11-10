@@ -6,8 +6,9 @@
 @import './styles/voice.css';
 @import './styles/pets.css';
 @import './styles/inspector.css';
-@import './styles/coordination.css';
+@import './styles/agents.css';
 @import './styles/annotation-source.css';
+@import './styles/browser-references.css';
 @import './styles/terminal.css';
 @import './styles/pages.css';
 @import './styles/activity.css';

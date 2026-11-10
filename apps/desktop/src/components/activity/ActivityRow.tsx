@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { ChatCircleDots, Check, CheckCircle, CircleNotch, Clock, Square, WarningCircle } from '@/components/icons'
+import { ChatCircleDots, Check, CheckCircle, Clock, Square, WarningCircle } from '@/components/icons'
 import { ContextUsageRing } from '@/components/ContextUsageRing'
+import { StatusMark } from './StatusMark'
 import {
   formatDeadlineCountdown,
   formatElapsedClock,
@@ -174,7 +175,7 @@ export function ActivityRow({
       >
         <span className={`activity-icon activity-icon--${iconTone}`}>
           {isRunning ? (
-            <CircleNotch className="spin" size={15} />
+            <StatusMark state="running" size={15} />
           ) : isQuestion ? (
             <ChatCircleDots size={15} />
           ) : isFailed ? (

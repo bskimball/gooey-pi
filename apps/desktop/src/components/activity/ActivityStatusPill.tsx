@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildActivitySections, type ActivityRowItem, type SessionLiveMap } from '@/app/session-live'
-import { CircleNotch, Warning } from '@/components/icons'
+import { Warning } from '@/components/icons'
+import { StatusMark } from './StatusMark'
 import type { SessionRecord } from '@/types/api'
 
 export interface ActivityStatusPillProps {
@@ -94,7 +95,7 @@ export function ActivityStatusPill({
         >
           {runningCount > 0 ? (
             <span className="activity-status-pill__segment activity-status-pill__segment--running">
-              <CircleNotch className="spin" size={13} />
+              <StatusMark state="running" size={14} />
               <span className="activity-status-pill__count tabular">{runningCount}</span>
               <span className="activity-status-pill__label">running</span>
             </span>

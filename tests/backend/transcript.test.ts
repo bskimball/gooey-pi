@@ -167,7 +167,7 @@ describe('tool result placement in assembled turns', () => {
       ] } }),
       // Results arrive out of call order; each must land after its own call.
       JSON.stringify({ type: 'message', id: 'result-2', parentId: 'assistant-1', message: { role: 'toolResult', toolCallId: 'call-2', toolName: 'Write', content: 'wrote' } }),
-      JSON.stringify({ type: 'message', id: 'result-1', parentId: 'result-2', message: { role: 'toolResult', toolCallId: 'call-1', toolName: 'Read', content: 'read' } }),
+      JSON.stringify({ type: 'message', id: 'result-1', parentId: 'result-2', message: { role: 'toolResult', toolCallId: 'call-1', toolName: 'Read', content: [{ type: 'text', text: 'read' }, { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' }] } }),
       JSON.stringify({ type: 'message', id: 'result-dup', parentId: 'result-1', message: { role: 'toolResult', toolCallId: 'call-dup', toolName: 'First', content: 'first wins' } }),
       JSON.stringify({ type: 'message', id: 'result-lost', parentId: 'result-dup', message: { role: 'toolResult', toolCallId: 'call-missing', toolName: 'Ghost', content: 'appended' } }),
       '',
@@ -188,6 +188,7 @@ describe('tool result placement in assembled turns', () => {
       'result:wrote',
       'result:appended',
     ])
+    expect(assistant?.parts.find((part) => part.type === 'toolResult' && part.name === 'Read')).toMatchObject({ images: [{ type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' }] })
   })
 })
 

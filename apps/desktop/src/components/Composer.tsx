@@ -1,8 +1,11 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ExtensionTabControls } from "@/hooks/useAgentBrowserTabs";
 import { useComposerImages } from "@/hooks/useComposerImages";
+import { useSharedBrowserSelection } from "@/hooks/useSharedBrowserSelection";
 import { useDictation } from "@/hooks/useDictation";
-import { appendAnnotationsToPrompt } from "@/lib/browser-annotations";
+import { appendAnnotationsToPrompt, type BrowserReference } from "@/lib/browser-annotations";
+import type { BrowserTarget } from "@/hooks/useBrowserAnnotations";
+import { BrowserSelectionTray } from "./BrowserSelectionTray";
 import { useComposerMenu } from "@/hooks/useComposerMenu";
 import {
 	appendCapabilityRouting,
@@ -63,7 +66,7 @@ import { ExtensionTabPill } from "./ExtensionTabControls";
 import {
 	ArrowUp,
 	CaretDown,
-	ChatCircleText,
+	Globe,
 	CircleNotch,
 	Gauge,
 	Image as ImageIcon,
@@ -115,6 +118,10 @@ interface ComposerProps {
 	/** The active thread's tab driven through the browser extension, with its pause and focus controls. */
 	extensionTab?: AgentBrowserTabRecord;
 	browserExtension?: ExtensionTabControls;
+	browserTarget?: BrowserTarget;
+	focusSignal?: number;
+	onOpenBrowser?(): void;
+	onRevealBrowserReference?(reference: BrowserReference): void;
 	/** The active terminal is visible as context; selected text expands this attachment. */
 	terminalSelection?: TerminalSelectionContext;
 	/** Reads the active xterm buffer only at submit time, avoiding output-driven renderer updates. */
@@ -203,6 +210,10 @@ export const Composer = memo(function Composer({
 	annotations = EMPTY_ANNOTATIONS,
 	extensionTab,
 	browserExtension,
+	browserTarget,
+	focusSignal = 0,
+	onOpenBrowser,
+	onRevealBrowserReference,
 	terminalSelection,
 	getTerminalContext,
 	queuedMessages = [],
@@ -265,7 +276,6 @@ export const Composer = memo(function Composer({
 	const [sessionReferenceIds, setSessionReferenceIds] = useState<
 		ReadonlyMap<string, string>
 	>(() => new Map());
-	const [annotationsOpen, setAnnotationsOpen] = useState(false);
 	const [terminalSelectionOpen, setTerminalSelectionOpen] = useState(false);
 	const referenceFilesRef = useRef<(paths: string[]) => void>(noop);
 	const [forwardFileReferences] = useState(
@@ -296,8 +306,12 @@ export const Composer = memo(function Composer({
 	const submittingRef = useRef(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const imageStatusId = useId();
+	const { annotation: sharedSelection, consume: consumeSharedSelection, processing: processingSelection, error: selectionError } = useSharedBrowserSelection(extensionTab, fileRoot);
+	useEffect(() => {
+		if (focusSignal || sharedSelection) textareaRef.current?.focus();
+	}, [focusSignal, sharedSelection?.id, sharedSelection?.element.captureId]);
 	const annotationsRef = useRef(annotations);
-	annotationsRef.current = annotations;
+	annotationsRef.current = sharedSelection ? [...annotations, sharedSelection] : annotations;
 	const mountedRef = useRef(true);
 	const draftKeyRef = useRef(draftKey);
 	const restoredDraftRef = useRef(false);
@@ -365,9 +379,6 @@ export const Composer = memo(function Composer({
 			mountedRef.current = false;
 		};
 	}, []);
-	useEffect(() => {
-		if (annotations.length === 0) setAnnotationsOpen(false);
-	}, [annotations.length]);
 	useEffect(() => {
 		if (!terminalSelection?.text) setTerminalSelectionOpen(false);
 	}, [terminalSelection?.text]);
@@ -542,6 +553,11 @@ export const Composer = memo(function Composer({
 		// Commands take their text verbatim: context blocks would become command arguments.
 		const commandDraft = /^\s*[/!]/.test(draftValue);
 		const bashDraft = /^\s*!/.test(draftValue);
+		const annotationImages = commandDraft ? [] : currentAnnotations.flatMap((annotation) => annotation.preview ? [annotation.preview] : []);
+		if (processingSelection) {
+			setAttachmentError("Wait for the element preview to finish before sending.");
+			return;
+		}
 		if (imageAttachments.hasPending()) {
 			setAttachmentError(
 				"Wait for the file to finish processing before sending.",
@@ -556,7 +572,7 @@ export const Composer = memo(function Composer({
 			);
 			return;
 		}
-		if (currentImages.length > 0 && !imageInputSupported) {
+		if ((currentImages.length > 0 || annotationImages.length > 0) && !imageInputSupported) {
 			setAttachmentError(
 				"This model does not accept images. Remove the attachment or choose a vision model.",
 			);
@@ -573,7 +589,7 @@ export const Composer = memo(function Composer({
 			);
 			return;
 		}
-		const submittedImages = currentImages.map(({ type, data, mimeType }) => ({
+		const submittedImages = [...currentImages, ...annotationImages].map(({ type, data, mimeType }) => ({
 			type,
 			data,
 			mimeType,
@@ -609,7 +625,7 @@ export const Composer = memo(function Composer({
 		const promptWithContext = bashDraft
 			? prompt
 			: appendTerminalContextToPrompt(
-					appendAnnotationsToPrompt(promptWithCapabilities, sentAnnotations),
+					appendAnnotationsToPrompt(promptWithCapabilities, sentAnnotations, currentImages.length),
 					commandDraft ? undefined : currentTerminalContext,
 				);
 		const frame = `${JSON.stringify({ type: intent === "steer" ? "steer" : "follow_up", message: promptWithContext, ...(submittedImages.length ? { images: submittedImages } : {}), id: "00000000-0000-0000-0000-000000000000" })}\n`;
@@ -628,6 +644,7 @@ export const Composer = memo(function Composer({
 		setMenu(null);
 		try {
 			await onSend(promptWithContext, submittedImages, intent);
+			if (sharedSelection && !commandDraft) consumeSharedSelection();
 			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (sentAnnotations.length > 0) onClearAnnotations();
@@ -708,46 +725,15 @@ export const Composer = memo(function Composer({
 						Drop files to attach
 					</div>
 				) : null}
+				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
+				{browserTarget && !extensionTab ? <button type="button" className="composer-browser-target" title={browserTarget.url} onClick={onOpenBrowser}><Globe size={12} /><span>{browserTarget.title || browserTarget.url}</span></button> : null}
 				{images.length ||
 				unsupportedFiles.length ||
-				annotations.length ||
 				terminalSelection?.text ||
 				(extensionTab && browserExtension) ? (
 					<div className="composer-attachments composer__context-chips" aria-label="Attachments">
 						{extensionTab && browserExtension ? (
-							<ExtensionTabPill tab={extensionTab} extension={browserExtension} />
-						) : null}
-						{annotations.length ? (
-							<div
-								className="composer-attachment composer-attachment--annotations"
-								title={`${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
-							>
-								<button
-									type="button"
-									className="composer-attachment__expand"
-									aria-expanded={annotationsOpen}
-									aria-label={`Inspect ${annotations.length} page annotation${annotations.length === 1 ? "" : "s"}`}
-									onClick={() => setAnnotationsOpen((open) => !open)}
-								>
-									<ChatCircleText size={13} />
-									<span>{annotations.length}</span>
-									<CaretDown
-										size={11}
-										className={annotationsOpen ? "is-open" : ""}
-									/>
-								</button>
-								<button
-									type="button"
-									className="composer-attachment__clear"
-									aria-label="Remove page annotations"
-									onClick={() => {
-										setAnnotationsOpen(false);
-										onClearAnnotations();
-									}}
-								>
-									<X size={12} />
-								</button>
-							</div>
+							<ExtensionTabPill tab={sharedSelection || processingSelection ? extensionTab : { ...extensionTab, selection: undefined }} extension={browserExtension} />
 						) : null}
 						{terminalSelection?.text ? (
 							<div
@@ -813,39 +799,6 @@ export const Composer = memo(function Composer({
 								</button>
 							</div>
 						))}
-					</div>
-				) : null}
-				{annotationsOpen && annotations.length ? (
-					<div
-						className="composer-annotations"
-						role="region"
-						aria-label="Page annotation details"
-					>
-						{annotations.map((annotation, index) => {
-							return (
-								<div className="composer-annotation" key={annotation.id}>
-									<span
-										className="composer-annotation__badge"
-										aria-hidden="true"
-									>
-										{index + 1}
-									</span>
-									<div className="composer-annotation__body">
-										<p>{annotation.comment}</p>
-										{annotation.stale ? (
-											<small>page changed since capture</small>
-										) : null}
-									</div>
-									<button
-										type="button"
-										aria-label={`Remove annotation ${index + 1}`}
-										onClick={() => onRemoveAnnotation(annotation.id)}
-									>
-										<X size={12} />
-									</button>
-								</div>
-							);
-						})}
 					</div>
 				) : null}
 				{terminalSelectionOpen && terminalSelection?.text ? (
@@ -1164,7 +1117,7 @@ export const Composer = memo(function Composer({
 										(!value.trim() &&
 											images.length === 0 &&
 											unsupportedFiles.length === 0 &&
-											annotations.length === 0 &&
+											annotations.length === 0 && !sharedSelection &&
 											!terminalSelection?.text) ||
 										processingImages ||
 										(!busy && submitting) ||

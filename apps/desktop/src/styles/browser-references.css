@@ -1,0 +1,236 @@
+.browser-selection-tray {
+  min-width: 0;
+  padding: 8px 8px 4px;
+}
+.browser-selection-tray__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+}
+.browser-selection-tray__heading > button {
+  padding: 4px 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+.browser-selection-tray > p {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
+}
+.browser-selection-tray__items {
+  display: flex;
+  gap: 8px;
+  max-height: 220px;
+  padding-bottom: 4px;
+  overflow: auto;
+}
+.browser-selection-card {
+  min-width: 0;
+  flex: 0 0 190px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+.browser-selection-card > header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.browser-selection-card__target {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+.browser-selection-card__target > svg {
+  flex: 0 0 auto;
+}
+.browser-selection-card__target > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-selection-card__target:not(:disabled):hover {
+  color: var(--text);
+}
+.browser-selection-card > header > .browser-selection-card__target {
+  flex: 1;
+}
+.browser-selection-card > header > button:last-child {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  background: transparent;
+}
+.browser-selection-card > header > button:last-child:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.browser-selection-card :is(button, summary):focus-visible,
+.user-browser-reference button:focus-visible,
+.composer-browser-target:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.browser-selection-tray .image-part__preview {
+  width: 100%;
+  height: 72px;
+  margin: 2px 0 6px;
+  border-radius: var(--radius-sm);
+}
+.browser-selection-tray .image-part {
+  width: 100%;
+  height: 72px;
+  max-height: 72px;
+  object-fit: contain;
+}
+.browser-selection-card__missing {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  padding: 8px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  text-align: center;
+}
+.browser-selection-card > small,
+.user-browser-reference > small {
+  display: block;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-selection-card details {
+  margin-top: 5px;
+  font-size: var(--fs-micro);
+}
+.browser-selection-card summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.browser-selection-card details :is(code, p, small) {
+  display: block;
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.composer-browser-target {
+  display: flex;
+  max-width: calc(100% - 16px);
+  align-items: center;
+  gap: 5px;
+  margin: 4px 8px;
+  padding: 3px 0;
+  color: var(--text-tertiary);
+  background: transparent;
+  font-size: var(--fs-micro);
+}
+.composer-browser-target > svg {
+  flex: 0 0 auto;
+}
+.composer-browser-target > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-browser-target:hover {
+  color: var(--text-secondary);
+}
+.composer__context-chips > .composer-attachment:has(> img) {
+  height: auto;
+  min-height: 72px;
+  padding: 5px;
+}
+.composer__context-chips > .composer-attachment > img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+.user-browser-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.user-browser-reference {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 240px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+.user-browser-reference .image-part__preview {
+  margin: 6px 0;
+}
+.user-browser-reference .image-part {
+  max-height: 240px;
+}
+.user-browser-reference > p {
+  margin: 7px 0 0;
+  font-size: var(--fs-meta);
+}
+.extension-tab-card {
+  width: 100%;
+  max-width: none;
+  padding: 16px;
+}
+.extension-tab-card .extension-tab-state {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: var(--fs-meta);
+}
+.extension-tab-card .extension-tab-state__dot::after {
+  animation: none;
+}
+.extension-tab-card__hint {
+  max-width: none;
+  font-size: var(--fs-meta);
+}
+.extension-tab-card__actions {
+  margin-top: 10px;
+}
+.extension-tab-card__actions .button {
+  min-height: 32px;
+}
+.extension-tab-card__selection details {
+  max-width: 100%;
+}
+.extension-tab-card__selection summary {
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+.extension-tab-card__selection details[open] > code {
+  display: block;
+  margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.extension-tab-card__capture {
+  width: 100%;
+  margin-top: 12px;
+}
+.extension-tab-card__capture > small {
+  color: var(--text-tertiary);
+  font-size: var(--fs-meta);
+}
+.extension-tab-card__capture .image-part__preview {
+  max-width: 100%;
+}

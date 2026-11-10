@@ -11,6 +11,17 @@ const attached = new Set()
 const syntheticAllowances = new Map()
 const commandTails = new Map()
 
+function sameDocument(left, right) {
+  if (left === right) return true
+  try {
+    const a = new URL(left)
+    const b = new URL(right)
+    return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search
+  } catch {
+    return false
+  }
+}
+
 function allowSyntheticInput(id, method, params) {
   if (method !== 'cdp') return null
   const input = params.params || {}
@@ -58,6 +69,51 @@ async function waitForLoad(tabId) {
     if ((await chrome.tabs.get(tabId)).status !== 'loading') return
   } while (Date.now() < deadline)
 }
+async function enrichElement(tabId, element) {
+  if (!element || typeof element !== 'object' || typeof element.selector !== 'string') return element
+  if (!chrome.scripting?.executeScript) return element
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      args: [element.selector],
+      func: (selector) => {
+        const el = document.querySelector(selector)
+        if (!el) return null
+        let component = el.getAttribute('data-source-component') || ''
+        if (!component) {
+          const key = Object.getOwnPropertyNames(el).find((name) => name.startsWith('__reactFiber$'))
+          let owner = key ? el[key] : undefined
+          owner = owner && owner._debugOwner
+          for (let depth = 0; owner && depth < 32; depth += 1) {
+            const type = owner.type
+            const name = type && (type.displayName || type.name)
+            if (typeof name === 'string' && name) {
+              component = name
+              break
+            }
+            owner = owner._debugOwner
+          }
+        }
+        return {
+          component: component.slice(0, 120),
+          file: (el.getAttribute('data-source-file') || '').slice(0, 4096),
+          line: el.getAttribute('data-source-line') || '',
+        }
+      },
+    })
+    const value = result?.result
+    if (!value) return element
+    if (value.component && !element.component) element.component = value.component
+    if (value.file && !element.sourceHint) {
+      const line = /^\d+$/.test(value.line) ? Number(value.line) : undefined
+      element.sourceHint = { kind: 'explicit', path: value.file, ...(line ? { line } : {}) }
+    }
+    return element
+  } catch {
+    return element
+  }
+}
 async function cdp(tabId, method, params = {}) {
   if (!attached.has(tabId)) {
     await chrome.debugger.attach({ tabId }, '1.3')
@@ -102,7 +158,7 @@ async function executeNow({ method, params }) {
     return true
   }
   if (method === 'close_tab') { tabs.delete(id); await chrome.tabs.remove(id); return true }
-  if (tabs.get(id).paused && !['screenshot', 'read_page'].includes(method)) throw new Error(PAUSED)
+  if (tabs.get(id).paused && !['screenshot', 'read_page', 'set_picking'].includes(method)) throw new Error(PAUSED)
   const allowance = allowSyntheticInput(id, method, params)
   try {
     if (method === 'navigate') {
@@ -134,6 +190,20 @@ async function executeNow({ method, params }) {
       return result.data
     }
     if (method === 'cdp') return await cdp(id, params.method, params.params)
+    if (method === 'set_picking') {
+      if (typeof params.picking !== 'boolean') throw new Error('picking must be a boolean')
+      const tab = tabs.get(id)
+      if (params.clearSelection === true && params.captureId && tab.captureId !== params.captureId) return false
+      tab.picking = params.picking
+      if (params.clearSelection === true) {
+        delete tab.captureId
+        delete tab.selectedLabel
+        await event('element_selected', { chromeTabId: id, cleared: true })
+      }
+      await event('tab_picking_changed', { chromeTabId: id, picking: params.picking })
+      chrome.tabs.sendMessage(id, { type: 'APEX_TAB_STATE_CHANGED' }).catch(() => undefined)
+      return true
+    }
     throw new Error(`Unknown extension command: ${method}`)
   } catch (error) {
     if (allowance) syntheticAllowances.set(id, (syntheticAllowances.get(id) || []).filter((item) => item !== allowance))
@@ -219,6 +289,35 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       await event('tab_unpaired', { chromeTabId: id })
       tabs.delete(id)
       if (attached.has(id)) await chrome.debugger.detach({ tabId: id })
+      return true
+    }
+    if (message.type === 'SET_TAB_PICKING') {
+      if (typeof message.picking !== 'boolean') throw new Error('picking must be a boolean')
+      tabs.get(id).picking = message.picking
+      await event('tab_picking_changed', { chromeTabId: id, picking: message.picking })
+      chrome.tabs.sendMessage(id, { type: 'APEX_TAB_STATE_CHANGED' }).catch(() => undefined)
+      return true
+    }
+    if (message.type === 'ELEMENT_SELECTED') {
+      const tab = tabs.get(id)
+      if (tab.picking !== true) return false
+      const capturedUrl = typeof message.capturedUrl === 'string' ? message.capturedUrl : ''
+      const pageUrl = (await chrome.tabs.get(id)).url
+      // The click recorded the document URL. If the tab has already navigated, that capture is stale.
+      if (capturedUrl && pageUrl && !sameDocument(capturedUrl, pageUrl)) return false
+      const generation = (tab.pickGeneration || 0) + 1
+      tab.pickGeneration = generation
+      const element = await enrichElement(id, message.element)
+      const current = tabs.get(id)
+      if (!current || current.picking !== true || current.pickGeneration !== generation) return false
+      if (!sameDocument((await chrome.tabs.get(id)).url, pageUrl)) return false
+      element.captureId = `${Date.now()}-${generation}`
+      current.captureId = element.captureId
+      current.picking = false
+      current.selectedLabel = element.component || (element.id ? `#${element.id}` : element.tagName)
+      await chrome.tabs.sendMessage?.(id, { type: 'APEX_TAB_STATE_CHANGED', picking: false })?.catch(() => undefined)
+      await event('tab_picking_changed', { chromeTabId: id, picking: false })
+      await event('element_selected', { chromeTabId: id, element, pageUrl })
       return true
     }
     if (message.type === 'SET_TAB_PAUSED' || message.type === 'USER_INTERACTION_DETECTED') {

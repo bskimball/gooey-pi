@@ -281,6 +281,7 @@ function extensionControls(connected: boolean): ExtensionTabControls {
 			pairedTabCount: 1,
 		},
 		setPaused: vi.fn(),
+		setPicking: vi.fn(),
 		popOut: vi.fn(),
 		focus: vi.fn(),
 	};
@@ -323,7 +324,7 @@ describe("BrowserPanel extension-backed tabs", () => {
 		expect(card?.textContent).toContain("Shared Docs");
 		expect(card?.textContent).toContain("https://docs.example.com/");
 		expect(card?.textContent).toContain("Shared from Browser");
-		expect(card?.textContent).toContain("Agent active");
+		expect(card?.textContent).toContain("Agent control enabled");
 		expect(container.querySelector(".browser-agent-slot")).toBeNull();
 		expect(container.querySelector(".browser-agent-area webview")).toBeNull();
 		expect(
@@ -334,6 +335,8 @@ describe("BrowserPanel extension-backed tabs", () => {
 			expect.objectContaining({ width: expect.any(Number) }),
 		);
 
+		act(() => button("Select element").click());
+		expect(extension.setPicking).toHaveBeenCalledWith(extensionTab, true);
 		act(() => button("Pause Agent").click());
 		expect(extension.setPaused).toHaveBeenCalledWith(extensionTab, true);
 		act(() => button("Focus in Browser").click());
@@ -343,7 +346,7 @@ describe("BrowserPanel extension-backed tabs", () => {
 			{ ...extensionTab, paused: true, pairedByUser: false },
 			extension,
 		);
-		expect(container.textContent).toContain("Paused by user");
+		expect(container.textContent).toContain("Agent control paused");
 		expect(container.textContent).toContain("Apex Tab Group");
 		act(() => button("Resume Agent").click());
 		expect(extension.setPaused).toHaveBeenLastCalledWith(

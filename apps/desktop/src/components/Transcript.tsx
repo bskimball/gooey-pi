@@ -12,6 +12,9 @@ import { createSessionSummarySelector } from './inspector/session-summary'
 import { SubagentContext } from './transcript/subagent-lane'
 import { TurnNavigator } from './transcript/turn-navigator'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
+import { WorkspaceImageContext } from './WorkspaceImage'
+import { BrowserReferenceContext } from './transcript/BrowserReferenceCards'
+import type { BrowserReference } from '@/lib/browser-annotations'
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
 export { tokenizeSyntax } from './transcript/syntax'
@@ -27,6 +30,9 @@ function timestampValue(value?: string | number): number | undefined {
 interface TranscriptProps {
   messages: TranscriptMessage[]
   git: GitStatus
+  /** Active workspace root for resolving assistant Markdown local images. */
+  cwd?: string
+  onRevealBrowserReference?(reference: BrowserReference): void
   /** Active harness; brands the assistant marks and working copy. */
   harness?: HarnessId
   loading?: boolean
@@ -65,7 +71,7 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
 
 
 
-export function Transcript({ messages, git, harness = 'pi', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference, onOpenSpecialist }: TranscriptProps) {
+export function Transcript({ messages, git, cwd, onRevealBrowserReference, harness = 'pi', loading, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, onOpenSessionReference, onOpenSpecialist }: TranscriptProps) {
   const [selectSummary] = useState(createSessionSummarySelector)
   const { specialists } = selectSummary(messages)
   const subagentContext = useMemo(() => ({ specialists, onOpen: onOpenSpecialist }), [specialists, onOpenSpecialist])
@@ -89,7 +95,7 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
     queuedMessageCount > 0 ? 'has-queued-messages' : '',
   ].filter(Boolean).join(' ')
 
-  return <SubagentContext.Provider value={subagentContext}>
+  return <BrowserReferenceContext.Provider value={onRevealBrowserReference}><WorkspaceImageContext.Provider value={cwd}><SubagentContext.Provider value={subagentContext}>
     <div ref={scrollRef} className={transcriptClasses} aria-busy={loading} onScroll={updatePinnedState}>
       <div className="sr-only" role="status" aria-live="polite">{announcement}</div>
       <div className="transcript__inner">
@@ -150,5 +156,5 @@ export function Transcript({ messages, git, harness = 'pi', loading, active = fa
     </div>
     {!loading ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
     {showPinnedChanges && git.files.length ? <div className="transcript-changes-pin"><ChangesCard git={git} onOpenChanges={onOpenChanges} /></div> : null}
-  </SubagentContext.Provider>
+  </SubagentContext.Provider></WorkspaceImageContext.Provider></BrowserReferenceContext.Provider>
 }

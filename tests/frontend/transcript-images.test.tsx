@@ -28,7 +28,7 @@ afterEach(() => {
 })
 
 function openLightbox(): HTMLElement {
-  const preview = container.querySelector('[aria-label="Expand pasted image"]') as HTMLButtonElement
+  const preview = container.querySelector('[aria-label="Expand image"]') as HTMLButtonElement
   preview.focus()
   act(() => preview.click())
   return document.querySelector('[role="dialog"]') as HTMLElement
@@ -40,7 +40,7 @@ describe('transcript image lightbox', () => {
     const expanded = dialog.querySelector('.image-lightbox__image') as HTMLImageElement
 
     expect(dialog.getAttribute('aria-modal')).toBe('true')
-    expect(dialog.textContent).toContain('Expanded pasted image')
+    expect(dialog.textContent).toContain('Expanded image')
     expect(expanded.src).toBe(source)
     expect(container.getAttribute('aria-hidden')).toBe('true')
     expect(container.inert).toBe(true)
@@ -50,7 +50,7 @@ describe('transcript image lightbox', () => {
   })
 
   it('closes on Escape or a click outside the image and restores thumbnail focus', () => {
-    const preview = container.querySelector('[aria-label="Expand pasted image"]') as HTMLButtonElement
+    const preview = container.querySelector('[aria-label="Expand image"]') as HTMLButtonElement
     let dialog = openLightbox()
     const close = dialog.querySelector('[aria-label="Close expanded image"]') as HTMLButtonElement
 

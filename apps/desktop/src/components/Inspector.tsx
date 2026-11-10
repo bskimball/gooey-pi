@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type {
 	ExtensionTabControls,
 	StampedPointerEvent,
@@ -14,7 +14,7 @@ import type {
 	TranscriptMessage,
 } from "@/types/api";
 import type { AgentSlotRect } from "./AgentBrowserLayer";
-import { Folder, GitDiff, Globe, Info, Robot, SidebarRight } from "./icons";
+import { ArrowsInSimple, ArrowsOutSimple, Folder, GitDiff, Globe, Info, Robot, SidebarRight } from "./icons";
 import { BrowserPanel } from "./inspector/BrowserPanel";
 import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
@@ -72,6 +72,10 @@ export interface InspectorProps {
 	onRevealPath(path: string): void;
 	onGrantProject(): Promise<void> | void;
 	overlay?: boolean;
+	visible?: boolean;
+	expanded?: boolean;
+	onToggleExpanded?(): void;
+	browserActive?: boolean;
 }
 
 const tabs: Array<{ id: InspectorTab; label: string; Icon: typeof Info }> = [
@@ -118,10 +122,16 @@ export const Inspector = memo(function Inspector({
 	onRevealPath,
 	onGrantProject,
 	overlay = false,
+	visible = true,
+	expanded = false,
+	onToggleExpanded,
+	browserActive = false,
 	platform = "darwin",
 	homeDir,
 }: InspectorProps) {
-	const inspectorRef = useFocusTrap<HTMLElement>(overlay, onClose);
+	const inspectorRef = useFocusTrap<HTMLElement>(overlay && visible, onClose);
+	const [browserVisited, setBrowserVisited] = useState(activeTab === "browser");
+	useEffect(() => { if (activeTab === "browser") setBrowserVisited(true); }, [activeTab]);
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
 	const [selectReadiness] = useState(createReadinessSelector);
@@ -145,6 +155,8 @@ export const Inspector = memo(function Inspector({
 		<aside
 			ref={inspectorRef}
 			className="inspector"
+			hidden={!visible}
+			inert={!visible}
 			aria-label="Session inspector"
 			tabIndex={overlay ? -1 : undefined}
 		>
@@ -176,6 +188,7 @@ export const Inspector = memo(function Inspector({
 					>
 						<tab.Icon size={15} aria-hidden="true" />
 						<span className="inspector__tab-label">{tab.label}</span>
+						{tab.id === "browser" && browserActive && activeTab !== "browser" ? <span className="inspector__browser-activity" aria-label="Browser activity" /> : null}
 						{tab.id === "changes" && git.files.length ? (
 							<span className="inspector__tab-count">{git.files.length}</span>
 						) : tab.id === "specialists" && specialistCount ? (
@@ -184,6 +197,7 @@ export const Inspector = memo(function Inspector({
 					</button>
 				))}
 				<span className="inspector__tab-spacer" />
+				{onToggleExpanded && !overlay ? <IconButton label={expanded ? "Restore inspector width" : "Expand inspector"} onClick={onToggleExpanded}>{expanded ? <ArrowsInSimple size={15} /> : <ArrowsOutSimple size={15} />}</IconButton> : null}
 				<IconButton label="Close inspector" onClick={onClose}>
 					<SidebarRight size={15} />
 				</IconButton>
@@ -235,8 +249,10 @@ export const Inspector = memo(function Inspector({
 						onRefreshGit={onRefreshGit}
 					/>
 				) : null}
-				{activeTab === "browser" ? (
+				{activeTab === "browser" || browserVisited ? (
+					<div className="inspector__browser-panel" hidden={activeTab !== "browser"} inert={activeTab !== "browser"}>
 					<BrowserPanel
+						visible={visible && activeTab === "browser"}
 						key={`${cwd ?? ''}:${agentSessionKey ?? ''}`}
 						cwd={cwd}
 						platform={platform}
@@ -258,6 +274,7 @@ export const Inspector = memo(function Inspector({
 						onNavigateAgentTab={onNavigateAgentTab}
 						extension={agentBrowserExtension}
 					/>
+					</div>
 				) : null}
 				{activeTab === "files" ? (
 					<FilesPanel project={project} git={git} onReveal={onRevealPath} />

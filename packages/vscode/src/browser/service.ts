@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 type WebContents = ReturnType<typeof extensionGuest>
 
+import { applySharedTabEvent } from 'apex-core/browser/element-selection'
 import type { ExtensionBrowserBridge } from 'apex-core/browser/extension-bridge'
 import { extensionGuest, PAUSED_MESSAGE } from 'apex-core/browser/extension-tab-driver'
 import { ACTION_TIMEOUT_MS, guardGuestCall, QUEUE_RELEASE_GRACE_MS, releaseQueueEventually } from 'apex-core/browser/guest-call-guard'
@@ -93,6 +94,8 @@ export class ExtensionBrowserService {
         active: this.activeBySession.get(tab.sessionKey) === tab.tabId,
         canGoBack: true,
         canGoForward: true,
+        ...(tab.picking ? { picking: true } : {}),
+        ...(tab.selection ? { selection: tab.selection } : {}),
       })),
     }
   }
@@ -306,6 +309,7 @@ export class ExtensionBrowserService {
       this.removeTab(tab)
       return
     }
+    applySharedTabEvent(tab, event)
     if (typeof event.url === 'string') tab.url = event.url
     if (typeof event.title === 'string') tab.title = event.title
     if (event.type === 'tab_pause_changed') {

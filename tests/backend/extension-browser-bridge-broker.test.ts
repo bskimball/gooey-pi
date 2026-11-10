@@ -1,4 +1,6 @@
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AgentBrowserService } from '../../apps/desktop/electron/main/browser/agent-service'
 import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
 import { callMethod, probeBroker } from '../../apps/desktop/electron/main/browser/extension-bridge-client'
 
@@ -168,6 +170,63 @@ describe('extension broker HTTP contract', () => {
     probe.mockRestore()
     expect(start).toHaveBeenCalledOnce()
     expect(loser.port).toBe(winner.port)
+  })
+
+  it('replicates a broker selection to a desktop client and clears it when the owner navigates', async () => {
+    const session = resolve('/sessions/a.jsonl')
+    const selected = { selector: '#save', tagName: 'button', id: 'save', classes: [], text: 'Save', rect: { x: 0, y: 0, width: 1, height: 1 } }
+    let tabs: Array<Record<string, unknown>> = [{ chromeTabId: 7, sessionKey: session, sessionFile: session, url: 'https://a.test/', title: 'A', selection: selected, picking: true }]
+    const { bridge, base, token } = await fixture('vscode')
+    const headers = { Authorization: `Bearer ${token}` }
+    const extension = await stubExtension(base, token)
+    bridge.setContext(() => ({ activeSessionKey: session, tabs }))
+    const desktopBridge = new ExtensionBrowserBridge()
+    bridges.push(desktopBridge)
+    const desktop = new AgentBrowserService({ getGuest: () => undefined, extensionBridge: desktopBridge })
+    try {
+      await desktop.setActiveSession(session)
+      await desktopBridge.startOrConnect(undefined, base)
+      await desktop.setActiveSession(session)
+      expect(desktop.state().tabs[0]).toMatchObject({ selection: selected, picking: true, url: 'https://a.test/' })
+      const replaced = { ...selected, selector: '#new', id: 'new' }
+      tabs = [{ chromeTabId: 7, sessionKey: session, sessionFile: session, url: 'https://a.test/', title: 'A', selection: replaced, picking: true }]
+      await fetch(`${base}/v1/extension/tab-state`, { headers })
+      await desktopBridge.refreshState()
+      expect(desktop.state().tabs[0]?.selection).toMatchObject({ selector: '#new' })
+      tabs = [{ chromeTabId: 7, sessionKey: session, sessionFile: session, url: 'https://b.test/', title: 'B' }]
+      await fetch(`${base}/v1/extension/tab-state`, { headers })
+      await desktopBridge.refreshState()
+      await desktopBridge.refreshState()
+      expect(desktop.state().tabs[0]?.url).toBe('https://b.test/')
+      expect(desktop.state().tabs[0]?.selection).toBeUndefined()
+      expect(desktop.state().tabs[0]?.picking).toBeUndefined()
+      expect(await desktop.listTabs(session)).toMatchObject({ tabs: [{ url: 'https://b.test/' }] })
+      expect((await desktop.listTabs(session)).tabs).not.toEqual([expect.objectContaining({ selection: expect.anything() })])
+    } finally {
+      desktop.beginShutdown()
+      await extension.stop()
+    }
+  })
+
+  it('delivers a sanitized capture when the broker does not own the selected tab', async () => {
+    const session = resolve('/sessions/remote.jsonl')
+    const { bridge, base, token } = await fixture('vscode')
+    bridge.setContext(() => ({ activeSessionKey: 'other-session', tabs: [] }))
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    const post = (body: Record<string, unknown>) => fetch(`${base}/v1/extension/event`, { method: 'POST', headers, body: JSON.stringify(body) })
+    await post({ type: 'tab_paired', chromeTabId: 8, sessionKey: session, url: 'https://remote.test/' })
+    await post({ type: 'element_selected', chromeTabId: 8, pageUrl: 'https://remote.test/', element: { selector: '#card', tagName: 'ARTICLE', text: 'Weekly\u0000 limit', rect: { x: 0, y: 0, width: 100, height: 100 } } })
+    const remoteBridge = new ExtensionBrowserBridge()
+    bridges.push(remoteBridge)
+    const desktop = new AgentBrowserService({ getGuest: () => undefined, extensionBridge: remoteBridge })
+    try {
+      await desktop.setActiveSession(session)
+      await remoteBridge.startOrConnect(undefined, base)
+      expect((await desktop.listTabs(session)).tabs).toEqual([expect.objectContaining({ selection: expect.objectContaining({ selector: '#card', tagName: 'article', text: 'Weekly limit' }) })])
+      await post({ type: 'tab_updated', chromeTabId: 8, url: 'https://remote.test/next' })
+      await remoteBridge.refreshState()
+      expect(desktop.state().tabs[0]?.selection).toBeUndefined()
+    } finally { desktop.beginShutdown() }
   })
 
   it('rejects a malicious status Origin', async () => {
