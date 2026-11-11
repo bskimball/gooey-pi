@@ -80,6 +80,7 @@ const expectedRegistrations: Record<string, Registration[]> = {
     { kind: 'command', name: 'gooeypi-fast-mode' },
     { kind: 'event', name: 'before_provider_request' },
   ],
+  'apex-visual-previews.ts': [{ kind: 'event', name: 'before_agent_start' }],
 }
 
 const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly [string, string]>> = {

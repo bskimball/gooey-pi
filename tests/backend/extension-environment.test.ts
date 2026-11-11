@@ -84,6 +84,7 @@ describe('Pi capability extension environment', () => {
       GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: '/app/extensions/pi-work-fast-mode.ts',
     }
     expect(PI_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment })).toContain('/app/extensions/pi-work-fast-mode.ts')
+    expect(PI_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment: { ...environment, APEX_VISUAL_PREVIEW_EXTENSION_PATH: '/app/extensions/apex-visual-previews.ts' } })).toContain('/app/extensions/apex-visual-previews.ts')
   })
 
   it('keeps standalone copies suppressed while omitting the bundled tool when disabled', () => {

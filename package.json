@@ -1,6 +1,6 @@
 {
 	"name": "gooeypi",
-	"version": "1.1.27",
+	"version": "1.1.28",
 	"private": true,
 	"workspaces": [
 		"apps/*",

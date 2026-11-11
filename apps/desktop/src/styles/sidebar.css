@@ -113,7 +113,8 @@
 .session-row-wrap:hover .session-row__meta, .session-row-wrap:focus-within .session-row__meta, .session-row-wrap.is-menu-open .session-row__meta,
 .session-row-wrap:hover .session-row__trail, .session-row-wrap:focus-within .session-row__trail, .session-row-wrap.is-menu-open .session-row__trail { visibility: hidden; }
 .session-row__archive, .session-row__more { position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); opacity: 0; pointer-events: none; transition: opacity 120ms ease-out; }
-.session-row-wrap:hover > .icon-button, .session-row-wrap:focus-within > .icon-button, .session-row-wrap.is-menu-open > .icon-button { opacity: 1; pointer-events: auto; }
+.session-row-wrap:hover > .icon-button, .session-row-wrap:focus-within > .icon-button, .session-row-wrap.is-menu-open > .icon-button, .session-row-wrap:has(.session-row__archive.is-confirming) > .session-row__archive { opacity: 1; pointer-events: auto; }
+.session-row-wrap:hover .session-row, .session-row-wrap:focus-within .session-row, .session-row-wrap.is-menu-open .session-row, .session-row-wrap:has(.session-row__archive.is-confirming) .session-row { padding-right: 58px; }
 .session-row__archive:active:not(:disabled), .session-row__more:active:not(:disabled) { transform: translateY(-50%) scale(.96); }
 .session-row__archive { right: 30px; }
 .session-row__archive.is-confirming { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }

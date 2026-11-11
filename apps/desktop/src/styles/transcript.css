@@ -4,7 +4,7 @@
 /* A gutter on both edges keeps the scrolled column centred on the same axis as the pane-centred
    turn header and composer, so their text lines up with the transcript's. The composer is docked
    below as its own row, so the scroller only needs breathing room, not overlay clearance. */
-.transcript { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 36px 0 32px; }
+.transcript { position: relative; flex: 1 1 auto; min-height: 0; overflow-x: clip; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 36px 0 32px; }
 .transcript.has-queued-messages { padding-bottom: 36px; }
 .transcript.has-pinned-changes { padding-bottom: 96px; }
 .transcript-changes-pin { z-index: 9; bottom: 137px; }
@@ -81,6 +81,11 @@
 .prose code { padding: 1px 4px; border: 1px solid var(--border); border-radius: var(--radius-xs); direction: ltr; unicode-bidi: isolate; background: var(--surface-subtle); font-size: .9em; }
 .prose pre { max-width: 100%; padding: 11px 13px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); direction: ltr; unicode-bidi: isolate; background: var(--canvas); font-size: var(--fs-body); line-height: 1.6; text-align: left; }
 .prose pre code { padding: 0; border: 0; background: transparent; font-size: inherit; white-space: pre; overflow-wrap: normal; }
+.html-preview { width: 100%; margin: 0 0 16px; }
+.html-preview__frame { width: 100%; height: 320px; display: block; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; }
+.html-preview__source-toggle { min-height: 28px; margin-top: 6px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); }
+.html-preview__source-toggle:hover { color: var(--text); background: var(--surface-hover); }
+.html-preview__source { max-width: 100%; margin: 6px 0 0; padding: 11px 13px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--canvas); font-size: var(--fs-body); line-height: 1.6; }
 .prose a > bdi { unicode-bidi: isolate; }
 .prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .prose th, .prose td { padding: 5px 8px; border: 1px solid var(--border); text-align: start; }
@@ -128,8 +133,10 @@
 .activity-line__kind { flex: 0 0 auto; color: var(--text-secondary); font-weight: 550; white-space: nowrap; }
 .activity-line--tool, .activity-line--agent { border-radius: 0; }
 .activity-line--tool:hover, .activity-line--agent:hover { background: var(--surface-subtle); }
-.activity-line--compaction { margin: 4px 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-raised); }
-.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }
+/* Break out of the centered reading column to the conversation pane. 50% is the column; 100cqi is the pane. */
+.activity-line--compaction { width: 100cqi; max-width: none; margin: 4px calc(50% - 50cqi); overflow: hidden; border: 1px solid var(--border); border-inline: 0; border-radius: 0; color: var(--text-secondary); background: var(--surface-raised); }
+.message--activity:has(.activity-line--compaction) { width: 100%; margin-inline: 0; overflow: visible; }
+.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 24px; }
 .activity-line--compaction.is-running { border-color: var(--border-strong); }
 .activity-line--compaction.is-done .activity-line__icon, .activity-line--compaction.is-done .activity-tool__state { color: var(--success); }
 .activity-line--compaction.is-failed .activity-line__icon, .activity-line--compaction.is-failed .activity-tool__state, .activity-line--compaction.is-cancelled .activity-line__icon, .activity-line--compaction.is-cancelled .activity-tool__state { color: var(--danger); }

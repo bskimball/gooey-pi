@@ -1,8 +1,9 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react'
+import { isValidElement, memo, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import type { Components, UrlTransform } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openExternalUrl } from '@/lib/desktop-actions'
+import { HtmlFence } from './HtmlFence'
 import { WorkspaceImage } from './WorkspaceImage'
 
 interface MarkdownTextProps {
@@ -49,6 +50,14 @@ const markdownPlugins = [remarkGfm]
  * The browser skips descendants that carry their own `dir`, so a paragraph
  * opening with LTR code still lays out RTL prose correctly.
  */
+function htmlFenceSource(children: ReactNode): string | undefined {
+  if (!isValidElement<{ className?: string; children?: ReactNode }>(children)) return undefined
+  const language = /language-([\w-]+)/.exec(children.props.className ?? '')?.[1]
+  if (language !== 'html' && language !== 'htm') return undefined
+  const body = children.props.children
+  return typeof body === 'string' ? body : undefined
+}
+
 const markdownComponents: Components = {
   a: ({ node: _node, ...props }) => <MarkdownLink {...props} />,
   blockquote: ({ node: _node, ...props }) => <blockquote {...props} dir="auto" />,
@@ -63,7 +72,11 @@ const markdownComponents: Components = {
   li: ({ node: _node, ...props }) => <li {...props} dir="auto" />,
   ol: ({ node: _node, ...props }) => <ol {...props} dir="auto" />,
   p: ({ node: _node, ...props }) => <p {...props} dir="auto" />,
-  pre: ({ node: _node, children, ...props }) => <pre {...props} dir="ltr">{children}</pre>,
+  pre: ({ node: _node, children, ...props }) => {
+    const source = htmlFenceSource(children)
+    if (source !== undefined) return <HtmlFence source={source} />
+    return <pre {...props} dir="ltr">{children}</pre>
+  },
   td: ({ node: _node, ...props }) => <td {...props} dir="auto" />,
   th: ({ node: _node, ...props }) => <th {...props} dir="auto" />,
   ul: ({ node: _node, ...props }) => <ul {...props} dir="auto" />,

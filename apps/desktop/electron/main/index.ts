@@ -1220,6 +1220,7 @@ async function bootstrap(): Promise<void> {
 	piManager.setRuntimeEnvironmentProvider((scope) => ({
 		...desktopLink?.editor.environmentFor(scope),
 		APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),
+		APEX_VISUAL_PREVIEW_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'visualPreview').filename, extensionPathContext),
 		...extensionRuntimeEnvironment(
 			piScheduleBridge.environmentFor(scope),
 			() => browserBridge.environmentFor(scope),
