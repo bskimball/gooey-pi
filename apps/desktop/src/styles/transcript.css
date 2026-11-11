@@ -4,7 +4,7 @@
 /* A gutter on both edges keeps the scrolled column centred on the same axis as the pane-centred
    turn header and composer, so their text lines up with the transcript's. The composer is docked
    below as its own row, so the scroller only needs breathing room, not overlay clearance. */
-.transcript { position: relative; flex: 1 1 auto; min-height: 0; overflow-x: clip; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 36px 0 32px; }
+.transcript { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; padding: 36px 0 32px; }
 .transcript.has-queued-messages { padding-bottom: 36px; }
 .transcript.has-pinned-changes { padding-bottom: 96px; }
 .transcript-changes-pin { z-index: 9; bottom: 137px; }
@@ -133,10 +133,10 @@
 .activity-line__kind { flex: 0 0 auto; color: var(--text-secondary); font-weight: 550; white-space: nowrap; }
 .activity-line--tool, .activity-line--agent { border-radius: 0; }
 .activity-line--tool:hover, .activity-line--agent:hover { background: var(--surface-subtle); }
-/* Break out of the centered reading column to the conversation pane. 50% is the column; 100cqi is the pane. */
-.activity-line--compaction { width: 100cqi; max-width: none; margin: 4px calc(50% - 50cqi); overflow: hidden; border: 1px solid var(--border); border-inline: 0; border-radius: 0; color: var(--text-secondary); background: var(--surface-raised); }
-.message--activity:has(.activity-line--compaction) { width: 100%; margin-inline: 0; overflow: visible; }
-.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 24px; }
+/* Same left/right edges as the other chat rows: full reading column, without the 38px activity indent. */
+.activity-line--compaction { width: 100%; margin: 4px 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-raised); }
+.message--activity:has(.activity-line--compaction) { width: auto; margin-inline: 0; }
+.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }
 .activity-line--compaction.is-running { border-color: var(--border-strong); }
 .activity-line--compaction.is-done .activity-line__icon, .activity-line--compaction.is-done .activity-tool__state { color: var(--success); }
 .activity-line--compaction.is-failed .activity-line__icon, .activity-line--compaction.is-failed .activity-tool__state, .activity-line--compaction.is-cancelled .activity-line__icon, .activity-line--compaction.is-cancelled .activity-tool__state { color: var(--danger); }
