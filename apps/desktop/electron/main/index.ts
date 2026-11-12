@@ -179,7 +179,7 @@ const rendererContentTypes: Record<string, string> = {
 
 function registerRendererProtocol(): void {
 	if (!app.isPackaged) return;
-	const rendererRoot = resolve(__dirname, "../renderer");
+	const rendererRoot = resolve(import.meta.dirname, "../renderer");
 	protocol.handle("prime-work", async (request) => {
 		try {
 			const url = new URL(request.url);
@@ -245,7 +245,7 @@ function resolveRendererUrl(): string {
 	if (!developmentUrl)
 		return app.isPackaged
 			? PACKAGED_RENDERER_URL
-			: pathToFileURL(join(__dirname, "../renderer/index.html")).href;
+			: pathToFileURL(join(import.meta.dirname, "../renderer/index.html")).href;
 	const parsed = new URL(developmentUrl);
 	if (
 		!["http:", "https:"].includes(parsed.protocol) ||
@@ -598,7 +598,7 @@ async function createWindow(): Promise<BrowserWindow | null> {
 			resolvedWindowTheme(store?.getSettings().theme),
 		),
 		webPreferences: {
-			preload: join(__dirname, "../preload/index.js"),
+			preload: join(import.meta.dirname, "../preload/index.js"),
 			zoomFactor: interfaceZoomFactor(),
 			nodeIntegration: false,
 			contextIsolation: true,
