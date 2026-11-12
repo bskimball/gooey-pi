@@ -20,7 +20,7 @@ import { resolveBrowserSource } from "./browser/source";
 import { readWorkspaceImage } from "./workspace-image";
 import type { CheckoutService } from "./checkouts";
 import type { CuaDriverService } from "./cua-driver";
-import { describeEffectiveRunConfig } from "./effective-run-config";
+import { createEffectiveConfigIpc } from "./effective-config-ipc";
 import type { ExtensionPathContext } from "./extension-manifest";
 import type { GitService } from "./git";
 import type { ModelCatalogProvider } from "./model-catalog";
@@ -133,7 +133,7 @@ export function isTrustedRendererUrl(
 export interface IpcRegistration {
 	authorize(webContents: WebContents): void;
 	revoke(webContentsId: number): void;
-	dispose(): void;
+	dispose(): Promise<void>;
 	/**
 	 * Resolves on the renderer bootstrap's first `app:get-meta` invoke, which
 	 * only reaches its handler once `verify` has admitted an authorized sender on
@@ -155,6 +155,7 @@ export function registerIpc(
 		);
 		activeIpcRegistration.dispose();
 	}
+	const configRequests = createEffectiveConfigIpc(services);
 	const authorized = new Map<number, WebContents>();
 	const invokeChannels: string[] = [];
 	const eventChannels: string[] = [];
@@ -410,7 +411,7 @@ export function registerIpc(
 		(await sessionsForPath(filePath)).service.rename(filePath, title),
 	);
 	handle("sessions:runtime-owners", () => services.sessionHandoff.otherOwners());
-	handle("runtime:effective-config", async (_event, cwd) => describeEffectiveRunConfig({ cwd: await services.projects.authorizeReadOnlyCwd(requireString(cwd, "cwd", { min: 1, max: 4096 })), harness: "pi", extensionContext: services.extensionPathContext }));
+	handle("runtime:effective-config", (_event, cwd) => configRequests.run(cwd));
 	handle("sessions:continue-in-vscode", (_event, filePath, mode) =>
 		services.sessionHandoff.continueInVsCode(filePath, mode),
 	);
@@ -889,7 +890,7 @@ export function registerIpc(
 			});
 		},
 		dispose() {
-			if (closed) return;
+			if (closed) return configRequests.dispose();
 			closed = true;
 			if (activeIpcRegistration === registration) activeIpcRegistration = null;
 			authorized.clear();
@@ -906,6 +907,7 @@ export function registerIpc(
 			for (const channel of invokeChannels) ipcMain.removeHandler(channel);
 			// Event listeners are removed wholesale only for our private fixed channels.
 			for (const channel of eventChannels) ipcMain.removeAllListeners(channel);
+			return configRequests.dispose();
 		},
 	};
 	activeIpcRegistration = registration;

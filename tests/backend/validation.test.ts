@@ -7,6 +7,7 @@ import {
   requireExistingPath,
   requireGitPath,
   requireId,
+  requireInteger,
   requireSelfHostedVoiceUrl,
   requireString,
   requireWebUrl,
@@ -173,6 +174,20 @@ describe('requireString', () => {
     expect(requireString('   ', 'label', { min: 1 })).toBe('   ')
     expect(() => requireString(`  ${'x'.repeat(4)}  `, 'label', { max: 4, trim: true })).not.toThrow()
     expect(() => requireString('x'.repeat(5), 'label', { max: 4 })).toThrow(/too long/)
+  })
+})
+
+describe('requireInteger', () => {
+  it('accepts inclusive bounds and preserves the numeric value', () => {
+    for (const value of [-10, -0, 0, 10, 2 ** 53]) {
+      expect(requireInteger(value, 'count', -10, 2 ** 53)).toBe(value)
+    }
+  })
+
+  it('rejects non-integers, non-numbers and out-of-range values without coercion', () => {
+    for (const value of [undefined, null, '2', true, 2n, {}, NaN, Infinity, -Infinity, 1.5, -11, 11]) {
+      expect(() => requireInteger(value, 'count', -10, 10)).toThrow(new TypeError('count must be an integer from -10 to 10'))
+    }
   })
 })
 

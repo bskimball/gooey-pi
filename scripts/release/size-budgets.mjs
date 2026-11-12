@@ -13,9 +13,9 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 601456 bytes with the explicit XState lifecycles for the agent runtime, terminal,
-  // shutdown, project removal and browser tab lifecycles (runtimeActivityMachine and friends).
-  mainBytes: 592 * KIB,
+  // Measured 678019 bytes with Effect Schema validation and shutdown-interruptible
+  // effective-config IPC alongside the existing XState lifecycle owners.
+  mainBytes: 664 * KIB,
   preloadBytes: 16 * KIB,
   initialRendererBytes: 1280 * KIB,
   largestRendererChunkBytes: 600 * KIB,

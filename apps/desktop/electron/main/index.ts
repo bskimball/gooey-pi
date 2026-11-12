@@ -1507,7 +1507,7 @@ app.on("before-quit", (event) => {
 
 	const registration = ipc;
 	ipc = null;
-	registration?.dispose();
+	const ipcShutdown = registration?.dispose();
 	backgroundMode?.dispose();
 	updateService?.dispose();
 	piAgents?.beginShutdown();
@@ -1515,7 +1515,7 @@ app.on("before-quit", (event) => {
 	beginPluginDiscoveryShutdown();
 	downloads?.cancelAll();
 	agentBrowser?.beginShutdown();
-	void settleShutdown([
+	void settleShutdown([ipcShutdown ?? Promise.resolve(),
 		...agentScheduleBridges.map((bridge) => bridge.stop()),
 		desktopLink?.stop() ?? Promise.resolve(),
 		agentBrowserBridge?.stop() ?? Promise.resolve(),
