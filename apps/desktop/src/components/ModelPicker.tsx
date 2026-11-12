@@ -1,11 +1,11 @@
 import { Brain, CaretDown, Check, MagnifyingGlass } from './icons'
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { PrimeModelDescriptor, PrimeProviderDescriptor } from '@/types/api'
+import type { ApexModelDescriptor, ApexProviderDescriptor } from '@/types/api'
 
 interface ModelPickerProps {
   value: string
-  modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>
-  providers: PrimeProviderDescriptor[]
+  modelsByProvider: ReadonlyMap<string, ApexModelDescriptor[]>
+  providers: ApexProviderDescriptor[]
   onChange(value: string): void
   label?: string
   disabled?: boolean
@@ -13,8 +13,8 @@ interface ModelPickerProps {
 }
 
 interface ModelGroup {
-  provider: PrimeProviderDescriptor
-  models: PrimeModelDescriptor[]
+  provider: ApexProviderDescriptor
+  models: ApexModelDescriptor[]
 }
 
 export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, providers, onChange, label = 'Model', disabled = false, unavailableLabel = 'No model available' }: ModelPickerProps) {
@@ -55,7 +55,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
     setOpen(false)
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
   }
-  const choose = (model: PrimeModelDescriptor | undefined) => {
+  const choose = (model: ApexModelDescriptor | undefined) => {
     if (disabled || !model?.available) return
     onChange(model.key)
     close(true)

@@ -51,7 +51,7 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
   }, [git.files, scope, selectedPath])
 
   useEffect(() => {
-    if (!cwd || !activeSelectedPath || !window.prime) {
+    if (!cwd || !activeSelectedPath || !window.apex) {
       setDiff(activeSelectedPath ? `diff --git a/${activeSelectedPath} b/${activeSelectedPath}
 --- a/${activeSelectedPath}
 +++ b/${activeSelectedPath}
@@ -65,19 +65,19 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
     }
     let cancelled = false
     setLoading(true)
-    window.prime.git.diff(cwd, activeSelectedPath, scope === 'staged').then((value) => { if (!cancelled) setDiff(value.text) }).catch(() => { if (!cancelled) setDiff('Unable to load this diff.') }).finally(() => { if (!cancelled) setLoading(false) })
+    window.apex.git.diff(cwd, activeSelectedPath, scope === 'staged').then((value) => { if (!cancelled) setDiff(value.text) }).catch(() => { if (!cancelled) setDiff('Unable to load this diff.') }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [cwd, activeSelectedPath, scope])
 
   const mutate = async (kind: 'stage' | 'unstage' | 'restore', paths: string[]): Promise<boolean> => {
-    if (readOnly || !cwd || !window.prime) return false
+    if (readOnly || !cwd || !window.apex) return false
     setActionError('')
     try {
       const ok = kind === 'stage'
-        ? await window.prime.git.stage(cwd, paths)
+        ? await window.apex.git.stage(cwd, paths)
         : kind === 'unstage'
-          ? await window.prime.git.unstage(cwd, paths)
-          : await window.prime.git.restore(cwd, paths)
+          ? await window.apex.git.unstage(cwd, paths)
+          : await window.apex.git.restore(cwd, paths)
       if (!ok) throw new Error(`Git could not ${kind} the selected ${paths.length === 1 ? 'file' : 'files'}.`)
       await onRefreshGit()
       return true
@@ -93,10 +93,10 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
   }
 
   const commit = async () => {
-    if (readOnly || !cwd || !commitMessage.trim() || !window.prime) return
+    if (readOnly || !cwd || !commitMessage.trim() || !window.apex) return
     setActionError('')
     try {
-      const result = await window.prime.git.commit(cwd, commitMessage.trim())
+      const result = await window.apex.git.commit(cwd, commitMessage.trim())
       if (!result.ok) throw new Error(result.output || 'Git could not create the commit.')
       setCommitOpen(false); setCommitMessage(''); await onRefreshGit()
     } catch (error) { setActionError(errorMessage(error)) }

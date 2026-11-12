@@ -159,7 +159,7 @@ function ingestMetadataLine(state: MetadataAccumulator, line: string): void {
 
 function metadataFromAccumulator(state: MetadataAccumulator, filePath: string, fallbackUpdated: string): SessionMetadata {
   const title = compactText(state.sessionName || state.firstUser, 100) || 'Untitled session'
-  // Prime verdicts describe exactly the message count they were generated from.
+  // Pi verdicts describe exactly the message count they were generated from.
   const taskState = typeof state.taskStateBasedOnMessageCount !== 'number' || state.taskStateBasedOnMessageCount === state.messageCount ? state.taskState : undefined
   return {
     id: state.id,
@@ -281,7 +281,7 @@ export type SessionMetadataReader = (filePath: string, knownStat?: Stats) => Pro
  * the new byte range plus the retained tail, which is verified byte-for-byte
  * before the parse resumes. Truncation, tail mismatch, or a same-size rewrite
  * fall back to a full re-read. `reservedHeaderBytes` excludes a fixed-width
- * mutable prefix (for example the OMP title slot) from the incremental parse:
+ * mutable prefix (for example a title slot) from the incremental parse:
  * the caller re-reads that prefix itself on every snapshot.
  */
 export function createIncrementalMetadataReader<Accumulator extends object>(
@@ -402,14 +402,14 @@ export function createIncrementalMetadataReader<Accumulator extends object>(
   }
 }
 
-const primeMetadataParser: MetadataLineParser<MetadataAccumulator> = {
+const apexMetadataParser: MetadataLineParser<MetadataAccumulator> = {
   createAccumulator,
   ingestLine: ingestMetadataLine,
   snapshot: metadataFromAccumulator,
 }
 
 export function createSessionMetadataReader(io: SessionMetadataReaderIo = nodeMetadataReaderIo): SessionMetadataReader {
-  return createIncrementalMetadataReader(primeMetadataParser, io)
+  return createIncrementalMetadataReader(apexMetadataParser, io)
 }
 
 export async function readSessionMetadata(filePath: string, knownStat?: Stats): Promise<SessionMetadata> {

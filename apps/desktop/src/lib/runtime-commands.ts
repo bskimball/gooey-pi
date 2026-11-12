@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { type BashCommand, parseSlashCommand } from '@/lib/composer-commands'
 import { hasPiExtensionCommand } from '@/lib/harness'
-import type { PrimeWorkApi, TranscriptMessage } from '@/types/api'
+import type { ApexApi, TranscriptMessage } from '@/types/api'
 
 /**
  * Runs a runtime extension command through `prompt`, which Pi executes
@@ -10,7 +10,7 @@ import type { PrimeWorkApi, TranscriptMessage } from '@/types/api'
  * Pi does not echo extension commands, so a sent command is shown as a user row.
  */
 export async function runExtensionCommandNow(
-  bridge: PrimeWorkApi,
+  bridge: ApexApi,
   runtimeId: string,
   prompt: string,
   ownsRuntime: () => boolean,
@@ -28,7 +28,7 @@ export async function runExtensionCommandNow(
 }
 
 interface BashRun {
-  bridge: PrimeWorkApi
+  bridge: ApexApi
   runtimeId: string
   bash: BashCommand
   setMessages: Dispatch<SetStateAction<TranscriptMessage[]>>

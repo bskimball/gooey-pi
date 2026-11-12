@@ -31,7 +31,7 @@ async function closeHermeticApp(target: ElectronApplication | undefined): Promis
   // Fixture agents may deliberately stay busy; release their cwd before
   // deleting the fixture on Windows, rather than leaving a quit dialog open.
   await target.windows()[0]?.evaluate(async () => {
-    if (window.prime) await Promise.all((await window.prime.agent.list()).map((runtime) => window.prime.agent.stop(runtime.runtimeId)))
+    if (window.apex) await Promise.all((await window.apex.agent.list()).map((runtime) => window.apex.agent.stop(runtime.runtimeId)))
   }).catch(() => undefined)
   const child = target.process()
   const closeEvent = target.waitForEvent('close', { timeout: 15_000 }).then(() => undefined, () => undefined)
@@ -80,7 +80,7 @@ function processIsAlive(pid: number): boolean {
 }
 
 function createHermeticFixture(): { userData: string; home: string; project: string; piExecutable: string; cuaExecutable: string; sessionFile: string } {
-  fixtureRoot = mkdtempSync(join(tmpdir(), 'prime-work-e2e-'))
+  fixtureRoot = mkdtempSync(join(tmpdir(), 'apex-e2e-'))
   const userData = join(fixtureRoot, 'user-data')
   const home = join(fixtureRoot, 'home')
   const project = join(fixtureRoot, 'project')
@@ -319,8 +319,8 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       { question: 'Which release channel?', options: ['Stable', 'Beta'] },
       { question: 'What should I optimize for?', options: ['Speed', 'Safety'] },
     ] } })
-    send({ type: 'extension_ui_request', id: 'fixture-question-1', method: 'select', title: 'Which release channel?', options: ['__prime_ask_user__fixture-group:0:2', 'Stable', 'Beta', 'Other (type your own answer)'] })
-    send({ type: 'extension_ui_request', id: 'fixture-question-2', method: 'select', title: 'What should I optimize for?', options: ['__prime_ask_user__fixture-group:1:2', 'Speed', 'Safety', 'Other (type your own answer)'] })
+    send({ type: 'extension_ui_request', id: 'fixture-question-1', method: 'select', title: 'Which release channel?', options: ['__apex_ask_user__fixture-group:0:2', 'Stable', 'Beta', 'Other (type your own answer)'] })
+    send({ type: 'extension_ui_request', id: 'fixture-question-2', method: 'select', title: 'What should I optimize for?', options: ['__apex_ask_user__fixture-group:1:2', 'Speed', 'Safety', 'Other (type your own answer)'] })
   } else if (command.type === 'extension_ui_response' && command.id === 'activity-confirm-1') {
     fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'activity-confirm-response.json'))}, JSON.stringify(command))
     const confirmedAt = new Date().toISOString()
@@ -404,7 +404,7 @@ function hermeticEnvironment(home: string, piExecutable: string, cuaExecutable: 
     LANG: 'C',
     LC_ALL: 'C',
     NO_COLOR: '1',
-    PRIME_WORK_E2E_HIDE_WINDOWS: '1',
+    APEX_E2E_HIDE_WINDOWS: '1',
     PI_BINARY: piExecutable,
     CUA_DRIVER_PATH: cuaExecutable,
   }
@@ -429,7 +429,7 @@ test.describe('Prime Work desktop smoke', () => {
       }
       try {
         const environment = hermeticEnvironment(fixture.home, fixture.piExecutable, fixture.cuaExecutable, noHarnesses)
-        if (testInfo.title === 'Command-Q backgrounds the window and menu-bar Open restores it') environment.PRIME_WORK_E2E_HIDE_WINDOWS = '0'
+        if (testInfo.title === 'Command-Q backgrounds the window and menu-bar Open restores it') environment.APEX_E2E_HIDE_WINDOWS = '0'
         app = await electron.launch({
           args: ['.', `--user-data-dir=${fixture.userData}`],
           cwd: process.cwd(),
@@ -562,7 +562,7 @@ test.describe('Prime Work desktop smoke', () => {
 
     const cwd = JSON.parse(readFileSync(fixtureSessionFile, 'utf8').split('\n')[0]).cwd as string
     writeFileSync(join(cwd, 'design.png'), readFileSync(imagePath))
-    await expect(page.evaluate(async ({ cwd, path }) => window.prime.app.readWorkspaceImage(cwd, path), { cwd, path: imagePath })).rejects.toThrow(/outside/)
+    await expect(page.evaluate(async ({ cwd, path }) => window.apex.app.readWorkspaceImage(cwd, path), { cwd, path: imagePath })).rejects.toThrow(/outside/)
     const imageData = readFileSync(imagePath).toString('base64')
     appendFileSync(fixtureSessionFile, [
       JSON.stringify({ type: 'message', id: 'visual-assistant', parentId: 'fixture-goal-summary', message: { role: 'assistant', content: [{ type: 'text', text: 'Design preview\n\n![Workspace design](design.png)' }, { type: 'toolCall', id: 'visual-capture', name: 'browser_screenshot' }] } }),
@@ -636,12 +636,12 @@ test.describe('Prime Work desktop smoke', () => {
     })
     expect(updateMenu.found).toBe(true)
     expect(updateMenu.parent).toBe(updateMenu.platform === 'darwin' ? 'Apex' : 'Help')
-    await expect(page.evaluate(() => window.prime.updates.getState())).resolves.toMatchObject({ phase: 'unsupported' })
-    const credentialStatus = await page.evaluate(() => window.prime.voice.credentialStatus())
+    await expect(page.evaluate(() => window.apex.updates.getState())).resolves.toMatchObject({ phase: 'unsupported' })
+    const credentialStatus = await page.evaluate(() => window.apex.voice.credentialStatus())
     expect(typeof credentialStatus.storage.available).toBe('boolean')
     if (!credentialStatus.storage.available) expect(credentialStatus.storage.message).toMatch(/secure|credential|keyring|kwallet/i)
     const invalidSelfHostedTest = await page.evaluate(async () => {
-      try { await window.prime.voice.testSelfHosted({ url: '', model: '' }); return '' }
+      try { await window.apex.voice.testSelfHosted({ url: '', model: '' }); return '' }
       catch (error) { return String(error) }
     })
     expect(invalidSelfHostedTest).toMatch(/too short|Invalid URL/)
@@ -651,7 +651,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.sidebar-update')).toHaveCount(0)
     await expect(page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ })).toBeVisible()
     await page.locator('.session-row-wrap', { hasText: 'Hermetic desktop fixture' }).click()
-    await expect.poll(async () => (await page.evaluate(() => window.prime.agent.list()))
+    await expect.poll(async () => (await page.evaluate(() => window.apex.agent.list()))
       .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
     expect(existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(false)
     await page.screenshot({ path: test.info().outputPath('sidebar-ready.png') })
@@ -848,14 +848,14 @@ test.describe('Prime Work desktop smoke', () => {
   test('persists a desktop-only Pi provider toggle and removes its models from the picker', async () => {
     await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    const voiceModelsBefore = await page.evaluate(async () => JSON.parse((await window.prime.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
+    const voiceModelsBefore = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModelsBefore.models.map((model) => model.name).sort()).toEqual(['Claude Fixture', 'GPT Fixture'])
     const anthropic = page.getByRole('checkbox', { name: 'Show anthropic provider' })
     await expect(anthropic).toBeChecked()
     await page.getByTitle('Hide provider in Pi').filter({ has: anthropic }).click()
     await expect(anthropic).not.toBeChecked()
     await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.piDisabledProviders).toEqual(['anthropic'])
-    const voiceModelsAfter = await page.evaluate(async () => JSON.parse((await window.prime.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
+    const voiceModelsAfter = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModelsAfter.models.map((model) => model.name)).toEqual(['GPT Fixture'])
 
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
@@ -891,7 +891,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(groups.nth(0)).toContainText('Claude Fixture')
     await expect(groups.nth(1)).toContainText('GPT Fixture')
 
-    const voiceModels = await page.evaluate(async () => JSON.parse((await window.prime.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
+    const voiceModels = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModels.models.map((model) => model.name)).toEqual(['Claude Fixture'])
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
     const modelPicker = page.locator('.model-picker')
@@ -922,7 +922,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(refresh).toBeEnabled()
     await expect(page.getByText('Pi is ready', { exact: true })).toBeVisible()
 
-    const result = await page.evaluate(() => window.prime.app.refreshHarnesses())
+    const result = await page.evaluate(() => window.apex.app.refreshHarnesses())
     expect(result.meta.harnesses.pi.path).toBeTruthy()
 
     expect(Object.keys(result.meta.harnesses)).toEqual(['pi'])
@@ -1038,12 +1038,12 @@ test.describe('Prime Work desktop smoke', () => {
 
     // Start a background runtime on primary.jsonl that asks a confirm question
     await page.evaluate(async ({ cwd, sessionPath }) => {
-      const runtime = await window.prime!.agent.start({
+      const runtime = await window.apex!.agent.start({
         cwd,
         sessionPath,
         harness: 'pi',
       })
-      await window.prime!.agent.command(runtime.runtimeId, {
+      await window.apex!.agent.command(runtime.runtimeId, {
         type: 'prompt',
         message: 'activity confirm question',
       })
@@ -1118,7 +1118,7 @@ test.describe('Prime Work desktop smoke', () => {
     await sessionRow.locator('.session-row').click()
     if (!(await page.locator('.inspector').isVisible())) await page.getByRole('button', { name: 'Toggle inspector' }).click()
     await page.getByRole('tab', { name: 'Browser' }).click()
-    const preview = page.locator('.browser-preview webview[partition="persist:prime-work-browser"]')
+    const preview = page.locator('.browser-preview webview[partition="persist:apex-browser"]')
     await expect(preview).toHaveCount(1)
     await expect.poll(() => preview.evaluate(async (node) => {
       const webview = node as HTMLElement & {
@@ -1169,7 +1169,7 @@ test.describe('Prime Work desktop smoke', () => {
       await page.screenshot({ path: test.info().outputPath('visual-workbench.png') })
       expect(await page.getByRole('button', { name: 'Expand inspector', exact: true }).evaluate((node) => node.getBoundingClientRect().right - window.innerWidth)).toBeLessThanOrEqual(1)
       await selection.locator('.browser-selection-card__target').click()
-      await expect.poll(() => preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<boolean> }).executeJavaScript('Boolean(document.getElementById("__primeWorkRevealOutline"))'))).toBe(true)
+      await expect.poll(() => preview.evaluate(async (node) => (node as HTMLElement & { executeJavaScript(script: string): Promise<boolean> }).executeJavaScript('Boolean(document.getElementById("__apexRevealOutline"))'))).toBe(true)
       await page.getByRole('button', { name: 'Remove annotation 1', exact: true }).click()
       await expect(selection).toHaveCount(0)
     } finally {
@@ -1238,12 +1238,12 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('enforces the live preload and IPC frame boundaries', async () => {
-    const initialMeta = await page.evaluate(() => window.prime.app.getMeta())
+    const initialMeta = await page.evaluate(() => window.apex.app.getMeta())
     expect(initialMeta.version).toBeTruthy()
 
     await page.evaluate(() => { window.location.hash = 'cfr-11-safe-fragment' })
     await expect(page).toHaveURL(/#cfr-11-safe-fragment$/)
-    const fragmentMeta = await page.evaluate(() => window.prime.app.getMeta())
+    const fragmentMeta = await page.evaluate(() => window.apex.app.getMeta())
     expect(fragmentMeta).toEqual(initialMeta)
 
     await page.evaluate(() => {
@@ -1266,7 +1266,7 @@ test.describe('Prime Work desktop smoke', () => {
     }, deniedUrl)
     await expect(page).toHaveURL(/^data:text\/html,/)
     const deniedAccess = await page.evaluate(async () => {
-      const prime = (window as Window & { prime?: typeof window.prime }).prime
+      const prime = (window as Window & { prime?: typeof window.apex }).prime
       if (!prime) return { bridge: 'undefined', result: 'unavailable' }
       try {
         await prime.app.getMeta()
@@ -1282,7 +1282,7 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('reflects an external JSONL append without reselecting the live session', async () => {
     await expect(page.locator('.transcript').getByText('Hermetic desktop fixture', { exact: true })).toBeVisible()
-    await expect.poll(async () => (await page.evaluate(() => window.prime.agent.list()))
+    await expect.poll(async () => (await page.evaluate(() => window.apex.agent.list()))
       .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
     await expect(page.locator('.context-usage-dial')).toHaveText('12')
     expect(existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(false)
@@ -1728,7 +1728,7 @@ test.describe('Prime Work desktop smoke', () => {
 
 
   test('round-trips a grouped Pi ask_user questionnaire', async () => {
-    await page.evaluate(() => window.prime.settings.update({ askUserEnabled: true }))
+    await page.evaluate(() => window.apex.settings.update({ askUserEnabled: true }))
     const composer = page.getByRole('combobox', { name: 'Message Pi' })
     await composer.fill('Ask me two questions')
     await composer.press('Enter')
@@ -1777,7 +1777,7 @@ test.describe('Prime Work desktop smoke', () => {
       message: 'Ask me two questions',
     })
     const runtimeArgs = JSON.parse(readFileSync(join(fixtureRoot, 'pi-runtime-args.json'), 'utf8')) as string[]
-    expect(runtimeArgs).toContain(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', 'omp-work-ask-user.ts'))
+    expect(runtimeArgs).toContain(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', 'apex-ask-user.ts'))
     const worked = page.locator('.work-disclosure__button')
     await expect(worked).toContainText(/^Worked for /)
     await expect(worked).toHaveAttribute('aria-expanded', 'false')
@@ -1815,7 +1815,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.toast')).toContainText(/shell is not executable/i)
     await expect(shell).toHaveValue(rejectedDraft)
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
-    await expect.poll(() => page.evaluate(() => window.prime.settings.get().then((settings) => settings.terminalShell))).toBe('/bin/sh')
+    await expect.poll(() => page.evaluate(() => window.apex.settings.get().then((settings) => settings.terminalShell))).toBe('/bin/sh')
 
     await page.getByRole('button', { name: 'General', exact: true }).click()
     await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
@@ -1832,7 +1832,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(sidebarScrim).toBeVisible()
     await sidebarScrim.click({ position: { x: 400, y: 300 } })
     await expect(page.locator('.sidebar')).toHaveCount(0)
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).sidebarOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).sidebarOpen)).toBe(false)
     // Panel reconciliation may restore a confirmed inspector preference after
     // the sidebar closes. Normalize either valid state before testing the toggle.
     await page.waitForTimeout(250)
@@ -1913,20 +1913,20 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.sidebar')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Show sidebar/ })).toBeVisible()
     await expect(page.locator('.workbench')).not.toHaveAttribute('inert')
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).sidebarOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).sidebarOpen)).toBe(false)
 
     await page.getByRole('button', { name: /Show sidebar/ }).click()
     await expect(page.locator('.sidebar')).toBeVisible()
     await page.locator('.sidebar').getByRole('button', { name: /Hide sidebar/ }).click()
     await expect(page.locator('.sidebar')).toHaveCount(0)
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).sidebarOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).sidebarOpen)).toBe(false)
 
     await page.setViewportSize({ width: 721, height: 700 })
     await page.getByRole('button', { name: /Show sidebar/ }).click()
     await expect(page.locator('.sidebar')).toBeVisible()
     await page.setViewportSize({ width: 720, height: 700 })
     await expect(page.locator('.sidebar')).toHaveCount(0)
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).sidebarOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).sidebarOpen)).toBe(false)
 
     const inspectorToggle = page.getByRole('button', { name: 'Toggle inspector' })
     await inspectorToggle.click()
@@ -1934,24 +1934,24 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeHidden()
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).inspectorOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).inspectorOpen)).toBe(false)
 
     await page.setViewportSize({ width: 721, height: 700 })
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeVisible()
     await page.setViewportSize({ width: 720, height: 700 })
     await expect(page.locator('.inspector')).toBeHidden()
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).inspectorOpen)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).inspectorOpen)).toBe(false)
   })
 
   test('attaches an isolated browser guest without navigation errors', async () => {
     await page.getByRole('button', { name: /^New session/ }).first().click()
     await page.getByRole('tab', { name: 'Browser' }).click()
-    const guest = page.locator('webview[partition="persist:prime-work-browser"]')
+    const guest = page.locator('webview[partition="persist:apex-browser"]')
     await expect(guest).toHaveCount(1)
     await expect.poll(() => guest.evaluate(async (node) => {
       const webview = node as HTMLElement & { executeJavaScript(script: string): Promise<unknown> }
-      return webview.executeJavaScript('typeof window.prime')
+      return webview.executeJavaScript('typeof window.apex')
     })).toBe('undefined')
     await page.waitForTimeout(2_500)
     expect(actionableErrors.filter((error) => /ERR_ABORTED|GUEST_VIEW_MANAGER_CALL/i.test(error))).toEqual([])
@@ -1989,7 +1989,7 @@ test.describe('Prime Work desktop smoke', () => {
     await popupToggle.focus()
     await popupToggle.press('Space')
     await expect(popupToggle).not.toBeChecked()
-    await expect.poll(() => page.evaluate(async () => (await window.prime.settings.get()).showFileChangesPopup)).toBe(false)
+    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).showFileChangesPopup)).toBe(false)
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
     await expect(page.locator('.changes-card')).toHaveCount(0)
 
@@ -2082,7 +2082,7 @@ test.describe('Prime Work desktop smoke', () => {
     await primaryInput.click()
     await page.keyboard.type('pwd')
     await page.keyboard.press('Enter')
-    await expect(primaryDrawer.locator('.xterm-rows')).toContainText(/prime-work-e2e-[^/]+\/project/, { timeout: 8_000 })
+    await expect(primaryDrawer.locator('.xterm-rows')).toContainText(/apex-e2e-[^/]+\/project/, { timeout: 8_000 })
     await expect(primaryDrawer.locator('.xterm-rows')).not.toContainText('secondary-session-state')
 
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
@@ -2090,7 +2090,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Ownership peer fixture' }).locator('.session-row').click()
     await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText('secondary-session-state')
     await page.locator('.session-row').filter({ hasText: 'Primary workspace fixture' }).click()
-    await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText(/prime-work-e2e-[^/]+\/project/)
+    await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText(/apex-e2e-[^/]+\/project/)
     await page.locator('.terminal-drawer:not([hidden])').getByLabel('Close terminal', { exact: true }).click()
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
     await page.locator('.terminal-drawer:not([hidden])').getByLabel('Close terminal', { exact: true }).click()
@@ -2098,10 +2098,10 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('opens independent terminal tabs inside the conversation column', async () => {
     const project = await page.evaluate(async () => {
-      const projects = await window.prime.projects.list()
+      const projects = await window.apex.projects.list()
       const selected = projects[0]
       if (!selected) return null
-      return selected.inferred ? window.prime.projects.grantInferred(selected.primaryFolder) : selected
+      return selected.inferred ? window.apex.projects.grantInferred(selected.primaryFolder) : selected
     })
     expect(project).not.toBeNull()
     await page.getByRole('tab', { name: 'Summary' }).click()
@@ -2239,7 +2239,7 @@ test.describe('Prime Work desktop smoke', () => {
         return originalBuildFromTemplate(template)
       }) as typeof Menu.buildFromTemplate
     })
-    await page.evaluate(() => window.prime.settings.update({ keepRunningInBackground: true }))
+    await page.evaluate(() => window.apex.settings.update({ keepRunningInBackground: true }))
     await expect.poll(() => app!.evaluate(() => typeof (globalThis as { __trayOpen?: unknown }).__trayOpen)).toBe('function')
     await expect.poll(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible())).toBe(true)
 
@@ -2279,7 +2279,7 @@ test.describe('Prime Work desktop smoke', () => {
         return originalBuildFromTemplate(template)
       }) as typeof Menu.buildFromTemplate
     }, trayBuildsPath)
-    await page.evaluate(() => window.prime.settings.update({ keepRunningInBackground: true }))
+    await page.evaluate(() => window.apex.settings.update({ keepRunningInBackground: true }))
     await expect.poll(() => existsSync(trayBuildsPath) ? readFileSync(trayBuildsPath, 'utf8').trim().split('\n').length : 0).toBe(1)
 
     const closed = app!.waitForEvent('close', { timeout: 45_000 })
@@ -2336,7 +2336,7 @@ test.describe('Prime Work desktop smoke', () => {
         return originalBuildFromTemplate(template)
       }) as typeof Menu.buildFromTemplate
     })
-    await page.evaluate(() => window.prime.settings.update({ keepRunningInBackground: true }))
+    await page.evaluate(() => window.apex.settings.update({ keepRunningInBackground: true }))
     await expect.poll(() => app!.evaluate(() => typeof (globalThis as { __trayQuit?: unknown }).__trayQuit)).toBe('function')
 
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()

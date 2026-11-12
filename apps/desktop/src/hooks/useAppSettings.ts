@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS } from '@/lib/data'
 import { PANEL_SETTING_KEYS, type PanelSettingKey } from '@/lib/settings-state'
-import type { AppSettings, InspectorTab, PrimeWorkApi } from '@/types/api'
+import type { AppSettings, InspectorTab, ApexApi } from '@/types/api'
 
 interface UseAppSettingsOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   reportError(error: unknown): void
 }
 

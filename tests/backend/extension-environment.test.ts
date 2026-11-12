@@ -23,40 +23,40 @@ import { extensionRuntimeEnvironment, type CapabilityExtensionPaths } from '../.
 import { PI_RPC_ADAPTER } from '../../apps/desktop/electron/main/agent-rpc'
 
 const extensionPaths: CapabilityExtensionPaths = {
-  schedule: '/app/extensions/omp-work-schedules.ts',
-  browser: '/app/extensions/omp-work-browser.ts',
-  askUser: '/app/extensions/omp-work-ask-user.ts',
+  schedule: '/app/extensions/apex-schedules.ts',
+  browser: '/app/extensions/apex-browser.ts',
+  askUser: '/app/extensions/apex-ask-user.ts',
 }
 
 /** What the schedule and browser bridges hand every runtime of the harness. */
 const scheduleBridgeEnvironment = {
-  PRIME_WORK_SCHEDULE_URL: 'http://127.0.0.1:45001',
-  PRIME_WORK_SCHEDULE_TOKEN: 'schedule-token',
-  PRIME_WORK_SCHEDULE_SKILL_PATH: '/app/skills/prime-work-schedules',
+  APEX_SCHEDULE_URL: 'http://127.0.0.1:45001',
+  APEX_SCHEDULE_TOKEN: 'schedule-token',
+  APEX_SCHEDULE_SKILL_PATH: '/app/skills/apex-schedules',
 }
 const browserBridgeEnvironment = {
-  PRIME_WORK_BROWSER_URL: 'http://127.0.0.1:45002',
-  PRIME_WORK_BROWSER_TOKEN: 'browser-token',
-  PRIME_WORK_BROWSER_EXTENSION_PATH: '/app/extensions/prime-work-browser.ts',
-  PRIME_WORK_BROWSER_SKILL_PATH: '/app/skills/prime-work-browser',
+  APEX_BROWSER_URL: 'http://127.0.0.1:45002',
+  APEX_BROWSER_TOKEN: 'browser-token',
+  APEX_BROWSER_EXTENSION_PATH: '/app/extensions/apex-browser.ts',
+  APEX_BROWSER_SKILL_PATH: '/app/skills/apex-browser',
 }
 
 describe('Pi capability extension environment', () => {
   it('populates the three shared extension paths and strips the Prime-only skill paths', () => {
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths)
 
-    expect(environment.PRIME_WORK_SCHEDULE_EXTENSION_PATH).toBe('/app/extensions/omp-work-schedules.ts')
-    expect(environment.PRIME_WORK_BROWSER_EXTENSION_PATH).toBe('/app/extensions/omp-work-browser.ts')
-    expect(environment.PRIME_WORK_ASK_USER_EXTENSION_PATH).toBe('/app/extensions/omp-work-ask-user.ts')
+    expect(environment.APEX_SCHEDULE_EXTENSION_PATH).toBe('/app/extensions/apex-schedules.ts')
+    expect(environment.APEX_BROWSER_EXTENSION_PATH).toBe('/app/extensions/apex-browser.ts')
+    expect(environment.APEX_ASK_USER_EXTENSION_PATH).toBe('/app/extensions/apex-ask-user.ts')
     expect(environment.GOOEYPI_MANAGES_ASK_USER).toBe('1')
     // The Prime-only --skill inputs never reach an extension-based harness.
-    expect(environment.PRIME_WORK_SCHEDULE_SKILL_PATH).toBeUndefined()
-    expect(environment.PRIME_WORK_BROWSER_SKILL_PATH).toBeUndefined()
+    expect(environment.APEX_SCHEDULE_SKILL_PATH).toBeUndefined()
+    expect(environment.APEX_BROWSER_SKILL_PATH).toBeUndefined()
     // The loopback-broker contract from both bridges is preserved untouched.
-    expect(environment.PRIME_WORK_SCHEDULE_URL).toBe('http://127.0.0.1:45001')
-    expect(environment.PRIME_WORK_SCHEDULE_TOKEN).toBe('schedule-token')
-    expect(environment.PRIME_WORK_BROWSER_URL).toBe('http://127.0.0.1:45002')
-    expect(environment.PRIME_WORK_BROWSER_TOKEN).toBe('browser-token')
+    expect(environment.APEX_SCHEDULE_URL).toBe('http://127.0.0.1:45001')
+    expect(environment.APEX_SCHEDULE_TOKEN).toBe('schedule-token')
+    expect(environment.APEX_BROWSER_URL).toBe('http://127.0.0.1:45002')
+    expect(environment.APEX_BROWSER_TOKEN).toBe('browser-token')
   })
 
   it.each([
@@ -70,9 +70,9 @@ describe('Pi capability extension environment', () => {
       if (args[index] === '--extension') injected.push(args[index + 1])
     }
     expect(injected).toEqual([
-      '/app/extensions/omp-work-schedules.ts',
-      '/app/extensions/omp-work-browser.ts',
-      '/app/extensions/omp-work-ask-user.ts',
+      '/app/extensions/apex-schedules.ts',
+      '/app/extensions/apex-browser.ts',
+      '/app/extensions/apex-ask-user.ts',
     ])
     // Neither extension-based harness receives Prime's --skill injections.
     expect(args).not.toContain('--skill')
@@ -90,7 +90,7 @@ describe('Pi capability extension environment', () => {
   it('keeps standalone copies suppressed while omitting the bundled tool when disabled', () => {
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, () => browserBridgeEnvironment, extensionPaths, false)
     expect(environment.GOOEYPI_MANAGES_ASK_USER).toBe('1')
-    expect(environment.PRIME_WORK_ASK_USER_EXTENSION_PATH).toBeUndefined()
+    expect(environment.APEX_ASK_USER_EXTENSION_PATH).toBeUndefined()
     for (const adapter of [PI_RPC_ADAPTER]) {
       expect(adapter.buildStartArgs({ cwd: '/work', environment })).not.toContain(extensionPaths.askUser)
     }
@@ -102,17 +102,17 @@ describe('Pi capability extension environment', () => {
     const mintBrowserClaim = vi.fn(() => browserBridgeEnvironment)
     const environment = extensionRuntimeEnvironment(scheduleBridgeEnvironment, mintBrowserClaim, extensionPaths, true, false)
     expect(mintBrowserClaim).not.toHaveBeenCalled()
-    expect(environment.PRIME_WORK_BROWSER_EXTENSION_PATH).toBeUndefined()
-    expect(environment.PRIME_WORK_BROWSER_URL).toBeUndefined()
-    expect(environment.PRIME_WORK_BROWSER_TOKEN).toBeUndefined()
+    expect(environment.APEX_BROWSER_EXTENSION_PATH).toBeUndefined()
+    expect(environment.APEX_BROWSER_URL).toBeUndefined()
+    expect(environment.APEX_BROWSER_TOKEN).toBeUndefined()
     expect(adapter.buildStartArgs({ cwd: '/work', environment })).not.toContain(extensionPaths.browser)
   })
 
   it.each([
     ['pi', PI_RPC_ADAPTER],
   ] as const)('injects session collaboration into %s without accepting an unsafe path', (_harness, adapter) => {
-    const args = adapter.buildStartArgs({ cwd: '/work', environment: { GOOEYPI_COLLABORATION_EXTENSION_PATH: '/app/extensions/omp-work-collaboration.ts' } })
-    expect(args.slice(-2)).toEqual(['--extension', '/app/extensions/omp-work-collaboration.ts'])
+    const args = adapter.buildStartArgs({ cwd: '/work', environment: { GOOEYPI_COLLABORATION_EXTENSION_PATH: '/app/extensions/apex-collaboration.ts' } })
+    expect(args.slice(-2)).toEqual(['--extension', '/app/extensions/apex-collaboration.ts'])
     const unsafe = adapter.buildStartArgs({ cwd: '/work', environment: { GOOEYPI_COLLABORATION_EXTENSION_PATH: '--session-injection' } })
     expect(unsafe).not.toContain('--session-injection')
   })

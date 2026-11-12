@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applySessionLifecycleEvent, sessionLifecycleChange } from '../../apps/desktop/src/app/session-attention'
-import { applyPrimeEvent, replayPrimeEvents } from '../../apps/desktop/src/lib/events'
+import { applyApexEvent, replayApexEvents } from '../../apps/desktop/src/lib/events'
 import type { SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const session = (): SessionRecord => ({
@@ -50,18 +50,18 @@ describe('provider auto-retry session lifecycle', () => {
 
 describe('provider auto-retry transcript continuity', () => {
   it('reopens the finalized tail assistant and removes the empty-turn fallback', () => {
-    const afterEnd = applyPrimeEvent(streamingAssistant(), { type: 'agent_end' })
+    const afterEnd = applyApexEvent(streamingAssistant(), { type: 'agent_end' })
     expect(afterEnd[0]).toMatchObject({ streaming: false, parts: [{ type: 'text', text: 'Completed without a text response.' }] })
 
-    const retrying = applyPrimeEvent(afterEnd, { type: 'auto_retry_start', attempt: 1, delayMs: 1000 })
+    const retrying = applyApexEvent(afterEnd, { type: 'auto_retry_start', attempt: 1, delayMs: 1000 })
     expect(retrying[0].streaming).toBe(true)
     expect(retrying[0].completedAt).toBeUndefined()
     expect(retrying[0].parts).toEqual([])
   })
 
   it('keeps real content from the failed attempt when reopening', () => {
-    const afterEnd = applyPrimeEvent(streamingAssistant('partial answer'), { type: 'agent_end' })
-    const retrying = applyPrimeEvent(afterEnd, { type: 'auto_retry_start', attempt: 1 })
+    const afterEnd = applyApexEvent(streamingAssistant('partial answer'), { type: 'agent_end' })
+    const retrying = applyApexEvent(afterEnd, { type: 'auto_retry_start', attempt: 1 })
     expect(retrying[0].streaming).toBe(true)
     expect(retrying[0].parts).toEqual([{ type: 'text', text: 'partial answer' }])
   })
@@ -74,8 +74,8 @@ describe('provider auto-retry transcript continuity', () => {
       delta('recovered'),
       { type: 'agent_end' },
     ]
-    const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), streamingAssistant())
-    const batched = replayPrimeEvents(streamingAssistant(), events)
+    const sequential = events.reduce((current, event) => applyApexEvent(current, event), streamingAssistant())
+    const batched = replayApexEvents(streamingAssistant(), events)
     for (const result of [sequential, batched]) {
       expect(result).toHaveLength(1)
       expect(result[0]).toMatchObject({ streaming: false, parts: [{ type: 'text', text: 'recovered' }] })
@@ -87,7 +87,7 @@ describe('provider auto-retry transcript continuity', () => {
       { type: 'agent_end' },
       { type: 'auto_retry_end', success: false, attempt: 3, finalError: 'overloaded' },
     ]
-    const result = replayPrimeEvents(streamingAssistant('partial answer'), events)
+    const result = replayApexEvents(streamingAssistant('partial answer'), events)
     expect(result[0]).toMatchObject({ streaming: false })
   })
 })
@@ -96,7 +96,7 @@ describe('assistant provider error visibility', () => {
   const failure = { type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: '429 ResourceExhausted', content: [] } }
   it.each([undefined, 'Partial response'])('shows a non-retried error without success fallback %s', (text) => {
     const events = [failure, { type: 'agent_end' }]
-    for (const result of [replayPrimeEvents(streamingAssistant(text), events), events.reduce((messages, event) => applyPrimeEvent(messages, event), streamingAssistant(text))]) {
+    for (const result of [replayApexEvents(streamingAssistant(text), events), events.reduce((messages, event) => applyApexEvent(messages, event), streamingAssistant(text))]) {
       expect(result).toHaveLength(1)
       expect(result[0]).toMatchObject({ streaming: false, errorMessage: '429 ResourceExhausted' })
       expect(result[0].parts).toEqual(text ? [{ type: 'text', text }] : [])
@@ -104,16 +104,16 @@ describe('assistant provider error visibility', () => {
   })
   it('keeps one final reason on exhausted retries with sequential/batched parity', () => {
     const events = [failure, { type: 'agent_end' }, { type: 'auto_retry_start' }, { type: 'agent_end' }, { type: 'auto_retry_end', success: false, finalError: 'Final provider reason' }]
-    for (const result of [replayPrimeEvents(streamingAssistant(), events), events.reduce((messages, event) => applyPrimeEvent(messages, event), streamingAssistant())]) {
+    for (const result of [replayApexEvents(streamingAssistant(), events), events.reduce((messages, event) => applyApexEvent(messages, event), streamingAssistant())]) {
       expect(result).toHaveLength(1)
       expect(result[0]).toMatchObject({ streaming: false, errorMessage: 'Final provider reason', parts: [] })
     }
   })
   it('clears stale failures on retry and successful recovery', () => {
-    const failed = replayPrimeEvents(streamingAssistant(), [failure, { type: 'agent_end' }])
-    const retrying = applyPrimeEvent(failed, { type: 'auto_retry_start' })
+    const failed = replayApexEvents(streamingAssistant(), [failure, { type: 'agent_end' }])
+    const retrying = applyApexEvent(failed, { type: 'auto_retry_start' })
     expect(retrying[0].errorMessage).toBeUndefined()
-    const result = replayPrimeEvents(retrying, [delta('Recovered'), { type: 'message_end', message: { role: 'assistant', stopReason: 'stop' } }, { type: 'auto_retry_end', success: true }, { type: 'agent_end' }])
+    const result = replayApexEvents(retrying, [delta('Recovered'), { type: 'message_end', message: { role: 'assistant', stopReason: 'stop' } }, { type: 'auto_retry_end', success: true }, { type: 'agent_end' }])
     expect(result[0]).toMatchObject({ streaming: false, parts: [{ type: 'text', text: 'Recovered' }] })
     expect(result[0].errorMessage).toBeUndefined()
   })

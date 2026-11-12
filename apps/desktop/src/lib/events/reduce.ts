@@ -4,7 +4,7 @@ import { nextTranscriptId, withPartId } from './ids'
 import { fallbackModelFromRecord, fallbackNoticeText } from './model-fallback'
 import { agentMessagePart, record, resultDetails, resultImages, resultText, string } from './parse'
 
-export interface PrimeEventReplayStats {
+export interface ApexEventReplayStats {
   messageScans: number
   eventScans: number
   partScans: number
@@ -49,10 +49,10 @@ export function createSteerPickupEvent(prompts: QueuedPrompt[]): Record<string, 
   return { type: 'gooeypi_steer_pickup', prompts, [LOCAL_STEER_PICKUP]: true }
 }
 
-export function replayPrimeEvents(
+export function replayApexEvents(
   messages: TranscriptMessage[],
   events: Record<string, unknown>[],
-  stats?: PrimeEventReplayStats,
+  stats?: ApexEventReplayStats,
 ): TranscriptMessage[] {
   if (!events.length) return messages
   let base = messages
@@ -430,18 +430,18 @@ export function replayPrimeEvents(
   return next
 }
 
-export interface PrimeEventBuffer {
+export interface ApexEventBuffer {
   readonly size: number
   push(event: Record<string, unknown>): void
   replay(messages: TranscriptMessage[]): TranscriptMessage[]
 }
 
-export function createPrimeEventBuffer(): PrimeEventBuffer {
+export function createApexEventBuffer(): ApexEventBuffer {
   const events: Record<string, unknown>[] = []
   return {
     get size() { return events.length },
     push(event) { events.push(event) },
-    replay(messages) { return replayPrimeEvents(messages, events) },
+    replay(messages) { return replayApexEvents(messages, events) },
   }
 }
 
@@ -449,6 +449,6 @@ export function createPrimeEventBuffer(): PrimeEventBuffer {
  * Sequential application is a batch of one: there is exactly one reducer, so
  * single-event and batched replay cannot diverge for any event type.
  */
-export function applyPrimeEvent(messages: TranscriptMessage[], raw: Record<string, unknown>): TranscriptMessage[] {
-  return replayPrimeEvents(messages, [raw])
+export function applyApexEvent(messages: TranscriptMessage[], raw: Record<string, unknown>): TranscriptMessage[] {
+  return replayApexEvents(messages, [raw])
 }

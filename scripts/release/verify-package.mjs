@@ -121,7 +121,7 @@ function assertArtifactSizeBudgets(payload, artifacts) {
 
 async function verifyZip(zip, options, artifacts) {
   run('unzip', ['-t', zip])
-  const extractionDirectory = mkdtempSync(join(tmpdir(), 'prime-work-zip-'))
+  const extractionDirectory = mkdtempSync(join(tmpdir(), 'apex-zip-'))
   try {
     run('ditto', ['-x', '-k', zip, extractionDirectory])
     const payload = await verifyApp({ ...options, app: findSingleApp(extractionDirectory, basename(zip)), artifact: zip })
@@ -133,7 +133,7 @@ async function verifyZip(zip, options, artifacts) {
 
 async function verifyDmg(dmg, options, artifacts) {
   run('hdiutil', ['verify', dmg])
-  const mountPoint = mkdtempSync(join(tmpdir(), 'prime-work-dmg-'))
+  const mountPoint = mkdtempSync(join(tmpdir(), 'apex-dmg-'))
   let mounted = false
   try {
     run('hdiutil', ['attach', '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', mountPoint, dmg])

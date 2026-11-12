@@ -1,7 +1,7 @@
 import { ArrowsClockwise, PawPrint, Sparkle } from '@/components/icons'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { PetAvatar } from '@/components/PetAvatar'
-import type { PetDefinition, PrimeWorkApi } from '@/types/api'
+import type { PetDefinition, ApexApi } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
 import { SettingsToggle } from './SettingsToggle'
 
@@ -10,7 +10,7 @@ const BUILT_INS: PetDefinition[] = [
   { id: 'gooey-pi', petId: 'gooey-pi', displayName: 'Apex', description: 'A friendly purple jelly pet shaped like the mathematical pi symbol.', source: 'built-in', kind: 'spritesheet' },
 ]
 
-export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps & { pets: PrimeWorkApi['pets'] | null }) {
+export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps & { pets: ApexApi['pets'] | null }) {
   const [available, setAvailable] = useState<PetDefinition[]>(BUILT_INS)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')

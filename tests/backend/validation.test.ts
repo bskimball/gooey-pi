@@ -95,7 +95,7 @@ describe('requireGitPath', () => {
 
 describe('requireExistingPath', () => {
   it('resolves symlinks to their real path', async () => {
-    const dir = temp('prime-work-validation-')
+    const dir = temp('apex-validation-')
     const targetDirectory = join(dir, 'target')
     mkdirSync(targetDirectory)
     const target = join(targetDirectory, 'target.txt')
@@ -109,7 +109,7 @@ describe('requireExistingPath', () => {
   })
 
   it('collapses dot-dot traversal through realpath resolution', async () => {
-    const dir = temp('prime-work-validation-')
+    const dir = temp('apex-validation-')
     mkdirSync(join(dir, 'nested'))
     writeFileSync(join(dir, 'file.txt'), 'data')
     const resolved = await requireExistingPath(join(dir, 'nested', '..', 'file.txt'))
@@ -117,7 +117,7 @@ describe('requireExistingPath', () => {
   })
 
   it('rejects relative, missing, and malformed paths', async () => {
-    const dir = temp('prime-work-validation-')
+    const dir = temp('apex-validation-')
     await expect(requireExistingPath('relative/path')).rejects.toThrow(/absolute/)
     await expect(requireExistingPath(join(dir, 'missing.txt'))).rejects.toThrow()
     await expect(requireExistingPath(`${dir}\0`)).rejects.toThrow(/NUL/)
@@ -150,8 +150,8 @@ describe('isPathWithin', () => {
     // Pins current behavior: a symlink inside the root that points outside
     // still counts as "within"; callers needing physical containment must
     // realpath first (as requireExistingPath does).
-    const dir = temp('prime-work-validation-')
-    const outside = temp('prime-work-validation-outside-')
+    const dir = temp('apex-validation-')
+    const outside = temp('apex-validation-outside-')
     const link = join(dir, 'escape')
     symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
     expect(isPathWithin(dir, link)).toBe(true)

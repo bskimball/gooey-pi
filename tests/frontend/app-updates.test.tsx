@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppUpdates } from '../../apps/desktop/src/hooks/useAppUpdates'
-import type { AppUpdateState, PrimeWorkApi } from '../../apps/desktop/src/types/api'
+import type { AppUpdateState, ApexApi } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -25,7 +25,7 @@ afterEach(async () => {
 
 const reportError = vi.fn()
 
-function Probe({ bridge, onAct, onCheck }: { bridge: PrimeWorkApi; onAct(act: () => Promise<void>): void; onCheck?(check: () => Promise<void>): void }) {
+function Probe({ bridge, onAct, onCheck }: { bridge: ApexApi; onAct(act: () => Promise<void>): void; onCheck?(check: () => Promise<void>): void }) {
   const updates = useAppUpdates(bridge, reportError)
   onAct(updates.act)
   onCheck?.(updates.check)
@@ -41,7 +41,7 @@ describe('useAppUpdates', () => {
         downloadAndInstall: vi.fn(async () => true),
         onChanged: () => () => undefined,
       },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     let check!: () => Promise<void>
     await act(async () => { root.render(<Probe bridge={bridge} onAct={() => undefined} onCheck={(next) => { check = next }} />) })
     await act(async () => { await check() })
@@ -57,7 +57,7 @@ describe('useAppUpdates', () => {
         check: vi.fn(async () => { throw failure }),
         onChanged: () => () => undefined,
       },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     let check!: () => Promise<void>
     await act(async () => { root.render(<Probe bridge={bridge} onAct={() => undefined} onCheck={(next) => { check = next }} />) })
     await act(async () => { await expect(check()).resolves.toBeUndefined() })
@@ -74,7 +74,7 @@ describe('useAppUpdates', () => {
         downloadAndInstall: vi.fn(async () => true),
         onChanged: (callback: (state: AppUpdateState) => void) => { push = callback; return () => undefined },
       },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     let action!: () => Promise<void>
 
     await act(async () => { root.render(<Probe bridge={bridge} onAct={(next) => { action = next }} />) })

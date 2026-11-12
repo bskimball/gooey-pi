@@ -5,7 +5,7 @@ import {
   type AppSettings,
   type AutomationScheduleRecord,
   INTERFACE_FONT_SCALES,
-  PRIME_THINKING_LEVELS,
+  APEX_THINKING_LEVELS,
   PROJECT_SORT_MODES,
   type ProjectRecord,
   type ProjectScripts,
@@ -342,7 +342,7 @@ function parseDisabledModels(value: unknown, fallback: string[]): string[] {
   return [...new Set(value.filter(isModelKey))].slice(0, 5_000)
 }
 
-const THINKING_LEVELS: ReadonlySet<string> = new Set(['auto', ...PRIME_THINKING_LEVELS])
+const THINKING_LEVELS: ReadonlySet<string> = new Set(['auto', ...APEX_THINKING_LEVELS])
 const RUN_STATUSES = new Set(['queued', 'running', 'succeeded', 'failed', 'skipped', 'interrupted', 'cancelled'])
 const SCHEDULE_STATUSES = new Set(['active', 'paused', 'completed', 'blocked'])
 

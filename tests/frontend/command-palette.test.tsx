@@ -182,7 +182,7 @@ describe('command palette file results', () => {
   it('selects file results that arrive after the query and opens them by absolute path', async () => {
     let resolveListing: (value: { entries: Array<{ path: string; type: 'file' | 'directory' }>; skipped: number }) => void = () => undefined
     const listFiles = vi.fn(() => new Promise<{ entries: Array<{ path: string; type: 'file' | 'directory' }>; skipped: number }>((resolve) => { resolveListing = resolve }))
-    Object.defineProperty(window, 'prime', { configurable: true, value: { projects: { listFiles } } })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { projects: { listFiles } } })
     const onOpenFile = vi.fn()
     const project = { ...SAMPLE_PROJECTS[0], id: 'files-project', primaryFolder: '/work/files-project', path: '/work/files-project' }
     const noop = () => undefined
@@ -208,7 +208,7 @@ describe('command palette file results', () => {
       })
       expect(onOpenFile).toHaveBeenCalledWith('/work/files-project/src/zebra-stripes.ts')
     } finally {
-      Reflect.deleteProperty(window, 'prime')
+      Reflect.deleteProperty(window, 'apex')
     }
   })
 })

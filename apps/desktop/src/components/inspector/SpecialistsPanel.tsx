@@ -86,7 +86,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   }, [active, homeDir])
 
   useEffect(() => {
-    if (!active || !candidateSessionPath || typeof window === 'undefined' || !window.prime?.sessions?.read) {
+    if (!active || !candidateSessionPath || typeof window === 'undefined' || !window.apex?.sessions?.read) {
       setDiskTranscript(null)
       return
     }
@@ -101,7 +101,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
         : null,
     )
     const load = () => {
-      void window.prime.sessions.read(targetPath).then((loaded) => {
+      void window.apex.sessions.read(targetPath).then((loaded) => {
         if (cancelled) return
         if (Array.isArray(loaded) && loaded.length > 0) {
           setDiskTranscript({ sessionKey: targetSessionKey, specId: targetId, path: targetPath, status: targetStatus, messages: loaded })

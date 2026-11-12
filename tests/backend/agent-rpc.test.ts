@@ -32,7 +32,7 @@ afterEach(async () => {
 
 describe('agent RPC exit details', () => {
   const writeExitingAgent = (body: string): { cwd: string; executable: string } => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-exit-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-exit-'))
     dirs.push(cwd)
     const executable = join(cwd, 'exit-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -43,7 +43,7 @@ ${body}
   }
 
   it('includes a sanitized stderr tail when the agent exits before any frame', async () => {
-    const fake = writeExitingAgent(`process.stderr.write('Error: Tool "session_list" from extension "pi-session-search" conflicts with extension "omp-work-collaboration"')
+    const fake = writeExitingAgent(`process.stderr.write('Error: Tool "session_list" from extension "pi-session-search" conflicts with extension "apex-collaboration"')
 process.exit(1)`)
     const runtime = new RpcRuntime(process.execPath, [fake.executable], fake.cwd, () => undefined, () => undefined)
     try {
@@ -92,7 +92,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 })
 
 function fakeAgent(promptResponse: string, stateResponse?: string, exitDelayMs = 0, confirmSwitch = false): { cwd: string; executable: string } {
-  const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-'))
   dirs.push(cwd)
   const executable = join(cwd, 'fake-agent.cjs')
   writeFileSync(executable, `#!/usr/bin/env node
@@ -618,7 +618,7 @@ describe('agent RPC responses', () => {
   })
 
   it('hydrates and refreshes authoritative context-window usage', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-context-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-context-'))
     dirs.push(cwd)
     const executable = join(cwd, 'context-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -666,7 +666,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('projects context usage while a response streams and corrects it at message boundaries', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-live-context-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-live-context-'))
     dirs.push(cwd)
     const executable = join(cwd, 'live-context-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -735,7 +735,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('runs a trailing authoritative refresh when agent_end lands during an in-flight refresh', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-trailing-context-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-trailing-context-'))
     dirs.push(cwd)
     const executable = join(cwd, 'trailing-context-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -782,7 +782,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('stays busy while an overflow compaction is waiting to restart', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-compaction-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-compaction-'))
     dirs.push(cwd)
     const executable = join(cwd, 'compaction-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -825,7 +825,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('stays busy while a provider auto-retry is waiting to restart', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-retry-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-retry-'))
     dirs.push(cwd)
     const executable = join(cwd, 'retry-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -901,7 +901,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   it('releases a minted environment when admission fails before a runtime exists', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
     const manager = managerFor(fake.executable)
-    const environment = { PRIME_WORK_BROWSER_TOKEN: 'never-spawned-token' }
+    const environment = { APEX_BROWSER_TOKEN: 'never-spawned-token' }
     const ended = vi.fn()
     manager.setRuntimeEnvironmentProvider(() => {
       manager.beginShutdown()
@@ -917,7 +917,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   it('notifies runtime termination once after explicit stop while active claims remain owned', async () => {
     const fake = fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }")
     const manager = managerFor(fake.executable)
-    const environment = { PRIME_WORK_SCHEDULE_TOKEN: 'active-token' }
+    const environment = { APEX_SCHEDULE_TOKEN: 'active-token' }
     const ended = vi.fn()
     manager.setRuntimeEnvironmentProvider(() => environment)
     manager.setRuntimeEndListener(ended)
@@ -935,7 +935,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('notifies runtime termination after natural child exit', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-natural-exit-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-natural-exit-'))
     dirs.push(cwd)
     const executable = join(cwd, 'natural-exit-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -952,7 +952,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 `)
     chmodSync(executable, 0o755)
     const manager = managerFor(executable)
-    const environment = { PRIME_WORK_BROWSER_TOKEN: 'natural-exit-token' }
+    const environment = { APEX_BROWSER_TOKEN: 'natural-exit-token' }
     const ended = vi.fn()
     manager.setRuntimeEnvironmentProvider(() => environment)
     manager.setRuntimeEndListener(ended)
@@ -966,10 +966,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   })
 
   it('releases the runtime slot on a failed start even when the child cannot be stopped', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-stuck-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-stuck-'))
     dirs.push(cwd)
     const manager = managerFor(fakeAgent("{ id: command.id, type: 'response', command: 'prompt', success: true }").executable)
-    const environment = { PRIME_WORK_SCHEDULE_TOKEN: 'unreapable-start-token' }
+    const environment = { APEX_SCHEDULE_TOKEN: 'unreapable-start-token' }
     const ended = vi.fn()
     manager.setRuntimeEnvironmentProvider(() => environment)
     manager.setRuntimeEndListener(ended)
@@ -1148,7 +1148,7 @@ input.on('line', (line) => {
   })
 
   it('terminates a process group that keeps writing after an oversized frame', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-overflow-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-overflow-'))
     dirs.push(cwd)
     const executable = join(cwd, 'overflow-agent.cjs')
     const pidFile = join(cwd, 'pid')
@@ -1231,7 +1231,7 @@ setInterval(() => {}, 1000)
   })
 
   it('reports delivery-uncertain timeouts and consumes the late response instead of orphaning it', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-uncertain-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-uncertain-'))
     dirs.push(cwd)
     const executable = join(cwd, 'sleepy-agent.cjs')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -1402,7 +1402,7 @@ setInterval(() => {}, 1000)
 
 describe('compaction watchdog', () => {
   const watchdogAgent = (name: string, promptScript: string): { cwd: string; executable: string } => {
-    const cwd = mkdtempSync(join(tmpdir(), `prime-work-rpc-${name}-`))
+    const cwd = mkdtempSync(join(tmpdir(), `apex-rpc-${name}-`))
     dirs.push(cwd)
     const executable = join(cwd, `${name}.cjs`)
     writeFileSync(executable, `#!/usr/bin/env node
@@ -1639,7 +1639,7 @@ setInterval(() => {}, 1000)
 
   // Waits until the fake agent answers, so process startup never eats into a prompt's deadline.
   const dialogRuntime = async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'prime-work-rpc-dialog-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'apex-rpc-dialog-'))
     dirs.push(cwd)
     const executable = join(cwd, 'dialog-agent.cjs')
     writeFileSync(executable, DIALOG_AGENT)

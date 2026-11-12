@@ -5,10 +5,10 @@ import { fallbackModelFromRecord } from '@/lib/events/model-fallback'
 import { parseSessionActionSnapshot } from '@/lib/session-actions'
 import { indexStartedSession } from './started-session-index'
 import type { WorkspaceSnapshot } from '@/app/workspace'
-import type { PrimeWorkApi, RuntimeInfo, SessionActionSnapshot, SessionRecord } from '@/types/api'
+import type { ApexApi, RuntimeInfo, SessionActionSnapshot, SessionRecord } from '@/types/api'
 
 interface UseAgentEventsOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   runtimeIdRef: React.RefObject<string | null>
   runtimeSessionsRef: React.RefObject<Map<string, string>>
   runtimeOwnerRef: React.RefObject<{ runtimeId: string; generation: number } | null>

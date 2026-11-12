@@ -12,7 +12,7 @@ map lists others.
 - `node -v` is `v24.21.0` (load nvm first if not: `. "$HOME/.nvm/nvm.sh"; nvm use`).
 - A display is available; on a headless machine prefix commands with `xvfb-run -a`.
 - Drives run against a throwaway `HOME` + Electron `--user-data-dir`, so the real
-  `~/.prime` / `~/.omp` / `~/.pi` state is never touched.
+  `~/.pi` state is never touched.
 - The driver dismisses the `No Pi family harness detected` modal automatically
   (a fresh `HOME` has no harness).
 - Never drive an app instance this verification run did not start.

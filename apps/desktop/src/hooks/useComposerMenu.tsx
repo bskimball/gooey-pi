@@ -12,7 +12,7 @@ import {
 } from '@/lib/capability-mentions'
 import { availableCommands, type ComposerCommand, type ComposerCommandAction, filterCommands, fuzzyFilter, selectableModels } from '@/lib/composer-commands'
 import { formatFileMention, parseFileMentionQuery, rankFileEntries } from '@/lib/file-mentions'
-import type { HarnessId, PrimeModelDescriptor, PrimeProviderDescriptor, PrimeThinkingLevel, SessionRecord, SkillRecord } from '@/types/api'
+import type { HarnessId, ApexModelDescriptor, ApexProviderDescriptor, ApexThinkingLevel, SessionRecord, SkillRecord } from '@/types/api'
 
 export type ComposerMenuKind = 'add' | 'mention' | 'command' | 'argument'
 
@@ -43,10 +43,10 @@ export interface ComposerMenuOptions {
   /** The full catalog, used for `/` prompt templates and skills before the runtime reports its own. */
   skills: readonly SkillRecord[]
   runtimeCommands?: readonly ComposerCommand[]
-  modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>
-  providers: readonly PrimeProviderDescriptor[]
-  reasoningLevels: readonly PrimeThinkingLevel[]
-  reasoningLabels: Record<PrimeThinkingLevel, string>
+  modelsByProvider: ReadonlyMap<string, ApexModelDescriptor[]>
+  providers: readonly ApexProviderDescriptor[]
+  reasoningLevels: readonly ApexThinkingLevel[]
+  reasoningLabels: Record<ApexThinkingLevel, string>
   /** Replaces `[start, caret)` with text; the menu then follows the new draft. */
   replaceBeforeCaret(start: number, text: string): void
   insert(text: string): void
@@ -54,7 +54,7 @@ export interface ComposerMenuOptions {
   openFilePicker(): void
   rememberSession(session: SessionRecord): void
   onModelChange(value: string): void
-  onEffortChange(value: PrimeThinkingLevel): void
+  onEffortChange(value: ApexThinkingLevel): void
   runCommand(action: ComposerCommandAction): void
 }
 

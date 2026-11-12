@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PetAvatar, type PetActivity } from '../../apps/desktop/src/components/PetAvatar'
-import type { PetDefinition, PrimeWorkApi } from '../../apps/desktop/src/types/api'
+import type { PetDefinition, ApexApi } from '../../apps/desktop/src/types/api'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -18,7 +18,7 @@ const pet: PetDefinition = {
 const pets = {
   list: vi.fn(async () => [pet]),
   sprite: vi.fn(async () => 'data:image/webp;base64,UklGRgQAAABXRUJQ'),
-} satisfies PrimeWorkApi['pets']
+} satisfies ApexApi['pets']
 
 describe('PetAvatar', () => {
   let container: HTMLDivElement

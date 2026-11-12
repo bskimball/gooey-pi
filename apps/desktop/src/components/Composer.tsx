@@ -43,11 +43,11 @@ import type {
 	CheckoutCatalog,
 	HarnessId,
 	MessageEnterAction,
-	PrimeContextUsage,
-	PrimeModelDescriptor,
-	PrimeProviderDescriptor,
-	PrimeThinkingLevel,
-	 PrimeWorkApi,
+	ApexContextUsage,
+	ApexModelDescriptor,
+	ApexProviderDescriptor,
+	ApexThinkingLevel,
+	 ApexApi,
 	PromptDeliveryIntent,
 	PromptImage,
 	QueuedPrompt,
@@ -88,10 +88,10 @@ interface ComposerProps {
 	loading?: boolean;
 	disabled?: boolean;
 	model: string;
-	effort: PrimeThinkingLevel;
-	modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>;
-	providers: PrimeProviderDescriptor[];
-	reasoningLevels: PrimeThinkingLevel[];
+	effort: ApexThinkingLevel;
+	modelsByProvider: ReadonlyMap<string, ApexModelDescriptor[]>;
+	providers: ApexProviderDescriptor[];
+	reasoningLevels: ApexThinkingLevel[];
 	fast: boolean;
 	fastSupported: boolean;
 	fastAvailable: boolean;
@@ -101,12 +101,12 @@ interface ComposerProps {
 	shortName?: string;
 	harness?: HarnessId;
 	imageInputSupported: boolean;
-	contextUsage?: PrimeContextUsage | null;
+	contextUsage?: ApexContextUsage | null;
 	sessionUsage?: SessionUsage | null;
 	executingModel?: RuntimeInfo["executingModel"] | null;
 	/** Primary action for Enter; Ctrl/Cmd+Enter selects the opposite action. */
 	messageEnterAction?: MessageEnterAction;
-	voice?: PrimeWorkApi["voice"] | null;
+	voice?: ApexApi["voice"] | null;
 	transcriptionProvider?: VoiceTranscriptionProvider;
 	skills: SkillRecord[];
 	/** Other sidebar sessions in the active project, available as @title references. */
@@ -132,7 +132,7 @@ interface ComposerProps {
 	/** Each bump submits the current draft immediately (Ctrl/Cmd+Enter from the annotation popover). */
 	sendSignal?: number;
 	onModelChange(value: string): void;
-	onEffortChange(value: PrimeThinkingLevel): void;
+	onEffortChange(value: ApexThinkingLevel): void;
 	onFastChange(value: boolean): void;
 	checkoutCatalog?: CheckoutCatalog;
 	/** Branch/worktree name shown before or without the linked-worktree catalog. */
@@ -161,7 +161,7 @@ interface ComposerProps {
 	insertDraft?: { id: number; text: string };
 }
 
-const reasoningLabels: Record<PrimeThinkingLevel, string> = {
+const reasoningLabels: Record<ApexThinkingLevel, string> = {
 	off: "Off",
 	minimal: "Minimal",
 	low: "Low",
@@ -179,7 +179,7 @@ const noop = () => undefined;
 function resolveDroppedFilePath(file: File): string {
 	return typeof window === "undefined"
 		? ""
-		: (window.prime?.app.pathForFile?.(file) ?? "");
+		: (window.apex?.app.pathForFile?.(file) ?? "");
 }
 
 export const Composer = memo(function Composer({
@@ -253,7 +253,7 @@ export const Composer = memo(function Composer({
 				icon={<Gauge size={12} />}
 				value={effort}
 				onChange={(event) =>
-					onEffortChange(event.target.value as PrimeThinkingLevel)
+					onEffortChange(event.target.value as ApexThinkingLevel)
 				}
 			>
 				{reasoningLevels.map((level) => (
@@ -335,7 +335,7 @@ export const Composer = memo(function Composer({
 		if (!draft) return;
 		if (draft.model && draft.model !== model) onModelChange(draft.model);
 		if (draft.effort && draft.effort !== effort)
-			onEffortChange(draft.effort as PrimeThinkingLevel);
+			onEffortChange(draft.effort as ApexThinkingLevel);
 		if (draft.fast !== undefined && draft.fast !== fast)
 			onFastChange(draft.fast);
 	}, [

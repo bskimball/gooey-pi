@@ -15,9 +15,9 @@ import {
 import { runTranscriptRead } from '@/app/transcript-load'
 import { reconcileTranscripts } from '@/app/transcript-reconcile'
 import type { WorkspaceSnapshot } from '@/app/workspace'
-import { createPrimeEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayPrimeEvents } from '@/lib/events'
+import { createApexEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayApexEvents } from '@/lib/events'
 import { findRuntimeForWorkspace, workspaceCwd } from '@/lib/workspace'
-import type { HarnessId, MessagePart, PrimeWorkApi, ProjectRecord, PromptDeliveryIntent, QueuedPrompt, RuntimeInfo, SessionActionSnapshot, SessionRecord, TranscriptMessage } from '@/types/api'
+import type { HarnessId, MessagePart, ApexApi, ProjectRecord, PromptDeliveryIntent, QueuedPrompt, RuntimeInfo, SessionActionSnapshot, SessionRecord, TranscriptMessage } from '@/types/api'
 import { workspaceLoadMachine, type TranscriptLoad } from './workspaceLoadMachine'
 
 let queuedPromptSequence = 0
@@ -41,7 +41,7 @@ function queuedPromptOwner(
 }
 
 interface UseWorkspaceRuntimeOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   /** Active harness; runtime discovery only attaches runtimes it owns. */
   harness?: HarnessId
   initialProject?: ProjectRecord
@@ -105,7 +105,7 @@ export function useWorkspaceRuntime({
     pendingAgentEventsRef.current = []
     const admitted = eventsForWorkspace(pending, generation)
     if (admitted.length) {
-      setMessages((current) => replayPrimeEvents(current, admitted))
+      setMessages((current) => replayApexEvents(current, admitted))
     }
   }, [])
 
@@ -124,7 +124,7 @@ export function useWorkspaceRuntime({
       const generation = workspaceRef.current.generation
       const chunk = pendingAgentEventsRef.current.splice(0, AGENT_EVENT_FLUSH_CHUNK)
       const admitted = eventsForWorkspace(chunk, generation)
-      if (admitted.length) setMessages((current) => replayPrimeEvents(current, admitted))
+      if (admitted.length) setMessages((current) => replayApexEvents(current, admitted))
       if (pendingAgentEventsRef.current.length) chunkedFlushTimerRef.current = window.setTimeout(flushChunk, 0)
     }
     flushChunk()
@@ -192,7 +192,7 @@ export function useWorkspaceRuntime({
     loadActor.send({
       type: 'ACTIVATE',
       load: bridge && session?.filePath
-        ? { generation, sessionFile: session.filePath, eventBuffer: createPrimeEventBuffer(), reconciliation: false, admissionRevision: 0 }
+        ? { generation, sessionFile: session.filePath, eventBuffer: createApexEventBuffer(), reconciliation: false, admissionRevision: 0 }
         : null,
     })
     const queueOwner = queuedPromptOwner(project, session, nextRuntime, generation)
@@ -237,7 +237,7 @@ export function useWorkspaceRuntime({
       eventBuffer: previousLoad?.generation === selected.generation
         && previousLoad.sessionFile === selected.sessionFile
         ? previousLoad.eventBuffer
-        : createPrimeEventBuffer(),
+        : createApexEventBuffer(),
       runtimeId,
       reconciliation,
       admissionRevision: loadActor.getSnapshot().context.promptRevision,

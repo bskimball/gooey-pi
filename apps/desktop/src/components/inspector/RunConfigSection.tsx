@@ -25,7 +25,7 @@ interface LoadedConfig { cwd: string; config: EffectiveRunConfig }
 function useEffectiveRunConfig(cwd: string | undefined, sessionKey: string | undefined): EffectiveRunConfig | null | undefined {
   const [loaded, setLoaded] = useState<LoadedConfig | null>(null)
   useEffect(() => {
-    const read = typeof window !== 'undefined' ? window.prime?.runtime?.effectiveConfig : undefined
+    const read = typeof window !== 'undefined' ? window.apex?.runtime?.effectiveConfig : undefined
     if (!read || !cwd) { setLoaded(null); return }
     let current = true
     void read(cwd).then((next) => {
@@ -33,7 +33,7 @@ function useEffectiveRunConfig(cwd: string | undefined, sessionKey: string | und
     }).catch(() => { if (current) setLoaded(null) })
     return () => { current = false }
   }, [cwd, sessionKey])
-  if (!cwd || typeof window === 'undefined' || !window.prime?.runtime?.effectiveConfig) return undefined
+  if (!cwd || typeof window === 'undefined' || !window.apex?.runtime?.effectiveConfig) return undefined
   return loaded?.cwd === cwd ? loaded.config : null
 }
 

@@ -1,8 +1,8 @@
-import type { OmpExtensionApi } from 'apex-core/types/api'
+import type { ApexExtensionApi } from 'apex-core/types/api'
 
-export default function editorExtension(pi: OmpExtensionApi) {
-  const url = process.env.APEX_EDITOR_URL ?? process.env.PRIME_WORK_BROWSER_URL
-  const token = process.env.APEX_EDITOR_TOKEN ?? process.env.PRIME_WORK_BROWSER_TOKEN
+export default function editorExtension(pi: ApexExtensionApi) {
+  const url = process.env.APEX_EDITOR_URL ?? process.env.APEX_BROWSER_URL
+  const token = process.env.APEX_EDITOR_TOKEN ?? process.env.APEX_BROWSER_TOKEN
   if (!url || !token) return
   const uri = { type: 'string', description: 'Exact document URI from editor_context. Defaults to the active text editor.' }
   const line = { type: 'integer', minimum: 1, description: '1-based line number.' }

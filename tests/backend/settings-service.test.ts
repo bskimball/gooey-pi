@@ -10,7 +10,7 @@ import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 function makeService(validateShell: (shell: unknown) => string = () => '/bin/zsh', onDidUpdate?: ConstructorParameters<typeof SettingsService>[3]) {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-settings-'))
+  const dir = mkdtempSync(join(tmpdir(), 'apex-settings-'))
   dirs.push(dir)
   return new SettingsService(new JsonStateStore(join(dir, 'state.json')), validateShell, undefined, onDidUpdate)
 }
@@ -78,7 +78,7 @@ describe('SettingsService.update', () => {
   })
 
   it('persists namespaced model IDs for selection and disabling across restart', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-settings-model-key-'))
+    const dir = mkdtempSync(join(tmpdir(), 'apex-settings-model-key-'))
     dirs.push(dir)
     const path = join(dir, 'state.json')
     const service = new SettingsService(new JsonStateStore(path), () => '/bin/zsh')

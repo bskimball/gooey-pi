@@ -106,9 +106,9 @@ export function captureSourceMetadata(element: Element): Pick<BrowserAnnotationE
   return result
 }
 
-const NAMESPACE = '__primeAnnotator'
+const NAMESPACE = '__apexAnnotator'
 
-// Idempotent bootstrap: defines window.__primeAnnotator once and touches no
+// Idempotent bootstrap: defines window.__apexAnnotator once and touches no
 // other page global. stop() removes every listener and the hover overlay;
 // destroy() additionally clears markers and deletes the namespace.
 const ENSURE_SCRIPT = `(function () {

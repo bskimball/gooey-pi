@@ -1,5 +1,5 @@
 ---
-name: prime-work-browser
+name: apex-browser
 description: Drive the Apex in-app browser for this thread with the browser_* tools - open tabs, navigate, read pages, click, type, scroll, screenshot, and extract data. Use when the user asks to open, test, inspect, or interact with a website or a local dev server inside Apex.
 ---
 

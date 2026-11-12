@@ -60,7 +60,7 @@
 .specialist-tabstrip__item strong { font-weight: 550; }
 .specialist-tabstrip__item span { color: var(--text-tertiary); font-family: var(--chat-mono); font-size: 10.5px; }
 .specialist-tabstrip__item::before { position: absolute; inset: 0; z-index: -1; border-radius: inherit; content: ""; background: linear-gradient(to right, var(--status-tint), transparent 72%); pointer-events: none; }
-.specialist-tabstrip__item.is-running { --status-tint: color-mix(in srgb, var(--prime) 14%, transparent); }
+.specialist-tabstrip__item.is-running { --status-tint: color-mix(in srgb, var(--apex) 14%, transparent); }
 .specialist-tabstrip__item.is-waiting { --status-tint: color-mix(in srgb, var(--warning) 12%, transparent); }
 .specialist-tabstrip__item.is-error { --status-tint: color-mix(in srgb, var(--danger) 12%, transparent); }
 .specialist-tabstrip__item.is-waiting svg:not(.status-mark) { color: var(--warning); }
@@ -88,7 +88,7 @@
 	white-space: nowrap;
 }
 .run-state::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; content: ""; }
-.run-state.is-running { color: var(--prime); background: var(--prime-soft); }
+.run-state.is-running { color: var(--apex); background: var(--apex-soft); }
 .run-state.is-running::before { display: none; }
 .run-state.is-waiting { color: var(--warning); background: var(--warning-soft); }
 .run-state.is-error { color: var(--danger); background: var(--danger-soft); }
@@ -203,7 +203,7 @@
 	margin-bottom: 4px;
 	overflow: hidden;
 	border: 1px solid var(--border);
-	border-left: 2.5px solid color-mix(in srgb, var(--prime) 60%, var(--border-strong));
+	border-left: 2.5px solid color-mix(in srgb, var(--apex) 60%, var(--border-strong));
 	border-radius: var(--radius-md);
 	background: var(--surface-subtle);
 }
@@ -284,15 +284,15 @@
 	background: var(--surface-subtle);
 }
 .specialists-panel .activity-line.is-running .activity-line__icon,
-.specialists-panel .activity-run.is-running .activity-line__icon { border-color: color-mix(in srgb, var(--prime) 28%, var(--border)); color: var(--prime); background: var(--prime-soft); }
+.specialists-panel .activity-run.is-running .activity-line__icon { border-color: color-mix(in srgb, var(--apex) 28%, var(--border)); color: var(--apex); background: var(--apex-soft); }
 .specialists-panel .activity-line.is-error .activity-line__icon,
 .specialists-panel .activity-run.is-error .activity-line__icon { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); color: var(--danger); background: var(--danger-soft); }
-.specialists-panel .activity-line--tool.is-running > .activity-tool__summary { background: color-mix(in srgb, var(--prime-soft) 45%, transparent); }
+.specialists-panel .activity-line--tool.is-running > .activity-tool__summary { background: color-mix(in srgb, var(--apex-soft) 45%, transparent); }
 .specialists-panel .activity-line--tool.is-error > .activity-tool__summary { background: color-mix(in srgb, var(--danger-soft) 38%, transparent); }
 .specialists-panel .activity-line__kind, .specialists-panel .activity-run__label { color: var(--text); font-size: var(--fs-meta); font-weight: 550; }
 .specialists-panel .activity-tool__preview, .specialists-panel .activity-tool__command, .specialists-panel .activity-run__names { color: var(--text-secondary); font-size: 11.5px; }
 .specialists-panel .activity-tool__state { font-size: var(--fs-micro); }
-.specialists-panel .activity-line.is-running .activity-tool__state { color: var(--prime); }
+.specialists-panel .activity-line.is-running .activity-tool__state { color: var(--apex); }
 .specialists-panel :is(.activity-tool__summary, .activity-run__summary, .activity-thought__summary) .disclosure-caret {
 	color: var(--text-tertiary);
 	opacity: 0.35;
@@ -323,13 +323,13 @@
 .specialists-panel .activity-line--note .prose { padding: 0; font-size: var(--fs-ui); line-height: 1.58; }
 
 /* Thinking / reasoning blocks */
-.specialists-panel .activity-thought__summary .activity-line__icon { border-color: color-mix(in srgb, var(--prime) 22%, var(--border-subtle)); color: var(--prime); background: color-mix(in srgb, var(--prime-soft) 65%, var(--surface-subtle)); }
+.specialists-panel .activity-thought__summary .activity-line__icon { border-color: color-mix(in srgb, var(--apex) 22%, var(--border-subtle)); color: var(--apex); background: color-mix(in srgb, var(--apex-soft) 65%, var(--surface-subtle)); }
 .specialists-panel .activity-thought__summary .activity-line__kind { color: var(--text-secondary); }
 .specialists-panel .activity-thought__body,
 .specialists-panel .activity-line--reasoning:not(.is-settled) {
 	margin: 2px 0 6px 17px;
 	padding: 8px 11px;
-	border-left: 2px solid color-mix(in srgb, var(--prime) 38%, var(--border-strong));
+	border-left: 2px solid color-mix(in srgb, var(--apex) 38%, var(--border-strong));
 	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 	color: var(--text-secondary);
 	background: color-mix(in srgb, var(--surface-subtle) 75%, transparent);

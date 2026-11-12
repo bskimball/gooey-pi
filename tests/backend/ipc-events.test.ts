@@ -68,7 +68,7 @@ describe('app:reveal-path authorization', () => {
   }
 
   it('reveals a path through the first authorization domain that accepts it', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-'))
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-'))
     try {
       const deny = async () => { throw new Error('not a project path') }
       const { invoke, registration } = revealHarness({
@@ -82,7 +82,7 @@ describe('app:reveal-path authorization', () => {
   })
 
   it('returns false without revealing when every authorization domain denies', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-denied-'))
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-denied-'))
     try {
       const deny = () => { throw new Error('denied') }
       const { invoke, registration } = revealHarness({
@@ -98,7 +98,7 @@ describe('app:reveal-path authorization', () => {
   })
 
   it('warns instead of swallowing an unexpected reveal failure', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-error-'))
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-error-'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     try {
       const { invoke, registration } = revealHarness({
@@ -256,7 +256,7 @@ describe('shell-facing app handlers', () => {
   })
 
   it('reveals a path only after project authorization succeeds', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-')); dirs.push(dir)
     const file = join(dir, 'file.txt'); writeFileSync(file, 'data')
     const canonical = await realpath(file)
     const authorizePath = vi.fn(async (path: string) => path)
@@ -268,7 +268,7 @@ describe('shell-facing app handlers', () => {
   })
 
   it('falls back to session and then plugin authorization in order', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-')); dirs.push(dir)
     const file = join(dir, 'file.txt'); writeFileSync(file, 'data')
     const canonical = await realpath(file)
     const authorizePath = vi.fn(async () => { throw new Error('outside projects') })
@@ -287,7 +287,7 @@ describe('shell-facing app handlers', () => {
   })
 
   it('denies reveal when every authorizer refuses the path', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-')); dirs.push(dir)
     const file = join(dir, 'file.txt'); writeFileSync(file, 'data')
     const registration = register({
       projects: { ...serviceStub(), authorizePath: vi.fn(async () => { throw new Error('denied') }) },
@@ -300,7 +300,7 @@ describe('shell-facing app handlers', () => {
   })
 
   it('denies reveal for nonexistent or relative paths before consulting authorizers', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-reveal-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-reveal-')); dirs.push(dir)
     const authorizePath = vi.fn(async (path: string) => path)
     const registration = register({ projects: { ...serviceStub(), authorizePath } })
     await expect(handlers.get('app:reveal-path')!(event, join(dir, 'missing.txt'))).resolves.toBe(false)

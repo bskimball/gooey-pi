@@ -40,7 +40,7 @@ function writePiSession(file: string, options: {
 }
 
 function setup(maxSessionFiles?: number): { root: string; project: string; service: SessionService } {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-pi-sessions-')); dirs.push(dir)
+  const dir = mkdtempSync(join(tmpdir(), 'apex-pi-sessions-')); dirs.push(dir)
   const root = join(dir, 'sessions'); mkdirSync(root)
   const project = join(dir, 'project'); mkdirSync(project)
   const store = new JsonStateStore(join(dir, 'state.json'))
@@ -119,7 +119,7 @@ describe('pi metadata reader', () => {
   })
 
   it.each([1, 3])('invalidates v%s metadata cache entries so saved Utopia mode and model choices are parsed', async (version) => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-pi-cache-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-pi-cache-')); dirs.push(dir)
     const root = join(dir, 'sessions'); mkdirSync(join(root, BUCKET), { recursive: true })
     const project = join(dir, 'project'); mkdirSync(project)
     const file = join(root, BUCKET, NAME_C)
@@ -213,7 +213,7 @@ describe('pi metadata reader', () => {
   })
 
   it('resumes appended tails incrementally and picks up a session_info rename', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-pi-rename-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-pi-rename-')); dirs.push(dir)
     const file = join(dir, NAME_A)
     const bulk = Array.from({ length: 8 }, (_, index) => piEntry('message', `aa11bb2${index}`, index ? `aa11bb2${index - 1}` : null, {
       message: { role: 'user', content: `filler ${'x'.repeat(600)}` },

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { Transcript } from '../../apps/desktop/src/components/Transcript'
 import { LiveElapsed, LiveWorkVerb } from '../../apps/desktop/src/components/transcript/timeline'
-import { replayPrimeEvents } from '../../apps/desktop/src/lib/events/reduce'
+import { replayApexEvents } from '../../apps/desktop/src/lib/events/reduce'
 import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -170,7 +170,7 @@ describe('transcript rendering', () => {
   )
 
   it('keeps a hidden tool Working through partial updates, then restores visible reasoning', () => {
-    const updating = replayPrimeEvents([], [
+    const updating = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'Plan ready.' } },
       { type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read_file' },
@@ -178,17 +178,17 @@ describe('transcript rendering', () => {
     ])
     expect(render(updating, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
 
-    const finished = replayPrimeEvents(updating, [
+    const finished = replayApexEvents(updating, [
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
     expect(render(finished, false, false)).toContain('role="status"><span class="sr-only">Thinking</span>')
 
-    const ended = replayPrimeEvents(updating, [{ type: 'agent_end' }])
+    const ended = replayApexEvents(updating, [{ type: 'agent_end' }])
     expect(ended[0].parts.find((part) => part.type === 'toolResult')).toMatchObject({ streaming: false, isError: true })
   })
 
   it('keeps late results at their call site and follows newer reasoning or narrative', () => {
-    const reasoning = replayPrimeEvents([], [
+    const reasoning = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'First thought.' } },
       { type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read_file' },
@@ -198,7 +198,7 @@ describe('transcript rendering', () => {
     expect(reasoning[0].parts.map((part) => part.type)).toEqual(['thinking', 'toolCall', 'toolResult', 'thinking'])
     expect(render(reasoning)).toContain('role="status"><span class="sr-only">Thinking</span>')
 
-    const narrative = replayPrimeEvents(reasoning, [
+    const narrative = replayApexEvents(reasoning, [
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Final answer.' } },
     ])
     expect(render(narrative, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
@@ -323,7 +323,7 @@ describe('transcript rendering', () => {
 
   it('renders streamed tool images inline even when tool logs are hidden', () => {
     const data = 'iVBORw0KGgo='
-    const messages = replayPrimeEvents([], [
+    const messages = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'tool_execution_start', toolCallId: 'capture', toolName: 'browser_screenshot' },
       { type: 'tool_execution_end', toolCallId: 'capture', toolName: 'browser_screenshot', result: { content: [{ type: 'text', text: 'Captured page' }, { type: 'image', mimeType: 'image/png', data }] } },
@@ -688,7 +688,7 @@ describe('transcript rendering', () => {
       onSuggestion: noop,
     }))
     expect(replyHtml).not.toContain('pi-mark')
-    expect(replyHtml).not.toContain('harness-mark--prime')
+    expect(replyHtml).not.toContain('harness-mark--apex')
   })
 
   it('anchors the live thinking/working status indicator below active timeline items', () => {

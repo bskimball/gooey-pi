@@ -2,7 +2,7 @@
 
 A user selects a persistent session and sends a prompt to the active harness;
 while a turn runs they can queue a follow-up or steer the turn. This is the core
-product loop, but it requires a working Pi/OMP/Prime harness — so it is driven by
+product loop, but it requires a working Pi harness — so it is driven by
 the repo's hermetic Playwright fixture (which installs fake harness binaries),
 **not** by `control.mjs`, whose disposable `HOME` has no harness.
 
@@ -15,9 +15,9 @@ the repo's hermetic Playwright fixture (which installs fake harness binaries),
 
 ## How to get to it (user POV)
 
-- Click a session row in the sidebar, then type in the composer (`Message Prime`
-  / `Message OMP`) and press `Enter` to send.
-- While the `Stop Prime` button is visible (turn running), press `Enter` to queue
+- Click a session row in the sidebar, then type in the composer (`Message Pi`
+  ) and press `Enter` to send.
+- While the `Stop Pi` button is visible (turn running), press `Enter` to queue
   or `Ctrl+Enter` to steer.
 
 ## Driving it with gooeypi-control
@@ -29,7 +29,7 @@ Preconditions:
   fixture instead.
 
 - **Run the fixture path.** Use the repo's hermetic Electron suite, which sets
-  `PRIME_AGENT_BINARY` / `OMP_BINARY` / `PI_BINARY` to fake executables and drives
+  `PI_BINARY` to fake executables and drives
   the composer. Run `xvfb-run -a npx playwright test tests/e2e/app.spec.ts -g "steers the active turn with Ctrl\\+Enter" --reporter=line`.
 - **Observable proof.** The fake harness writes `steer-args.json` under the
   fixture root; the test asserts `{ type: 'steer', message: 'change direction now' }`,
@@ -45,5 +45,5 @@ Preconditions:
   do not substitute the navigation scenario as evidence.
 - A queued/steered message is only proven by its side effect (the marker file the
   harness receives), not by the composer clearing or a message bubble appearing.
-- The composer accessible name is harness-specific (`Message Prime` vs
-  `Message OMP`); match the active harness shown in the top-left switcher.
+- The composer accessible name is harness-specific (`Message Pi`)
+  match the agent name shown in the UI.

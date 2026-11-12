@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PrimeWorkApi, RuntimeOwnerView } from '@/types/api'
+import type { ApexApi, RuntimeOwnerView } from '@/types/api'
 import { Laptop } from './icons'
 
 const POLL_MS = 10_000
@@ -18,7 +18,7 @@ const ownershipKey = (owners: ReadonlyMap<string, RuntimeOwnerView>) => [...owne
  * instance), keyed by session file path. Refreshed on window focus and every
  * few seconds; the map keeps its identity while ownership is unchanged.
  */
-export function useRuntimeOwners(bridge: PrimeWorkApi | null, activeSessionPath?: string): { owners: ReadonlyMap<string, RuntimeOwnerView>; activeOwner?: RuntimeOwnerView } {
+export function useRuntimeOwners(bridge: ApexApi | null, activeSessionPath?: string): { owners: ReadonlyMap<string, RuntimeOwnerView>; activeOwner?: RuntimeOwnerView } {
   const [owners, setOwners] = useState(NO_OWNERS)
   useEffect(() => {
     const read = bridge?.sessions.runtimeOwners

@@ -15,7 +15,7 @@ import {
   serializeAnnotations,
   splitAnnotationBlock,
 } from '../../apps/desktop/src/lib/browser-annotations'
-import type { BrowserAnnotation, BrowserAnnotationElement, PrimeWorkApi, PromptImage } from '../../apps/desktop/src/types/api'
+import type { BrowserAnnotation, BrowserAnnotationElement, ApexApi, PromptImage } from '../../apps/desktop/src/types/api'
 
 const element = (overrides: Partial<BrowserAnnotationElement> = {}): BrowserAnnotationElement => ({
   selector: '#main > button:nth-of-type(2)',
@@ -42,8 +42,8 @@ describe('selection reference capture', () => {
   it('attaches image/source results and truthfully preserves metadata when either lookup fails', async () => {
     const preview: PromptImage = { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' }
     const source = { kind: 'unknown' as const, reason: 'No owning source was found.' }
-    const captureSelection = vi.fn<PrimeWorkApi['browser']['captureSelection']>().mockResolvedValue(preview)
-    const resolveBrowserSource = vi.fn<PrimeWorkApi['app']['resolveBrowserSource']>().mockResolvedValue(source)
+    const captureSelection = vi.fn<ApexApi['browser']['captureSelection']>().mockResolvedValue(preview)
+    const resolveBrowserSource = vi.fn<ApexApi['app']['resolveBrowserSource']>().mockResolvedValue(source)
     const request = {
       bridge: { browser: { captureSelection }, app: { resolveBrowserSource } },
       sessionKey: '/session.jsonl', tabId: 'preview', pageUrl: 'https://example.com/page', pageTitle: 'Example', cwd: '/repo',

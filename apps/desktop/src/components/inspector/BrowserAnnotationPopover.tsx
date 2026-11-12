@@ -24,9 +24,9 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
   const opening = snapshot.matches('opening')
   const resolveSource = useCallback(async (): Promise<BrowserSourceResult> => {
     if (!element.sourceHint) return { kind: 'unknown', reason: 'This element has no usable original-source metadata. Visual context can still be attached.' }
-    if (!cwd || !window.prime) return { kind: 'unknown', reason: 'Open a granted workspace to validate this source location.' }
+    if (!cwd || !window.apex) return { kind: 'unknown', reason: 'Open a granted workspace to validate this source location.' }
     try {
-      return await window.prime.app.resolveBrowserSource(cwd, element.sourceHint)
+      return await window.apex.app.resolveBrowserSource(cwd, element.sourceHint)
     } catch {
       return { kind: 'unknown', reason: 'Source validation failed. Visual context can still be attached.' }
     }
@@ -36,7 +36,7 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
     send({
       type: 'CHECK',
       resolveSource,
-      openInVsCode: (path, line) => window.prime.app.openInVsCode(path, line),
+      openInVsCode: (path, line) => window.apex.app.openInVsCode(path, line),
     })
   }, [resolveSource, send])
 

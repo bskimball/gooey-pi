@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { applySessionLifecycleEvent } from '../../apps/desktop/src/app/session-attention'
 import { indexStartedSession } from '../../apps/desktop/src/hooks/started-session-index'
-import type { PrimeWorkApi, SessionRecord } from '../../apps/desktop/src/types/api'
+import type { ApexApi, SessionRecord } from '../../apps/desktop/src/types/api'
 
 const existing: SessionRecord = {
   id: 'existing', harness: 'pi', filePath: '/sessions/existing.jsonl', projectPath: '/project', title: 'Existing chat',
@@ -18,7 +18,7 @@ describe('new session indexing', () => {
       sessions = typeof update === 'function' ? update(sessions) : update
     }
     const indexing = indexStartedSession({
-      bridge: { sessions: { list } } as unknown as PrimeWorkApi,
+      bridge: { sessions: { list } } as unknown as ApexApi,
       harness: 'pi', sessionFile: created.filePath, setSessions,
     })
     sessions = [{ ...existing, title: 'Renamed during scan' }]
@@ -33,7 +33,7 @@ describe('new session indexing', () => {
     const list = vi.fn(() => new Promise<SessionRecord[]>((resolve) => { resolveList = resolve }))
     let sessions = [created]
     const indexing = indexStartedSession({
-      bridge: { sessions: { list } } as unknown as PrimeWorkApi,
+      bridge: { sessions: { list } } as unknown as ApexApi,
       harness: 'pi', sessionFile: created.filePath,
       setSessions: (update) => { sessions = typeof update === 'function' ? update(sessions) : update },
     })
@@ -54,7 +54,7 @@ describe('new session indexing', () => {
       sessions = typeof update === 'function' ? update(sessions) : update
     }
     const indexing = indexStartedSession({
-      bridge: { sessions: { list } } as unknown as PrimeWorkApi,
+      bridge: { sessions: { list } } as unknown as ApexApi,
       harness: 'pi', sessionFile: created.filePath, setSessions, isCurrent: () => current,
     })
     current = false

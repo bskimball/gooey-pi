@@ -14,9 +14,9 @@ const shipped = [
     .map(([name]) => name),
 ]
 for (const name of shipped) {
-  if (obsolete.test(name)) throw new Error(`Removed Prime SDK dependency ships with the app: ${name}`)
+  if (obsolete.test(name)) throw new Error(`Removed legacy SDK dependency ships with the app: ${name}`)
 }
 for (const name of readdirSync(resolve(root, 'vendor'))) {
-  if (name.startsWith('prime-agent')) throw new Error(`Removed Prime SDK artifact remains: ${name}`)
+  if (name.startsWith('prime-agent')) throw new Error(`Removed legacy SDK artifact remains: ${name}`)
 }
 console.log('Pi-only dependency boundary verified; no vendored SDK patches remain.')

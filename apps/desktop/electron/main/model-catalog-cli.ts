@@ -1,5 +1,5 @@
 import { supportsFastMode } from '../../assets/extensions/pi-work-fast-mode'
-import type { PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '../../src/types/api'
+import type { ApexModelCatalog, ApexModelDescriptor, ApexProviderDescriptor } from '../../src/types/api'
 import { catalogLimitWarnings, limitCatalogRelations, type ModelCatalogProvider } from './model-catalog'
 import { withModelVisibility } from './model-visibility'
 import { resolveExecutable, runProcess, type ExecutableSource } from './process-utils'
@@ -7,7 +7,7 @@ import { requireString } from 'apex-core/validation'
 
 /**
  * Shared model-catalog machinery for the harnesses whose catalog comes from an
- * external CLI (OMP's `omp models --json`, pi's RPC probe) instead of
+ * external CLI (pi's RPC probe) instead of
  * in-process npm modules. Everything here is harness-agnostic: caching,
  * single-flight refresh, stale-catalog degradation, untrusted-entry validation,
  * provider derivation, and the version probe. Subclasses supply only how raw
@@ -36,7 +36,7 @@ export function boundedInteger(value: unknown): number {
 
 /**
  * Neither CLI carries per-model fast-mode metadata, so both delegate to the
- * same `supportsFastMode` predicate Prime uses and the model family can never
+ * same `supportsFastMode` predicate Pi uses and the model family can never
  * drift between harnesses. The API variant is not reported either, but the
  * openai-codex provider maps 1:1 onto the openai-codex-responses API the
  * predicate requires, and every other provider fails its provider check
@@ -53,7 +53,7 @@ export interface ValidatedModelEntry {
   id: string
   reasoning: boolean
   /** Descriptor fields derived purely from the shared entry shape. */
-  descriptor: Omit<PrimeModelDescriptor, 'availableThinkingLevels'>
+  descriptor: Omit<ApexModelDescriptor, 'availableThinkingLevels'>
 }
 
 export function validateModelEntry(value: unknown): ValidatedModelEntry | null {
@@ -98,11 +98,11 @@ export interface CliModelCatalogOptions {
 export abstract class CliModelCatalogService implements ModelCatalogProvider {
   protected readonly timeoutMs: number
   protected readonly maxOutputBytes: number
-  private cachedCatalog: PrimeModelCatalog | null = null
+  private cachedCatalog: ApexModelCatalog | null = null
   private cachedAt = 0
   private cachedExecutable: string | null = null
   private cachedFingerprint = ''
-  private catalogRefresh: { executable: string; fingerprint: string; promise: Promise<PrimeModelCatalog> } | null = null
+  private catalogRefresh: { executable: string; fingerprint: string; promise: Promise<ApexModelCatalog> } | null = null
   private cachedVersion: { executable: string; value: string } | null = null
 
   constructor(private readonly executable: ExecutableSource, options: CliModelCatalogOptions = {}) {
@@ -110,7 +110,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     this.maxOutputBytes = options.maxOutputBytes ?? DEFAULT_CATALOG_MAX_OUTPUT_BYTES
   }
 
-  /** Harness name as it appears in user-facing warnings and errors ('OMP', 'Pi'). */
+  /** Harness name as it appears in user-facing warnings and errors ('Pi'). */
   protected abstract readonly harnessLabel: string
   /** Warning served when the harness CLI is not installed. */
   protected abstract readonly notInstalledWarning: string
@@ -118,7 +118,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
   /** Fetches the untrusted raw model entries from the harness CLI. */
   protected abstract fetchModelEntries(executable: string): Promise<unknown[]>
   /** Maps one untrusted raw entry to a descriptor, or null when it is malformed. */
-  protected abstract toModelDescriptor(value: unknown): PrimeModelDescriptor | null
+  protected abstract toModelDescriptor(value: unknown): ApexModelDescriptor | null
   /** Extracts the version from the `--version` stdout, or null when unrecognized. */
   protected abstract parseVersion(stdout: string): string | null
   /** Environment for the `--version` probe; undefined inherits the runProcess default. */
@@ -126,11 +126,11 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
   /** Optional external config fingerprint; a change invalidates the TTL cache immediately. */
   protected catalogFingerprint(): string { return '' }
 
-  async catalog(force = false, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()): Promise<PrimeModelCatalog> {
+  async catalog(force = false, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()): Promise<ApexModelCatalog> {
     const executable = resolveExecutable(this.executable)
     this.prepareExecutable(executable)
     if (!executable) {
-      return { primeVersion: 'unknown', refreshedAt: new Date().toISOString(), models: [], providers: [], warning: this.notInstalledWarning }
+      return { apexVersion: 'unknown', refreshedAt: new Date().toISOString(), models: [], providers: [], warning: this.notInstalledWarning }
     }
     const fingerprint = this.catalogFingerprint()
     if (!force && this.cachedCatalog && this.cachedFingerprint === fingerprint && Date.now() - this.cachedAt < CATALOG_TTL_MS) {
@@ -159,7 +159,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     }
   }
 
-  async requireAvailableModel(rawKey: unknown, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()): Promise<PrimeModelDescriptor> {
+  async requireAvailableModel(rawKey: unknown, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()): Promise<ApexModelDescriptor> {
     const key = requireString(rawKey, 'model', { min: 3, max: 512, trim: true })
     const catalog = await this.catalog(false, disabledProviders, disabledModels)
     const model = catalog.models.find((candidate) => candidate.key === key)
@@ -171,7 +171,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     return model
   }
 
-  async capabilities(provider: string | undefined, modelId: string | undefined): Promise<PrimeModelDescriptor | undefined> {
+  async capabilities(provider: string | undefined, modelId: string | undefined): Promise<ApexModelDescriptor | undefined> {
     if (!provider || !modelId) return undefined
     return (await this.catalog()).models.find((model) => model.provider === provider && model.id === modelId)
   }
@@ -184,13 +184,13 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     return (container as Record<string, unknown>).models as unknown[]
   }
 
-  private async refreshCatalog(executable: string, fingerprint: string): Promise<PrimeModelCatalog> {
+  private async refreshCatalog(executable: string, fingerprint: string): Promise<ApexModelCatalog> {
     const [rawModels, version] = await Promise.all([
       this.fetchModelEntries(executable),
       this.resolveVersion(executable),
     ])
 
-    const validModels: PrimeModelDescriptor[] = []
+    const validModels: ApexModelDescriptor[] = []
     const seenKeys = new Set<string>()
     let invalidEntries = 0
     for (const entry of rawModels) {
@@ -202,7 +202,7 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
     }
 
     const providerIds = [...new Set(validModels.map((model) => model.provider))]
-    const relation = limitCatalogRelations(validModels, providerIds.map((id): PrimeProviderDescriptor => ({
+    const relation = limitCatalogRelations(validModels, providerIds.map((id): ApexProviderDescriptor => ({
       id,
       name: id.slice(0, 200),
       authMethod: 'external',
@@ -219,8 +219,8 @@ export abstract class CliModelCatalogService implements ModelCatalogProvider {
         : undefined,
     ].filter((warning): warning is string => Boolean(warning))
 
-    const catalog: PrimeModelCatalog = {
-      primeVersion: version,
+    const catalog: ApexModelCatalog = {
+      apexVersion: version,
       refreshedAt: new Date().toISOString(),
       models: relation.models,
       providers: relation.providers,

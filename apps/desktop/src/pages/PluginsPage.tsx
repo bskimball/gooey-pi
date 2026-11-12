@@ -79,9 +79,9 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
 
   const visible = useMemo(() => skills.map((skill) => skill.id === 'gooeypi-ask-user'
     ? { ...skill, enabled: askUserEnabled }
-    : skill.id === 'prime-work-browser' ? { ...skill, enabled: browserEnabled }
+    : skill.id === 'apex-browser' ? { ...skill, enabled: browserEnabled }
     : skill.id === 'gooeypi-computer-use' ? { ...skill, enabled: computerUseEnabled } : skill).filter((skill) => {
-    const capability = skill.id === 'prime-work-browser' || skill.kind !== 'skill' && skill.kind !== 'prompt'
+    const capability = skill.id === 'apex-browser' || skill.kind !== 'skill' && skill.kind !== 'prompt'
     return (tab === 'plugins' ? capability : !capability)
       && (filter === 'all' || filter === 'installed' && skill.enabled || filter === skill.location)
       && `${skill.name} ${skill.description}`.toLowerCase().includes(query.toLowerCase())
@@ -158,21 +158,15 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       setMcpSupportNotice(enabling ? 'Pi MCP Adapter installed.' : 'Pi MCP Adapter disabled.')
     }
   })
-  const mcpServerName = (skill: SkillRecord): string => skill.id.startsWith('prime-mcp-') ? skill.id.slice('prime-mcp-'.length) : skill.name
   const setMcp = (skill: SkillRecord, enabled: boolean) => runOperation(skill.id, async () => {
     setCapabilityAlert('')
-    if (skill.id.startsWith('prime-mcp-')) {
-      const response = await onMutateCapability({ kind: 'mcp', action: enabled ? 'enable' : 'disable', name: mcpServerName(skill), scope: 'user' })
-      if (!response.ok) setCapabilityAlert(response.output)
-    } else {
-      const response = await onSetMcpEnabled({ name: skill.name, scope: skill.location === 'project' ? 'project' : 'user', projectPath: skill.location === 'project' ? activeProjectPath : undefined, enabled })
-      if (!response.ok) setCapabilityAlert(response.output)
-    }
+    const response = await onSetMcpEnabled({ name: skill.name, scope: skill.location === 'project' ? 'project' : 'user', projectPath: skill.location === 'project' ? activeProjectPath : undefined, enabled })
+    if (!response.ok) setCapabilityAlert(response.output)
   })
   const disableCapability = async (skill: SkillRecord) => {
     setConfirmDisable(null)
     if (skill.id === 'gooeypi-ask-user') await setAskUser(skill, false)
-    else if (skill.id === 'prime-work-browser') await setBrowser(skill, false)
+    else if (skill.id === 'apex-browser') await setBrowser(skill, false)
     else if (skill.id === 'gooeypi-computer-use') await setComputerUse(skill, false)
     else if (skill.id === MCP_SUPPORT_SKILL_ID) await setMcpSupport(skill, false)
     else if (skill.kind === 'mcp') await setMcp(skill, false)
@@ -183,7 +177,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     const response = await onMutateCapability({
       kind: skill.kind === 'mcp' ? 'mcp' : 'package',
       action,
-      name: skill.kind === 'mcp' ? mcpServerName(skill) : skill.name,
+      name: skill.name,
       ...(skill.kind === 'mcp' && action === 'remove' && skill.definitionKey !== undefined ? { definitionKey: skill.definitionKey } : {}),
       ...(skill.kind === 'package' ? { source: skill.source } : {}),
       scope: skill.location === 'project' ? 'project' : 'user',
@@ -210,7 +204,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     if (harness === 'pi' && skill.kind === 'mcp' && !piMcpAdapterInstalled) {
       return <span className="plugin-toggle" role="img" aria-label={`Pi MCP Adapter required for ${skill.name}`} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
     }
-    const isBrowser = skill.id === 'prime-work-browser'
+    const isBrowser = skill.id === 'apex-browser'
     const actionable = skill.id === 'gooeypi-ask-user' || isBrowser || skill.id === 'gooeypi-computer-use' || skill.id === MCP_SUPPORT_SKILL_ID || skill.kind === 'mcp' || skill.kind === 'package'
     if (!actionable) return <span className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Enabled' : 'Unavailable'} ${skill.name}`}>{skill.enabled ? <Check size={14}/> : <Plus size={14}/>}</span>
     const updating = operation.busyId === skill.id

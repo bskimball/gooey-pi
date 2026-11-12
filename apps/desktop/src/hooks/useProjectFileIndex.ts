@@ -16,7 +16,7 @@ export function useProjectFileIndex(root: string | undefined, harness: HarnessId
     if (!key || !root) { setEntries(undefined); return }
     const cached = cache.get(key)
     setEntries(cached?.entries)
-    const listFiles = typeof window === 'undefined' ? undefined : window.prime?.projects.listFiles
+    const listFiles = typeof window === 'undefined' ? undefined : window.apex?.projects.listFiles
     if (!active || !listFiles || (cached && Date.now() - cached.loadedAt < FRESH_FOR_MS)) return
     let current = true
     listFiles(root, harness).then((listing) => {

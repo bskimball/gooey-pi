@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { TranscriptMessage } from 'apex-core/types/api'
 import { isRecord } from 'apex-core/validation'
-import { replayPrimeEvents } from '../../src/lib/events/reduce'
+import { replayApexEvents } from '../../src/lib/events/reduce'
 import { blockingExtensionUiRequestId } from '../../src/lib/extension-ui'
 
 /** Updated synchronously before subscribers see a frame. Never rereads a live file. */
@@ -35,7 +35,7 @@ export class DesktopSessionProjection {
       this.messages = [...previous.map((row) => row.streaming ? { ...row, streaming: false } : row), message]
       return { type: 'desktop_user_message', message, messages: this.messages }
     }
-    this.messages = replayPrimeEvents(this.messages, [event])
+    this.messages = replayApexEvents(this.messages, [event])
     return undefined
   }
 

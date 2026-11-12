@@ -27,7 +27,7 @@ export function WorkspaceImage({ src, alt }: ComponentProps<'img'>) {
   const label = alt || 'attachment'
   const rawSrc = typeof src === 'string' ? src.trim() : ''
   const inlineDataUrl = rawSrc ? parseInlineDataUrl(rawSrc) : null
-  const canReadWorkspace = Boolean(rawSrc && !inlineDataUrl && !isRemoteOrUnsupportedScheme(rawSrc) && cwd && typeof window !== 'undefined' && window.prime?.app?.readWorkspaceImage)
+  const canReadWorkspace = Boolean(rawSrc && !inlineDataUrl && !isRemoteOrUnsupportedScheme(rawSrc) && cwd && typeof window !== 'undefined' && window.apex?.app?.readWorkspaceImage)
 
   const [resolved, setResolved] = useState<{
     key: string
@@ -41,7 +41,7 @@ export function WorkspaceImage({ src, alt }: ComponentProps<'img'>) {
     if (!canReadWorkspace || !cwd) return
     let cancelled = false
     setResolved({ key: requestKey, status: 'loading' })
-    void window.prime.app
+    void window.apex.app
       .readWorkspaceImage(cwd, rawSrc)
       .then((image) => {
         if (cancelled) return

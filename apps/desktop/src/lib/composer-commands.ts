@@ -1,5 +1,5 @@
 import { parseMcpAuthenticationCommand } from '@/lib/mcp-policy'
-import type { HarnessId, PrimeModelDescriptor, PrimeProviderDescriptor, PrimeThinkingLevel, SessionRecord, SkillRecord } from '@/types/api'
+import type { HarnessId, ApexModelDescriptor, ApexProviderDescriptor, ApexThinkingLevel, SessionRecord, SkillRecord } from '@/types/api'
 
 /** Where a slash command comes from: Apex itself, or the Pi runtime's `get_commands` listing. */
 export type ComposerCommandSource = 'builtin' | 'extension' | 'prompt' | 'skill'
@@ -186,7 +186,7 @@ export function fuzzyFilter<T>(items: readonly T[], query: string, text: (item: 
 }
 
 /** Models the picker offers: available models from enabled providers. */
-export function selectableModels(modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>, providers: readonly PrimeProviderDescriptor[]): PrimeModelDescriptor[] {
+export function selectableModels(modelsByProvider: ReadonlyMap<string, ApexModelDescriptor[]>, providers: readonly ApexProviderDescriptor[]): ApexModelDescriptor[] {
   return providers
     .filter((provider) => provider.enabled)
     .flatMap((provider) => modelsByProvider.get(provider.id) ?? [])
@@ -196,14 +196,14 @@ export function selectableModels(modelsByProvider: ReadonlyMap<string, PrimeMode
 export type LocalCommandOutcome =
   | { type: 'action'; action: ComposerCommandAction }
   | { type: 'model'; key: string }
-  | { type: 'effort'; level: PrimeThinkingLevel }
+  | { type: 'effort'; level: ApexThinkingLevel }
   /** Leave `/name ` in the draft so its argument menu opens. */
   | { type: 'complete'; draft: string }
   | { type: 'error'; message: string }
 
 interface LocalCommandContext {
-  models: readonly PrimeModelDescriptor[]
-  reasoningLevels: readonly PrimeThinkingLevel[]
+  models: readonly ApexModelDescriptor[]
+  reasoningLevels: readonly ApexThinkingLevel[]
   sessions: readonly SessionRecord[]
 }
 

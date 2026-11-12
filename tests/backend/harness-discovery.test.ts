@@ -32,7 +32,7 @@ describe('HarnessDiscoveryService', () => {
     }
   })
   beforeEach(() => {
-    vi.stubEnv('PRIME_WORK_E2E_HIDE_WINDOWS', '1')
+    vi.stubEnv('APEX_E2E_HIDE_WINDOWS', '1')
     vi.stubEnv('PI_BINARY', '')
     vi.stubEnv('PATH', '')
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyPrimeEvent, createPrimeEventBuffer, replayPrimeEvents, resetTranscriptIdsForTests } from '../../apps/desktop/src/lib/events'
+import { applyApexEvent, createApexEventBuffer, replayApexEvents, resetTranscriptIdsForTests } from '../../apps/desktop/src/lib/events'
 import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const streamingMessage = (): TranscriptMessage => ({
@@ -8,7 +8,7 @@ const streamingMessage = (): TranscriptMessage => ({
 
 describe('agent transport events', () => {
   it('finalizes the stream and shows transport errors', () => {
-    const messages = applyPrimeEvent([streamingMessage()], { type: 'transport_error', error: 'Malformed agent output' })
+    const messages = applyApexEvent([streamingMessage()], { type: 'transport_error', error: 'Malformed agent output' })
 
     expect(messages[0].streaming).toBe(false)
     expect(messages.at(-1)?.role).toBe('system')
@@ -16,17 +16,17 @@ describe('agent transport events', () => {
   })
 
   it('keeps the stream open when the desktop rate limiter drops events', () => {
-    const messages = applyPrimeEvent([streamingMessage()], { type: 'transport_limit', kind: 'count', error: 'Prime Agent event rate exceeded the desktop limit' })
+    const messages = applyApexEvent([streamingMessage()], { type: 'transport_limit', kind: 'count', error: 'Prime Agent event rate exceeded the desktop limit' })
 
     expect(messages[0].streaming).toBe(true)
     expect(messages.at(-1)?.role).toBe('assistant')
   })
 
   it('explains an unexpected runtime exit without duplicating an existing error', () => {
-    const exited = applyPrimeEvent([streamingMessage()], { type: 'runtime_exit', code: 2, expected: false })
+    const exited = applyApexEvent([streamingMessage()], { type: 'runtime_exit', code: 2, expected: false })
     expect(exited.at(-1)?.parts[0]).toMatchObject({ type: 'text', text: 'The agent stopped unexpectedly (exit code 2). Send the message again to restart it.' })
 
-    const afterTransportError = applyPrimeEvent(exited, { type: 'runtime_exit', code: 2, expected: false })
+    const afterTransportError = applyApexEvent(exited, { type: 'runtime_exit', code: 2, expected: false })
     expect(afterTransportError).toHaveLength(exited.length)
   })
 
@@ -35,16 +35,16 @@ describe('agent transport events', () => {
       type: 'custom_message', customType: 'agent_message', content: 'fallback',
       details: { message: 'Review complete.', from: { sessionName: 'reviewer' } },
     }
-    const applied = applyPrimeEvent([streamingMessage()], event)
+    const applied = applyApexEvent([streamingMessage()], event)
     expect(applied[0].parts.at(-1)).toMatchObject({ type: 'agentMessage', text: 'Review complete.', agentName: 'reviewer' })
 
-    const buffered = createPrimeEventBuffer()
+    const buffered = createApexEventBuffer()
     buffered.push(event)
     expect(buffered.replay([streamingMessage()])[0].parts.at(-1)).toMatchObject({ type: 'agentMessage', text: 'Review complete.', agentName: 'reviewer' })
   })
 
   it('replays live events over an older transcript load result', () => {
-    const pendingLoadEvents = createPrimeEventBuffer()
+    const pendingLoadEvents = createApexEventBuffer()
     pendingLoadEvents.push({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: ' plus live output' } })
     pendingLoadEvents.push({ type: 'agent_end' })
 
@@ -73,21 +73,21 @@ describe('agent transport events', () => {
       expect(messages[0].parts.map((part) => part.type)).toEqual(['text', 'agentMessage', 'toolCall', 'toolResult'])
     }
 
-    assertContinuousTurn(events.reduce((messages, event) => applyPrimeEvent(messages, event), [streamingMessage()]))
-    const buffered = createPrimeEventBuffer()
+    assertContinuousTurn(events.reduce((messages, event) => applyApexEvent(messages, event), [streamingMessage()]))
+    const buffered = createApexEventBuffer()
     for (const event of events) buffered.push(event)
     assertContinuousTurn(buffered.replay([streamingMessage()]))
   })
 
   it('renders compaction start and completion without leaving a silent assistant stream', () => {
-    const started = applyPrimeEvent([streamingMessage()], { type: 'compaction_start', reason: 'overflow' })
+    const started = applyApexEvent([streamingMessage()], { type: 'compaction_start', reason: 'overflow' })
     expect(started[0]).toMatchObject({ role: 'assistant', streaming: false, parts: [{ type: 'text', text: 'partial' }] })
     expect(started.at(-1)).toMatchObject({
       role: 'system', streaming: true,
       parts: [{ type: 'compaction', status: 'running', reason: 'overflow' }],
     })
 
-    const finished = applyPrimeEvent(started, {
+    const finished = applyApexEvent(started, {
       type: 'compaction_end', reason: 'overflow', willRetry: true, aborted: false,
       result: { summary: 'Earlier work was summarized.', tokensBefore: 99_175, firstKeptEntryId: 'kept-1' },
     })
@@ -109,8 +109,8 @@ describe('agent transport events', () => {
       { type: 'compaction_end', reason: 'threshold', aborted: false, errorSeverity: 'warning', errorMessage: 'Auto-compaction skipped: no model' },
     ]
     resetTranscriptIdsForTests()
-    const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), [streamingMessage()])
-    const buffered = createPrimeEventBuffer()
+    const sequential = events.reduce((current, event) => applyApexEvent(current, event), [streamingMessage()])
+    const buffered = createApexEventBuffer()
     for (const event of events) buffered.push(event)
     resetTranscriptIdsForTests()
     expect(buffered.replay([streamingMessage()])).toEqual(sequential)
@@ -134,8 +134,8 @@ describe('agent transport events', () => {
       expect(new Set(messages.map((message) => message.id)).size).toBe(messages.length)
     }
 
-    assertDistinctIds(events.reduce<TranscriptMessage[]>((current, event) => applyPrimeEvent(current, event), []))
-    assertDistinctIds(replayPrimeEvents([], events))
+    assertDistinctIds(events.reduce<TranscriptMessage[]>((current, event) => applyApexEvent(current, event), []))
+    assertDistinctIds(replayApexEvents([], events))
     now.mockRestore()
   })
 
@@ -143,10 +143,10 @@ describe('agent transport events', () => {
     const sequential = [
       { type: 'error', message: 'first failure' },
       { type: 'transport_error', error: 'second failure' },
-    ].reduce((current, event) => applyPrimeEvent(current, event), [streamingMessage()])
+    ].reduce((current, event) => applyApexEvent(current, event), [streamingMessage()])
     expect(sequential.filter((message) => message.role === 'system')).toHaveLength(1)
 
-    const batched = replayPrimeEvents([streamingMessage()], [
+    const batched = replayApexEvents([streamingMessage()], [
       { type: 'error', message: 'first failure' },
       { type: 'transport_error', error: 'second failure' },
     ])
@@ -158,7 +158,7 @@ describe('agent transport events', () => {
       id: 'persisted-compaction', role: 'system',
       parts: [{ type: 'compaction', status: 'done', reason: 'overflow', tokensBefore: 99_175, firstKeptEntryId: 'kept-1', summary: 'Earlier work.' }],
     }]
-    const replayed = createPrimeEventBuffer()
+    const replayed = createApexEventBuffer()
     replayed.push({ type: 'compaction_start', reason: 'overflow' })
     replayed.push({ type: 'compaction_end', reason: 'overflow', aborted: false, willRetry: true, result: { summary: 'Earlier work.', tokensBefore: 99_175, firstKeptEntryId: 'kept-1' } })
     const result = replayed.replay(loaded)

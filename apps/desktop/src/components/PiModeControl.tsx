@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Command, Gauge } from './icons'
 import { SelectControl } from './ui'
 import { ModelPicker } from './ModelPicker'
-import type { PrimeModelDescriptor, PrimeProviderDescriptor, PrimeThinkingLevel } from '@/types/api'
+import type { ApexModelDescriptor, ApexProviderDescriptor, ApexThinkingLevel } from '@/types/api'
 import {
   type PiHydraTier,
   fusionModelIdentity,
@@ -23,15 +23,15 @@ import {
 
 interface PiModeControlProps {
   disabled: boolean
-  modelsByProvider: ReadonlyMap<string, PrimeModelDescriptor[]>
-  providers: PrimeProviderDescriptor[]
+  modelsByProvider: ReadonlyMap<string, ApexModelDescriptor[]>
+  providers: ApexProviderDescriptor[]
   /** Ordinary model/thinking controls, shown only outside Fusion. */
   children?: ReactNode
   /** Sends a `/mode …` command through the normal prompt path. */
   onCommand(command: string): Promise<void> | void
 }
 
-const thinkingLabels: Record<PrimeThinkingLevel, string> = {
+const thinkingLabels: Record<ApexThinkingLevel, string> = {
   off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Standard', high: 'High', xhigh: 'Extra high', max: 'Max',
 }
 

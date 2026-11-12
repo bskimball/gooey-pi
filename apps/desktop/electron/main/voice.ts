@@ -8,7 +8,7 @@ import { streamingBehaviorForIntent } from '../../src/lib/session-actions'
 import type {
   AppSettings,
   RuntimeHarnessId as HarnessId,
-  PrimeModelDescriptor,
+  ApexModelDescriptor,
   ProjectRecord,
   VoiceCredentialProvider,
   VoiceCredentialStorageStatus,
@@ -487,7 +487,7 @@ export class VoiceService {
     return new Set(disabled[harness])
   }
 
-  private async availableModels(harness: HarnessId): Promise<PrimeModelDescriptor[]> {
+  private async availableModels(harness: HarnessId): Promise<ApexModelDescriptor[]> {
     return availableModels(this.options.catalogs[harness], this.disabledProviders(harness), this.disabledModels(harness))
   }
 
@@ -592,7 +592,7 @@ export class VoiceService {
     const settings = this.options.settings()
     const executable = await requireExistingPath(settings.voiceLocalWhisperExecutable, 'whisper.cpp executable')
     const model = await requireExistingPath(settings.voiceLocalWhisperModel, 'whisper.cpp model')
-    const directory = await mkdtemp(join(tmpdir(), 'prime-work-voice-'))
+    const directory = await mkdtemp(join(tmpdir(), 'apex-voice-'))
     const input = join(directory, 'dictation.wav')
     const output = join(directory, 'transcript')
     try {

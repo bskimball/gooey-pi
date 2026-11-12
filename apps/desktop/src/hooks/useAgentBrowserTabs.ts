@@ -4,11 +4,11 @@ import type {
 	AgentBrowserExtensionStatus,
 	AgentBrowserPointerEvent,
 	AgentBrowserTabRecord,
-	PrimeWorkApi,
+	ApexApi,
 } from "@/types/api";
 
 interface UseAgentBrowserTabsOptions {
-	bridge: PrimeWorkApi | null;
+	bridge: ApexApi | null;
 	/** Canonical session file of the active thread; the extension pairs newly shared tabs with it. */
 	sessionKey?: string | null;
 	reportError(error: unknown): void;

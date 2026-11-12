@@ -1,4 +1,4 @@
-import type { PrimeContextUsage } from '../../../src/types/api'
+import type { ApexContextUsage } from '../../../src/types/api'
 import { isRecord } from 'apex-core/validation'
 import type { RpcObject } from './types'
 
@@ -88,10 +88,10 @@ export class LiveContextUsageTracker {
 
 /** Adds only output produced after the authoritative snapshot was captured. */
 export function withLiveContextUsage(
-  snapshot: PrimeContextUsage,
+  snapshot: ApexContextUsage,
   activityTokens: number,
   snapshotActivityTokens: number,
-): PrimeContextUsage {
+): ApexContextUsage {
   if (snapshot.tokens === null || snapshot.percent === null) return snapshot
   const inFlight = Math.max(0, activityTokens - snapshotActivityTokens)
   if (inFlight === 0) return snapshot

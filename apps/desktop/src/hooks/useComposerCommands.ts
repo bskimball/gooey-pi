@@ -3,13 +3,13 @@ import { useStableCallback } from '@/hooks/useStableCallback'
 import { writeClipboardText } from '@/lib/clipboard'
 import { type ComposerCommand, type ComposerCommandAction, parseRuntimeCommands } from '@/lib/composer-commands'
 import type { SettingsSection } from '@/pages/settings/contracts'
-import type { InspectorTab, PrimeWorkApi, SessionRecord, TranscriptMessage } from '@/types/api'
+import type { InspectorTab, ApexApi, SessionRecord, TranscriptMessage } from '@/types/api'
 
 /** Last `get_commands` listing per project, so a new session lists extension commands before its runtime starts. */
 const commandsByProject = new Map<string, ComposerCommand[]>()
 
 interface ComposerCommandsDeps {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   runtimeId: string | undefined
   projectId: string | undefined
   activeSession: SessionRecord | undefined

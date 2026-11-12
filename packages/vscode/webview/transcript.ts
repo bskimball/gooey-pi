@@ -1,4 +1,4 @@
-import { replayPrimeEvents } from 'apex-ui'
+import { replayApexEvents } from 'apex-ui'
 import type { MessagePart, TranscriptMessage } from 'apex-core/types/api'
 import type { TranscriptOp } from '../src/protocol'
 
@@ -20,7 +20,7 @@ export function applyOps(messages: TranscriptMessage[], ops: TranscriptOp[]): Tr
   let batch: Record<string, unknown>[] = []
   const flush = () => {
     if (!batch.length) return
-    next = replayPrimeEvents(next, batch)
+    next = replayApexEvents(next, batch)
     batch = []
   }
   for (const op of ops) {

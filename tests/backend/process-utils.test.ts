@@ -21,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
-const temp = () => { const dir = mkdtempSync(join(tmpdir(), 'prime-work-process-')); dirs.push(dir); return dir }
+const temp = () => { const dir = mkdtempSync(join(tmpdir(), 'apex-process-')); dirs.push(dir); return dir }
 describe('runProcess resource bounds', () => {
   it('runs a pnpm CLI under a Finder-style minimal PATH', async () => {
     const home = temp()
@@ -345,7 +345,7 @@ describe('Pi discovery candidates', () => {
   })
 
   it('keeps E2E discovery hermetic when a fixture executable disappears', async () => {
-    const env = { PRIME_WORK_E2E_HIDE_WINDOWS: '1', PATH: '/fixture/bin' }
+    const env = { APEX_E2E_HIDE_WINDOWS: '1', PATH: '/fixture/bin' }
     expect(harnessExecutableCandidates(HARNESSES.pi, env, 'darwin', undefined, '/fixture/home')).toEqual(['/fixture/bin/pi'])
     await expect(nvmHarnessExecutableCandidates(HARNESSES.pi, env, 'darwin', '/fixture/home')).resolves.toEqual([])
   })

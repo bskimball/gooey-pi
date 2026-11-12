@@ -27,7 +27,7 @@ its index before driving, then use the matching feature file as the recipe.
   command with `xvfb-run -a` (e.g. `xvfb-run -a --server-args="-screen 0 1600x1000x24" ...`).
 - **Isolation.** Every drive launches its own app instance with a throwaway
   `HOME` and Electron `--user-data-dir`, so it never reads or writes your real
-  `~/.prime` / `~/.omp` / `~/.pi` state and never drives an instance it did not
+  `~/.pi` state and never drives an instance it did not
   start. Readiness is `.app-shell[data-ready="true"]`. A fresh `HOME` has no
   harness installed, so the driver first dismisses the `No Pi family harness
   detected` modal (that modal makes the shell `inert`).

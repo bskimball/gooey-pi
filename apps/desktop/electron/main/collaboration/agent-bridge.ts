@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
-import type { PrimeModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../../src/types/api'
+import type { ApexModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../../src/types/api'
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import type { AgentRpcManager } from '../agent-rpc'
@@ -238,8 +238,8 @@ export class AgentCollaborationBridge extends CapabilityBridge {
 
   private async peersFor(source: CollaborationTarget): Promise<CollaborationTarget[]> {
     const peers: CollaborationTarget[] = []
-    // Project grants are harness-scoped. A Prime session can collaborate with
-    // Prime peers (and likewise for OMP/pi), but its token never grants access
+    // Project grants are harness-scoped. A Pi session can collaborate with
+    // Pi peers, but its token never grants access
     // to another harness's session catalog even when the cwd text matches.
     const harness = source.session.harness
     if (harness !== 'pi') throw new Error('Invalid collaboration harness')
@@ -265,7 +265,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     }))
   }
 
-  private async modelsFor(source: CollaborationTarget): Promise<PrimeModelDescriptor[]> {
+  private async modelsFor(source: CollaborationTarget): Promise<ApexModelDescriptor[]> {
     const harness = source.session.harness
     if (harness !== 'pi') throw new Error('Invalid collaboration harness')
     return availableModels(this.options.catalogs[harness], this.options.disabledProviders[harness](), this.options.disabledModels[harness]())

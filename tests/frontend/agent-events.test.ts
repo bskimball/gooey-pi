@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_EVENT_QUEUE_LIMIT, admitAgentEvent, contextUsageFromEvent, sessionUsageFromEvent, type PendingAgentEvent } from '../../apps/desktop/src/app/agent-events'
-import { replayPrimeEvents } from '../../apps/desktop/src/lib/events'
+import { replayApexEvents } from '../../apps/desktop/src/lib/events'
 import { contextDialLabel, formatSessionCost, formatSessionTokens } from '../../apps/desktop/src/lib/format-cost'
 
 describe('context usage events', () => {
@@ -85,7 +85,7 @@ describe('agent event admission bound', () => {
 
 describe('provider fallback events', () => {
   it('adds a notice for an applied fallback and resumes streaming below it', () => {
-    const messages = replayPrimeEvents([], [
+    const messages = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'before' } },
       { type: 'retry_fallback_applied', from: 'anthropic/claude-opus', to: 'anthropic/claude-sonnet', role: 'fallback' },
@@ -102,7 +102,7 @@ describe('provider fallback events', () => {
   })
 
   it('does not add a row for a succeeded fallback', () => {
-    const messages = replayPrimeEvents([], [
+    const messages = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'retry_fallback_succeeded', model: 'anthropic/claude-sonnet', role: 'fallback' },
     ])
@@ -112,7 +112,7 @@ describe('provider fallback events', () => {
   })
 
   it('deduplicates identical applied fallback notices', () => {
-    const messages = replayPrimeEvents([], [
+    const messages = replayApexEvents([], [
       { type: 'retry_fallback_applied', from: 'anthropic/claude-opus', to: 'anthropic/claude-sonnet', role: 'fallback' },
       { type: 'retry_fallback_applied', from: 'anthropic/claude-opus', to: 'anthropic/claude-sonnet', role: 'fallback' },
     ])
@@ -125,7 +125,7 @@ describe('provider fallback events', () => {
   })
 
   it('ignores unrelated model events without finalizing streaming', () => {
-    const messages = replayPrimeEvents([], [
+    const messages = replayApexEvents([], [
       { type: 'agent_start' },
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'before' } },
       { type: 'model_changed' },

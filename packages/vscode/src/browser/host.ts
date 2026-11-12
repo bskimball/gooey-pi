@@ -14,7 +14,7 @@ class BrowserCapability extends CapabilityBridge {
     super()
   }
   protected environmentEntries(url: string, token: string): NodeJS.ProcessEnv {
-    return { PRIME_WORK_BROWSER_URL: url, PRIME_WORK_BROWSER_TOKEN: token, PRIME_WORK_BROWSER_EXTENSION_PATH: this.extensionPath }
+    return { APEX_BROWSER_URL: url, APEX_BROWSER_TOKEN: token, APEX_BROWSER_EXTENSION_PATH: this.extensionPath }
   }
   protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim): Promise<unknown> {
     if (!claim.sessionPath) throw new Error('Browser control is not available yet for this thread; try again in a moment')
@@ -64,7 +64,7 @@ export class BrowserHost {
   readonly extensionPath: string
   private starting: Promise<void> | undefined
   constructor(distDirectory: string, resizeScreenshot?: ScreenshotResizer, describeSession?: (sessionKey: string) => Promise<string | undefined>) {
-    this.extensionPath = join(distDirectory, 'extensions', 'omp-work-browser.ts')
+    this.extensionPath = join(distDirectory, 'extensions', 'apex-browser.ts')
     this.service = new ExtensionBrowserService({ extensionBridge: this.bridge, extensionPath: join(distDirectory, 'browser-extension'), resizeScreenshot, describeSession })
     this.capability = new BrowserCapability(this.service, this.extensionPath)
   }

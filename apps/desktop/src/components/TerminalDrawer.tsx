@@ -78,7 +78,7 @@ const terminalTheme = (): ITheme => {
   return {
     background: read('--terminal-bg', '#ffffff'),
     foreground: read('--terminal-text', '#20201e'),
-    cursor: read('--prime', '#6b55e8'),
+    cursor: read('--apex', '#6b55e8'),
     selectionBackground: read('--terminal-selection', '#c8beff99'),
     black: read('--terminal-black', '#242423'),
     red: read('--terminal-red', '#b42318'),
@@ -154,9 +154,9 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
   const publishActiveContext = () => {
     const terminal = terminalRef.current
     const terminalId = terminalIdRef.current
-    if (!visibleRef.current || !terminal || !terminalId || !window.prime) return
+    if (!visibleRef.current || !terminal || !terminalId || !window.apex) return
     const content = readTerminalContent(terminal)
-    window.prime.terminal.setActiveContext(terminalId, { label: labelRef.current, content: content.content, truncated: content.contentTruncated })
+    window.apex.terminal.setActiveContext(terminalId, { label: labelRef.current, content: content.content, truncated: content.contentTruncated })
   }
 
   const scheduleActiveContext = () => {
@@ -170,7 +170,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
   useEffect(() => {
     if (!visible) {
       const terminalId = terminalIdRef.current
-      if (terminalId && window.prime) window.prime.terminal.clearActiveContext(terminalId)
+      if (terminalId && window.apex) window.apex.terminal.clearActiveContext(terminalId)
       return
     }
     requestAnimationFrame(() => {
@@ -182,8 +182,8 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
 
   useEffect(() => {
     const terminalId = terminalIdRef.current
-    if (!terminalId || !window.prime) return
-    void window.prime.terminal.bindSession(terminalId, sessionPath ?? null).then(() => scheduleActiveContext()).catch(() => undefined)
+    if (!terminalId || !window.apex) return
+    void window.apex.terminal.bindSession(terminalId, sessionPath ?? null).then(() => scheduleActiveContext()).catch(() => undefined)
   }, [sessionPath])
 
   useEffect(() => {
@@ -206,8 +206,8 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
         onOpenLinkRef.current(uri, terminalLinkOpensExternally(event))
         return
       }
-      if (!window.prime) return
-      void openExternalUrl(window.prime.app, uri).then((failure) => {
+      if (!window.apex) return
+      void openExternalUrl(window.apex.app, uri).then((failure) => {
         if (failure) onErrorRef.current?.(failure)
       })
     })
@@ -234,29 +234,29 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
     }
     const inputDisposable = terminal.onData((data) => {
       const id = terminalIdRef.current
-      if (id && window.prime) window.prime.terminal.input(id, data)
+      if (id && window.apex) window.apex.terminal.input(id, data)
     })
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
       const id = terminalIdRef.current
-      if (id && window.prime) window.prime.terminal.resize(id, cols, rows)
+      if (id && window.apex) window.apex.terminal.resize(id, cols, rows)
     })
     const selectionDisposable = terminal.onSelectionChange(() => {
       const selection = boundTerminalText(terminal.getSelection(), TERMINAL_SELECTION_MAX_CHARS)
       onSelectionChangeRef.current(selection.text, selection.truncated)
     })
 
-    if (window.prime && cwd) {
+    if (window.apex && cwd) {
       // Subscribe before create resolves: a fast shell can emit its prompt or exit before the IPC reply.
-      offData = window.prime.terminal.onData((event) => send({ type: 'DATA', event }))
-      offExit = window.prime.terminal.onExit((event) => send({ type: 'EXIT', event }))
+      offData = window.apex.terminal.onData((event) => send({ type: 'DATA', event }))
+      offExit = window.apex.terminal.onExit((event) => send({ type: 'EXIT', event }))
       send({ type: 'START', session: {
-        create: () => window.prime.terminal.create({ cwd, shell, command, cols: terminal.cols, rows: terminal.rows }),
-        kill: (terminalId) => { if (window.prime) void window.prime.terminal.kill(terminalId) },
+        create: () => window.apex.terminal.create({ cwd, shell, command, cols: terminal.cols, rows: terminal.rows }),
+        kill: (terminalId) => { if (window.apex) void window.apex.terminal.kill(terminalId) },
         attach: ({ terminalId, shell: actualShell }, initialOutput) => {
           terminalIdRef.current = terminalId
           onStateChangeRef.current({ shellName: actualShell.split('/').at(-1) ?? actualShell, connected: true })
           const bindCurrentSession = async () => {
-            if (sessionPathRef.current) await window.prime.terminal.bindSession(terminalId, sessionPathRef.current)
+            if (sessionPathRef.current) await window.apex.terminal.bindSession(terminalId, sessionPathRef.current)
             scheduleActiveContext()
           }
           if (initialOutput) terminal.write(initialOutput, () => { void bindCurrentSession().catch(() => undefined) })
@@ -274,7 +274,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
     } else {
       terminal.writeln('\x1b[38;5;141mGooeyPi terminal\x1b[0m')
       terminal.writeln('\x1b[90mA live PTY will connect when the desktop bridge and project are available.\x1b[0m')
-      terminal.write('\r\n\x1b[32m➜\x1b[0m \x1b[36mprime-work\x1b[0m \x1b[90mgit:(main)\x1b[0m ')
+      terminal.write('\r\n\x1b[32m➜\x1b[0m \x1b[36mapex\x1b[0m \x1b[90mgit:(main)\x1b[0m ')
     }
 
     const observer = new ResizeObserver(() => {

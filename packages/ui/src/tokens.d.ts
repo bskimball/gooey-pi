@@ -31,8 +31,8 @@ export interface ThemePalette {
   borderSubtle: string
   borderStrong: string
   focus: string
-  prime: string
-  primeSoft: string
+  apex: string
+  apexSoft: string
   success: string
   warning: string
   danger: string
@@ -44,7 +44,7 @@ export interface ThemePalette {
   termText: string
   termSelection: string
   ansi: ThemeAnsiPalette
-  onPrime: string
+  onApex: string
   shadow: string
 }
 

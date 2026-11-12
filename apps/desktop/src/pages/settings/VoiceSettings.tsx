@@ -14,7 +14,7 @@ import {
   optionsWithCurrent,
   type VoiceOption,
 } from '@/lib/voice-options'
-import type { AppSettings, PrimeWorkApi, VoiceCredentialProvider, VoiceCredentialStatus, VoiceTranscriptionProvider } from '@/types/api'
+import type { AppSettings, ApexApi, VoiceCredentialProvider, VoiceCredentialStatus, VoiceTranscriptionProvider } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
 
 const CREDENTIALS: Array<{ id: VoiceCredentialProvider; name: string; monogram: string; detail: string }> = [
@@ -27,7 +27,7 @@ const CREDENTIALS: Array<{ id: VoiceCredentialProvider; name: string; monogram: 
 const CONNECTION_CREDENTIALS = CREDENTIALS.filter((item) => item.id !== 'self-hosted')
 
 interface VoiceSettingsProps extends SettingsSectionProps {
-  voice: PrimeWorkApi['voice'] | null
+  voice: ApexApi['voice'] | null
   platform?: NodeJS.Platform
 }
 

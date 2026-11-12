@@ -22,8 +22,8 @@ import {
 } from "../../apps/desktop/src/lib/harness";
 import type {
 	BrowserAnnotation,
-	PrimeModelDescriptor,
-	PrimeProviderDescriptor,
+	ApexModelDescriptor,
+	ApexProviderDescriptor,
 	PromptDeliveryIntent,
 	PromptImage,
 	SessionRecord,
@@ -34,7 +34,7 @@ import type {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const models: PrimeModelDescriptor[] = [
+const models: ApexModelDescriptor[] = [
 	{
 		key: "provider/vision",
 		provider: "provider",
@@ -49,7 +49,7 @@ const models: PrimeModelDescriptor[] = [
 		available: true,
 	},
 ];
-const providers: PrimeProviderDescriptor[] = [
+const providers: ApexProviderDescriptor[] = [
 	{
 		id: "provider",
 		name: "Provider",
@@ -242,12 +242,12 @@ const pressKey = async (key: string, init: KeyboardEventInit = {}) => {
 
 describe("Composer shared browser selection", () => {
 	it("reuses a captured Chrome preview and treats a superseded clear as a no-op", async () => {
-		const previous = window.prime;
-		const descriptor = Object.getOwnPropertyDescriptor(window, 'prime');
+		const previous = window.apex;
+		const descriptor = Object.getOwnPropertyDescriptor(window, 'apex');
 		const preview = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
 		const captureSelection = vi.fn(async () => preview);
 		const clearSelection = vi.fn(async () => false);
-		Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { ...previous, browser: { ...previous?.browser, captureSelection, clearSelection } } });
+		Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: { ...previous, browser: { ...previous?.browser, captureSelection, clearSelection } } });
 		try {
 			const { onSend } = renderComposer({ composerProps: { extensionTab: {
 				tabId: 'cached-preview', sessionFile: '/sessions/cached.jsonl', backend: 'extension',
@@ -263,8 +263,8 @@ describe("Composer shared browser selection", () => {
 			expect(clearSelection).toHaveBeenCalledWith('/sessions/cached.jsonl', 'cached-preview', 'cached-capture');
 			expect(container.querySelector('[aria-label="Selected browser elements"]')).toBeNull();
 		} finally {
-			if (descriptor) Object.defineProperty(window, 'prime', descriptor);
-			else Reflect.deleteProperty(window, 'prime');
+			if (descriptor) Object.defineProperty(window, 'apex', descriptor);
+			else Reflect.deleteProperty(window, 'apex');
 		}
 	});
 
@@ -453,7 +453,7 @@ describe("Composer skill mentions", () => {
 			skills: [
 				skillRecord("browser-skill"),
 				skillRecord("Browser", {
-					id: "prime-work-browser",
+					id: "apex-browser",
 					kind: "extension",
 					path: undefined,
 				}),
@@ -597,14 +597,14 @@ describe("Composer skill mentions", () => {
 			],
 			skipped: 0,
 		}));
-		const previous = window.prime;
-		window.prime = { projects: { listFiles } } as unknown as typeof window.prime;
+		const previous = window.apex;
+		window.apex = { projects: { listFiles } } as unknown as typeof window.apex;
 		try {
 			const { onSend } = renderComposer({
 				composerProps: { fileRoot: "/project-files-test" },
 				skills: [
 					skillRecord("browser", {
-						id: "prime-work-browser",
+						id: "apex-browser",
 						kind: "extension",
 						path: undefined,
 					}),
@@ -629,7 +629,7 @@ describe("Composer skill mentions", () => {
 			const [prompt] = onSend.mock.calls[0];
 			expect(prompt.match(/- @browser:/g)).toHaveLength(1);
 		} finally {
-			window.prime = previous;
+			window.apex = previous;
 		}
 	});
 
@@ -675,7 +675,7 @@ describe("capability mention parsing", () => {
 		skillRecord("unslop"),
 		skillRecord("HOMEWORK"),
 		skillRecord("Browser", {
-			id: "prime-work-browser",
+			id: "apex-browser",
 			kind: "extension",
 			path: undefined,
 		}),
@@ -721,7 +721,7 @@ describe("capability mention parsing", () => {
 		const shared = [
 			skillRecord("Browser"),
 			skillRecord("Browser", {
-				id: "prime-work-browser",
+				id: "apex-browser",
 				kind: "extension",
 				path: undefined,
 			}),
@@ -1177,14 +1177,14 @@ describe("Composer sendSignal", () => {
 			id: "Lead/Model",
 			name: "Lead Model",
 			availableThinkingLevels: ["high", "xhigh"],
-		} satisfies PrimeModelDescriptor;
+		} satisfies ApexModelDescriptor;
 		const sidekick = {
 			...models[0],
 			key: "provider/Side/Model",
 			id: "Side/Model",
 			name: "Side Model",
 			availableThinkingLevels: ["off", "low"],
-		} satisfies PrimeModelDescriptor;
+		} satisfies ApexModelDescriptor;
 		const pair: PiFusionPair = {
 			lead: { provider: "provider", modelId: lead.id, thinking: "high" },
 			sidekick: { provider: "provider", modelId: sidekick.id, thinking: "off" },

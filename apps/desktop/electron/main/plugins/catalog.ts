@@ -376,7 +376,7 @@ export async function discoverPlugins(agentDir: string, safeProjectPath: string 
       samePath(join(homedir(), '.agents', 'skills'), projectSkillsDir),
     ])
     const projectRoots = [safeProjectPath]
-    // A project can point back at the same Prime settings and shared skills
+    // A project can point back at the same Pi settings and shared skills
     // directories. Discover those paths once as user-scoped records instead
     // of presenting every entry twice.
     if (!sameSettingsFile) {

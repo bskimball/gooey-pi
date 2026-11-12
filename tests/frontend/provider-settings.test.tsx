@@ -4,15 +4,15 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useProviderCatalog } from '../../apps/desktop/src/hooks/useProviderCatalog'
 import { ProviderSettings } from '../../apps/desktop/src/pages/settings/ProviderSettings'
-import type { HarnessId, PrimeModelCatalog, PrimeWorkApi, RuntimeInfo } from '../../apps/desktop/src/types/api'
+import type { HarnessId, ApexModelCatalog, ApexApi, RuntimeInfo } from '../../apps/desktop/src/types/api'
 
 const model = {
   key: 'openai-codex/gpt-5.6', provider: 'openai-codex', id: 'gpt-5.6', name: 'GPT-5.6', reasoning: true,
   input: ['text'] as const, contextWindow: 400_000, maxTokens: 128_000,
   availableThinkingLevels: ['low', 'medium', 'high'] as const, fastModeSupported: true, available: true,
 }
-const catalog: PrimeModelCatalog = {
-  primeVersion: '0.7.0',
+const catalog: ApexModelCatalog = {
+  apexVersion: '0.7.0',
   refreshedAt: '2026-08-06T00:00:00.000Z',
   models: [
     { ...model, key: 'anthropic/claude-sonnet', provider: 'anthropic', id: 'claude-sonnet', name: 'Claude Sonnet', input: [...model.input], availableThinkingLevels: ['low', 'high'], enabled: false },
@@ -144,11 +144,11 @@ describe('provider settings behavior and accessibility', () => {
 
 describe('provider runtime mutations', () => {
   function mountCatalogHook(options: {
-    command: PrimeWorkApi['agent']['command']
+    command: ApexApi['agent']['command']
     runtime?: typeof runtime | null
     syncRuntime?: (runtimeId: string) => Promise<void>
-    setEnabled?: PrimeWorkApi['providers']['setEnabled']
-    setDisabled?: PrimeWorkApi['providers']['setDisabled']
+    setEnabled?: ApexApi['providers']['setEnabled']
+    setDisabled?: ApexApi['providers']['setDisabled']
     harness?: HarnessId
     reportError?: (error: unknown) => void
   }) {
@@ -161,7 +161,7 @@ describe('provider runtime mutations', () => {
         setEnabled: options.setEnabled ?? vi.fn().mockResolvedValue(catalog),
         setDisabled: options.setDisabled ?? vi.fn().mockResolvedValue(catalog),
       },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = options.syncRuntime ?? vi.fn().mockResolvedValue(undefined)
     const reportError = options.reportError ?? vi.fn()
     function Harness() {

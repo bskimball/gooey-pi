@@ -62,7 +62,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
-  Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: undefined })
+  Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: undefined })
   vi.restoreAllMocks()
 })
 
@@ -87,7 +87,7 @@ const openChangesTab = async () => {
 describe('Phase 2 coordination', () => {
   it('shows compact specialist tabs and opens only an observed source position', async () => {
     const openInVsCode = vi.fn(async () => true)
-    Object.defineProperty(window, 'prime', { configurable: true, value: { app: { openInVsCode } } })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { app: { openInVsCode } } })
     const onSelect = vi.fn()
     const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
       { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect source', cwd: '/repo' } },
@@ -197,7 +197,7 @@ describe('useBrowserAnnotations identity', () => {
 describe('SpecialistsPanel transcript scoping and loading', () => {
   it.each([false, true])('keeps the initial report landing through delayed disk hydration unless the reader scrolls (scrolled: %s)', async (scrolled) => {
     let finishRead: ((messages: TranscriptMessage[]) => void) | undefined
-    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       const body = this.closest<HTMLDivElement>('.specialists-panel__body')
       const offset = body?.textContent?.includes('Earlier worker commentary') ? 900 : 120
@@ -224,12 +224,12 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     ] }]))
     expect(scroller.scrollTop).toBe(scrolled ? 40 : 900)
     expect(container.querySelector('.specialist-result')?.textContent).toBe('ResultFinal report')
-    Reflect.deleteProperty(window, 'prime')
+    Reflect.deleteProperty(window, 'apex')
   })
 
   it('pauses following while reading, does not repin when a disk transcript arrives, and jumps explicitly', async () => {
     let finishRead: ((messages: TranscriptMessage[]) => void) | undefined
-    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
     const messages: TranscriptMessage[] = [{ id: 'start', role: 'assistant', parts: [
       { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Investigate navigation' } },
       { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { sessionFile: '/worker.jsonl' } } },
@@ -246,11 +246,11 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     await act(async () => container.querySelector<HTMLButtonElement>('.specialist-jump')!.click())
     expect(scroller.scrollTop).toBe(1000)
     expect(container.querySelector('.specialist-jump')).toBeNull()
-    Reflect.deleteProperty(window, 'prime')
+    Reflect.deleteProperty(window, 'apex')
   })
 
   it('keeps commentary and tool activity in order and marks only the recorded final report as Result', async () => {
-    Object.defineProperty(window, 'prime', { configurable: true, value: { sessions: { read: async (): Promise<TranscriptMessage[]> => [{ id: 'disk', role: 'assistant', parts: [
+    Object.defineProperty(window, 'apex', { configurable: true, value: { sessions: { read: async (): Promise<TranscriptMessage[]> => [{ id: 'disk', role: 'assistant', parts: [
       { type: 'text', text: 'First commentary' },
       { type: 'toolCall', name: 'bash', args: { command: 'echo inspected' } },
       { type: 'toolResult', name: 'bash', text: 'inspected' },
@@ -269,7 +269,7 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     expect(text.indexOf('echo inspected')).toBeLessThan(text.indexOf('Second commentary'))
     expect(text.indexOf('Second commentary')).toBeLessThan(text.indexOf('Final report'))
     expect(container.querySelector('.specialist-result')?.textContent).toBe('ResultFinal report')
-    Reflect.deleteProperty(window, 'prime')
+    Reflect.deleteProperty(window, 'apex')
   })
 
   it('isolates cached worker transcripts across parent sessions and loads task / chain step session files', async () => {
@@ -291,7 +291,7 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
       }
       throw new Error('Transcript not found')
     })
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { sessions: { read: readSession } },
     })
@@ -448,10 +448,10 @@ describe('RunConfigSection disclosure and formatting', () => {
       ],
       injectedCapabilities: [
         { capability: 'piFastMode', filename: 'pi-work-fast-mode.ts', present: true },
-        { capability: 'schedule', filename: 'omp-work-schedules.ts', present: false },
+        { capability: 'schedule', filename: 'apex-schedules.ts', present: false },
       ],
     }
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { runtime: { effectiveConfig: vi.fn(async () => effectiveConfig) } },
     })
@@ -497,7 +497,7 @@ describe('RunConfigSection disclosure and formatting', () => {
     expect(body?.textContent).toContain('Schedules')
     expect(container.querySelector('.run-config__chips li.is-missing')?.textContent).toBe('Schedules')
 
-    Reflect.deleteProperty(window, 'prime')
+    Reflect.deleteProperty(window, 'apex')
   })
 })
 
@@ -528,9 +528,9 @@ describe('VS Code webview sub-agent inspection', () => {
         },
       }),
     })
-    const { installPrimeShim } = await import('../../packages/vscode/webview/host')
+    const { installApexShim } = await import('../../packages/vscode/webview/host')
     const { App: VsCodeApp } = await import('../../packages/vscode/webview/App')
-    installPrimeShim()
+    installApexShim()
 
     await act(async () => {
       root.render(<VsCodeApp />)
@@ -608,6 +608,6 @@ describe('VS Code webview sub-agent inspection', () => {
     })
     expect(container.querySelector('.apex-specialists-pane')).toBeNull()
 
-    Reflect.deleteProperty(window, 'prime')
+    Reflect.deleteProperty(window, 'apex')
   })
 })

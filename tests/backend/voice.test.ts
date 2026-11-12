@@ -27,7 +27,7 @@ function model(key: string, name: string, levels: Array<'off' | 'minimal' | 'low
 }
 
 function makeService(overrides: Partial<VoiceServiceOptions> = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'prime-work-voice-test-'))
+  const directory = mkdtempSync(join(tmpdir(), 'apex-voice-test-'))
   directories.push(directory)
   const command = vi.fn(async () => ({}))
   const stop = vi.fn(async () => true)
@@ -35,7 +35,7 @@ function makeService(overrides: Partial<VoiceServiceOptions> = {}) {
   const list = vi.fn(() => [{ runtimeId: 'runtime-1', harness: 'pi', cwd: '/tmp/pi', isStreaming: true, sessionId: 'session-1', sessionFile: '/tmp/session.jsonl' }])
   const agent = { start, command, stop, list }
   const catalog = async (_force = false, disabledProviders: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()) => ({
-    primeVersion: 'test', refreshedAt: '2026-01-01T00:00:00.000Z',
+    apexVersion: 'test', refreshedAt: '2026-01-01T00:00:00.000Z',
     providers: [
       { id: 'openai-codex', name: 'OpenAI Codex', authMethod: 'oauth' as const, configured: true, modelCount: 3, availableModelCount: 2, enabled: !disabledProviders.has('openai-codex') },
       { id: 'anthropic', name: 'Anthropic', authMethod: 'api_key' as const, configured: true, modelCount: 2, availableModelCount: 1, enabled: !disabledProviders.has('anthropic') },

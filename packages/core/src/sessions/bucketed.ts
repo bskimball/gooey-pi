@@ -9,8 +9,8 @@ import { ingestMessageActivity, type JsonRecord, MAX_METADATA_RECORDS, type Meta
 import { boundedString, compactText, createTranscriptReader, MAX_PART_TEXT_CHARS, promptTitle, type TranscriptFileReader, textFromContent, validTimestamp } from './transcript'
 
 /**
- * Shared machinery for the bucketed JSONL session layouts the pi and OMP
- * harnesses use: `<root>/<bucket>/<ISO timestamp with dashes>_<uuid>.jsonl`,
+ * Shared machinery for the bucketed JSONL session layouts the pi
+ * harness uses: `<root>/<bucket>/<ISO timestamp with dashes>_<uuid>.jsonl`,
  * a `{"type":"session","version":3,...}` header, then append-only entries with
  * `id`/`parentId` forming a branch tree. Only the display-name and
  * `model_change` record shapes differ between the two dialects.
@@ -32,7 +32,7 @@ export function timestampFromBucketedSessionName(name: string): number | undefin
 /**
  * Catalog IO that recurses exactly one bucket-directory level under a session
  * root. Discovered entries carry bucket-relative names so the shared catalog
- * joins, stats, canonicalizes, caches, and bounds them exactly like flat Prime
+ * joins, stats, canonicalizes, caches, and bounds them exactly like flat Pi
  * entries.
  */
 export function createBucketedCatalogIo(): SessionCatalogIo {

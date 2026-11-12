@@ -23,8 +23,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type {
   AutomationScheduleRecord,
   HarnessId,
-  PrimeModelDescriptor,
-  PrimeThinkingLevel,
+  ApexModelDescriptor,
+  ApexThinkingLevel,
   ProjectRecord,
   ScheduleExecution,
   ScheduleInput,
@@ -35,7 +35,7 @@ import type {
   ScheduleTiming,
   SessionRecord,
 } from '@/types/api'
-import { PRIME_THINKING_LEVELS } from '@/types/api'
+import { APEX_THINKING_LEVELS } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { errorMessage } from '@/lib/errors'
@@ -60,7 +60,7 @@ type ScheduleForm = {
   weekdays: string[]
   advancedRrule: string
   model: string
-  thinking: 'auto' | PrimeThinkingLevel
+  thinking: 'auto' | ApexThinkingLevel
   fast: boolean
 }
 
@@ -69,7 +69,7 @@ interface ScheduledPageProps {
   schedules: AutomationScheduleRecord[]
   projects: ProjectRecord[]
   sessions: SessionRecord[]
-  models: PrimeModelDescriptor[]
+  models: ApexModelDescriptor[]
   lastSelectedModel: string
   error?: string
   initialProjectId?: string
@@ -96,7 +96,7 @@ const WEEKDAYS = [
   { value: 'SU', label: 'S', long: 'Sunday' },
 ] as const
 const DAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const
-const THINKING_LEVELS: readonly PrimeThinkingLevel[] = PRIME_THINKING_LEVELS
+const THINKING_LEVELS: readonly ApexThinkingLevel[] = APEX_THINKING_LEVELS
 const FREQUENCIES: Array<{ value: Frequency; label: string }> = [
   { value: 'hourly', label: 'Hourly' },
   { value: 'daily', label: 'Daily' },
@@ -128,13 +128,13 @@ function projectForSession(session: SessionRecord, projects: ProjectRecord[]) {
   return projects.find((project) => project.path === session.projectPath)
 }
 
-function defaultScheduleModel(models: PrimeModelDescriptor[], lastSelectedModel: string): string {
+function defaultScheduleModel(models: ApexModelDescriptor[], lastSelectedModel: string): string {
   return models.find((model) => model.key === lastSelectedModel && model.enabled !== false && model.available)?.key
     ?? models.find((model) => model.enabled !== false && model.available)?.key
     ?? ''
 }
 
-function defaultForm(projects: ProjectRecord[], sessions: SessionRecord[], models: PrimeModelDescriptor[], lastSelectedModel: string, initialProjectId?: string, initialSessionId?: string): ScheduleForm {
+function defaultForm(projects: ProjectRecord[], sessions: SessionRecord[], models: ApexModelDescriptor[], lastSelectedModel: string, initialProjectId?: string, initialSessionId?: string): ScheduleForm {
   const authorizedProjects = projects.filter(isAuthorized)
   const initialSession = sessions.find((session) => session.id === initialSessionId && !session.archived)
   const sessionProject = initialSession ? projectForSession(initialSession, authorizedProjects) : undefined
@@ -169,7 +169,7 @@ function rruleParts(rrule: string) {
   }))
 }
 
-function formFromSchedule(item: AutomationScheduleRecord, models: PrimeModelDescriptor[], lastSelectedModel: string): ScheduleForm {
+function formFromSchedule(item: AutomationScheduleRecord, models: ApexModelDescriptor[], lastSelectedModel: string): ScheduleForm {
   const start = item.timing.kind === 'once'
     ? localParts(new Date(item.timing.at))
     : { date: item.timing.dtstartLocal.slice(0, 10), time: item.timing.dtstartLocal.slice(11, 16) }

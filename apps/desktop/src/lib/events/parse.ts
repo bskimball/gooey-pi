@@ -1,6 +1,6 @@
 import type { MessagePart } from 'apex-core/types/api'
 
-/** Record and field coercion for raw Prime events. */
+/** Record and field coercion for raw Pi events. */
 
 export type UnknownRecord = Record<string, unknown>
 

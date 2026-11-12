@@ -15,7 +15,7 @@ import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachi
 import { AgentSettings } from '../../apps/desktop/src/pages/settings/AgentSettings'
 import { ProviderSettings } from '../../apps/desktop/src/pages/settings/ProviderSettings'
 import { SettingsPage } from '../../apps/desktop/src/pages/SettingsPage'
-import type { AppMeta, AppSettings, HarnessId, PrimeModelCatalog, PrimeWorkApi, ProjectRecord, RuntimeInfo, SessionRecord } from '../../apps/desktop/src/types/api'
+import type { AppMeta, AppSettings, HarnessId, ApexModelCatalog, ApexApi, ProjectRecord, RuntimeInfo, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -32,17 +32,17 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
-const primeProject: ProjectRecord = {
+const apexProject: ProjectRecord = {
   id: 'project', harness: 'pi', name: 'Pi project', path: '/project', folders: ['/project'], primaryFolder: '/project', pinned: false,
   createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 1,
 }
-const primeSession: SessionRecord = {
+const apexSession: SessionRecord = {
   id: 'session', harness: 'pi', projectPath: '/project', filePath: '/sessions/current.jsonl', title: 'Pi session',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
 }
-const piProject: ProjectRecord = { ...primeProject, id: 'pi-project', harness: 'pi', name: 'Pi project', path: '/pi', folders: ['/pi'], primaryFolder: '/pi' }
-const piSession: SessionRecord = { ...primeSession, id: 'pi-session', harness: 'pi', projectPath: '/pi', filePath: '/pi-sessions/current.jsonl', title: 'Pi session' }
-const primeRuntime: RuntimeInfo = { runtimeId: 'background-runtime', harness: 'pi', cwd: '/project', sessionFile: primeSession.filePath, isStreaming: false }
+const piProject: ProjectRecord = { ...apexProject, id: 'pi-project', harness: 'pi', name: 'Pi project', path: '/pi', folders: ['/pi'], primaryFolder: '/pi' }
+const piSession: SessionRecord = { ...apexSession, id: 'pi-session', harness: 'pi', projectPath: '/pi', filePath: '/pi-sessions/current.jsonl', title: 'Pi session' }
+const apexRuntime: RuntimeInfo = { runtimeId: 'background-runtime', harness: 'pi', cwd: '/project', sessionFile: apexSession.filePath, isStreaming: false }
 const piRuntime: RuntimeInfo = { runtimeId: 'pi-runtime', harness: 'pi', cwd: '/pi', sessionFile: piSession.filePath, isStreaming: false }
 
 const meta: AppMeta = {
@@ -91,7 +91,7 @@ describe('Pi bootstrap ownership', () => {
       agent: { list: agentList },
       app: { getMeta: async () => meta },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     return { bridge, projectsList, sessionsList, agentList }
   }
 
@@ -147,7 +147,7 @@ describe('Pi bootstrap ownership', () => {
       agent: { list: async () => [] },
       app: { getMeta: async () => meta },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const workspace = makeWorkspace()
     const setProjects = vi.fn()
     const setSessions = vi.fn()
@@ -168,7 +168,7 @@ describe('Pi bootstrap ownership', () => {
     await act(async () => { root.render(<BootstrapProbe harness="pi" />); await Promise.resolve() })
     const activationsBeforeResolve = workspace.activated.length
     // User navigation takes precedence over a pending Pi startup catalog.
-    act(() => { workspace.activateWorkspace(primeProject) })
+    act(() => { workspace.activateWorkspace(apexProject) })
     await act(async () => { projects.resolve([piProject]); await projects.promise; await Promise.resolve(); await Promise.resolve() })
     expect(workspace.activated.length).toBe(activationsBeforeResolve + 1)
   })
@@ -185,7 +185,7 @@ describe('Pi bootstrap ownership', () => {
       agent: { list: async () => [] },
       app: { getMeta: async () => meta },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const workspace = makeWorkspace()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
@@ -227,13 +227,13 @@ describe('background Pi runtime event isolation', () => {
     let handler!: (payload: { runtimeId: string; event: Record<string, unknown> }) => void
     const bridge = {
       agent: { onEvent: (callback: typeof handler) => { handler = callback; return () => undefined } },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const setSessions = vi.fn()
     const setRuntime = vi.fn()
     const queueAgentEvent = vi.fn()
     const reconcileTranscriptForEvent = vi.fn()
     // Another Pi runtime streams with its background session still registered.
-    const runtimeSessionsRef = { current: new Map([[primeRuntime.runtimeId, primeSession.filePath]]) }
+    const runtimeSessionsRef = { current: new Map([[apexRuntime.runtimeId, apexSession.filePath]]) }
     function AgentEventsProbe() {
       useAgentEvents({
         bridge,
@@ -255,9 +255,9 @@ describe('background Pi runtime event isolation', () => {
     }
     await act(async () => { root.render(<AgentEventsProbe />) })
     act(() => {
-      handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'agent_start' } })
-      handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'x' } } })
-      handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'agent_end' } })
+      handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'agent_start' } })
+      handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'x' } } })
+      handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'agent_end' } })
     })
     // Lifecycle updates only touch records whose filePath matches; the visible
     // The visible Pi session does not match, so its list remains unchanged.
@@ -278,8 +278,8 @@ describe('background Pi runtime event isolation', () => {
 describe('Pi Fusion pair reporting', () => {
   const pairA = { lead: { provider: 'openai', modelId: 'gpt-6-astra', thinking: 'xhigh' }, sidekick: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'medium' } }
   const pairB = { lead: { provider: 'anthropic', modelId: 'claude-fable-5-1', thinking: 'high' }, sidekick: { provider: 'openai', modelId: 'gpt-6-mini', thinking: 'low' } }
-  const pairCatalog: PrimeModelCatalog = {
-    primeVersion: '0.84.1', refreshedAt: '2026-08-06T00:00:00.000Z',
+  const pairCatalog: ApexModelCatalog = {
+    apexVersion: '0.84.1', refreshedAt: '2026-08-06T00:00:00.000Z',
     providers: ['openai', 'claude-bridge', 'anthropic'].map((id) => ({ id, name: id, authMethod: 'api_key', configured: true, modelCount: 2, availableModelCount: 2, enabled: true })),
     models: [pairA.lead, pairA.sidekick, pairB.lead, pairB.sidekick].map((choice) => ({ key: `${choice.provider}/${choice.modelId}`, provider: choice.provider, id: choice.modelId, name: choice.modelId, reasoning: true, input: ['text'], contextWindow: 100_000, maxTokens: 8_000, availableThinkingLevels: ['off', 'low', 'medium', 'high', 'xhigh'], fastModeSupported: false, available: true })),
   }
@@ -302,7 +302,7 @@ describe('Pi Fusion pair reporting', () => {
     })
     const onCommand = vi.fn<(_: string) => Promise<void>>(async () => undefined)
     const setRuntime = vi.fn()
-    const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as ApexApi
     let show!: (runtimeId: string, event: Record<string, unknown>) => void
     function PairProbe({ activeRuntimeId, activeSessionMode }: { activeRuntimeId?: string; activeSessionMode?: string }) {
       const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime, reportError: vi.fn(), agentTurn: createAgentTurnHandle() })
@@ -525,15 +525,15 @@ describe('provider fallback runtime state', () => {
     let handler!: (payload: { runtimeId: string; event: Record<string, unknown> }) => void
     const bridge = {
       agent: { onEvent: (callback: typeof handler) => { handler = callback; return () => undefined } },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const setRuntime = vi.fn()
     function AgentEventsProbe() {
       useAgentEvents({
         bridge,
-        runtimeIdRef: { current: primeRuntime.runtimeId },
+        runtimeIdRef: { current: apexRuntime.runtimeId },
         runtimeSessionsRef: { current: new Map() },
         runtimeOwnerRef: { current: null },
-        workspaceRef: { current: { generation: 0, sessionFile: primeSession.filePath, cwd: '/project' } },
+        workspaceRef: { current: { generation: 0, sessionFile: apexSession.filePath, cwd: '/project' } },
         setSessions: vi.fn(),
         setRuntime,
         queueAgentEvent: vi.fn(),
@@ -549,11 +549,11 @@ describe('provider fallback runtime state', () => {
 
     await act(async () => { root.render(<AgentEventsProbe />) })
     act(() => {
-      handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'retry_fallback_applied', from: 'anthropic/claude-opus', to: 'anthropic/claude-sonnet', role: 'fallback' } })
+      handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'retry_fallback_applied', from: 'anthropic/claude-opus', to: 'anthropic/claude-sonnet', role: 'fallback' } })
     })
 
     const update = setRuntime.mock.calls.at(-1)?.[0] as (current: RuntimeInfo) => RuntimeInfo
-    const next = update({ ...primeRuntime, model: { provider: 'provider', id: 'vision' } })
+    const next = update({ ...apexRuntime, model: { provider: 'provider', id: 'vision' } })
     expect(next.model).toEqual({ provider: 'provider', id: 'vision' })
     expect(next.executingModel).toEqual({
       provider: 'anthropic',
@@ -562,15 +562,15 @@ describe('provider fallback runtime state', () => {
       isFallback: true,
     })
 
-    act(() => { handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'retry_fallback_succeeded', model: 'anthropic/claude-sonnet', role: 'fallback' } }) })
+    act(() => { handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'retry_fallback_succeeded', model: 'anthropic/claude-sonnet', role: 'fallback' } }) })
     const succeededUpdate = setRuntime.mock.calls.at(-1)?.[0] as (current: RuntimeInfo) => RuntimeInfo
     expect(succeededUpdate(next).executingModel).toEqual(next.executingModel)
 
     const callsBeforeModelChanged = setRuntime.mock.calls.length
-    act(() => { handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'model_changed' } }) })
+    act(() => { handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'model_changed' } }) })
     expect(setRuntime.mock.calls).toHaveLength(callsBeforeModelChanged)
 
-    act(() => { handler({ runtimeId: primeRuntime.runtimeId, event: { type: 'agent_start' } }) })
+    act(() => { handler({ runtimeId: apexRuntime.runtimeId, event: { type: 'agent_start' } }) })
     const reset = setRuntime.mock.calls.at(-1)?.[0] as (current: RuntimeInfo) => RuntimeInfo
     expect(reset({ ...next }).executingModel).toBeNull()
   })
@@ -582,8 +582,8 @@ describe('sidebar brand header', () => {
     return act(async () => {
       root.render(
         <Sidebar
-          projects={[primeProject]}
-          sessions={[primeSession]}
+          projects={[apexProject]}
+          sessions={[apexSession]}
           activeView="session"
           activeHarness="pi"
           onSelectProject={noop}
@@ -617,16 +617,16 @@ describe('sidebar brand header', () => {
 })
 
 describe('Pi provider catalog authority', () => {
-  const primeCatalog: PrimeModelCatalog = {
-    primeVersion: '0.7.0', refreshedAt: '2026-08-06T00:00:00.000Z',
+  const apexCatalog: ApexModelCatalog = {
+    apexVersion: '0.7.0', refreshedAt: '2026-08-06T00:00:00.000Z',
     models: [{ key: 'openai-codex/gpt-5.6', provider: 'openai-codex', id: 'gpt-5.6', name: 'GPT-5.6', reasoning: true, input: ['text'], contextWindow: 400_000, maxTokens: 128_000, availableThinkingLevels: ['low', 'medium', 'high'], fastModeSupported: true, available: true }],
     providers: [{ id: 'openai-codex', name: 'ChatGPT Plus/Pro', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true }],
   }
   it('waits for persisted settings before loading a provider catalog', async () => {
-    const catalog = vi.fn(async () => primeCatalog)
+    const catalog = vi.fn(async () => apexCatalog)
     const bridge = {
       providers: { catalog },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     function CatalogProbe({ ready }: { ready: boolean }) {
       useProviderCatalog({ bridge, ready, harness: 'pi', runtime: null, syncRuntime: async () => undefined, reportError })
@@ -646,11 +646,11 @@ describe('Pi provider catalog authority', () => {
   })
 
   it('restores a usable remembered model and replaces a stale preference with the first usable model', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const rememberModel = vi.fn()
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
@@ -664,16 +664,16 @@ describe('Pi provider catalog authority', () => {
     expect(rememberModel).not.toHaveBeenCalled()
 
     await act(async () => { root.render(<CatalogProbe key="stale-preference" lastSelectedModel="missing/model" />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
-    expect(rememberModel).toHaveBeenLastCalledWith(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
+    expect(rememberModel).toHaveBeenLastCalledWith(apexCatalog.models[0].key)
   })
 
   it('syncs model and thinking level from active session metadata when runtime has no live model', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     function CatalogProbe({ activeSession }: { activeSession?: SessionRecord }) {
@@ -682,7 +682,7 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionA: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-a',
       provider: 'openai-codex',
       model: 'gpt-5.5',
@@ -690,10 +690,10 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionB: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-b',
       provider: 'openai-codex',
-      model: primeCatalog.models[0].id,
+      model: apexCatalog.models[0].id,
       thinkingLevel: 'high',
     }
 
@@ -702,7 +702,7 @@ describe('Pi provider catalog authority', () => {
     expect(state.effort).toBe('low')
 
     await act(async () => { root.render(<CatalogProbe activeSession={sessionB} />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(state.effort).toBe('high')
 
     await act(async () => { root.render(<CatalogProbe activeSession={sessionA} />); await Promise.resolve() })
@@ -710,16 +710,16 @@ describe('Pi provider catalog authority', () => {
     expect(state.effort).toBe('low')
 
     await act(async () => { root.render(<CatalogProbe activeSession={sessionB} />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(state.effort).toBe('high')
   })
 
   it('keeps an unsent selection per tab and prefers it over session metadata', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     function CatalogProbe({ activeSession }: { activeSession?: SessionRecord }) {
@@ -728,17 +728,17 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionA: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-a',
       provider: 'openai-codex',
       model: 'gpt-5.5',
       thinkingLevel: 'low',
     }
     const sessionB: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-b',
       provider: 'openai-codex',
-      model: primeCatalog.models[0].id,
+      model: apexCatalog.models[0].id,
       thinkingLevel: 'high',
     }
 
@@ -746,14 +746,14 @@ describe('Pi provider catalog authority', () => {
     expect(state.model).toBe('openai-codex/gpt-5.5')
     expect(state.effort).toBe('low')
 
-    act(() => state.changeModel(primeCatalog.models[0].key))
+    act(() => state.changeModel(apexCatalog.models[0].key))
     act(() => state.changeEffort('high'))
     await act(async () => { root.render(<CatalogProbe activeSession={sessionB} />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(state.effort).toBe('high')
 
     await act(async () => { root.render(<CatalogProbe activeSession={sessionA} />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(state.effort).toBe('high')
 
     await act(async () => { root.render(<CatalogProbe activeSession={undefined} />); await Promise.resolve() })
@@ -764,11 +764,11 @@ describe('Pi provider catalog authority', () => {
   })
 
   it('prefers the live runtime model over session metadata', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     function CatalogProbe({ runtime, activeSession }: { runtime: RuntimeInfo | null; activeSession?: SessionRecord }) {
@@ -777,17 +777,17 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionB: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-b',
       provider: 'openai-codex',
-      model: primeCatalog.models[0].id,
+      model: apexCatalog.models[0].id,
       thinkingLevel: 'high',
     }
 
     await act(async () => {
       root.render(<CatalogProbe
         activeSession={sessionB}
-        runtime={{ ...primeRuntime, model: { provider: 'openai-codex', id: 'gpt-5.5' }, thinkingLevel: 'low' }}
+        runtime={{ ...apexRuntime, model: { provider: 'openai-codex', id: 'gpt-5.5' }, thinkingLevel: 'low' }}
       />)
       await Promise.resolve()
     })
@@ -795,11 +795,11 @@ describe('Pi provider catalog authority', () => {
     expect(state.effort).toBe('low')
   })
 
-  const disabledBridgeCatalog: PrimeModelCatalog = {
-    ...primeCatalog,
+  const disabledBridgeCatalog: ApexModelCatalog = {
+    ...apexCatalog,
     providers: [
       { id: 'claude-bridge', name: 'Claude Bridge', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 0, enabled: false },
-      ...primeCatalog.providers,
+      ...apexCatalog.providers,
     ],
   }
 
@@ -808,7 +808,7 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = vi.fn(async () => undefined)
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
@@ -818,14 +818,14 @@ describe('Pi provider catalog authority', () => {
     }
 
     const unavailableSession: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-unavailable',
       provider: 'claude-bridge',
       model: 'claude-opus-5-5',
       thinkingLevel: 'high',
     }
     const unavailableRuntime: RuntimeInfo = {
-      ...primeRuntime,
+      ...apexRuntime,
       runtimeId: 'runtime-unavailable',
       model: { provider: 'claude-bridge', id: 'claude-opus-5-5' },
       thinkingLevel: 'high',
@@ -836,11 +836,11 @@ describe('Pi provider catalog authority', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(command).toHaveBeenCalledWith('runtime-unavailable', {
       type: 'set_model',
-      provider: primeCatalog.models[0].provider,
-      modelId: primeCatalog.models[0].id,
+      provider: apexCatalog.models[0].provider,
+      modelId: apexCatalog.models[0].id,
     })
     expect(command).toHaveBeenCalledWith('runtime-unavailable', {
       type: 'set_thinking_level',
@@ -855,18 +855,18 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     let state!: ReturnType<typeof useProviderCatalog>
     const syncRuntime = async () => undefined
     const reportError = vi.fn()
-    function CatalogProbe({ runtime, catalogBridge }: { runtime: RuntimeInfo; catalogBridge: PrimeWorkApi }) {
-      state = useProviderCatalog({ bridge: catalogBridge, harness: 'pi', runtime, activeSession: primeSession, syncRuntime, reportError })
+    function CatalogProbe({ runtime, catalogBridge }: { runtime: RuntimeInfo; catalogBridge: ApexApi }) {
+      state = useProviderCatalog({ bridge: catalogBridge, harness: 'pi', runtime, activeSession: apexSession, syncRuntime, reportError })
       return <Probe />
     }
     // Provider absent from the catalog: e.g. supplied by a project extension the probe does not load.
-    const omittedBridge = { providers: { catalog: vi.fn(async () => primeCatalog) }, agent: { command } } as unknown as PrimeWorkApi
+    const omittedBridge = { providers: { catalog: vi.fn(async () => apexCatalog) }, agent: { command } } as unknown as ApexApi
     await act(async () => {
-      root.render(<CatalogProbe catalogBridge={omittedBridge} runtime={{ ...primeRuntime, runtimeId: 'runtime-extension', model: { provider: 'project-ext', id: 'local-model' } }} />)
+      root.render(<CatalogProbe catalogBridge={omittedBridge} runtime={{ ...apexRuntime, runtimeId: 'runtime-extension', model: { provider: 'project-ext', id: 'local-model' } }} />)
       await Promise.resolve(); await Promise.resolve()
     })
     expect(command).not.toHaveBeenCalled()
@@ -875,7 +875,7 @@ describe('Pi provider catalog authority', () => {
     await act(async () => { root.unmount() })
     root = createRoot(container)
     await act(async () => {
-      root.render(<CatalogProbe catalogBridge={bridge} runtime={{ ...primeRuntime, runtimeId: 'runtime-streaming', isStreaming: true, model: { provider: 'claude-bridge', id: 'claude-opus-5-5' } }} />)
+      root.render(<CatalogProbe catalogBridge={bridge} runtime={{ ...apexRuntime, runtimeId: 'runtime-streaming', isStreaming: true, model: { provider: 'claude-bridge', id: 'claude-opus-5-5' } }} />)
       await Promise.resolve(); await Promise.resolve()
     })
     expect(command).not.toHaveBeenCalled()
@@ -886,12 +886,12 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const setSessions = vi.fn()
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
-    const session: SessionRecord = { ...primeSession, id: 'session-rejected', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
-    const runtime: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-rejected', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
+    const session: SessionRecord = { ...apexSession, id: 'session-rejected', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
+    const runtime: RuntimeInfo = { ...apexRuntime, runtimeId: 'runtime-rejected', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
     const syncRuntime = async () => undefined
     function CatalogProbe() {
       state = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession: session, setSessions, syncRuntime, reportError })
@@ -918,13 +918,13 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => disabledBridgeCatalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const setSessions = vi.fn()
     const syncRuntime = async () => undefined
     const reportError = vi.fn()
-    const sessionA: SessionRecord = { ...primeSession, id: 'session-a', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
-    const sessionB: SessionRecord = { ...primeSession, id: 'session-b', provider: 'openai-codex', model: 'gpt-5.6', thinkingLevel: 'high' }
-    const runtimeA: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-a', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
+    const sessionA: SessionRecord = { ...apexSession, id: 'session-a', provider: 'claude-bridge', model: 'claude-opus-5-5', thinkingLevel: 'high' }
+    const sessionB: SessionRecord = { ...apexSession, id: 'session-b', provider: 'openai-codex', model: 'gpt-5.6', thinkingLevel: 'high' }
+    const runtimeA: RuntimeInfo = { ...apexRuntime, runtimeId: 'runtime-a', model: { provider: 'claude-bridge', id: 'claude-opus-5-5' }, thinkingLevel: 'high' }
     function CatalogProbe({ runtime, activeSession }: { runtime: RuntimeInfo | null; activeSession: SessionRecord }) {
       useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession, setSessions, syncRuntime, reportError })
       return <Probe />
@@ -947,13 +947,13 @@ describe('Pi provider catalog authority', () => {
   })
 
   it('reconciles the same live runtime when a catalog refresh disables its active model', async () => {
-    const transientModel = { ...primeCatalog.models[0], key: 'claude-bridge/claude-opus-5-5', provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' }
-    const initialCatalog: PrimeModelCatalog = {
-      ...primeCatalog,
-      models: [transientModel, ...primeCatalog.models],
+    const transientModel = { ...apexCatalog.models[0], key: 'claude-bridge/claude-opus-5-5', provider: 'claude-bridge', id: 'claude-opus-5-5', name: 'Claude Opus 5.5' }
+    const initialCatalog: ApexModelCatalog = {
+      ...apexCatalog,
+      models: [transientModel, ...apexCatalog.models],
       providers: [
         { id: 'claude-bridge', name: 'Claude Bridge', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
-        ...primeCatalog.providers,
+        ...apexCatalog.providers,
       ],
     }
     let currentCatalog = initialCatalog
@@ -961,18 +961,18 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => currentCatalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = vi.fn(async () => undefined)
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     const liveRuntime: RuntimeInfo = {
-      ...primeRuntime,
+      ...apexRuntime,
       runtimeId: 'runtime-same-id',
       model: { provider: 'claude-bridge', id: 'claude-opus-5-5' },
       thinkingLevel: 'high',
     }
     function CatalogProbe() {
-      state = useProviderCatalog({ bridge, harness: 'pi', runtime: liveRuntime, activeSession: primeSession, syncRuntime, reportError })
+      state = useProviderCatalog({ bridge, harness: 'pi', runtime: liveRuntime, activeSession: apexSession, syncRuntime, reportError })
       return <Probe />
     }
 
@@ -992,24 +992,24 @@ describe('Pi provider catalog authority', () => {
       await state.refresh(true)
       await Promise.resolve()
     })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(command).toHaveBeenCalledWith('runtime-same-id', {
       type: 'set_model',
-      provider: primeCatalog.models[0].provider,
-      modelId: primeCatalog.models[0].id,
+      provider: apexCatalog.models[0].provider,
+      modelId: apexCatalog.models[0].id,
     })
     expect(syncRuntime).toHaveBeenCalledWith('runtime-same-id')
   })
 
   it('does not revert a selection when the catalog refreshes for the same session', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const catalogMock = vi.fn()
       .mockResolvedValueOnce(catalog)
       .mockImplementation(async (force: boolean) => force ? { ...catalog } : catalog)
     const bridge = {
       providers: { catalog: catalogMock },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     function CatalogProbe({ activeSession }: { activeSession?: SessionRecord }) {
@@ -1018,7 +1018,7 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionA: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-a',
       provider: 'openai-codex',
       model: 'gpt-5.5',
@@ -1026,14 +1026,14 @@ describe('Pi provider catalog authority', () => {
     }
 
     await act(async () => { root.render(<CatalogProbe activeSession={sessionA} />); await Promise.resolve() })
-    act(() => state.changeModel(primeCatalog.models[0].key))
+    act(() => state.changeModel(apexCatalog.models[0].key))
     await act(async () => { await state.refresh(true) })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
   })
 
   it('applies a pending selection when a live runtime with a different model attaches, and does not revert while set_model is in flight', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const setModelGate = deferred<Record<string, unknown>>()
     const command = vi.fn(async (_runtimeId: string, payload: Record<string, unknown>) => {
       if (payload.type === 'set_model') return setModelGate.promise
@@ -1042,7 +1042,7 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
       agent: { command },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = vi.fn(async () => undefined)
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
@@ -1052,14 +1052,14 @@ describe('Pi provider catalog authority', () => {
     }
 
     const sessionA: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-a',
       provider: 'openai-codex',
       model: 'gpt-5.5',
       thinkingLevel: 'low',
     }
     const staleRuntime: RuntimeInfo = {
-      ...primeRuntime,
+      ...apexRuntime,
       model: { provider: 'openai-codex', id: 'gpt-5.5' },
       thinkingLevel: 'low',
     }
@@ -1068,16 +1068,16 @@ describe('Pi provider catalog authority', () => {
     expect(state.model).toBe('openai-codex/gpt-5.5')
 
     // User selects a new model before the runtime attaches.
-    act(() => state.changeModel(primeCatalog.models[0].key))
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    act(() => state.changeModel(apexCatalog.models[0].key))
+    expect(state.model).toBe(apexCatalog.models[0].key)
 
     // Attaching a runtime that still reports the old model pushes the user's pending selection to the runtime.
     await act(async () => { root.render(<CatalogProbe runtime={staleRuntime} activeSession={sessionA} />); await Promise.resolve() })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
     expect(command).toHaveBeenCalledWith(staleRuntime.runtimeId, {
       type: 'set_model',
-      provider: primeCatalog.models[0].provider,
-      modelId: primeCatalog.models[0].id,
+      provider: apexCatalog.models[0].provider,
+      modelId: apexCatalog.models[0].id,
     })
 
     // Re-rendering activeSession while set_model is still in flight must not revert the optimistic selection.
@@ -1085,7 +1085,7 @@ describe('Pi provider catalog authority', () => {
       root.render(<CatalogProbe runtime={staleRuntime} activeSession={{ ...sessionA, updatedAt: '2026-01-01T00:01:00.000Z' }} />)
       await Promise.resolve()
     })
-    expect(state.model).toBe(primeCatalog.models[0].key)
+    expect(state.model).toBe(apexCatalog.models[0].key)
 
     await act(async () => {
       setModelGate.resolve({ type: 'response', success: true })
@@ -1095,19 +1095,19 @@ describe('Pi provider catalog authority', () => {
   })
 
   it('completes a detached model selection before sendPrompt dispatches prompt to a newly discovered runtime', async () => {
-    const alternate = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
-    const catalog = { ...primeCatalog, models: [primeCatalog.models[0], alternate] }
+    const alternate = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.5', id: 'gpt-5.5', name: 'GPT-5.5' }
+    const catalog = { ...apexCatalog, models: [apexCatalog.models[0], alternate] }
     const order: string[] = []
     const setModelGate = deferred<Record<string, unknown>>()
     const sessionA: SessionRecord = {
-      ...primeSession,
+      ...apexSession,
       id: 'session-a',
       provider: 'openai-codex',
       model: 'gpt-5.5',
       thinkingLevel: 'low',
     }
     const discoveredRuntime: RuntimeInfo = {
-      ...primeRuntime,
+      ...apexRuntime,
       model: { provider: 'openai-codex', id: 'gpt-5.5' },
       thinkingLevel: 'low',
     }
@@ -1119,9 +1119,9 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
       agent: { list: vi.fn(async () => [discoveredRuntime]), command, start: vi.fn(), stop: vi.fn() },
-      projects: { grantInferred: vi.fn(async () => primeProject) },
+      projects: { grantInferred: vi.fn(async () => apexProject) },
       sessions: { followUp: vi.fn(async () => false), list: vi.fn(async () => [sessionA]) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = vi.fn(async () => { order.push('syncRuntime') })
     const reportError = vi.fn()
     let provider!: ReturnType<typeof useProviderCatalog>
@@ -1132,7 +1132,7 @@ describe('Pi provider catalog authority', () => {
 
     await act(async () => { root.render(<CatalogProbe runtime={null} />); await Promise.resolve() })
     act(() => {
-      provider.changeModel(primeCatalog.models[0].key)
+      provider.changeModel(apexCatalog.models[0].key)
       provider.changeEffort('high')
     })
 
@@ -1140,7 +1140,7 @@ describe('Pi provider catalog authority', () => {
       runtime: null as RuntimeInfo | null,
       runtimeIdRef: { current: null as string | null },
       runtimeOwnerRef: { current: null as { runtimeId: string; generation: number } | null },
-      workspaceRef: { current: { generation: 1, project: primeProject, session: sessionA, cwd: primeProject.primaryFolder, sessionFile: sessionA.filePath } },
+      workspaceRef: { current: { generation: 1, project: apexProject, session: sessionA, cwd: apexProject.primaryFolder, sessionFile: sessionA.filePath } },
       prepareForPrompt: () => true,
       setMessages: vi.fn(),
       setRuntime: vi.fn((updater: RuntimeInfo | null | ((current: RuntimeInfo | null) => RuntimeInfo | null)) => {
@@ -1161,9 +1161,9 @@ describe('Pi provider catalog authority', () => {
     const actions = createWorkspaceActions(() => ({
       bridge,
       initialized: true,
-      projects: [primeProject],
+      projects: [apexProject],
       sessions: [sessionA],
-      activeProject: primeProject,
+      activeProject: apexProject,
       workspace,
       settingsState: { settings: DEFAULT_SETTINGS } as WorkspaceActionsDeps['settingsState'],
       layout: {} as WorkspaceActionsDeps['layout'],
@@ -1198,17 +1198,17 @@ describe('Pi provider catalog authority', () => {
       await sendPromise
     })
     expect(order).toEqual(['set_model', 'set_thinking_level', 'syncRuntime', 'prompt'])
-    expect(provider.model).toBe(primeCatalog.models[0].key)
+    expect(provider.model).toBe(apexCatalog.models[0].key)
     expect(provider.effort).toBe('high')
   })
 
   it('preserves each session model when a new session starts with a different model and the first session is reopened', async () => {
-    const argon = { ...primeCatalog.models[0], key: 'openai-codex/gpt-5.4-argon', id: 'gpt-5.4-argon', name: 'Argon' }
-    const opus = { ...primeCatalog.models[0], key: 'anthropic/claude-opus-4-6', provider: 'anthropic', id: 'claude-opus-4-6', name: 'Opus' }
-    const catalog: PrimeModelCatalog = {
-      ...primeCatalog,
+    const argon = { ...apexCatalog.models[0], key: 'openai-codex/gpt-5.4-argon', id: 'gpt-5.4-argon', name: 'Argon' }
+    const opus = { ...apexCatalog.models[0], key: 'anthropic/claude-opus-4-6', provider: 'anthropic', id: 'claude-opus-4-6', name: 'Opus' }
+    const catalog: ApexModelCatalog = {
+      ...apexCatalog,
       providers: [
-        primeCatalog.providers[0],
+        apexCatalog.providers[0],
         { id: 'anthropic', name: 'Anthropic', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
       ],
       models: [argon, opus],
@@ -1216,14 +1216,14 @@ describe('Pi provider catalog authority', () => {
     const bridge = {
       providers: { catalog: vi.fn(async () => catalog) },
       agent: { command: vi.fn(async () => ({ type: 'response', success: true })) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const syncRuntime = vi.fn(async () => undefined)
     const reportError = vi.fn()
     let state!: ReturnType<typeof useProviderCatalog>
     function CatalogProbe({ sessionId, runtime }: { sessionId: string; runtime: RuntimeInfo | null }) {
       const [sessionsState, setSessions] = useState<SessionRecord[]>(() => [
-        { ...primeSession, id: 'session-1' },
-        { ...primeSession, id: 'session-2' },
+        { ...apexSession, id: 'session-1' },
+        { ...apexSession, id: 'session-2' },
       ])
       const activeSession = sessionsState.find((item) => item.id === sessionId)
       state = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession, setSessions, syncRuntime, reportError })
@@ -1236,7 +1236,7 @@ describe('Pi provider catalog authority', () => {
     expect(state.model).toBe(argon.key)
 
     // Session 2 is created, warm runtime attaches with Argon, and user switches Session 2 to Opus.
-    const runtime2: RuntimeInfo = { ...primeRuntime, runtimeId: 'runtime-2', model: { provider: 'openai-codex', id: 'gpt-5.4-argon' }, thinkingLevel: 'medium' }
+    const runtime2: RuntimeInfo = { ...apexRuntime, runtimeId: 'runtime-2', model: { provider: 'openai-codex', id: 'gpt-5.4-argon' }, thinkingLevel: 'medium' }
     await act(async () => { root.render(<CatalogProbe sessionId="session-2" runtime={runtime2} />); await Promise.resolve() })
     await act(async () => { state.changeModel(opus.key); await Promise.resolve() })
     expect(state.model).toBe(opus.key)
@@ -1322,8 +1322,8 @@ describe('harness settings surfaces', () => {
   })
 
   it('renders Pi provider visibility toggles while keeping credentials CLI-owned', async () => {
-    const catalog: PrimeModelCatalog = {
-      primeVersion: '0.84.1', refreshedAt: '2026-08-06T00:00:00.000Z',
+    const catalog: ApexModelCatalog = {
+      apexVersion: '0.84.1', refreshedAt: '2026-08-06T00:00:00.000Z',
       models: [{ key: 'openai-codex/gpt-5.6-luna', provider: 'openai-codex', id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', reasoning: true, input: ['text'], contextWindow: 272_000, maxTokens: 128_000, availableThinkingLevels: ['low', 'high'], fastModeSupported: true, available: true }],
       providers: [
         { id: 'openai-codex', name: 'OpenAI Codex', authMethod: 'external', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },

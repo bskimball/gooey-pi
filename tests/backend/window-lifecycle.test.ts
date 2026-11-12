@@ -186,7 +186,7 @@ describe('renderer hardening', () => {
     const { handler } = hardenedWindow()
     const preferences: Record<string, unknown> = { preload: '/tmp/evil.js', nodeIntegration: true, webviewTag: true, sandbox: false }
     const event = { preventDefault: vi.fn() }
-    handler('will-attach-webview')(...[event, preferences, { partition: 'persist:prime-work-browser', src: 'https://example.test/' }] as never[])
+    handler('will-attach-webview')(...[event, preferences, { partition: 'persist:apex-browser', src: 'https://example.test/' }] as never[])
 
     expect(event.preventDefault).not.toHaveBeenCalled()
     expect(preferences).toMatchObject({
@@ -205,7 +205,7 @@ describe('renderer hardening', () => {
     const { handler } = hardenedWindow()
     for (const params of [
       { partition: 'persist:other', src: 'https://example.test/' },
-      { partition: 'persist:prime-work-browser', src: 'file:///etc/passwd' },
+      { partition: 'persist:apex-browser', src: 'file:///etc/passwd' },
     ]) {
       const event = { preventDefault: vi.fn() }
       handler('will-attach-webview')(...[event, {}, params] as never[])

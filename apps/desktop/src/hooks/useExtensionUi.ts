@@ -6,10 +6,10 @@ import { applySessionStatusEvent } from '@/app/session-attention'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
 import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, piSessionMode, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
-import type { PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
+import type { ApexApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface UseExtensionUiOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   activeRuntimeId?: string
   activeSessionMode?: string
   runtimeSessionsRef: React.RefObject<Map<string, string>>

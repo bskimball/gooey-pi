@@ -7,12 +7,12 @@ import {
 } from '@/app/session-live'
 import type { WorkspaceSnapshot } from '@/app/workspace'
 import type { PendingExtensionUi } from './useExtensionUi'
-import type { HarnessId, PrimeWorkApi, RuntimeInfo } from '@/types/api'
+import type { HarnessId, ApexApi, RuntimeInfo } from '@/types/api'
 
 const MAX_BUFFERED_EVENTS_PER_RUNTIME = 64
 
 export async function resolveRuntimeIdForSession(
-  bridge: PrimeWorkApi,
+  bridge: ApexApi,
   runtimeSessions: ReadonlyMap<string, string>,
   activeRuntime: RuntimeInfo | null,
   sessionFile?: string,
@@ -28,7 +28,7 @@ export async function resolveRuntimeIdForSession(
 }
 
 export interface UseSessionLiveOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   harness?: HarnessId
   runtimeSessionsRef: React.RefObject<Map<string, string>>
   runtimeIdRef?: React.RefObject<string | null>

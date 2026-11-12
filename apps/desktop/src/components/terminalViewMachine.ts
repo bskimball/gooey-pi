@@ -1,7 +1,7 @@
 import { assign, fromPromise, setup } from 'xstate'
-import type { PrimeWorkApi, TerminalDataEvent, TerminalExitEvent } from '@/types/api'
+import type { ApexApi, TerminalDataEvent, TerminalExitEvent } from '@/types/api'
 
-type CreatedTerminal = Awaited<ReturnType<PrimeWorkApi['terminal']['create']>>
+type CreatedTerminal = Awaited<ReturnType<ApexApi['terminal']['create']>>
 
 interface Session {
   create(): Promise<CreatedTerminal>

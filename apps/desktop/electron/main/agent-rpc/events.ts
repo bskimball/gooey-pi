@@ -1,4 +1,4 @@
-import type { PrimeEventEnvelope } from '../../../src/types/api'
+import type { ApexEventEnvelope } from '../../../src/types/api'
 import type { RpcObject } from './types'
 
 export interface AgentEventLimits {
@@ -27,7 +27,7 @@ export class AgentEventForwarder {
 
   constructor(
     private readonly runtimeId: string,
-    private readonly onEvent: (envelope: PrimeEventEnvelope) => void,
+    private readonly onEvent: (envelope: ApexEventEnvelope) => void,
     limits: Partial<AgentEventLimits> = {},
   ) {
     this.limits = { ...DEFAULT_AGENT_EVENT_LIMITS, ...limits }
@@ -53,7 +53,7 @@ export class AgentEventForwarder {
       if (this.eventCount > this.limits.maxEvents) { this.reportLimit('count', 'Pi event rate exceeded the desktop limit'); return }
     }
 
-    const envelope: PrimeEventEnvelope = { runtimeId: this.runtimeId, event }
+    const envelope: ApexEventEnvelope = { runtimeId: this.runtimeId, event }
     const bytes = this.serializedBytes(envelope)
     if (bytes === null || bytes > this.limits.maxEnvelopeBytes) {
       this.reportLimit('envelope', 'Pi event exceeded the desktop envelope byte limit')
@@ -88,14 +88,14 @@ export class AgentEventForwarder {
     // transport_limit, not transport_error: the desktop dropped events but the
     // agent is still running, so the renderer must reconcile the transcript
     // from disk rather than treat the turn as failed or finished.
-    const envelope: PrimeEventEnvelope = { runtimeId: this.runtimeId, event: { type: 'transport_limit', kind, error } }
+    const envelope: ApexEventEnvelope = { runtimeId: this.runtimeId, event: { type: 'transport_limit', kind, error } }
     const bytes = this.serializedBytes(envelope)
     if (bytes === null || bytes > this.limits.maxEnvelopeBytes || this.windowBytes + bytes > this.limits.maxWindowBytes) return
     this.windowBytes += bytes
     this.onEvent(envelope)
   }
 
-  private serializedBytes(envelope: PrimeEventEnvelope): number | null {
+  private serializedBytes(envelope: ApexEventEnvelope): number | null {
     try { return Buffer.byteLength(JSON.stringify(envelope), 'utf8') } catch { return null }
   }
 }

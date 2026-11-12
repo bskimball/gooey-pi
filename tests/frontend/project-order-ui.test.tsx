@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../../apps/desktop/src/App'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
 import { composerDraftStorageKey } from '../../apps/desktop/src/lib/composer-draft'
-import type { AppMeta, PrimeWorkApi, ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
+import type { AppMeta, ApexApi, ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -40,7 +40,7 @@ const meta: AppMeta = {
 }
 
 let settings = { ...DEFAULT_SETTINGS, activeHarness: 'pi' as const }
-let bridge: PrimeWorkApi
+let bridge: ApexApi
 let container: HTMLDivElement
 let root: Root
 
@@ -145,8 +145,8 @@ beforeEach(() => {
       diff: vi.fn(async () => ''),
       restore: vi.fn(async () => true),
     },
-  } as unknown as PrimeWorkApi
-  Object.defineProperty(window, 'prime', { configurable: true, value: bridge })
+  } as unknown as ApexApi
+  Object.defineProperty(window, 'apex', { configurable: true, value: bridge })
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }) })
   Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: class { observe() {} unobserve() {} disconnect() {} } })
   container = document.createElement('div')
@@ -157,7 +157,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
-  Object.defineProperty(window, 'prime', { configurable: true, value: undefined })
+  Object.defineProperty(window, 'apex', { configurable: true, value: undefined })
   vi.restoreAllMocks()
 })
 
@@ -181,7 +181,7 @@ async function press(element: Element): Promise<void> {
 describe('session creation in App', () => {
   it.each([false, true])('preserves an attachment and restores a failed first prompt across adoption (submit while creating: %s)', async (submitWhileCreating) => {
     vi.mocked(bridge.providers.catalog).mockResolvedValue({
-      primeVersion: 'test', refreshedAt: new Date().toISOString(),
+      apexVersion: 'test', refreshedAt: new Date().toISOString(),
       models: [{ key: 'provider/vision', provider: 'provider', id: 'vision', name: 'Vision', reasoning: true, input: ['text', 'image'], contextWindow: 100_000, maxTokens: 8_000, availableThinkingLevels: ['medium'], fastModeSupported: false, available: true }],
       providers: [{ id: 'provider', name: 'Provider', authMethod: 'api_key', configured: true, modelCount: 1, availableModelCount: 1, enabled: true }],
     })

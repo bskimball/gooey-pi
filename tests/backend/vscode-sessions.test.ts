@@ -315,7 +315,7 @@ describe('VS Code handoff lifecycle', () => {
   it('overrides inherited Desktop editor credentials in a real standalone Pi child', async () => {
     vi.stubEnv('APEX_EDITOR_URL', 'http://inherited-desktop')
     vi.stubEnv('APEX_EDITOR_TOKEN', 'inherited-fixture-token')
-    const rpc = new PiRpc({ file: process.execPath, args: ['-e', `require('node:readline').createInterface({ input: process.stdin }).on('line', line => { const c = JSON.parse(line); process.stdout.write(JSON.stringify({type:'response',id:c.id,success:true,data:{url:process.env.APEX_EDITOR_URL,token:process.env.APEX_EDITOR_TOKEN}})+'\\n') })`] }, [], process.cwd(), () => undefined, () => undefined, { PRIME_WORK_BROWSER_URL: 'http://own-editor', PRIME_WORK_BROWSER_TOKEN: 'own-fixture-token' })
+    const rpc = new PiRpc({ file: process.execPath, args: ['-e', `require('node:readline').createInterface({ input: process.stdin }).on('line', line => { const c = JSON.parse(line); process.stdout.write(JSON.stringify({type:'response',id:c.id,success:true,data:{url:process.env.APEX_EDITOR_URL,token:process.env.APEX_EDITOR_TOKEN}})+'\\n') })`] }, [], process.cwd(), () => undefined, () => undefined, { APEX_BROWSER_URL: 'http://own-editor', APEX_BROWSER_TOKEN: 'own-fixture-token' })
     try { expect(await rpc.command('get_state')).toEqual({ url: 'http://own-editor', token: 'own-fixture-token' }) }
     finally { await rpc.dispose(); vi.unstubAllEnvs() }
   })
@@ -389,7 +389,7 @@ describe('VS Code handoff lifecycle', () => {
       owner: { set: vi.fn() }, statusItem: { hide: vi.fn() }, distDirectory: directory,
       browser: {
         bridge: { port: 29301 }, extensionPath: join(directory, 'extension'), start: vi.fn(async () => undefined),
-        capability: { revoke: vi.fn(), environmentFor: () => ({ PRIME_WORK_BROWSER_TOKEN: 'fixture-token' }) },
+        capability: { revoke: vi.fn(), environmentFor: () => ({ APEX_BROWSER_TOKEN: 'fixture-token' }) },
         service: { setActiveSession: vi.fn(async () => undefined) },
       },
       refreshAll: vi.fn().mockRejectedValue(new Error('state unavailable')),
@@ -804,8 +804,8 @@ describe('VS Code editor integration', () => {
   it('registers editor tools and sends authenticated calls to the bridge', async () => {
     vi.stubEnv('APEX_EDITOR_URL', undefined)
     vi.stubEnv('APEX_EDITOR_TOKEN', undefined)
-    vi.stubEnv('PRIME_WORK_BROWSER_URL', 'http://127.0.0.1:12345/v1/call')
-    vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'test-token')
+    vi.stubEnv('APEX_BROWSER_URL', 'http://127.0.0.1:12345/v1/call')
+    vi.stubEnv('APEX_BROWSER_TOKEN', 'test-token')
     const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ ok: true, result: { dirty: true, text: 'buffer' } }) })
     vi.stubGlobal('fetch', fetchMock)
     try {

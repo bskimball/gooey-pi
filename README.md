@@ -6,9 +6,9 @@ Apex is a desktop workspace for [Pi](https://pi.dev/). It gives the Pi coding ag
 
 ## Pi is the runtime
 
-Apex runs [Pi](https://pi.dev/) as its only agent runtime. OMP and Prime Agent are no longer supported. Apex detects the Pi executable on your computer; you can refresh detection or set a custom executable path in Settings.
+Apex runs [Pi](https://pi.dev/) as its only agent runtime. Apex detects the Pi executable on your computer; you can refresh detection or set a custom executable path in Settings.
 
-Existing data is kept. Old OMP and Prime CLI session files are not modified or deleted, and previously stored desktop data stays on disk. Projects that were granted to OMP or Prime are not converted into Pi grants. Add the folder again to use it with Pi.
+Existing data is kept. Session files from earlier agent runtimes are not modified or deleted, and previously stored desktop data stays on disk. Projects granted to an earlier runtime are not converted into Pi grants. Add the folder again to use it with Pi.
 
 ## What you can do
 

@@ -1,4 +1,4 @@
-/** Shared Apex session-collaboration tools for Prime Agent, OMP, and pi. */
+/** Shared Apex session-collaboration tools for Pi. */
 
 interface SchemaOptions { description?: string; minLength?: number; maxLength?: number; minimum?: number; maximum?: number }
 interface HostTypebox {
@@ -135,4 +135,4 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
   })
 }
 
-export type OmpExtensionApi = ExtensionApi
+export type ApexExtensionApi = ExtensionApi

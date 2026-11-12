@@ -26,7 +26,7 @@ const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 
 function makeDirectory(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-store-'))
+  const dir = mkdtempSync(join(tmpdir(), 'apex-store-'))
   dirs.push(dir)
   return dir
 }
@@ -976,7 +976,7 @@ describe('JsonStateStore', () => {
     expect(JSON.parse(readFileSync(path, 'utf8')).archivedSessions).toEqual(['after-recovery'])
   })
   it('archives and restores session visibility metadata without touching the transcript', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-session-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-session-')); dirs.push(dir)
     const sessionRoot = join(dir, 'sessions')
     const { mkdirSync } = await import('node:fs')
     mkdirSync(sessionRoot)

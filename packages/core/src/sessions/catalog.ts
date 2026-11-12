@@ -353,7 +353,7 @@ export class SessionMetadataCatalog {
     }
     if (!rootStat.isDirectory()) return []
 
-    // Timestamp-encoding names (Prime UUIDv7, OMP ISO prefixes) expose creation
+    // Timestamp-encoding names (UUIDv7, ISO prefixes) expose creation
     // order without per-entry I/O. Admit a bounded deterministic set before
     // canonicalization and stat; legacy names fall back to reverse lexical order.
     const entriesByName = new Map<string, { symbolicLink: boolean }>()

@@ -1,13 +1,13 @@
 import { ArrowsClockwise, ArrowSquareOut, CaretRight, Gauge, Lightning, MagnifyingGlass } from '@/components/icons'
 import { useMemo, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
-import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, } from '@/types/api'
+import type { HarnessId, ApexModelCatalog, ApexModelDescriptor, } from '@/types/api'
 import { HARNESS_AGENT_NAMES } from '@/lib/harness'
 
 interface ProviderSettingsProps {
   /** Pi credentials stay CLI-owned; visibility toggles only affect Apex. */
   harness?: HarnessId
-  catalog: PrimeModelCatalog | null
+  catalog: ApexModelCatalog | null
   onRefresh(): Promise<void>
   onSetEnabled(providerId: string, enabled: boolean): Promise<void>
   onSetAllEnabled(): Promise<void>
@@ -40,7 +40,7 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
     const matches = normalized
       ? (catalog?.models ?? []).filter((model) => `${model.name} ${model.id} ${model.provider} ${providerNames.get(model.provider) ?? ''}`.toLowerCase().includes(normalized))
       : catalog?.models ?? []
-    const byProvider = new Map<string, PrimeModelDescriptor[]>()
+    const byProvider = new Map<string, ApexModelDescriptor[]>()
     for (const model of matches) {
       const models = byProvider.get(model.provider)
       if (models) models.push(model)

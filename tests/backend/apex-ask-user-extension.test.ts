@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import askUser, { type OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-ask-user'
+import askUser, { type ApexExtensionApi } from '../../apps/desktop/assets/extensions/apex-ask-user'
 
 interface ToolContext {
   hasUI: boolean
@@ -29,13 +29,13 @@ function fixture() {
     typebox: { Type: { Object: schema('object'), String: schema('string'), Array: schema('array') } },
     registerTool: (tool: RegisteredTool) => tools.push(tool),
   }
-  askUser(pi as unknown as OmpExtensionApi)
+  askUser(pi as unknown as ApexExtensionApi)
   const tool = tools[0]
   if (!tool) throw new Error('ask_user was not registered')
   return { tools, tool }
 }
 
-describe('omp-work-ask-user extension', () => {
+describe('apex-ask-user extension', () => {
   it('registers a standalone sequential ask_user tool', () => {
     const { tools, tool } = fixture()
     expect(tools).toHaveLength(1)
@@ -57,7 +57,7 @@ describe('omp-work-ask-user extension', () => {
     expect(select).toHaveBeenCalledTimes(2)
     const firstOptions = select.mock.calls[0][1] as string[]
     const secondOptions = select.mock.calls[1][1] as string[]
-    expect(firstOptions[0]).toMatch(/^__prime_ask_user__[a-z0-9-]+:0:2$/)
+    expect(firstOptions[0]).toMatch(/^__apex_ask_user__[a-z0-9-]+:0:2$/)
     expect(secondOptions[0]).toBe(firstOptions[0].replace(/:0:2$/, ':1:2'))
     expect(firstOptions.slice(1)).toEqual(['Stable', 'Beta', 'Other (type your own answer)'])
     expect(secondOptions.slice(1)).toEqual(['Speed', 'Other (type your own answer)'])

@@ -122,11 +122,11 @@ export const browser = {
 }
 
 /**
- * pi-desktop components reach the Electron preload through optional `window.prime` calls.
+ * pi-desktop components reach the Electron preload through optional `window.apex` calls.
  * Only the calls the reused components make are bridged; everything else stays absent.
  */
-export function installPrimeShim() {
-  const prime = {
+export function installApexShim() {
+  const apex = {
     app: {
       openExternal: async (url: string) => { postToHost({ type: 'openExternal', url }); return true },
       revealPath: async () => false,
@@ -147,7 +147,7 @@ export function installPrimeShim() {
     sessions: { read: sessions.read },
     browser,
   }
-  ;(window as unknown as { prime: unknown }).prime = prime
+  ;(window as unknown as { apex: unknown }).apex = apex
 }
 
 /** Mirror the VS Code theme kind onto pi-desktop's `data-theme` switch. */

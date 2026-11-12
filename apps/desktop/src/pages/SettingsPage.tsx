@@ -4,7 +4,7 @@ import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, Modal } from '@/components/ui'
-import type { AppMeta, AppSettings, AppUpdateState, PrimeModelCatalog, PrimeWorkApi } from '@/types/api'
+import type { AppMeta, AppSettings, AppUpdateState, ApexModelCatalog, ApexApi } from '@/types/api'
 import { AboutSettings } from './settings/AboutSettings'
 import { AgentSettings } from './settings/AgentSettings'
 import { AppearanceSettings } from './settings/AppearanceSettings'
@@ -33,9 +33,9 @@ const sections: Array<{ id: SettingsSection; label: MessageKey; icon: ComponentT
 interface SettingsPageProps {
   settings: AppSettings
   meta?: AppMeta | null
-  providerCatalog: PrimeModelCatalog | null
-  voice: PrimeWorkApi['voice'] | null
-  pets: PrimeWorkApi['pets'] | null
+  providerCatalog: ApexModelCatalog | null
+  voice: ApexApi['voice'] | null
+  pets: ApexApi['pets'] | null
   updateState: AppUpdateState
   onUpdate: SettingsUpdate
   onClose(): void

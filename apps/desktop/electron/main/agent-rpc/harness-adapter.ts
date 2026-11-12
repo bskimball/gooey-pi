@@ -1,4 +1,4 @@
-import type { PrimeContextUsage, RuntimeHarnessId, SessionUsage, SessionUsageTokens } from '../../../src/types/api'
+import type { ApexContextUsage, RuntimeHarnessId, SessionUsage, SessionUsageTokens } from '../../../src/types/api'
 import { extensionInjections } from '../extension-manifest'
 import { HARNESSES } from '../harness'
 import { isRecord } from 'apex-core/validation'
@@ -15,7 +15,7 @@ export interface HarnessStartArgsInput {
 
 export interface HarnessStateReading {
   serviceTier?: 'default' | 'priority'
-  contextUsage?: PrimeContextUsage
+  contextUsage?: ApexContextUsage
 }
 
 /** Pi's wire protocol, shared by the manager and transport. */
@@ -32,7 +32,7 @@ export interface HarnessRpcAdapter {
   readState(data: RpcObject): HarnessStateReading
 }
 
-export function parseContextUsage(raw: unknown): PrimeContextUsage | null {
+export function parseContextUsage(raw: unknown): ApexContextUsage | null {
   if (!isRecord(raw) || !Number.isSafeInteger(raw.contextWindow) || Number(raw.contextWindow) <= 0) return null
   const tokens = raw.tokens === null ? null : Number.isSafeInteger(raw.tokens) && Number(raw.tokens) >= 0 ? Number(raw.tokens) : undefined
   const percent = raw.percent === null ? null : typeof raw.percent === 'number' && Number.isFinite(raw.percent) && raw.percent >= 0 ? raw.percent : undefined

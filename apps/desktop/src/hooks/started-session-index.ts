@@ -1,9 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { mergeSessionCatalog } from '@/hooks/useBootstrap'
-import type { PrimeWorkApi, ProjectRecord, SessionRecord } from '@/types/api'
+import type { ApexApi, ProjectRecord, SessionRecord } from '@/types/api'
 
 interface StartedSessionIndexInput {
-  bridge: PrimeWorkApi
+  bridge: ApexApi
   harness: ProjectRecord['harness']
   sessionFile: string | undefined
   setSessions: Dispatch<SetStateAction<SessionRecord[]>>

@@ -1,5 +1,5 @@
 import { assign, setup, transition } from 'xstate'
-import type { PrimeContextUsage, SessionUsage } from '@/types/api'
+import type { ApexContextUsage, SessionUsage } from '@/types/api'
 
 /**
  * Live phases a running session can be in. `waiting` is not a phase: a pending
@@ -28,7 +28,7 @@ export interface SessionLiveContext {
   lastEventAt: number
   currentTool?: SessionLiveTool
   runStartedAt?: number
-  contextUsage?: PrimeContextUsage
+  contextUsage?: ApexContextUsage
   sessionUsage?: SessionUsage
   queuedCount?: number
   lastError?: string

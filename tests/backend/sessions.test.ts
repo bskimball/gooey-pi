@@ -18,7 +18,7 @@ function setup(
   maxSessionFiles?: number,
   options?: SessionServiceOptions,
 ): { root: string; project: string; service: SessionService; store: JsonStateStore } {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-sessions-')); dirs.push(dir)
+  const dir = mkdtempSync(join(tmpdir(), 'apex-sessions-')); dirs.push(dir)
   const root = join(dir, 'sessions'); mkdirSync(root)
   const project = join(dir, 'project'); mkdirSync(project)
   const store = new JsonStateStore(join(dir, 'state.json'))
@@ -255,7 +255,7 @@ describe('incremental session metadata reads', () => {
   }
 
   it('reads only the appended byte range plus the verification tail after the initial parse', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-incremental-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-incremental-')); dirs.push(dir)
     const file = join(dir, 'incremental.jsonl')
     writeLargeSession(file, 'incremental')
     const { reader, opens } = trackedReader()
@@ -278,7 +278,7 @@ describe('incremental session metadata reads', () => {
   })
 
   it('resumes a verified partial line and matches the one-shot parser', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-partial-line-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-partial-line-')); dirs.push(dir)
     const file = join(dir, 'partial.jsonl')
     writeLargeSession(file, 'partial')
     const { reader, opens } = trackedReader()
@@ -302,7 +302,7 @@ describe('incremental session metadata reads', () => {
   })
 
   it('falls back to a full re-read on truncation and rewritten tails', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-truncate-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-truncate-')); dirs.push(dir)
     const file = join(dir, 'truncate.jsonl')
     writeSession(file, '/project', 'original')
     appendFileSync(file, JSON.stringify({ type: 'message', id: 'tail', message: { role: 'assistant', content: 'tail' } }).slice(0, 30))
@@ -331,7 +331,7 @@ describe('incremental session metadata reads', () => {
 
 describe('Prime task-state freshness', () => {
   it('ignores a persisted verdict after later messages and accepts a current verdict', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-task-state-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-task-state-')); dirs.push(dir)
     const file = join(dir, 'task-state.jsonl')
     writeFileSync(file, [
       JSON.stringify({ type: 'session', id: 'task-state', cwd: '/project', timestamp: '2025-01-01T00:00:00.000Z' }),
@@ -389,7 +389,7 @@ describe('SessionService user-message ordering', () => {
 
 describe('SessionMetadataCatalog refresh synchronization', () => {
   it('does not let an in-flight pre-append scan satisfy a post-invalidation refresh', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-scan-race-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-scan-race-')); dirs.push(dir)
     const root = join(dir, 'sessions'); mkdirSync(root)
     const project = join(dir, 'project'); mkdirSync(project)
     const file = join(root, 'race.jsonl')
@@ -865,7 +865,7 @@ describe('SessionService orchestration', () => {
   })
 
   it('marks a session running and stops its runtime when the agent reports the file via a symlinked root', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-sessions-symlink-')); dirs.push(dir)
+    const dir = mkdtempSync(join(tmpdir(), 'apex-sessions-symlink-')); dirs.push(dir)
     const realRoot = join(dir, 'real-sessions'); mkdirSync(realRoot)
     const aliasRoot = join(dir, 'alias-sessions'); symlinkSync(realRoot, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir')
     const project = join(dir, 'project'); mkdirSync(project)

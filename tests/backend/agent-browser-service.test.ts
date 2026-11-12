@@ -259,8 +259,8 @@ describe("AgentBrowserService", () => {
 			scrollIntoView: () => { scrolls.push(index); offset = index === 0 ? 100 : 200; },
 			getBoundingClientRect: () => ({ left: (index === 0 ? 120 : destinationLeft) - offset, top: 20, width: 10, height: 10 }),
 		}));
-		guest.scriptResult = (code) => code.includes("const refs = window.__primeWorkAgentRefs")
-			? runInNewContext(code, { window: { __primeWorkAgentRefs: refs, __primeWorkAgentRefsUrl: guest.url, innerWidth: 640, innerHeight: 480 }, location: { href: guest.url } })
+		guest.scriptResult = (code) => code.includes("const refs = window.__apexAgentRefs")
+			? runInNewContext(code, { window: { __apexAgentRefs: refs, __apexAgentRefsUrl: guest.url, innerWidth: 640, innerHeight: 480 }, location: { href: guest.url } })
 			: original(code);
 		try {
 			await service.drag(sessionA, { ref: 0, to_ref: 1, steps: 1 });
@@ -537,7 +537,7 @@ describe("AgentBrowserService", () => {
 			"https://example.com/",
 		);
 		guest.scriptResult = (code) => {
-			if (code.includes("__primeWorkAgentRefs"))
+			if (code.includes("__apexAgentRefs"))
 				return JSON.stringify({ x: 12, y: 34 });
 			return JSON.stringify({
 				url: guest.url,
@@ -611,7 +611,7 @@ describe("AgentBrowserService", () => {
 		).toBe(true);
 		// Focusing a field for typing also moves the cursor there.
 		guest.scriptResult = (code) => {
-			if (code.includes("__primeWorkAgentRefs"))
+			if (code.includes("__apexAgentRefs"))
 				return JSON.stringify({ x: 40, y: 50 });
 			return JSON.stringify({
 				url: guest.url,
@@ -637,7 +637,7 @@ describe("AgentBrowserService", () => {
 		guest.inputEvents.length = 0;
 		let refResolutions = 0;
 		guest.scriptResult = (code) => {
-			if (code.includes("__primeWorkAgentRefs")) {
+			if (code.includes("__apexAgentRefs")) {
 				refResolutions += 1;
 				return JSON.stringify({ x: 320, y: 230 });
 			}
@@ -665,7 +665,7 @@ describe("AgentBrowserService", () => {
 		await service.click(sessionA, { x: 20, y: 30 });
 		guest.inputEvents.length = 0;
 		guest.scriptResult = (code) => JSON.stringify(
-			code.includes("__primeWorkAgentRefs")
+			code.includes("__apexAgentRefs")
 				? { x: 320, y: 230 }
 				: { readyState: "complete" },
 		);
@@ -738,7 +738,7 @@ describe("AgentBrowserService", () => {
 		expect(
 			guest.executedScripts.some(
 				(code) =>
-					code.includes("__primeWorkAgentCursorMarker") &&
+					code.includes("__apexAgentCursorMarker") &&
 					code.includes("style.left = '10px'"),
 			),
 		).toBe(true);

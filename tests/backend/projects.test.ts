@@ -40,7 +40,7 @@ afterEach(async () => {
 })
 
 function setup(): { root: string; service: ProjectService; store: JsonStateStore } {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-files-')); dirs.push(dir)
+  const dir = mkdtempSync(join(tmpdir(), 'apex-files-')); dirs.push(dir)
   const root = join(dir, 'project'); mkdirSync(root)
   const store = new JsonStateStore(join(dir, 'state.json'))
   stores.push(store)

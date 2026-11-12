@@ -59,7 +59,7 @@ function Harness({ pollIntervalMs = 50, scope = 'first' }: { pollIntervalMs?: nu
 }
 
 beforeEach(() => {
-  Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: undefined })
+  Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: undefined })
   vi.useFakeTimers()
   executed = []
   takeResult = null
@@ -119,7 +119,7 @@ describe('BrowserPanel annotation mode', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60)
     })
-    expect(executed.some((code) => code.includes('__primeAnnotator'))).toBe(true)
+    expect(executed.some((code) => code.includes('__apexAnnotator'))).toBe(true)
   })
 
   it('injects the picker, captures a clicked element, and stores the comment', async () => {
@@ -127,7 +127,7 @@ describe('BrowserPanel annotation mode', () => {
     await makeDomReady()
     await toggleAnnotate()
 
-    expect(executed.some((code) => code.includes('__primeAnnotator.start()'))).toBe(true)
+    expect(executed.some((code) => code.includes('__apexAnnotator.start()'))).toBe(true)
     expect(container.querySelector('.annotation-hint')).not.toBeNull()
 
     takeResult = capturedPayload
@@ -137,7 +137,7 @@ describe('BrowserPanel annotation mode', () => {
     takeResult = null
 
     // Selection stops picking (page listeners cleaned up) and opens the comment popover.
-    expect(executed.some((code) => code.includes('__primeAnnotator.stop()'))).toBe(true)
+    expect(executed.some((code) => code.includes('__apexAnnotator.stop()'))).toBe(true)
     const popover = container.querySelector('.annotation-popover')
     expect(popover?.textContent).toContain('Comment on element 1')
     // The DOM label is intentionally not shown; the header and comment field suffice.
@@ -164,7 +164,7 @@ describe('BrowserPanel annotation mode', () => {
   it('shows checked source, navigates only on request, and attaches evidence without sending', async () => {
     const resolveBrowserSource = vi.fn(async () => ({ kind: 'resolved', path: '/repo/Button.tsx', line: 2, evidence: 'explicit' }))
     const openInVsCode = vi.fn(async () => true)
-    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
+    Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
     await act(async () => root.render(<Harness />))
     await makeDomReady(); await toggleAnnotate()
     takeResult = JSON.stringify([{ selector: '#cta', tagName: 'button', component: 'Button', sourceHint: { kind: 'explicit', path: 'Button.tsx', line: 2 } }])
@@ -187,7 +187,7 @@ describe('BrowserPanel annotation mode', () => {
   it('keeps unmapped selections useful and discards pending source checks on navigation', async () => {
     let finish: ((value: { kind: 'resolved'; path: string; evidence: 'explicit' }) => void) | undefined
     const resolveBrowserSource = vi.fn(() => new Promise((resolve) => { finish = resolve }))
-    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource } } })
+    Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: { app: { resolveBrowserSource } } })
     await act(async () => root.render(<Harness />))
     await makeDomReady(); await toggleAnnotate()
     takeResult = capturedPayload
@@ -300,13 +300,13 @@ describe('BrowserPanel annotation mode', () => {
     const api: BrowserAnnotationsApi = { annotations, atCapacity: true, add: vi.fn(() => false), remove: vi.fn(), clear: vi.fn(), handleNavigation: vi.fn(), sendSignal: 0, requestSend: vi.fn() }
     await act(async () => root.render(<BrowserPanel home="https://example.com/" onOpenExternal={() => undefined} annotations={api} pollIntervalMs={50} />))
     await makeDomReady()
-    const injectedBefore = executed.filter((code) => code.includes('__primeAnnotator.start()')).length
+    const injectedBefore = executed.filter((code) => code.includes('__apexAnnotator.start()')).length
 
     await toggleAnnotate()
 
     expect(container.querySelector('.annotation-notice')?.textContent).toContain('at most 20 annotations')
     expect(container.querySelector('.annotation-hint')).toBeNull()
-    expect(executed.filter((code) => code.includes('__primeAnnotator.start()')).length).toBe(injectedBefore)
+    expect(executed.filter((code) => code.includes('__apexAnnotator.start()')).length).toBe(injectedBefore)
   })
 
   it('marks annotations stale on navigation and exits annotation mode', async () => {
@@ -436,7 +436,7 @@ describe('BrowserPanel annotation mode', () => {
       })
     })
     const openInVsCode = vi.fn(async () => true)
-    Object.defineProperty(window, 'prime', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
+    Object.defineProperty(window, 'apex', { configurable: true, writable: true, value: { app: { resolveBrowserSource, openInVsCode } } })
 
     await act(async () => root.render(<Harness />))
     await makeDomReady()

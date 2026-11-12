@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
 import { VoiceSettings } from '../../apps/desktop/src/pages/settings/VoiceSettings'
-import type { AppSettings, PrimeWorkApi, VoiceCredentialStatus } from '../../apps/desktop/src/types/api'
+import type { AppSettings, ApexApi, VoiceCredentialStatus } from '../../apps/desktop/src/types/api'
 
 vi.mock('../../apps/desktop/src/components/ui', () => ({
   Modal: ({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) => <div role="dialog" aria-label={title}>{children}{footer}</div>,
@@ -54,7 +54,7 @@ async function choose(select: HTMLSelectElement, value: string) {
   })
 }
 
-function voiceBridge(overrides: Partial<PrimeWorkApi['voice']> = {}): PrimeWorkApi['voice'] {
+function voiceBridge(overrides: Partial<ApexApi['voice']> = {}): ApexApi['voice'] {
   return {
     credentialStatus: vi.fn().mockResolvedValue(emptyStatus),
     saveApiKey: vi.fn().mockResolvedValue(emptyStatus),
@@ -67,7 +67,7 @@ function voiceBridge(overrides: Partial<PrimeWorkApi['voice']> = {}): PrimeWorkA
   }
 }
 
-function Harness({ voice }: { voice: PrimeWorkApi['voice'] | null }) {
+function Harness({ voice }: { voice: ApexApi['voice'] | null }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   return <VoiceSettings settings={settings} voice={voice} onUpdate={(patch) => { setSettings((current) => ({ ...current, ...patch })) }} />
 }

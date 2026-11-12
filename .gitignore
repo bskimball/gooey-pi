@@ -8,7 +8,6 @@ test-results
 .DS_Store
 .env
 .env.*
-.prime-gui.log
 .superdesign/
 .claude/worktrees/
 __pycache__/

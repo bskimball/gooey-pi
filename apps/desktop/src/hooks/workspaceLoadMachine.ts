@@ -1,11 +1,11 @@
 import { assign, setup } from 'xstate'
 import type { TranscriptReconciliationMarker } from '@/app/agent-events'
-import type { PrimeEventBuffer } from '@/lib/events'
+import type { ApexEventBuffer } from '@/lib/events'
 
 export interface TranscriptLoad {
   generation: number
   sessionFile: string
-  eventBuffer: PrimeEventBuffer
+  eventBuffer: ApexEventBuffer
   runtimeId?: string
   reconciliation: boolean
   admissionRevision: number

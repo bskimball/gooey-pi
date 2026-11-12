@@ -38,7 +38,7 @@ Preconditions:
 - On a fresh `HOME` the `No Pi family harness detected` modal makes the shell
   `inert`; the driver dismisses it first. If you drive manually, close that modal
   (its `Close` button) before clicking the sidebar or every click times out.
-- The Capabilities heading is `Extend <active harness>` (e.g. `Extend OMP`), not
+- The Capabilities heading is `Extend Pi`, not
   the literal word "Capabilities"; assert the `^Extend ` heading or the level-2
   `Capabilities` directory heading, not the sidebar button text.
 - `Scheduled` and `Capabilities` also appear as words elsewhere (kicker, tabs);

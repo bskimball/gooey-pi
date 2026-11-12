@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
-import { PRIME_THINKING_LEVELS, type PrimeModelDescriptor, type PrimeThinkingLevel } from '../../src/types/api'
+import { APEX_THINKING_LEVELS, type ApexModelDescriptor, type ApexThinkingLevel } from '../../src/types/api'
 import { CliModelCatalogService, validateModelEntry, type CliModelCatalogOptions } from './model-catalog-cli'
 import { killProcessTree, prepareExecutableSpawn, waitForProcessExit } from './process-utils'
 
@@ -47,9 +47,9 @@ function readPiCatalogFingerprint(agentDir = piAgentDir()): string {
  * map names them, and every other level is supported by default. Hostile
  * (non-string, non-null) map values are treated as absent.
  */
-function toThinkingLevels(reasoning: boolean, rawMap: Record<string, unknown> | undefined): PrimeThinkingLevel[] {
+function toThinkingLevels(reasoning: boolean, rawMap: Record<string, unknown> | undefined): ApexThinkingLevel[] {
   if (!reasoning) return ['off']
-  return PRIME_THINKING_LEVELS.filter((level) => {
+  return APEX_THINKING_LEVELS.filter((level) => {
     const mapped = rawMap && Object.hasOwn(rawMap, level) ? rawMap[level] : undefined
     if (mapped === null) return false
     if (level === 'xhigh' || level === 'max') return typeof mapped === 'string'
@@ -200,8 +200,8 @@ export type PiModelCatalogOptions = CliModelCatalogOptions
 /**
  * Model catalog service for the pi harness, backed by the short-lived
  * `get_available_models` RPC probe instead of a CLI JSON list. Satisfies the
- * same `ModelCatalogProvider` surface as `PrimeProviderService` and
- * `OmpModelCatalogService`, so `AgentRpcManager` and the `providers:catalog`
+ * same `ModelCatalogProvider` surface as `ApexProviderService` and
+ * `ApexModelCatalogService`, so `AgentRpcManager` and the `providers:catalog`
  * IPC path can consume any of them.
  *
  * The probe output is untrusted: it is byte-bounded, time-bounded, spawned
@@ -236,7 +236,7 @@ export class PiModelCatalogService extends CliModelCatalogService {
   }
 
   /** Validates one untrusted RPC model entry; returns null when any field is hostile or malformed. */
-  protected toModelDescriptor(value: unknown): PrimeModelDescriptor | null {
+  protected toModelDescriptor(value: unknown): ApexModelDescriptor | null {
     const entry = validateModelEntry(value)
     if (!entry) return null
     const { thinkingLevelMap } = entry.record

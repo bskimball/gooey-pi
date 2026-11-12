@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DesktopPet } from '../../apps/desktop/src/components/DesktopPet'
-import type { PetDefinition, PrimeWorkApi } from '../../apps/desktop/src/types/api'
+import type { PetDefinition, ApexApi } from '../../apps/desktop/src/types/api'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -15,7 +15,7 @@ const definitions: PetDefinition[] = [
 describe('DesktopPet', () => {
   let container: HTMLDivElement
   let root: Root
-  const pets = { list: vi.fn(async () => definitions), sprite: vi.fn(async () => 'data:image/webp;base64,UklGRgQAAABXRUJQ') } satisfies PrimeWorkApi['pets']
+  const pets = { list: vi.fn(async () => definitions), sprite: vi.fn(async () => 'data:image/webp;base64,UklGRgQAAABXRUJQ') } satisfies ApexApi['pets']
   beforeEach(() => {
     container = document.createElement('div')
     document.body.appendChild(container)

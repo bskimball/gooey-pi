@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentBrowserBridge } from '../../apps/desktop/electron/main/browser/agent-bridge'
 import type { AgentBrowserService } from '../../apps/desktop/electron/main/browser/agent-service'
-import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-browser'
+import type { ApexExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser'
 
 interface RegisteredTool {
   name: string
@@ -31,16 +31,16 @@ function fakePi() {
     },
     registerTool: (tool: RegisteredTool) => { tools.push(tool) },
   }
-  return { tools, pi: pi as unknown as OmpExtensionApi }
+  return { tools, pi: pi as unknown as ApexExtensionApi }
 }
 
 async function loadExtension(environment: NodeJS.ProcessEnv) {
   vi.resetModules()
-  if (environment.PRIME_WORK_BROWSER_URL !== undefined) vi.stubEnv('PRIME_WORK_BROWSER_URL', environment.PRIME_WORK_BROWSER_URL)
-  else vi.stubEnv('PRIME_WORK_BROWSER_URL', undefined as unknown as string)
-  if (environment.PRIME_WORK_BROWSER_TOKEN !== undefined) vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', environment.PRIME_WORK_BROWSER_TOKEN)
-  else vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', undefined as unknown as string)
-  const module = await import('../../apps/desktop/assets/extensions/omp-work-browser')
+  if (environment.APEX_BROWSER_URL !== undefined) vi.stubEnv('APEX_BROWSER_URL', environment.APEX_BROWSER_URL)
+  else vi.stubEnv('APEX_BROWSER_URL', undefined as unknown as string)
+  if (environment.APEX_BROWSER_TOKEN !== undefined) vi.stubEnv('APEX_BROWSER_TOKEN', environment.APEX_BROWSER_TOKEN)
+  else vi.stubEnv('APEX_BROWSER_TOKEN', undefined as unknown as string)
+  const module = await import('../../apps/desktop/assets/extensions/apex-browser')
   return module.default
 }
 
@@ -77,7 +77,7 @@ afterEach(async () => {
 async function fixture() {
   const { calls, service } = fakeService()
   const terminals = { readActive: vi.fn(() => ({ label: 'zsh 1', cwd: '/project', content: '$ npm test\npassed', truncated: false })) }
-  const bridge = new AgentBrowserBridge({ service, terminals, extensionPath: '/app/extensions/omp-work-browser.ts', skillPath: '/app/skills/prime-work-browser' })
+  const bridge = new AgentBrowserBridge({ service, terminals, extensionPath: '/app/extensions/apex-browser.ts', skillPath: '/app/skills/apex-browser' })
   await bridge.start()
   bridges.push(bridge)
   const environment = bridge.environmentFor({ cwd: '/project', sessionPath: '/sessions/one.jsonl' })
@@ -92,7 +92,7 @@ async function fixture() {
   return { bridge, calls, terminals, environment, tools, tool }
 }
 
-describe('omp-work-browser extension', () => {
+describe('apex-browser extension', () => {
   it('registers no tools when the broker environment is missing', async () => {
     const factory = await loadExtension({})
     const { tools, pi } = fakePi()
@@ -162,7 +162,7 @@ describe('omp-work-browser extension', () => {
 
   it('surfaces broker errors as tool errors without leaking the token', async () => {
     const { bridge, environment, tool } = await fixture()
-    const denied = await loadExtension({ ...environment, PRIME_WORK_BROWSER_TOKEN: 'not-the-real-token' })
+    const denied = await loadExtension({ ...environment, APEX_BROWSER_TOKEN: 'not-the-real-token' })
     const { tools: deniedTools, pi } = fakePi()
     denied(pi)
     const deniedTabs = deniedTools.find((candidate) => candidate.name === 'browser_tabs')!
@@ -170,8 +170,8 @@ describe('omp-work-browser extension', () => {
     await bridge.stop()
     await expect(tool('browser_tabs').execute('call-2', { action: 'list' })).rejects.toSatisfy((error: unknown) => {
       const message = String((error as Error).message)
-      expect(message).toContain('OMP Work is not reachable')
-      expect(message).not.toContain(environment.PRIME_WORK_BROWSER_TOKEN)
+      expect(message).toContain('Apex is not reachable')
+      expect(message).not.toContain(environment.APEX_BROWSER_TOKEN)
       return true
     })
   })

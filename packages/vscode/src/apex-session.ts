@@ -180,7 +180,7 @@ export class ApexSession implements vscode.Disposable {
         this.notice(notice)
       }
       const environment = this.browser.capability.environmentFor({ cwd: this.cwd, sessionPath: this.browserSessionKey })
-      launchToken = environment.PRIME_WORK_BROWSER_TOKEN
+      launchToken = environment.APEX_BROWSER_TOKEN
       this.browserToken = launchToken
       rpc = new PiRpc(
         resolvePi(config.get('piPath', '')),

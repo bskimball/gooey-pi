@@ -11,8 +11,8 @@ from urllib.request import Request, urlopen
 
 
 def _request(method: str, params: dict[str, Any] | None = None) -> Any:
-    url = os.environ.get("PRIME_WORK_SCHEDULE_URL")
-    token = os.environ.get("PRIME_WORK_SCHEDULE_TOKEN")
+    url = os.environ.get("APEX_SCHEDULE_URL")
+    token = os.environ.get("APEX_SCHEDULE_TOKEN")
     if not url or not token:
         raise RuntimeError("Apex scheduling is unavailable. Open this session in Apex and keep its broker running.")
     payload = json.dumps({"method": method, "params": params or {}}, separators=(",", ":")).encode()

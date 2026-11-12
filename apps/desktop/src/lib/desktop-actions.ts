@@ -1,7 +1,7 @@
-import type { PrimeWorkApi } from '@/types/api'
+import type { ApexApi } from '@/types/api'
 import { errorMessage } from './errors'
 
-type ShellApi = Pick<PrimeWorkApi['app'], 'openExternal' | 'revealPath'>
+type ShellApi = Pick<ApexApi['app'], 'openExternal' | 'revealPath'>
 
 /**
  * The main process answers these shell requests with a boolean instead of a
@@ -25,7 +25,7 @@ export async function revealPath(app: ShellApi, path: string): Promise<string | 
   }
 }
 
-export async function openInVsCode(app: Pick<PrimeWorkApi['app'], 'openInVsCode'>, path: string): Promise<string | null> {
+export async function openInVsCode(app: Pick<ApexApi['app'], 'openInVsCode'>, path: string): Promise<string | null> {
   try {
     return await app.openInVsCode(path) ? null : `Apex could not open ${path} in VS Code. Is VS Code installed?`
   } catch (error) {

@@ -7,7 +7,7 @@ import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRu
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
 import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
-import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { HarnessId, ApexApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const project: ProjectRecord = {
   id: 'project', harness: 'pi', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',
@@ -29,7 +29,7 @@ function Probe({
   initialSession = session,
   sessions = [session],
 }: {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   harness?: HarnessId
   initialProject?: ProjectRecord
   initialSession?: SessionRecord
@@ -199,7 +199,7 @@ describe('prompt admission versus background transcript reads', () => {
     const bridge = {
       sessions: { read },
       agent: { list: vi.fn(async () => []) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
 
     await act(async () => { root.render(createElement(Probe, { bridge })) })
     await flush()
@@ -228,7 +228,7 @@ describe('prompt admission versus background transcript reads', () => {
     const bridge = {
       sessions: { read },
       agent: { list: vi.fn(async () => []) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
 
     await act(async () => { root.render(createElement(Probe, { bridge })) })
     await flush()
@@ -267,7 +267,7 @@ describe('prompt admission versus background transcript reads', () => {
       projects: {
         grantInferred: vi.fn(async () => project),
       },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
 
     await act(async () => {
       root.render(createElement(Probe, { bridge, initialSession: runningSession, sessions: [runningSession, otherSession] }))
@@ -338,7 +338,7 @@ describe('prompt admission versus background transcript reads', () => {
       },
       agent: { list: vi.fn(async () => []), start, stop: vi.fn(async () => true), command },
       projects: { grantInferred: vi.fn(async () => project) },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
 
     await act(async () => {
       root.render(createElement(Probe, { bridge, initialSession: session, sessions: [session, otherSession] }))

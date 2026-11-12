@@ -11,8 +11,8 @@ import type { TranscriptFileReader } from './transcript'
 
 /**
  * Pi session JSONL v3 layout under `~/.pi/agent/sessions/<bucket>/`:
- * - Line 1 is the `{"type":"session","version":3,...}` header (no OMP-style
- *   title slot); everything after it is append-only entries with `id`/`parentId`
+ * - Line 1 is the `{"type":"session","version":3,...}` header
+ *   everything after it is append-only entries with `id`/`parentId`
  *   forming a branch tree. The project path comes from the header `cwd` —
  *   decoding the bucket directory name is lossy for paths containing dashes.
  * - The display name rides `session_info` entries (`name`); the latest one in
@@ -21,7 +21,7 @@ import type { TranscriptFileReader } from './transcript'
  *   from the name prefix, not UUIDv7 bits.
  *
  * Everything except the display-name and `model_change` record shapes is shared
- * with OMP through `./bucketed`.
+ * through `./bucketed`.
  */
 export function piSessionRoot(): string {
   return join(homedir(), '.pi', 'agent', 'sessions')
@@ -76,8 +76,8 @@ export async function resolvePiSessionCandidate(sessionRootRealPath: string, req
 
 const piMetadataParser = createBucketedMetadataParser((state, value) => {
   if (value.type === 'model_change') {
-    // Pi records split `provider` + `modelId` fields (Prime's shape), unlike
-    // OMP's single `provider/id` string.
+    // Pi records split `provider` + `modelId` fields (Pi's shape), unlike
+    // a combined provider/id string.
     if (typeof value.modelId === 'string') state.model = value.modelId
     if (typeof value.provider === 'string') state.provider = value.provider
   } else if (value.type === 'session_info' && typeof value.name === 'string') {
@@ -162,7 +162,7 @@ export const readPiTranscript: TranscriptFileReader = createBranchSummaryTranscr
 
 /**
  * Fully wired SessionService options for a pi session root. Construct the
- * service with a null CLI path: pi has no `prime-agent list` live overlay.
+ * service with a null CLI path: pi has no `list` live overlay.
  */
 export function piSessionServiceOptions(sessionRoot = piSessionRoot()) {
   return {

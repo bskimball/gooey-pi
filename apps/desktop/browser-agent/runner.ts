@@ -50,7 +50,7 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
     // those reads; do not change the broker's ref table or expose passwords.
     if (record(raw) && Array.isArray(raw.elements) && raw.elements.some((el) => record(el) && (el.tag === 'textarea' || !['input', 'button', 'a', 'select', 'summary'].includes(String(el.tag))))) {
       const metadata = await evaluate(
-        `return (window.__primeWorkAgentRefs || []).map((el, ref) => ({ref, contenteditable: el.isContentEditable === true, ...(el.tagName === 'TEXTAREA' ? {value: el.value.slice(0, 120)} : {})}));`,
+        `return (window.__apexAgentRefs || []).map((el, ref) => ({ref, contenteditable: el.isContentEditable === true, ...(el.tagName === 'TEXTAREA' ? {value: el.value.slice(0, 120)} : {})}));`,
       )
       if (Array.isArray(metadata)) {
         for (const el of raw.elements) {
@@ -111,13 +111,13 @@ async function execute(input: RunInput, { broker, classifier, signal, intent }: 
         case 'type':
           if (step.clear)
             await evaluate(
-              `const el = window.__primeWorkAgentRefs[${target?.ref}]; if (!el || !el.isConnected) throw new Error('Stale target'); el.focus(); if (typeof el.select === 'function') el.select(); else if (el.isContentEditable) { const range = document.createRange(); range.selectNodeContents(el); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); } else throw new Error('Target cannot be cleared'); return true;`,
+              `const el = window.__apexAgentRefs[${target?.ref}]; if (!el || !el.isConnected) throw new Error('Stale target'); el.focus(); if (typeof el.select === 'function') el.select(); else if (el.isContentEditable) { const range = document.createRange(); range.selectNodeContents(el); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); } else throw new Error('Target cannot be cleared'); return true;`,
             )
           await call('type', { ref: target?.ref, text: step.text, submit: step.submit, glide: false })
           break
         case 'select':
           result.detail = await evaluate(
-            `const el = window.__primeWorkAgentRefs[${target?.ref}]; if (!el || !el.isConnected || el.tagName !== 'SELECT') throw new Error('Target is not a connected select'); const value = ${JSON.stringify(step.value)}; const option = Array.from(el.options).find(o => o.value === value) || Array.from(el.options).find(o => o.text.trim() === value.trim()); if (!option || option.disabled || el.disabled) throw new Error('Option unavailable'); el.value = option.value; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); return option.text;`,
+            `const el = window.__apexAgentRefs[${target?.ref}]; if (!el || !el.isConnected || el.tagName !== 'SELECT') throw new Error('Target is not a connected select'); const value = ${JSON.stringify(step.value)}; const option = Array.from(el.options).find(o => o.value === value) || Array.from(el.options).find(o => o.text.trim() === value.trim()); if (!option || option.disabled || el.disabled) throw new Error('Option unavailable'); el.value = option.value; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); return option.text;`,
           )
           break
         case 'press':

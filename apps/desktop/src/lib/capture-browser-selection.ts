@@ -1,5 +1,5 @@
 import type { BrowserAnnotationInput } from './browser-annotations'
-import type { BrowserAnnotationElement, PrimeWorkApi } from '@/types/api'
+import type { BrowserAnnotationElement, ApexApi } from '@/types/api'
 
 export async function captureBrowserSelection({
   bridge,
@@ -11,8 +11,8 @@ export async function captureBrowserSelection({
   element,
 }: {
   bridge: {
-    browser: Pick<PrimeWorkApi['browser'], 'captureSelection'>
-    app: Pick<PrimeWorkApi['app'], 'resolveBrowserSource'>
+    browser: Pick<ApexApi['browser'], 'captureSelection'>
+    app: Pick<ApexApi['app'], 'resolveBrowserSource'>
   }
   sessionKey: string
   tabId: string

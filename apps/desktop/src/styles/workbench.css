@@ -39,14 +39,14 @@
 .project-run-menu textarea { width: 100%; min-height: 52px; resize: vertical; padding: 7px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); outline: 0; color: var(--text); background: var(--canvas); font-size: var(--fs-meta); line-height: 1.45; }
 .project-run-menu textarea:focus { border-color: var(--focus); box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 24%, transparent); }
 .project-run-menu__status { min-height: 22px; display: inline-flex; align-items: center; gap: 5px; justify-self: start; margin-top: -7px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-micro); }
-.project-run-menu__status.is-running { color: var(--prime); background: var(--prime-soft); }
+.project-run-menu__status.is-running { color: var(--apex); background: var(--apex-soft); }
 .project-run-menu__status.is-success { color: var(--success); background: var(--success-soft); }
 .project-run-menu__status.is-error { color: var(--danger); background: var(--danger-soft); }
 .project-run-menu__error { margin: -4px 0 0; color: var(--danger); font-size: var(--fs-micro); line-height: 1.4; }
 .project-run-menu > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 1px; }
 .project-run-menu > footer .button { min-height: 28px; font-size: var(--fs-meta); }
 .button--quiet { color: var(--text-secondary); background: transparent; }
-.branch-pill { height: 24px; max-width: 180px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; color: var(--text-secondary); background: color-mix(in srgb, var(--prime-soft) 28%, var(--surface-subtle)); border: 1px solid color-mix(in srgb, var(--prime) 20%, var(--border)); border-radius: var(--radius-sm); font-size: var(--fs-ui); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.branch-pill { height: 24px; max-width: 180px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; color: var(--text-secondary); background: color-mix(in srgb, var(--apex-soft) 28%, var(--surface-subtle)); border: 1px solid color-mix(in srgb, var(--apex) 20%, var(--border)); border-radius: var(--radius-sm); font-size: var(--fs-ui); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .workbench__content { flex: 1; min-height: 0; min-width: 0; }
 .session-workspace { display: flex; height: 100%; min-height: 0; min-width: 0; }
 .conversation-column { position: relative; display: flex; min-height: 0; min-width: 0; flex: 1 1 auto; flex-direction: column; }
@@ -74,10 +74,10 @@
 .resize-handle--vertical > span { inset-block: 0; left: 3px; width: 1px; }
 .resize-handle--horizontal { width: 100%; height: 7px; margin-block: -3px; cursor: row-resize; }
 .resize-handle--horizontal > span { inset-inline: 0; top: 3px; height: 1px; }
-.resize-handle:hover > span, .resize-handle:focus-visible > span, .resize-handle[data-resizing="true"] > span { background: var(--prime); box-shadow: 0 0 0 1px color-mix(in srgb, var(--prime) 18%, transparent); }
+.resize-handle:hover > span, .resize-handle:focus-visible > span, .resize-handle[data-resizing="true"] > span { background: var(--apex); box-shadow: 0 0 0 1px color-mix(in srgb, var(--apex) 18%, transparent); }
 .resize-handle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .terminal-drawer > .resize-handle > span { background: var(--terminal-resize); }
-.terminal-drawer > .resize-handle:hover > span, .terminal-drawer > .resize-handle:focus-visible > span, .terminal-drawer > .resize-handle[data-resizing="true"] > span { background: var(--prime); }
+.terminal-drawer > .resize-handle:hover > span, .terminal-drawer > .resize-handle:focus-visible > span, .terminal-drawer > .resize-handle[data-resizing="true"] > span { background: var(--apex); }
 body.is-resizing-vertical, body.is-resizing-vertical * { cursor: col-resize !important; user-select: none !important; }
 body.is-resizing-horizontal, body.is-resizing-horizontal * { cursor: row-resize !important; user-select: none !important; }
 

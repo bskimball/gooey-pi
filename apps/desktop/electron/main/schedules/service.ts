@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { PRIME_THINKING_LEVELS } from '../../../src/types/api'
+import { APEX_THINKING_LEVELS } from '../../../src/types/api'
 import type {
-  PrimeThinkingLevel,
+  ApexThinkingLevel,
   ScheduleChangeEvent,
   ScheduleExecution,
   ScheduleInput,
@@ -25,7 +25,7 @@ import {
 const MAX_TASKS = 500
 const MAX_CONCURRENT_RUNS = 2
 const DUE_GRACE_MS = 60_000
-const THINKING_LEVELS: ReadonlySet<string> = new Set(['auto', ...PRIME_THINKING_LEVELS])
+const THINKING_LEVELS: ReadonlySet<string> = new Set(['auto', ...APEX_THINKING_LEVELS])
 
 export class ScheduleBlockedError extends Error {}
 
@@ -67,7 +67,7 @@ function parseExecution(value: unknown): ScheduleExecution {
   const thinking = requireString(execution.thinking, 'execution.thinking', { min: 1, max: 16, trim: true })
   if (!THINKING_LEVELS.has(thinking)) throw new TypeError('Invalid scheduled reasoning level')
   if (execution.speed !== 'normal' && execution.speed !== 'fast') throw new TypeError('Invalid scheduled speed')
-  return { model, thinking: thinking as 'auto' | PrimeThinkingLevel, speed: execution.speed }
+  return { model, thinking: thinking as 'auto' | ApexThinkingLevel, speed: execution.speed }
 }
 
 function parseTiming(value: unknown, now: Date): ScheduleTiming {

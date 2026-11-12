@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 async function fixture(harness: 'pi' = 'pi') {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-agent-schedules-'))
+  const dir = mkdtempSync(join(tmpdir(), 'apex-agent-schedules-'))
   dirs.push(dir)
   const service = new AutomationService(new JsonStateStore(join(dir, 'state.json')), {
     validateTarget: async () => undefined,
@@ -23,14 +23,14 @@ async function fixture(harness: 'pi' = 'pi') {
     now: () => new Date('2030-01-01T00:00:00Z'),
   })
   const bridge = new AgentScheduleBridge({
-    service, harness, skillPath: '/app/skills/prime-work-schedules',
+    service, harness, skillPath: '/app/skills/apex-schedules',
     resolveScope: async ({ sessionPath }) => ({ projectId: 'project-one', sessionId: sessionPath ? 'session-one' : undefined }),
   })
   await bridge.start()
   bridges.push(bridge)
   const environment = bridge.environmentFor({ cwd: '/project', sessionPath: '/sessions/one.jsonl' })
-  const call = async (method: string, params: Record<string, unknown>, token = environment.PRIME_WORK_SCHEDULE_TOKEN) => {
-    const response = await fetch(environment.PRIME_WORK_SCHEDULE_URL!, {
+  const call = async (method: string, params: Record<string, unknown>, token = environment.APEX_SCHEDULE_TOKEN) => {
+    const response = await fetch(environment.APEX_SCHEDULE_URL!, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ method, params }),
     })
@@ -45,16 +45,16 @@ describe('AgentScheduleBridge', () => {
     const other = bridges[0].environmentFor({ cwd: '/project', sessionPath: '/sessions/two.jsonl' })
 
     expect(await call('list', {})).toMatchObject({ status: 200 })
-    expect(bridges[0].revoke(environment.PRIME_WORK_SCHEDULE_TOKEN)).toBe(true)
-    expect(bridges[0].revoke(environment.PRIME_WORK_SCHEDULE_TOKEN)).toBe(false)
+    expect(bridges[0].revoke(environment.APEX_SCHEDULE_TOKEN)).toBe(true)
+    expect(bridges[0].revoke(environment.APEX_SCHEDULE_TOKEN)).toBe(false)
 
     expect(await call('list', {})).toMatchObject({ status: 401 })
-    expect(await call('list', {}, other.PRIME_WORK_SCHEDULE_TOKEN)).toMatchObject({ status: 200 })
+    expect(await call('list', {}, other.APEX_SCHEDULE_TOKEN)).toMatchObject({ status: 200 })
   })
 
   it('creates agent-attributed tasks only in the capability current target', async () => {
     const { service, environment, call } = await fixture()
-    expect(environment.PRIME_WORK_SCHEDULE_SKILL_PATH).toBe('/app/skills/prime-work-schedules')
+    expect(environment.APEX_SCHEDULE_SKILL_PATH).toBe('/app/skills/apex-schedules')
     const response = await call('create', {
       target: 'current_session',
       input: {
@@ -71,21 +71,21 @@ describe('AgentScheduleBridge', () => {
 
   it('rejects non-JSON and missing content types but accepts parameterized application/json', async () => {
     const { environment, call } = await fixture()
-    const plain = await fetch(environment.PRIME_WORK_SCHEDULE_URL!, {
+    const plain = await fetch(environment.APEX_SCHEDULE_URL!, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${environment.PRIME_WORK_SCHEDULE_TOKEN}`, 'Content-Type': 'text/plain' },
+      headers: { Authorization: `Bearer ${environment.APEX_SCHEDULE_TOKEN}`, 'Content-Type': 'text/plain' },
       body: JSON.stringify({ method: 'list', params: {} }),
     })
     expect(plain.status).toBe(415)
-    const missing = await fetch(environment.PRIME_WORK_SCHEDULE_URL!, {
+    const missing = await fetch(environment.APEX_SCHEDULE_URL!, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${environment.PRIME_WORK_SCHEDULE_TOKEN}` },
+      headers: { Authorization: `Bearer ${environment.APEX_SCHEDULE_TOKEN}` },
       body: JSON.stringify({ method: 'list', params: {} }),
     })
     expect(missing.status).toBe(415)
-    const charset = await fetch(environment.PRIME_WORK_SCHEDULE_URL!, {
+    const charset = await fetch(environment.APEX_SCHEDULE_URL!, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${environment.PRIME_WORK_SCHEDULE_TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
+      headers: { Authorization: `Bearer ${environment.APEX_SCHEDULE_TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ method: 'list', params: {} }),
     })
     expect(charset.status).toBe(200)
@@ -95,14 +95,14 @@ describe('AgentScheduleBridge', () => {
   it('rejects missing tokens, browser origins, and unavailable target scopes', async () => {
     const { environment, call } = await fixture()
     expect((await call('list', {}, 'wrong')).status).toBe(401)
-    const origin = await fetch(environment.PRIME_WORK_SCHEDULE_URL!, {
-      method: 'POST', headers: { Authorization: `Bearer ${environment.PRIME_WORK_SCHEDULE_TOKEN}`, Origin: 'https://example.com' },
+    const origin = await fetch(environment.APEX_SCHEDULE_URL!, {
+      method: 'POST', headers: { Authorization: `Bearer ${environment.APEX_SCHEDULE_TOKEN}`, Origin: 'https://example.com' },
       body: JSON.stringify({ method: 'list', params: {} }),
     })
     expect(origin.status).toBe(404)
     const noSessionEnvironment = bridges[0].environmentFor({ cwd: '/project' })
-    const response = await fetch(noSessionEnvironment.PRIME_WORK_SCHEDULE_URL!, {
-      method: 'POST', headers: { Authorization: `Bearer ${noSessionEnvironment.PRIME_WORK_SCHEDULE_TOKEN}`, 'Content-Type': 'application/json' },
+    const response = await fetch(noSessionEnvironment.APEX_SCHEDULE_URL!, {
+      method: 'POST', headers: { Authorization: `Bearer ${noSessionEnvironment.APEX_SCHEDULE_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ method: 'create', params: { target: 'current_session', input: {} } }),
     })
     expect(response.status).toBe(400)

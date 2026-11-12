@@ -1,4 +1,4 @@
-import { PRIME_THINKING_LEVELS, type PrimeThinkingLevel } from '../../../src/types/api'
+import { APEX_THINKING_LEVELS, type ApexThinkingLevel } from '../../../src/types/api'
 import { rejectUnknownKeys, requireBoolean, requireId, requireRecord, requireString } from 'apex-core/validation'
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from './limits'
 import type { RpcObject } from './types'
@@ -9,7 +9,7 @@ const SIMPLE_COMMANDS = new Set([
   'get_messages', 'agent_messages_status', 'agent_messages_pause', 'agent_messages_resume',
   'agent_messages_clear', 'get_commands', 'abort_bash', 'get_available_thinking_levels', 'clear_queue',
 ])
-const THINKING_LEVELS: ReadonlySet<string> = new Set(PRIME_THINKING_LEVELS)
+const THINKING_LEVELS: ReadonlySet<string> = new Set(APEX_THINKING_LEVELS)
 
 function validateImageData(data: string, mimeType: string): void {
   if (data.length % 4 !== 0 || !/^[a-z\d+/]*={0,2}$/i.test(data)) throw new TypeError('Image data must be canonical base64')
@@ -25,7 +25,7 @@ function validateImageData(data: string, mimeType: string): void {
   if (!matches) throw new TypeError('Image data does not match its MIME type')
 }
 
-export function isThinkingLevel(value: string): value is PrimeThinkingLevel { return THINKING_LEVELS.has(value) }
+export function isThinkingLevel(value: string): value is ApexThinkingLevel { return THINKING_LEVELS.has(value) }
 
 function validateImages(value: unknown): Array<{ type: 'image'; data: string; mimeType: string }> | undefined {
   if (value === undefined) return undefined

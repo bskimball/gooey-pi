@@ -5,8 +5,8 @@ import type {
 	AgentBrowserPointerEvent,
 	AgentBrowserState,
 	AppUpdateState,
-	PrimeEventEnvelope,
-	PrimeWorkApi,
+	ApexEventEnvelope,
+	ApexApi,
 	ScheduleChangeEvent,
 	SessionChangeEvent,
 	TerminalDataEvent,
@@ -61,7 +61,7 @@ function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 	});
 }
 
-const api: PrimeWorkApi = {
+const api: ApexApi = {
 	app: {
 		getMeta: () => invoke("app:get-meta"),
 		refreshHarnesses: () => invoke("app:refresh-harnesses"),
@@ -133,7 +133,7 @@ const api: PrimeWorkApi = {
 		stop: (runtimeId) => invoke("agent:stop", runtimeId),
 		list: () => invoke("agent:list"),
 		onEvent: (callback) =>
-			subscribe<PrimeEventEnvelope>("agent:event", callback),
+			subscribe<ApexEventEnvelope>("agent:event", callback),
 	},
 	providers: {
 		catalog: (force, harness) => invoke("providers:catalog", force, harness),
@@ -280,4 +280,4 @@ const api: PrimeWorkApi = {
 };
 
 for (const domain of Object.values(api)) Object.freeze(domain);
-contextBridge.exposeInMainWorld("prime", Object.freeze(api));
+contextBridge.exposeInMainWorld("apex", Object.freeze(api));

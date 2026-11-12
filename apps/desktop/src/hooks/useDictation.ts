@@ -1,11 +1,11 @@
 import { useCallback, useLayoutEffect } from 'react'
 import { useMachine } from '@xstate/react'
-import type { PrimeWorkApi, VoiceTranscriptionProvider } from '@/types/api'
+import type { ApexApi, VoiceTranscriptionProvider } from '@/types/api'
 import { dictationMachine } from './dictationMachine'
 
 export type DictationState = 'idle' | 'connecting' | 'recording' | 'transcribing'
 
-export function useDictation(voice: PrimeWorkApi['voice'] | null | undefined, provider: VoiceTranscriptionProvider, onError: (message: string) => void) {
+export function useDictation(voice: ApexApi['voice'] | null | undefined, provider: VoiceTranscriptionProvider, onError: (message: string) => void) {
   const [snapshot, send, actor] = useMachine(dictationMachine)
   const state: DictationState = snapshot.matches('idle') ? 'idle'
     : snapshot.matches({ active: 'connecting' }) ? 'connecting'

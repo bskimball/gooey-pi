@@ -1,5 +1,5 @@
 import { assign, fromPromise, setup } from 'xstate'
-import type { PrimeWorkApi, VoiceTranscriptionProvider } from '@/types/api'
+import type { ApexApi, VoiceTranscriptionProvider } from '@/types/api'
 
 interface BatchCapture {
   kind: 'batch'
@@ -26,7 +26,7 @@ interface LiveCapture {
 
 type Capture = BatchCapture | LiveCapture
 interface Options {
-  voice: PrimeWorkApi['voice']
+  voice: ApexApi['voice']
   provider: VoiceTranscriptionProvider
   onError: (message: string) => void
 }

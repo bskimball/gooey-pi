@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { HarnessId, PrimeModelCatalog, PrimeModelDescriptor, PrimeThinkingLevel, PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
+import type { HarnessId, ApexModelCatalog, ApexModelDescriptor, ApexThinkingLevel, ApexApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 /** Stable fallback identities so consumers can memoize on prop equality. */
-const DEFAULT_REASONING_LEVELS: PrimeThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const DEFAULT_REASONING_LEVELS: ApexThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
-function isUsable(candidate: PrimeModelDescriptor): boolean {
+function isUsable(candidate: ApexModelDescriptor): boolean {
   return candidate.enabled !== false && candidate.available
 }
 
 /** True only when a warning-free catalog lists the model or its provider as disabled/unavailable. */
-function runtimeModelKnownUnavailable(catalog: PrimeModelCatalog, provider: string, id: string): boolean {
+function runtimeModelKnownUnavailable(catalog: ApexModelCatalog, provider: string, id: string): boolean {
   if (catalog.warning) return false
   const listed = catalog.models.find((candidate) => candidate.provider === provider && candidate.id === id)
   if (listed) return !isUsable(listed)
@@ -18,16 +18,16 @@ function runtimeModelKnownUnavailable(catalog: PrimeModelCatalog, provider: stri
 }
 
 /** Resolve a session's persisted model against the catalog, matching either the model id or the full key. */
-function findSessionModel(catalog: PrimeModelCatalog, session: Pick<SessionRecord, 'model' | 'provider'> | undefined): PrimeModelDescriptor | undefined {
+function findSessionModel(catalog: ApexModelCatalog, session: Pick<SessionRecord, 'model' | 'provider'> | undefined): ApexModelDescriptor | undefined {
   if (!session?.provider || !session.model) return undefined
   return catalog.models.find((candidate) => candidate.provider === session.provider && (candidate.id === session.model || candidate.key === session.model) && isUsable(candidate))
     ?? catalog.models.find((candidate) => candidate.id === session.model && isUsable(candidate))
 }
 
-interface PendingSelection { model: string; effort: PrimeThinkingLevel; fast: boolean }
+interface PendingSelection { model: string; effort: ApexThinkingLevel; fast: boolean }
 
-export function groupModelsByProvider(models: readonly PrimeModelDescriptor[] | undefined): Map<string, PrimeModelDescriptor[]> {
-  const grouped = new Map<string, PrimeModelDescriptor[]>()
+export function groupModelsByProvider(models: readonly ApexModelDescriptor[] | undefined): Map<string, ApexModelDescriptor[]> {
+  const grouped = new Map<string, ApexModelDescriptor[]>()
   for (const model of models ?? []) {
     if (model.enabled === false) continue
     const bucket = grouped.get(model.provider)
@@ -38,7 +38,7 @@ export function groupModelsByProvider(models: readonly PrimeModelDescriptor[] | 
 }
 
 interface UseProviderCatalogOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   /** Prevent startup work before the persisted harness selection is loaded. */
   ready?: boolean
   /** Harness whose model catalog is shown; catalogs are cached per harness. */
@@ -57,13 +57,13 @@ interface UseProviderCatalogOptions {
 
 export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runtime, activeSession, setSessions, lastSelectedModel = '', rememberModel, syncRuntime, reportError }: UseProviderCatalogOptions) {
   const [model, setModel] = useState('')
-  const [effort, setEffort] = useState<PrimeThinkingLevel>('medium')
+  const [effort, setEffort] = useState<ApexThinkingLevel>('medium')
   const [fast, setFast] = useState(false)
   // Per-harness cache: switching back to a harness shows its last catalog
   // immediately while the background refresh updates it.
-  const [catalogs, setCatalogs] = useState<Partial<Record<HarnessId, PrimeModelCatalog>>>({})
+  const [catalogs, setCatalogs] = useState<Partial<Record<HarnessId, ApexModelCatalog>>>({})
   const catalog = catalogs[harness] ?? null
-  const setCatalogFor = useCallback((target: HarnessId, next: PrimeModelCatalog) => {
+  const setCatalogFor = useCallback((target: HarnessId, next: ApexModelCatalog) => {
     setCatalogs((current) => ({ ...current, [target]: next }))
   }, [])
   const modelRef = useRef(model)
@@ -76,7 +76,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   useLayoutEffect(() => { runtimeIdRef.current = runtime?.runtimeId })
 
   const updateModel = useCallback((value: string) => { modelRef.current = value; setModel(value) }, [])
-  const updateEffort = useCallback((value: PrimeThinkingLevel) => { effortRef.current = value; setEffort(value) }, [])
+  const updateEffort = useCallback((value: ApexThinkingLevel) => { effortRef.current = value; setEffort(value) }, [])
   const updateFast = useCallback((value: boolean) => { fastRef.current = value; setFast(value) }, [])
 
   const queueRuntimeMutation = useCallback((
@@ -135,13 +135,13 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const rememberSelectionRef = useRef(rememberSelection)
   useLayoutEffect(() => { rememberSelectionRef.current = rememberSelection })
 
-  const firstUsableModel = useCallback((nextCatalog: PrimeModelCatalog | null | undefined) => (
+  const firstUsableModel = useCallback((nextCatalog: ApexModelCatalog | null | undefined) => (
     nextCatalog?.models.find((candidate) => candidate.enabled !== false && candidate.available)
   ), [])
 
   const activeSessionRef = useRef(activeSession)
   useLayoutEffect(() => { activeSessionRef.current = activeSession })
-  const fallbackModel = useCallback((nextCatalog: PrimeModelCatalog | null | undefined) => {
+  const fallbackModel = useCallback((nextCatalog: ApexModelCatalog | null | undefined) => {
     if (nextCatalog) {
       const sessionModel = findSessionModel(nextCatalog, activeSessionRef.current)
       if (sessionModel) return sessionModel
@@ -150,7 +150,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       ?? firstUsableModel(nextCatalog)
   }, [firstUsableModel, lastSelectedModel])
 
-  const selectedModel = useMemo<PrimeModelDescriptor | undefined>(() => {
+  const selectedModel = useMemo<ApexModelDescriptor | undefined>(() => {
     return catalog?.models.find((candidate) => candidate.key === model && candidate.enabled !== false && candidate.available)
   }, [catalog, model])
   const reasoningLevels = selectedModel?.availableThinkingLevels ?? runtime?.availableThinkingLevels ?? DEFAULT_REASONING_LEVELS
@@ -210,7 +210,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const sessionKey = activeSession?.id ?? ''
   const sessionKeyRef = useRef(sessionKey)
   useLayoutEffect(() => { sessionKeyRef.current = sessionKey })
-  const syncActiveSessionChoice = useCallback((providerId: string | undefined, modelId: string | undefined, thinkingLevel?: PrimeThinkingLevel) => {
+  const syncActiveSessionChoice = useCallback((providerId: string | undefined, modelId: string | undefined, thinkingLevel?: ApexThinkingLevel) => {
     const sessionId = sessionKeyRef.current
     if (!sessionId || !setSessions) return
     setSessions((items) => items.map((item) => {
@@ -245,9 +245,9 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     syncActiveSessionChoice(pendingModel.provider, pendingModel.id, nextEffort)
     if (!modelChanged && !effortChanged && !fastChanged) return false
     const previousModel = runtimeModel?.key ?? modelRef.current
-    const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as PrimeThinkingLevel)
+    const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as ApexThinkingLevel)
       ? targetRuntime.thinkingLevel
-      : effortRef.current) as PrimeThinkingLevel
+      : effortRef.current) as ApexThinkingLevel
     const previousFast = targetRuntime.serviceTier === 'priority'
     queueRuntimeMutation(
       targetRuntime.runtimeId,
@@ -294,8 +294,8 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (runtimeModel) {
       if (modelRef.current !== runtimeModel.key) updateModel(runtimeModel.key)
       rememberSelectionRef.current(runtimeModel.key)
-      const nextRuntimeEffort = runtime?.thinkingLevel && runtimeModel.availableThinkingLevels.includes(runtime.thinkingLevel as PrimeThinkingLevel)
-        ? runtime.thinkingLevel as PrimeThinkingLevel
+      const nextRuntimeEffort = runtime?.thinkingLevel && runtimeModel.availableThinkingLevels.includes(runtime.thinkingLevel as ApexThinkingLevel)
+        ? runtime.thinkingLevel as ApexThinkingLevel
         : effortRef.current
       if (effortRef.current !== nextRuntimeEffort) updateEffort(nextRuntimeEffort)
       syncActiveSessionChoice(runtimeModel.provider, runtimeModel.id, nextRuntimeEffort)
@@ -312,8 +312,8 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
         const sessionModel = findSessionModel(catalog, activeSession)
         if (sessionModel) {
           if (modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
-          const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as PrimeThinkingLevel)
-            ? activeSession.thinkingLevel as PrimeThinkingLevel
+          const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as ApexThinkingLevel)
+            ? activeSession.thinkingLevel as ApexThinkingLevel
             : effortRef.current
           if (effortRef.current !== sessionEffort) updateEffort(sessionEffort)
         } else if (sessionKey) {
@@ -345,7 +345,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
           : targetModel.availableThinkingLevels.includes('medium') ? 'medium' : targetModel.availableThinkingLevels[0] ?? 'off'
         if (effortRef.current !== targetEffort) updateEffort(targetEffort)
         const runtimeModelKey = runtime.model?.provider && runtime.model.id ? `${runtime.model.provider}/${runtime.model.id}` : previousModel
-        const runtimeEffort = (runtime.thinkingLevel as PrimeThinkingLevel | undefined) ?? previousEffort
+        const runtimeEffort = (runtime.thinkingLevel as ApexThinkingLevel | undefined) ?? previousEffort
         const originSessionKey = sessionKeyRef.current
         queueRuntimeMutation(
           runtime.runtimeId,
@@ -399,7 +399,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     )
   }, [bridge, catalog?.models, queueRuntimeMutation, rememberSelection, runtime, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
-  const changeEffort = useCallback((nextEffort: PrimeThinkingLevel) => {
+  const changeEffort = useCallback((nextEffort: ApexThinkingLevel) => {
     const previous = effortRef.current
     updateEffort(nextEffort)
     syncActiveSessionChoice(undefined, undefined, nextEffort)

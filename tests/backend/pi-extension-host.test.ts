@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { OmpExtensionApi as BrowserExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-browser'
-import type { OmpExtensionApi as ScheduleExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-schedules'
-import type { OmpExtensionApi as AskUserExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-ask-user'
-import type { OmpExtensionApi as CollaborationExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-collaboration'
+import type { ApexExtensionApi as BrowserExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser'
+import type { ApexExtensionApi as ScheduleExtensionApi } from '../../apps/desktop/assets/extensions/apex-schedules'
+import type { ApexExtensionApi as AskUserExtensionApi } from '../../apps/desktop/assets/extensions/apex-ask-user'
+import type { ApexExtensionApi as CollaborationExtensionApi } from '../../apps/desktop/assets/extensions/apex-collaboration'
 
 /**
  * Base pi host simulation: unlike OMP, pi injects no `pi.typebox` shim.
@@ -46,16 +46,16 @@ afterEach(() => {
 
 async function loadBrowserExtension() {
   vi.resetModules()
-  vi.stubEnv('PRIME_WORK_BROWSER_URL', 'http://127.0.0.1:1/')
-  vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'token')
-  return (await import('../../apps/desktop/assets/extensions/omp-work-browser')).default
+  vi.stubEnv('APEX_BROWSER_URL', 'http://127.0.0.1:1/')
+  vi.stubEnv('APEX_BROWSER_TOKEN', 'token')
+  return (await import('../../apps/desktop/assets/extensions/apex-browser')).default
 }
 
 async function loadScheduleExtension() {
   vi.resetModules()
-  vi.stubEnv('PRIME_WORK_SCHEDULE_URL', 'http://127.0.0.1:1/')
-  vi.stubEnv('PRIME_WORK_SCHEDULE_TOKEN', 'token')
-  return (await import('../../apps/desktop/assets/extensions/omp-work-schedules')).default
+  vi.stubEnv('APEX_SCHEDULE_URL', 'http://127.0.0.1:1/')
+  vi.stubEnv('APEX_SCHEDULE_TOKEN', 'token')
+  return (await import('../../apps/desktop/assets/extensions/apex-schedules')).default
 }
 
 describe('extensions on a base pi host (no injected pi.typebox)', () => {
@@ -93,9 +93,9 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
 
   it('browser extension still registers nothing without the broker environment', async () => {
     vi.resetModules()
-    vi.stubEnv('PRIME_WORK_BROWSER_URL', undefined as unknown as string)
-    vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', undefined as unknown as string)
-    const factory = (await import('../../apps/desktop/assets/extensions/omp-work-browser')).default
+    vi.stubEnv('APEX_BROWSER_URL', undefined as unknown as string)
+    vi.stubEnv('APEX_BROWSER_TOKEN', undefined as unknown as string)
+    const factory = (await import('../../apps/desktop/assets/extensions/apex-browser')).default
     const { tools, pi } = piHost()
     await factory(pi as unknown as BrowserExtensionApi)
     expect(tools).toHaveLength(0)
@@ -122,7 +122,7 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
 
   it('ask-user extension registers ask_user with host-resolved schemas', async () => {
     vi.resetModules()
-    const factory = (await import('../../apps/desktop/assets/extensions/omp-work-ask-user')).default
+    const factory = (await import('../../apps/desktop/assets/extensions/apex-ask-user')).default
     const { tools, pi } = piHost()
     await factory(pi as unknown as AskUserExtensionApi)
     expect(tools).toHaveLength(1)
@@ -138,7 +138,7 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
     vi.resetModules()
     vi.stubEnv('GOOEYPI_COLLABORATION_URL', 'http://127.0.0.1:1/')
     vi.stubEnv('GOOEYPI_COLLABORATION_TOKEN', 'token')
-    const factory = (await import('../../apps/desktop/assets/extensions/omp-work-collaboration')).default
+    const factory = (await import('../../apps/desktop/assets/extensions/apex-collaboration')).default
     const { tools, pi } = piHost()
     await factory(pi as unknown as CollaborationExtensionApi)
     expect(tools.map((tool) => tool.name)).toEqual(['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_wait'])

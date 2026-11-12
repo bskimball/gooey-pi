@@ -135,10 +135,10 @@ export function findCapabilityMentions(value: string, skills: readonly SkillReco
 
 function routingInstruction(mention: CapabilityMention): string {
   const token = mention.text
-  if (mention.skill.id === 'prime-work-browser') {
+  if (mention.skill.id === 'apex-browser') {
     return `${token}: use Apex's in-app Browser capability and its own browser tools. Do not substitute Chrome, an external browser, or another connected browser tool.`
   }
-  if (mention.skill.id === 'prime-work-schedules') {
+  if (mention.skill.id === 'apex-schedules') {
     return `${token}: use Apex's Scheduled tasks capability and its own schedule tools.`
   }
   // Skills are Markdown files; agents have no tool that resolves catalog ids.

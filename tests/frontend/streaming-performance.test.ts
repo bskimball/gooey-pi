@@ -8,7 +8,7 @@ import {
   updateActivityCriteria,
   type ActivityViewState,
 } from '../../apps/desktop/src/pages/ActivityPage'
-import { applyPrimeEvent, createPrimeEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayPrimeEvents, resetTranscriptIdsForTests, type PrimeEventReplayStats } from '../../apps/desktop/src/lib/events'
+import { applyApexEvent, createApexEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayApexEvents, resetTranscriptIdsForTests, type ApexEventReplayStats } from '../../apps/desktop/src/lib/events'
 import { reconcileTranscripts } from '../../apps/desktop/src/app/transcript-reconcile'
 import { createSidebarActionProxy } from '../../apps/desktop/src/hooks/useSidebarActions'
 import { mergeSessionCatalog } from '../../apps/desktop/src/hooks/useBootstrap'
@@ -38,7 +38,7 @@ const transcriptText = (messages: TranscriptMessage[]) => {
 }
 
 function runTranscriptRace(frameBeforeRead: boolean): TranscriptMessage[] {
-  const eventBuffer = createPrimeEventBuffer()
+  const eventBuffer = createApexEventBuffer()
   const pendingLoad = { generation: 4, eventBuffer }
   const frameQueue: PendingAgentEvent[] = []
   const events = [delta('one'), delta('-two')]
@@ -48,7 +48,7 @@ function runTranscriptRace(frameBeforeRead: boolean): TranscriptMessage[] {
   let messages: TranscriptMessage[] = []
   const flushFrame = () => {
     messages = eventsForWorkspace(frameQueue.splice(0), 4)
-      .reduce((current, event) => applyPrimeEvent(current, event), messages)
+      .reduce((current, event) => applyApexEvent(current, event), messages)
   }
   const finishRead = () => { messages = eventBuffer.replay(transcript()) }
 
@@ -78,7 +78,7 @@ describe('streamed transcript event ownership', () => {
       { generation: 3, event: delta('-new-2') },
     ]
     const messages = eventsForWorkspace(queue, 3).reduce(
-      (current, event) => applyPrimeEvent(current, event),
+      (current, event) => applyApexEvent(current, event),
       transcript(),
     )
 
@@ -106,7 +106,7 @@ describe('Sidebar memoization and scale bounds', () => {
   it('rejects a streaming parent rerender when navigation data and stable handlers are unchanged', () => {
     const callbacks = sidebarProps(() => undefined)
     const before = { ...callbacks }
-    const streamedMessages = applyPrimeEvent(transcript(), delta('next frame'))
+    const streamedMessages = applyApexEvent(transcript(), delta('next frame'))
     const after = { ...callbacks }
 
     expect(streamedMessages).not.toBe(transcript())
@@ -176,7 +176,7 @@ afterEach(() => { vi.useRealTimers() })
 describe('batched Prime event reduction', () => {
   it('anchors an accepted steer immediately, then marks the exact pickup boundary', () => {
     const steer = { id: 'queued-1', text: 'change direction', intent: 'steer' as const, timestamp: 2, parts: [{ type: 'text' as const, text: 'change direction' }] }
-    const result = replayPrimeEvents(transcript(), [
+    const result = replayApexEvents(transcript(), [
       delta('before acceptance'),
       createSteerAcceptedEvent(steer),
       delta('still finishing the current work'),
@@ -199,7 +199,7 @@ describe('batched Prime event reduction', () => {
   })
 
   it('places repeated picked-up steers between the tool segments that consumed them', () => {
-    const result = replayPrimeEvents(transcript(), [
+    const result = replayApexEvents(transcript(), [
       { type: 'tool_execution_start', toolCallId: 'read', toolName: 'Read', args: { path: 'before.ts' } },
       createSteerPickupEvent([{ id: 'queued-1', text: 'change direction', intent: 'steer', timestamp: 2, parts: [{ type: 'text', text: 'change direction' }] }]),
       { type: 'turn_start' },
@@ -237,9 +237,9 @@ describe('batched Prime event reduction', () => {
       { type: 'agent_end' },
     ]
     resetTranscriptIdsForTests()
-    const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), transcript())
+    const sequential = events.reduce((current, event) => applyApexEvent(current, event), transcript())
     resetTranscriptIdsForTests()
-    const batched = replayPrimeEvents(transcript(), events)
+    const batched = replayApexEvents(transcript(), events)
 
     expect(batched).toEqual(sequential)
     expect(batched[0]?.parts.map((part) => part.type)).toEqual([
@@ -262,7 +262,7 @@ describe('batched Prime event reduction', () => {
         return Reflect.get(target, key, receiver)
       },
     })
-    const result = replayPrimeEvents(measured, Array.from({ length: 1_000 }, () => delta('x')))
+    const result = replayApexEvents(measured, Array.from({ length: 1_000 }, () => delta('x')))
 
     expect(transcriptText([result.at(-1)!])).toBe('x'.repeat(1_000))
     expect(indexedReads).toBeLessThan(6_100)
@@ -307,9 +307,9 @@ describe('linear event batches', () => {
       { type: 'runtime_exit', expected: true },
     ]
     resetTranscriptIdsForTests()
-    const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), transcript())
+    const sequential = events.reduce((current, event) => applyApexEvent(current, event), transcript())
     resetTranscriptIdsForTests()
-    expect(replayPrimeEvents(transcript(), events)).toEqual(sequential)
+    expect(replayApexEvents(transcript(), events)).toEqual(sequential)
   })
 
   it('pairs id-less tool executions onto one tool row instead of adding a phantom row', () => {
@@ -322,9 +322,9 @@ describe('linear event batches', () => {
       { type: 'agent_end' },
     ]
     resetTranscriptIdsForTests()
-    const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), transcript())
+    const sequential = events.reduce((current, event) => applyApexEvent(current, event), transcript())
     resetTranscriptIdsForTests()
-    const batched = replayPrimeEvents(transcript(), events)
+    const batched = replayApexEvents(transcript(), events)
 
     expect(batched).toEqual(sequential)
     const parts = batched[0]?.parts ?? []
@@ -342,7 +342,7 @@ describe('linear event batches', () => {
       { type: 'tool_execution_start', toolCallId: 'one', toolName: 'One', args: { command: 'ls -la' } },
       { type: 'tool_execution_update', toolCallId: 'one', toolName: 'One', partialResult: 'partial' },
     ]
-    const messages = replayPrimeEvents(transcript(), events)
+    const messages = replayApexEvents(transcript(), events)
     const call = messages.flatMap((message) => message.parts).find((part) => part.type === 'toolCall')
     expect(call && 'args' in call ? call.args : undefined).toEqual({ command: 'ls -la' })
   })
@@ -369,9 +369,9 @@ describe('linear event batches', () => {
     for (let run = 0; run < 100; run += 1) {
       const events = Array.from({ length: 80 }, () => pool[random() % pool.length])
       resetTranscriptIdsForTests()
-      const sequential = events.reduce((current, event) => applyPrimeEvent(current, event), transcript())
+      const sequential = events.reduce((current, event) => applyApexEvent(current, event), transcript())
       resetTranscriptIdsForTests()
-      expect(replayPrimeEvents(transcript(), events)).toEqual(sequential)
+      expect(replayApexEvents(transcript(), events)).toEqual(sequential)
     }
   })
 
@@ -384,9 +384,9 @@ describe('linear event batches', () => {
       { type: 'agent_end' },
     ]
     resetTranscriptIdsForTests()
-    const sequential = [...batchA, ...batchB].reduce((current, event) => applyPrimeEvent(current, event), transcript())
+    const sequential = [...batchA, ...batchB].reduce((current, event) => applyApexEvent(current, event), transcript())
     resetTranscriptIdsForTests()
-    const batched = replayPrimeEvents(replayPrimeEvents(transcript(), batchA), batchB)
+    const batched = replayApexEvents(replayApexEvents(transcript(), batchA), batchB)
 
     expect(batched).toEqual(sequential)
     expect(batched.filter((message) => message.role === 'assistant')).toHaveLength(2)
@@ -402,8 +402,8 @@ describe('linear event batches', () => {
     let commits = 0
     for (let batch = 0; batch < 50; batch += 1) {
       const events = Array.from({ length: 200 }, () => delta('x'))
-      const stats: PrimeEventReplayStats = { messageScans: 0, eventScans: 0, partScans: 0, transcriptCopies: 0 }
-      const next = replayPrimeEvents(state, events, stats)
+      const stats: ApexEventReplayStats = { messageScans: 0, eventScans: 0, partScans: 0, transcriptCopies: 0 }
+      const next = replayApexEvents(state, events, stats)
       commits += 1
       expect(stats.messageScans).toBe(500)
       expect(stats.eventScans).toBe(200)

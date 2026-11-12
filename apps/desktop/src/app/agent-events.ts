@@ -1,5 +1,5 @@
-import type { PrimeEventBuffer } from '@/lib/events'
-import type { PrimeContextUsage, SessionUsage, SessionUsageTokens, TranscriptMessage } from '@/types/api'
+import type { ApexEventBuffer } from '@/lib/events'
+import type { ApexContextUsage, SessionUsage, SessionUsageTokens, TranscriptMessage } from '@/types/api'
 
 export interface PendingAgentEvent {
   generation: number
@@ -8,7 +8,7 @@ export interface PendingAgentEvent {
 
 export interface TranscriptEventOwner {
   generation: number
-  eventBuffer: PrimeEventBuffer
+  eventBuffer: ApexEventBuffer
 }
 
 export interface TranscriptReconciliationMarker {
@@ -30,7 +30,7 @@ export function eventType(event: Record<string, unknown>): string {
   return typeof event.type === 'string' ? event.type : ''
 }
 
-export function contextUsageFromEvent(event: Record<string, unknown>): PrimeContextUsage | null {
+export function contextUsageFromEvent(event: Record<string, unknown>): ApexContextUsage | null {
   if (eventType(event) !== 'context_usage' || typeof event.contextUsage !== 'object' || event.contextUsage === null || Array.isArray(event.contextUsage)) return null
   const raw = event.contextUsage as Record<string, unknown>
   if (!Number.isSafeInteger(raw.contextWindow) || Number(raw.contextWindow) <= 0) return null

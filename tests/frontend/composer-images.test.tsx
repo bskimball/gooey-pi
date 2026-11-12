@@ -5,16 +5,16 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
-import type { PrimeModelDescriptor, PrimeProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
+import type { ApexModelDescriptor, ApexProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const models: PrimeModelDescriptor[] = [{
+const models: ApexModelDescriptor[] = [{
   key: 'provider/vision', provider: 'provider', id: 'vision', name: 'Vision', reasoning: true,
   input: ['text', 'image'], contextWindow: 100_000, maxTokens: 8_000,
   availableThinkingLevels: ['medium'], fastModeSupported: false, available: true,
 }]
-const providers: PrimeProviderDescriptor[] = [{
+const providers: ApexProviderDescriptor[] = [{
   id: 'provider', name: 'Provider', authMethod: 'api_key', configured: true,
   modelCount: 1, availableModelCount: 1, enabled: true,
 }]
@@ -390,8 +390,8 @@ describe('Composer image ingestion', () => {
   })
 
   it('references on-disk non-image files by @path instead of attaching them', async () => {
-    const previous = window.prime
-    window.prime = { app: { pathForFile: (file: File) => file.name === 'notes.txt' ? 'C:\\work\\my notes.txt' : '' } } as unknown as typeof window.prime
+    const previous = window.apex
+    window.apex = { app: { pathForFile: (file: File) => file.name === 'notes.txt' ? 'C:\\work\\my notes.txt' : '' } } as unknown as typeof window.apex
     try {
       const onSend = renderComposer()
       await pasteFiles([new File(['plain text'], 'notes.txt', { type: 'text/plain' })], 'summarize')
@@ -402,7 +402,7 @@ describe('Composer image ingestion', () => {
       })
       expect(onSend).toHaveBeenCalledWith('summarize @"C:\\work\\my notes.txt"', [], 'queue')
     } finally {
-      window.prime = previous
+      window.apex = previous
     }
   })
 

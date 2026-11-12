@@ -13,7 +13,7 @@ import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '@/lib/se
 import type { DEFAULT_SETTINGS } from '@/lib/data'
 import { isAgentBusy, isSubmissionAdmitting, type AgentTurnHandle } from '@/app/agentTurnMachine'
 import { findProjectForSession, findRuntimeForWorkspace, newSessionProject, projectContainsPath, workspaceCwd } from '@/lib/workspace'
-import type { CapabilityMutationInput, ExtensionInstallInput, GitStatus, InspectorTab, McpConnectionInput, McpStateInput, PrimeWorkApi, ProjectRecord, ProjectSortMode, PromptDeliveryIntent, PromptImage, ScheduleInput, SchedulePatch, SessionRecord, TranscriptMessage, WorkspaceView } from '@/types/api'
+import type { CapabilityMutationInput, ExtensionInstallInput, GitStatus, InspectorTab, McpConnectionInput, McpStateInput, ApexApi, ProjectRecord, ProjectSortMode, PromptDeliveryIntent, PromptImage, ScheduleInput, SchedulePatch, SessionRecord, TranscriptMessage, WorkspaceView } from '@/types/api'
 import type { useAppSettings } from '@/hooks/useAppSettings'
 import type { usePanelLayout } from '@/hooks/usePanelLayout'
 import type { usePluginSkills } from '@/hooks/usePluginSkills'
@@ -22,7 +22,7 @@ import type { useWorkspaceRuntime } from '@/hooks/useWorkspaceRuntime'
 import { resolveRuntimeIdForSession } from '@/hooks/useSessionLive'
 
 export interface WorkspaceActionsDeps {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   initialized: boolean
   projects: ProjectRecord[]
   sessions: SessionRecord[]

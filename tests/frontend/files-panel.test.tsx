@@ -27,7 +27,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
-  Reflect.deleteProperty(window, 'prime')
+  Reflect.deleteProperty(window, 'apex')
   vi.restoreAllMocks()
 })
 
@@ -234,7 +234,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -330,7 +330,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -369,7 +369,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -404,7 +404,7 @@ describe('FilesPanel component', () => {
       entries: [{ path: 'App.tsx', type: 'file' as const }],
       skipped: 2,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -422,7 +422,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -482,7 +482,7 @@ describe('FilesPanel component', () => {
         skipped: 0,
       }
     })
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -505,7 +505,7 @@ describe('FilesPanel component', () => {
     const listFiles = vi.fn(async () => {
       throw new Error('Permission denied')
     })
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -523,7 +523,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })
@@ -551,7 +551,7 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
-    Object.defineProperty(window, 'prime', {
+    Object.defineProperty(window, 'apex', {
       configurable: true,
       value: { projects: { listFiles } },
     })

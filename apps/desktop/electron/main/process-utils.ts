@@ -473,7 +473,7 @@ export function harnessExecutableCandidates(descriptor: HarnessDescriptor, env: 
   }
   // Electron E2E fixtures must not silently connect to a developer machine's
   // globally installed harnesses after an explicit fixture binary disappears.
-  const fallbackDirs = env.PRIME_WORK_E2E_HIDE_WINDOWS === '1' ? [] : [...descriptor.candidateDirs(platform, home, env), ...sharedHarnessCandidateDirs(env, platform, home)]
+  const fallbackDirs = env.APEX_E2E_HIDE_WINDOWS === '1' ? [] : [...descriptor.candidateDirs(platform, home, env), ...sharedHarnessCandidateDirs(env, platform, home)]
   for (const directory of fallbackDirs) {
     if (directory && isAbsolutePathForPlatform(directory, platform)) {
       for (const name of executableNames) candidates.push(pathApi.join(directory, name))
@@ -490,7 +490,7 @@ export function harnessExecutableCandidates(descriptor: HarnessDescriptor, env: 
 
 /** Bounded, shell-free discovery for nvm installs that a desktop app's PATH does not inherit. */
 export async function nvmHarnessExecutableCandidates(descriptor: HarnessDescriptor, env: NodeJS.ProcessEnv = process.env, platform = process.platform, home = homedir()): Promise<string[]> {
-  if (platform === 'win32' || env.PRIME_WORK_E2E_HIDE_WINDOWS === '1') return []
+  if (platform === 'win32' || env.APEX_E2E_HIDE_WINDOWS === '1') return []
   const root = env.NVM_DIR && posix.isAbsolute(env.NVM_DIR) ? env.NVM_DIR : posix.join(home, '.nvm')
   const versionsRoot = posix.join(root, 'versions', 'node')
   try {

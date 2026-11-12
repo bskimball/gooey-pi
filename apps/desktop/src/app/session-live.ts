@@ -4,7 +4,7 @@ import { ASK_USER_TIMEOUT_MS, parseExtensionUiRequest } from '@/lib/extension-ui
 import type { PendingExtensionUi } from '@/hooks/useExtensionUi'
 import { boundText } from '@/lib/render-bounds'
 import { parseSessionActionSnapshot } from '@/lib/session-actions'
-import type { PrimeContextUsage, RuntimeInfo, SessionRecord, SessionUsage } from '@/types/api'
+import type { ApexContextUsage, RuntimeInfo, SessionRecord, SessionUsage } from '@/types/api'
 
 import {
   applySessionLiveEvent,
@@ -111,7 +111,7 @@ export function questionFromPendingExtensionUi(pending: PendingExtensionUi): Ses
   }
 }
 
-function sameContextUsage(left?: PrimeContextUsage, right?: PrimeContextUsage): boolean {
+function sameContextUsage(left?: ApexContextUsage, right?: ApexContextUsage): boolean {
   if (left === right) return true
   if (!left || !right) return false
   return left.tokens === right.tokens && left.contextWindow === right.contextWindow && left.percent === right.percent

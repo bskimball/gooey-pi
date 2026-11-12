@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { withModelVisibility } from '../../apps/desktop/electron/main/model-visibility'
-import type { PrimeModelCatalog } from '../../apps/desktop/src/types/api'
+import type { ApexModelCatalog } from '../../apps/desktop/src/types/api'
 
-const catalog: PrimeModelCatalog = {
-  primeVersion: 'test',
+const catalog: ApexModelCatalog = {
+  apexVersion: 'test',
   refreshedAt: '2026-08-13T00:00:00.000Z',
   providers: [{ id: 'openai', name: 'OpenAI', authMethod: 'external', configured: true, modelCount: 2, availableModelCount: 2, enabled: true }],
   models: [

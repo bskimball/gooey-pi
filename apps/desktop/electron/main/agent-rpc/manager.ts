@@ -1,4 +1,4 @@
-import type { PrimeEventEnvelope, PrimeModelDescriptor, RuntimeInfo } from '../../../src/types/api'
+import type { ApexEventEnvelope, ApexModelDescriptor, RuntimeInfo } from '../../../src/types/api'
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import { resolveExecutable, type ExecutableSource } from '../process-utils'
@@ -15,12 +15,12 @@ import type { DesktopSessionSnapshot } from 'apex-core/sessions/desktop-link'
 import { DesktopSessionProjection } from '../desktop-link-projection'
 
 /**
- * Structural slice of the provider catalog the manager needs; PrimeProviderService
- * satisfies it today and a future OMP model catalog can be injected in its place.
+ * Structural slice of the provider catalog the manager needs; ApexProviderService
+ * satisfies it.
  */
 export interface ProviderCatalog {
-  requireAvailableModel(rawKey: unknown, disabledProviders?: ReadonlySet<string>, disabledModels?: ReadonlySet<string>): Promise<PrimeModelDescriptor>
-  capabilities(provider: string | undefined, modelId: string | undefined): Promise<PrimeModelDescriptor | undefined>
+  requireAvailableModel(rawKey: unknown, disabledProviders?: ReadonlySet<string>, disabledModels?: ReadonlySet<string>): Promise<ApexModelDescriptor>
+  capabilities(provider: string | undefined, modelId: string | undefined): Promise<ApexModelDescriptor | undefined>
 }
 
 const MAX_IDLE_RUNTIMES = 3
@@ -30,7 +30,7 @@ export class AgentRpcManager {
   private readonly runtimes = new Map<string, RpcRuntime>()
   private readonly projections = new Map<string, DesktopSessionProjection>()
   private readonly unavailableProjections = new Set<string>()
-  private readonly subscribers = new Set<(event: PrimeEventEnvelope) => void>()
+  private readonly subscribers = new Set<(event: ApexEventEnvelope) => void>()
   private readonly attachmentPins = new Map<string, number>()
   private readonly sessionClaims = new Map<string, RuntimeSessionClaims>()
   private readonly sessionTransitions = new Set<string>()
@@ -44,7 +44,7 @@ export class AgentRpcManager {
   private readonly idleSweep: NodeJS.Timeout
   private runtimeEnvironmentRevision = 0
   private disabledModels: () => ReadonlySet<string> = () => new Set()
-  private eventSink: (envelope: PrimeEventEnvelope) => void = () => undefined
+  private eventSink: (envelope: ApexEventEnvelope) => void = () => undefined
   private runtimeEnvironmentProvider: (scope: { cwd: string; sessionPath?: string; interactive: boolean }) => NodeJS.ProcessEnv = () => ({})
   private runtimeStartListener: (environment: NodeJS.ProcessEnv, info: RuntimeInfo) => void = () => undefined
   private runtimeEndListener: (environment: NodeJS.ProcessEnv, info?: RuntimeInfo) => void = () => undefined
@@ -71,9 +71,9 @@ export class AgentRpcManager {
     this.idleSweep.unref()
   }
 
-  setEventSink(sink: (envelope: PrimeEventEnvelope) => void): void { this.eventSink = sink }
+  setEventSink(sink: (envelope: ApexEventEnvelope) => void): void { this.eventSink = sink }
 
-  subscribe(sink: (envelope: PrimeEventEnvelope) => void): () => void {
+  subscribe(sink: (envelope: ApexEventEnvelope) => void): () => void {
     this.subscribers.add(sink)
     return () => { this.subscribers.delete(sink) }
   }
@@ -98,7 +98,7 @@ export class AgentRpcManager {
     }
   }
 
-  private publishEvent(envelope: PrimeEventEnvelope): void {
+  private publishEvent(envelope: ApexEventEnvelope): void {
     const normalized = this.projections.get(envelope.runtimeId)?.apply(envelope.event)
     this.eventSink(envelope)
     for (const sink of this.subscribers) sink(envelope)
@@ -161,7 +161,7 @@ export class AgentRpcManager {
       ? undefined
       : await this.validateSessionPath(requireString(options.sessionPath, 'sessionPath', { max: 4096 }))
     if (sessionPath) await this.sessionAttachGuard(sessionPath)
-    let selectedModel: PrimeModelDescriptor | undefined
+    let selectedModel: ApexModelDescriptor | undefined
     let modelId: string | undefined
     if (options.model !== undefined) {
       selectedModel = this.providers

@@ -33,7 +33,7 @@ const MAX_OPTION_LENGTH = 500
 const MAX_QUESTIONNAIRE_OPTIONS = 32
 const MAX_SELECT_OPTIONS = 2_000
 const BLOCKING_METHODS: ReadonlySet<string> = new Set(['select', 'confirm', 'input', 'editor'])
-const ASK_USER_RPC_MARKER = '__prime_ask_user__'
+const ASK_USER_RPC_MARKER = '__apex_ask_user__'
 export const ASK_USER_TIMEOUT_MS = 120_000
 
 function stringValue(value: unknown, max: number): string | undefined {

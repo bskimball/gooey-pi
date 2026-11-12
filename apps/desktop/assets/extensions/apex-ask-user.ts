@@ -1,18 +1,18 @@
 /**
- * OMP Work questionnaire tool.
+ * Apex questionnaire tool.
  *
- * Loaded explicitly for every OMP and base pi runtime started by the desktop
- * app. The extension is self-contained because packaged OMP imports it
- * directly from app resources. In RPC mode, the marker option lets Prime Work
+ * Loaded explicitly for every pi runtime started by the desktop
+ * app. The extension is self-contained because it is loaded
+ * directly from app resources. In RPC mode, the marker option lets Apex
  * combine the individual select requests into one multi-question modal.
  *
  * Schema builders come from the injected `pi.typebox` shim when the host
- * provides one (OMP); base pi injects no shim, so builders resolve from the
+ * provides one; base pi injects no shim, so builders resolve from the
  * `typebox` package via the host's extension loader. The import uses a
  * runtime specifier inside try/catch so neither host hard-fails at load.
  */
 
-interface OmpSchemaOptions {
+interface ApexSchemaOptions {
   description?: string
   minLength?: number
   maxLength?: number
@@ -20,10 +20,10 @@ interface OmpSchemaOptions {
   maxItems?: number
 }
 
-interface OmpTypebox {
-  Object(properties: Record<string, unknown>, options?: OmpSchemaOptions): unknown
-  String(options?: OmpSchemaOptions): unknown
-  Array(items: unknown, options?: OmpSchemaOptions): unknown
+interface ApexTypebox {
+  Object(properties: Record<string, unknown>, options?: ApexSchemaOptions): unknown
+  String(options?: ApexSchemaOptions): unknown
+  Array(items: unknown, options?: ApexSchemaOptions): unknown
 }
 
 interface AskQuestion {
@@ -37,19 +37,19 @@ interface EncodedAnswer {
   context?: string
 }
 
-interface OmpExtensionContext {
+interface ApexExtensionContext {
   hasUI: boolean
   ui: {
     select(title: string, options: string[], settings?: { signal?: AbortSignal }): Promise<string | undefined>
   }
 }
 
-interface OmpToolResult {
+interface ApexToolResult {
   content: Array<{ type: 'text'; text: string }>
   details: Record<string, unknown>
 }
 
-interface OmpToolDefinition<Params> {
+interface ApexToolDefinition<Params> {
   name: string
   label: string
   description: string
@@ -60,13 +60,13 @@ interface OmpToolDefinition<Params> {
     params: Params,
     signal: AbortSignal | undefined,
     onUpdate: unknown,
-    context: OmpExtensionContext,
-  ): Promise<OmpToolResult>
+    context: ApexExtensionContext,
+  ): Promise<ApexToolResult>
 }
 
-export interface OmpExtensionApi {
-  typebox?: { Type: OmpTypebox }
-  registerTool<Params>(tool: OmpToolDefinition<Params>): void
+export interface ApexExtensionApi {
+  typebox?: { Type: ApexTypebox }
+  registerTool<Params>(tool: ApexToolDefinition<Params>): void
 }
 
 async function importHostModule(specifier: string): Promise<Record<string, unknown> | undefined> {
@@ -77,8 +77,8 @@ async function importHostModule(specifier: string): Promise<Record<string, unkno
   }
 }
 
-async function resolveHostTypebox(): Promise<OmpTypebox> {
-  const hostType = (await importHostModule('typebox'))?.Type as OmpTypebox | undefined
+async function resolveHostTypebox(): Promise<ApexTypebox> {
+  const hostType = (await importHostModule('typebox'))?.Type as ApexTypebox | undefined
   if (hostType) {
     return {
       Object: (properties, options) => hostType.Object(properties, options),
@@ -94,7 +94,7 @@ async function resolveHostTypebox(): Promise<OmpTypebox> {
   }
 }
 
-const ASK_USER_RPC_MARKER = '__prime_ask_user__'
+const ASK_USER_RPC_MARKER = '__apex_ask_user__'
 const OTHER_OPTION = 'Other (type your own answer)'
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_OPTION_LENGTH = 500
@@ -172,8 +172,8 @@ function groupId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
-export default function (pi: OmpExtensionApi): void | Promise<void> {
-  // OMP injects a TypeBox shim and calls the factory without awaiting it, so
+export default function (pi: ApexExtensionApi): void | Promise<void> {
+  // A host that injects a TypeBox shim may call the factory without awaiting it, so
   // that path must stay fully synchronous; base pi awaits the factory, so the
   // fallback may resolve builders asynchronously before registering.
   const injected = pi.typebox?.Type
@@ -184,7 +184,7 @@ export default function (pi: OmpExtensionApi): void | Promise<void> {
   return resolveHostTypebox().then((hostType) => { registerTools(pi, hostType) })
 }
 
-function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
+function registerTools(pi: ApexExtensionApi, Type: ApexTypebox): void {
   const question = Type.Object({
     question: Type.String({ description: 'The question to ask the user', minLength: 1, maxLength: MAX_QUESTION_LENGTH }),
     options: Type.Array(Type.String({ minLength: 1, maxLength: MAX_OPTION_LENGTH }), {

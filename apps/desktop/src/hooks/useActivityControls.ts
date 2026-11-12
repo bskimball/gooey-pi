@@ -4,7 +4,7 @@ import { resolveRuntimeIdForSession } from './useSessionLive'
 import type { PendingExtensionUi } from './useExtensionUi'
 import type { useWorkspaceRuntime } from './useWorkspaceRuntime'
 import type {
-  PrimeWorkApi,
+  ApexApi,
   PromptDeliveryIntent,
   PromptImage,
   SessionRecord,
@@ -23,7 +23,7 @@ export interface ActivityControls {
 }
 
 export interface UseActivityControlsOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   compactLayout: boolean
   workspace: ReturnType<typeof useWorkspaceRuntime>
   pendingByRuntime: ReadonlyMap<string, PendingExtensionUi>

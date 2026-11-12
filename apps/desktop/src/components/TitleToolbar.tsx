@@ -27,7 +27,7 @@ const windowsMenus: ReadonlyArray<{ name: ApplicationMenuName; label: string }> 
 
 function openApplicationMenu(menu: ApplicationMenuName, event: MouseEvent<HTMLButtonElement>): void {
   const rect = event.currentTarget.getBoundingClientRect()
-  void window.prime?.app.popupMenu?.(menu, rect.right + 4, rect.top).catch(() => undefined)
+  void window.apex?.app.popupMenu?.(menu, rect.right + 4, rect.top).catch(() => undefined)
 }
 
 /** Windows keeps File/Edit/View behind one quiet button instead of a permanent menu row. */

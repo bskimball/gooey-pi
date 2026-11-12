@@ -26,7 +26,7 @@ function fixtureExecutable(script: string): string {
 const identities = (...paths: string[]) => Object.fromEntries(paths.map((path) => { const info = lstatSync(path, { bigint: true }); return [realpathSync(path), { dev: info.dev.toString(), ino: info.ino.toString() }] }))
 describe('security boundaries', () => {
   it('does not expose project-configured files outside the project root', async () => {
-    const project = temp('prime-work-plugin-')
+    const project = temp('apex-plugin-')
     const config = join(project, '.pi')
     mkdirSync(config, { recursive: true })
     writeFileSync(join(config, 'settings.json'), JSON.stringify({ prompts: ['/etc/hosts'] }))
@@ -36,7 +36,7 @@ describe('security boundaries', () => {
   })
 
   it('revokes a removed project immediately and ignores a session rooted at filesystem root', async () => {
-    const dir = temp('prime-work-project-')
+    const dir = temp('apex-project-')
     const folder = join(dir, 'project'); mkdirSync(folder)
     const store = new JsonStateStore(join(dir, 'state.json'))
     await store.update((state) => { state.projects.push({ id: 'project-1', harness: 'pi', name: 'Project', path: folder, folders: [folder], primaryFolder: folder, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(folder) }) })
@@ -53,7 +53,7 @@ describe('security boundaries', () => {
   })
 
   it('grants read-only access for inferred session projects and requires an explicit grant for cwd execution', async () => {
-    const dir = temp('prime-work-inferred-')
+    const dir = temp('apex-inferred-')
     const folder = join(dir, 'project'); mkdirSync(folder)
     writeFileSync(join(folder, 'README.md'), 'test')
     const store = new JsonStateStore(join(dir, 'state.json'))
@@ -81,16 +81,16 @@ describe('security boundaries', () => {
   })
 
   it('awaits TERM/KILL escalation for an RPC child that refuses graceful shutdown', async () => {
-    const dir = temp('prime-work-agent-stop-')
+    const dir = temp('apex-agent-stop-')
     const executable = join(dir, 'fake-agent.cjs')
     const pidFile = join(dir, 'pid')
     const descendantPidFile = join(dir, 'descendant-pid')
     writeFileSync(executable, `#!/usr/bin/env node
 const descendant = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
 require('node:fs').writeFileSync(${JSON.stringify(descendantPidFile)}, String(descendant.pid));
-const readline=require('node:readline');const fs=require('node:fs');fs.writeFileSync(process.env.PRIME_WORK_TEST_PID_FILE,String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);readline.createInterface({input:process.stdin}).on('line',(line)=>{const v=JSON.parse(line);if(v.type==='get_state')process.stdout.write(JSON.stringify({type:'response',id:v.id,command:v.type,success:true,data:{isStreaming:false}})+'\\n')});process.stdin.resume();`)
+const readline=require('node:readline');const fs=require('node:fs');fs.writeFileSync(process.env.APEX_TEST_PID_FILE,String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);readline.createInterface({input:process.stdin}).on('line',(line)=>{const v=JSON.parse(line);if(v.type==='get_state')process.stdout.write(JSON.stringify({type:'response',id:v.id,command:v.type,success:true,data:{isStreaming:false}})+'\\n')});process.stdin.resume();`)
     chmodSync(executable, 0o755)
-    process.env.PRIME_WORK_TEST_PID_FILE = pidFile
+    process.env.APEX_TEST_PID_FILE = pidFile
     const manager = new AgentRpcManager(fixtureExecutable(executable), async (cwd) => cwd, async (path) => path)
     const runtime = await manager.start({ cwd: dir })
     const pid = Number(readFileSync(pidFile, 'utf8'))
@@ -102,7 +102,7 @@ const readline=require('node:readline');const fs=require('node:fs');fs.writeFile
     await waitUntil(() => {
       try { process.kill(descendantPid, 0); return false } catch { return true }
     })
-    delete process.env.PRIME_WORK_TEST_PID_FILE
+    delete process.env.APEX_TEST_PID_FILE
   }, 10_000)
 
   it('bounds each outbound agent envelope and aggregate bytes while preserving normal events', () => {
@@ -150,7 +150,7 @@ const readline=require('node:readline');const fs=require('node:fs');fs.writeFile
   })
 
   it('closes agent admission before stopAll snapshots in-flight starts', async () => {
-    const dir = temp('prime-work-agent-admission-')
+    const dir = temp('apex-agent-admission-')
     const executable = join(dir, 'fake-agent.cjs')
     const spawnMarker = join(dir, 'spawned')
     writeFileSync(executable, `#!/usr/bin/env node
@@ -183,7 +183,7 @@ setInterval(()=>{},1000)
   })
 
   it('closes one-shot process admission before the cleanup snapshot', async () => {
-    const dir = temp('prime-work-process-admission-')
+    const dir = temp('apex-process-admission-')
     const runningMarker = join(dir, 'running')
     const deniedMarker = join(dir, 'denied')
     const running = runProcess(process.execPath, ['-e', `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(process.argv.at(-1),String(process.pid));setInterval(()=>{},1000)`, runningMarker], { timeoutMs: 30_000 })

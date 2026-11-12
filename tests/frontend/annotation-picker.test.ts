@@ -12,7 +12,7 @@ import {
 } from '../../apps/desktop/src/lib/annotation-picker'
 import { sanitizeCapturedElement } from '../../apps/desktop/src/lib/browser-annotations'
 
-type AnnotatorWindow = Window & { __primeAnnotator?: { take(): string | null } }
+type AnnotatorWindow = Window & { __apexAnnotator?: { take(): string | null } }
 
 // Runs an injected-picker script the same way webview.executeJavaScript would:
 // as plain page-level code against the (jsdom) document.
@@ -218,7 +218,7 @@ describe('injected picker script', () => {
     runScript(annotationMarkersScript([{ selector: '#a', index: 1 }]))
     expect(runScript(annotationTeardownScript())).toBe(true)
 
-    expect((window as AnnotatorWindow).__primeAnnotator).toBeUndefined()
+    expect((window as AnnotatorWindow).__apexAnnotator).toBeUndefined()
     expect(document.querySelector('div[style*="2147483646"]')).toBeNull()
     expect(document.querySelector('div[style*="2147483645"]')).toBeNull()
     // Teardown when nothing was injected reports false and stays quiet.

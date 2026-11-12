@@ -1,4 +1,4 @@
-.voice-toggle--active { color: var(--prime) !important; background: color-mix(in srgb, var(--prime) 12%, var(--surface-selected)) !important; }
+.voice-toggle--active { color: var(--apex) !important; background: color-mix(in srgb, var(--apex) 12%, var(--surface-selected)) !important; }
 .voice-session__audio { display: none; }
 .voice-orb { --orb-x: 80vw; --orb-y: 90px; position: fixed; z-index: 120; left: var(--orb-x); top: var(--orb-y); width: 136px; color: var(--text); filter: drop-shadow(0 18px 24px color-mix(in srgb, #000 25%, transparent)); }
 .voice-orb__drag { width: 136px; height: 150px; position: relative; display: grid; place-items: center; padding-bottom: 20px; touch-action: none; user-select: none; cursor: grab; }

@@ -19,10 +19,10 @@ body[class*='vscode-'] {
   --border-subtle: color-mix(in srgb, var(--text) 7%, transparent);
   --border-strong: var(--vscode-input-border, color-mix(in srgb, var(--text) 18%, transparent));
   --focus: var(--vscode-focusBorder, #007fd4);
-  --prime: var(--vscode-textLink-foreground, #3794ff);
-  --prime-soft: color-mix(in srgb, var(--prime) 14%, var(--canvas));
-  --accent: var(--prime);
-  --annotation: var(--prime);
+  --apex: var(--vscode-textLink-foreground, #3794ff);
+  --apex-soft: color-mix(in srgb, var(--apex) 14%, var(--canvas));
+  --accent: var(--apex);
+  --annotation: var(--apex);
 }
 .apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
 .apex-shell .conversation-pane { min-width: 0; }
@@ -115,8 +115,8 @@ body[class*='vscode-'] {
   background: var(--surface-hover);
 }
 .apex-agents-trigger.is-running {
-  color: var(--prime);
-  border-color: color-mix(in srgb, var(--prime) 35%, var(--border));
+  color: var(--apex);
+  border-color: color-mix(in srgb, var(--apex) 35%, var(--border));
 }
 .apex-agents-trigger:active:not(:disabled) {
   transform: scale(0.96);
@@ -139,8 +139,8 @@ body[class*='vscode-'] {
   font-variant-numeric: tabular-nums;
 }
 .apex-agents-trigger.is-running .apex-agents-trigger__count {
-  background: var(--prime-soft);
-  color: var(--prime);
+  background: var(--apex-soft);
+  color: var(--apex);
 }
 
 .conversation-pane[data-specialists-open='true'] > .transcript,
@@ -174,7 +174,7 @@ body[class*='vscode-'] {
   font-weight: 560;
 }
 .apex-specialists-pane__title > svg {
-  color: var(--prime);
+  color: var(--apex);
 }
 .apex-specialists-pane__close {
   height: 22px;
@@ -301,8 +301,8 @@ body[class*='vscode-'] {
   outline-offset: -2px;
 }
 .apex-session-picker .session-status-mark--active {
-  color: var(--prime);
-  background: var(--prime-soft);
+  color: var(--apex);
+  background: var(--apex-soft);
 }
 .apex-session-picker .session-row__heading {
   min-width: 0;

@@ -4,7 +4,7 @@ import { act, type RefObject } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TerminalDrawer, type TerminalDrawerHandle } from '../../apps/desktop/src/components/TerminalDrawer'
-import type { PrimeWorkApi, TerminalExitEvent } from '../../apps/desktop/src/types/api'
+import type { ApexApi, TerminalExitEvent } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -51,8 +51,8 @@ describe('TerminalDrawer project command handle', () => {
         setActiveContext: vi.fn(),
         clearActiveContext: vi.fn(),
       },
-    } as unknown as PrimeWorkApi
-    Object.defineProperty(window, 'prime', { configurable: true, value: bridge })
+    } as unknown as ApexApi
+    Object.defineProperty(window, 'apex', { configurable: true, value: bridge })
     Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: class { observe() {} disconnect() {} } })
   })
 
@@ -134,8 +134,8 @@ describe('TerminalDrawer project command handle', () => {
       await Promise.resolve()
     })
     expect(kill).toHaveBeenCalledExactlyOnceWith('late-terminal')
-    expect(window.prime.terminal.bindSession).not.toHaveBeenCalledWith('late-terminal', expect.anything())
-    expect(window.prime.terminal.setActiveContext).not.toHaveBeenCalledWith('late-terminal', expect.anything())
+    expect(window.apex.terminal.bindSession).not.toHaveBeenCalledWith('late-terminal', expect.anything())
+    expect(window.apex.terminal.setActiveContext).not.toHaveBeenCalledWith('late-terminal', expect.anything())
     expect(onExit).toHaveBeenCalledOnce()
     expect(onError).not.toHaveBeenCalled()
     expect([...container.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('Late'))).toBe(false)

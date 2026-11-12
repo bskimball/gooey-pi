@@ -56,12 +56,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export const SAMPLE_PROJECTS: ProjectRecord[] = [
   {
-    id: 'prime-work',
+    id: 'apex',
     harness: 'pi',
-    name: 'prime-work',
-    path: '/Users/you/Projects/prime-work',
-    folders: ['/Users/you/Projects/prime-work'],
-    primaryFolder: '/Users/you/Projects/prime-work',
+    name: 'apex',
+    path: '/Users/you/Projects/apex',
+    folders: ['/Users/you/Projects/apex'],
+    primaryFolder: '/Users/you/Projects/apex',
     pinned: true,
     createdAt: new Date(Date.now() - 864e5 * 18).toISOString(),
     lastOpenedAt: new Date().toISOString(),
@@ -181,7 +181,7 @@ export const SAMPLE_SCHEDULES: AutomationScheduleRecord[] = [
   {
     schemaVersion: 1, id: 'morning', harness: 'pi', revision: 1, title: 'Morning issue triage',
     prompt: 'Review new high-priority issues and propose owners.',
-    target: { kind: 'project', projectId: 'prime-work' },
+    target: { kind: 'project', projectId: 'apex' },
     timing: { kind: 'rrule', dtstartLocal: '2026-08-06T09:00:00', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
     execution: { model: 'auto', thinking: 'auto', speed: 'normal' }, status: 'active', createdBy: 'user',
     createdAt: new Date(Date.now() - 7 * 864e5).toISOString(), updatedAt: new Date().toISOString(), nextRunAt: new Date(Date.now() + 16 * 3600e3).toISOString(), runs: [],

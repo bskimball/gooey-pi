@@ -1,10 +1,10 @@
-import type { PrimeWorkApi, RuntimeInfo } from '@/types/api'
+import type { ApexApi, RuntimeInfo } from '@/types/api'
 
-type StartOptions = Parameters<PrimeWorkApi['agent']['start']>[0]
-const starts = new WeakMap<PrimeWorkApi, Map<string, Promise<RuntimeInfo>>>()
+type StartOptions = Parameters<ApexApi['agent']['start']>[0]
+const starts = new WeakMap<ApexApi, Map<string, Promise<RuntimeInfo>>>()
 
 /** Prewarming and Send join the same launch, including an unsaved workspace. */
-export function startWorkspaceRuntime(bridge: PrimeWorkApi, options: StartOptions, generation: number): Promise<RuntimeInfo> {
+export function startWorkspaceRuntime(bridge: ApexApi, options: StartOptions, generation: number): Promise<RuntimeInfo> {
   let pending = starts.get(bridge)
   if (!pending) {
     pending = new Map()

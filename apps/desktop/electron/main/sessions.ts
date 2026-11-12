@@ -47,16 +47,16 @@ const watchSessionDirectory: SessionWatchFactory = (path, options, listener) => 
   (eventType, filename) => listener(eventType, filename),
 )
 
-const authorizePrimeSessionPath: SessionPathAuthorizer = (root, path) => isPathWithin(root, path) && path.endsWith('.jsonl')
+const authorizeApexSessionPath: SessionPathAuthorizer = (root, path) => isPathWithin(root, path) && path.endsWith('.jsonl')
 
 export interface SessionServiceOptions {
-  /** Harness stamped on every record and change event this service emits; defaults to 'prime'. */
+  /** Harness stamped on every record and change event this service emits; defaults to 'pi'. */
   harness?: HarnessId
   /** Canonical-or-lexical session root; defaults to the Pi session directory. */
   sessionRoot?: string
   metadataCachePath?: string
   catalogIo?: SessionCatalogIo
-  /** Pre-I/O discovery ordering for a harness's file-name scheme; defaults to Prime UUIDv7 names. */
+  /** Pre-I/O discovery ordering for a harness's file-name scheme; defaults to UUIDv7 names. */
   catalogNameTimestamp?: SessionNameTimestamp
   metadataReader?: SessionMetadataReader
   transcriptReader?: TranscriptReader
@@ -73,7 +73,7 @@ export interface SessionServiceOptions {
   watchDirectory?: SessionWatchFactory
   /**
    * File-level rename fallback for harnesses whose CLI does not expose a
-   * `rename` subcommand (OMP, pi). Called when no live runtime is available
+   * `rename` subcommand (pi). Called when no live runtime is available
    * to accept `set_session_name` and no CLI fallback exists.
    */
   renameFile?: (filePath: string, title: string) => boolean
@@ -129,7 +129,7 @@ export class SessionService {
     this.recursiveWatch = options.recursiveWatch === true
     this.metadataReader = options.metadataReader ?? createSessionMetadataReader()
     this.transcriptReader = options.transcriptReader ?? readTranscript
-    this.isSessionPathAuthorized = options.isSessionPathAuthorized ?? authorizePrimeSessionPath
+    this.isSessionPathAuthorized = options.isSessionPathAuthorized ?? authorizeApexSessionPath
     this.resolveSessionCandidate = options.resolveSessionCandidate
     this.watchDirectory = options.watchDirectory ?? watchSessionDirectory
     this.catalog = new SessionMetadataCatalog(
@@ -316,7 +316,7 @@ export class SessionService {
   }
 
   /**
-   * Pi and OMP keep JSONL files exactly one bucket below the session root, so
+   * Pi keeps JSONL files exactly one bucket below the session root, so
    * watch a bounded set of real child directories and feed their root-relative
    * names through the same containment checks as root events. Using this on
    * every platform keeps behavior identical where recursive `fs.watch` is not

@@ -1,5 +1,5 @@
 ---
-name: prime-work-schedules
+name: apex-schedules
 description: Create, inspect, edit, pause, resume, run, and delete durable Apex scheduled tasks. Use when the user asks to schedule recurring or one-time work in the current project or thread. Use rlm-heartbeat instead for temporary internal polling while actively working.
 ---
 
@@ -14,7 +14,7 @@ Use this capability for durable, user-visible tasks. Apex must be running.
 Call from IPython:
 
 ```python
-await prime_work_schedules.create_recurring(
+await apex_schedules.create_recurring(
     prompt="Review open issues and report blockers",
     rrule="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0",
     dtstart_local="2026-08-07T09:00:00",
@@ -30,13 +30,13 @@ await prime_work_schedules.create_recurring(
 Other calls:
 
 ```python
-await prime_work_schedules.create_once(prompt="...", at="2026-08-08T18:00:00Z", target="current_session")
-await prime_work_schedules.list()
-await prime_work_schedules.update(task_id, title="New title", prompt="...")
-await prime_work_schedules.pause(task_id)
-await prime_work_schedules.resume(task_id)
-await prime_work_schedules.run_now(task_id)
-await prime_work_schedules.delete(task_id)
+await apex_schedules.create_once(prompt="...", at="2026-08-08T18:00:00Z", target="current_session")
+await apex_schedules.list()
+await apex_schedules.update(task_id, title="New title", prompt="...")
+await apex_schedules.pause(task_id)
+await apex_schedules.resume(task_id)
+await apex_schedules.run_now(task_id)
+await apex_schedules.delete(task_id)
 ```
 
 RRULE must be RFC 5545 without `DTSTART`; pass local start and IANA timezone separately. Never invent another project path or session ID: this capability is intentionally restricted to the current project/thread.

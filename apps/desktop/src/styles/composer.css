@@ -71,8 +71,8 @@
 	background: var(--warning-soft);
 }
 .composer-extension-pill.is-selecting .composer-extension-pill__state {
-	color: var(--prime);
-	background: var(--prime-soft);
+	color: var(--apex);
+	background: var(--apex-soft);
 }
 .composer-extension-pill__selection {
 	min-width: 0;
@@ -387,8 +387,8 @@
 	background: var(--surface-subtle);
 }
 .composer-attachment--terminal.has-selection {
-	border-color: color-mix(in srgb, var(--prime) 35%, var(--border));
-	background: color-mix(in srgb, var(--prime) 7%, var(--surface-subtle));
+	border-color: color-mix(in srgb, var(--apex) 35%, var(--border));
+	background: color-mix(in srgb, var(--apex) 7%, var(--surface-subtle));
 }
 .composer-attachment--terminal .composer-attachment__expand {
 	width: auto;
@@ -413,7 +413,7 @@
 	text-overflow: ellipsis;
 }
 .composer-attachment--terminal .composer-attachment__expand small {
-	color: var(--prime);
+	color: var(--apex);
 	font-size: var(--fs-micro);
 	font-weight: 600;
 }
@@ -578,7 +578,7 @@
 	gap: 6px;
 }
 .context-usage-dial {
-	--context-color: var(--prime);
+	--context-color: var(--apex);
 	position: relative;
 	width: 26.4px;
 	height: 26.4px;
@@ -1180,10 +1180,10 @@
 	fill: currentColor;
 	stroke: none;
 }
-/* Mid-run the primary action steers the live turn; prime ink separates it from the red Stop beside it. */
+/* Mid-run the primary action steers the live turn; apex ink separates it from the red Stop beside it. */
 .send-button--steer:not(:disabled) {
 	color: var(--canvas);
-	background: var(--prime);
+	background: var(--apex);
 }
 .composer-menu {
 	position: absolute;
@@ -1256,9 +1256,9 @@
 	inset: -5px;
 	border-radius: 19px;
 	background: conic-gradient(
-		color-mix(in srgb, var(--prime) 55%, transparent),
+		color-mix(in srgb, var(--apex) 55%, transparent),
 		color-mix(in srgb, var(--focus) 45%, transparent),
-		color-mix(in srgb, var(--prime) 55%, transparent)
+		color-mix(in srgb, var(--apex) 55%, transparent)
 	);
 	filter: blur(7px);
 	opacity: 0.14;
@@ -1275,8 +1275,8 @@
 	background: conic-gradient(
 		from var(--composer-flow),
 		transparent 0 12%,
-		color-mix(in srgb, var(--prime) 22%, transparent) 26%,
-		color-mix(in srgb, var(--prime) 55%, transparent) 36%,
+		color-mix(in srgb, var(--apex) 22%, transparent) 26%,
+		color-mix(in srgb, var(--apex) 55%, transparent) 36%,
 		color-mix(in srgb, var(--focus) 40%, transparent) 44%,
 		transparent 60%
 	);

@@ -153,7 +153,7 @@ describe('validatePackageSource', () => {
   })
 
   it('resolves existing absolute paths and rejects missing ones', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'prime-work-package-'))
+    const dir = mkdtempSync(join(tmpdir(), 'apex-package-'))
     dirs.push(dir)
     expect(validatePackageSource(dir)).toBe(realpathSync(dir))
     expect(() => validatePackageSource(join(dir, 'missing'))).toThrow(/does not exist/)
@@ -162,7 +162,7 @@ describe('validatePackageSource', () => {
 
 describe('PluginService package source validation', () => {
   it.each(['pi'] as const)('does not launch the %s executable for rejected npm sources', async (harness) => {
-    const root = mkdtempSync(join(tmpdir(), 'prime-work-package-service-'))
+    const root = mkdtempSync(join(tmpdir(), 'apex-package-service-'))
     dirs.push(root)
     const agentDir = join(root, 'agent')
     const executable = join(root, `${harness}.cjs`)

@@ -115,10 +115,10 @@ function revealElementScript(selector: string, pageUrl: string): string {
 		if (!el || !el.isConnected) return JSON.stringify({ url, found: false });
 		el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
 		const rect = el.getBoundingClientRect();
-		let ring = document.getElementById('__primeWorkRevealOutline');
+		let ring = document.getElementById('__apexRevealOutline');
 		if (ring) ring.remove();
 		ring = document.createElement('div');
-		ring.id = '__primeWorkRevealOutline';
+		ring.id = '__apexRevealOutline';
 		ring.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #2488ff;background:rgba(36,136,255,.14);box-shadow:0 0 0 3px rgba(36,136,255,.22);border-radius:3px;transition:opacity 180ms ease-out;';
 		ring.style.left = Math.round(rect.left - 2) + 'px';
 		ring.style.top = Math.round(rect.top - 2) + 'px';

@@ -16,9 +16,9 @@ export function useSharedBrowserSelection(tab: AgentBrowserTabRecord | undefined
   const hint = useMemo(() => kind && path ? { kind, path, ...(line === undefined ? {} : { line }) } : undefined, [kind, path, line])
   const sourceKey = JSON.stringify([cwd, hint])
   const active = Boolean(tab && element && captureKey !== consumedCaptures.get(tab.tabId))
-  const captureSelection = typeof window.prime?.browser?.captureSelection === 'function' ? window.prime.browser.captureSelection : undefined
+  const captureSelection = typeof window.apex?.browser?.captureSelection === 'function' ? window.apex.browser.captureSelection : undefined
   useEffect(() => {
-    const resolveSource = window.prime?.app?.resolveBrowserSource
+    const resolveSource = window.apex?.app?.resolveBrowserSource
     if (!hint || !cwd || !resolveSource) return
     let cancelled = false
     void resolveSource(cwd, hint)?.then((source) => { if (!cancelled) setResolved({ key: sourceKey, source }) }, () => {})
@@ -52,7 +52,7 @@ export function useSharedBrowserSelection(tab: AgentBrowserTabRecord | undefined
       if (!tab) return
       consumedCaptures.set(tab.tabId, captureKey)
       setDeliveryRevision((revision) => revision + 1)
-      void window.prime?.browser?.clearSelection?.(tab.sessionFile, tab.tabId, element?.captureId)?.catch(
+      void window.apex?.browser?.clearSelection?.(tab.sessionFile, tab.tabId, element?.captureId)?.catch(
         (err: unknown) => setClearError({ key: captureKey, error: err instanceof Error ? err.message : String(err) }),
       )
     },

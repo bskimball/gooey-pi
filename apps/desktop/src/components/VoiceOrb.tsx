@@ -1,14 +1,14 @@
 import { Microphone, MicrophoneSlash, X } from './icons'
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useMachine } from '@xstate/react'
-import type { HarnessId, PrimeWorkApi, VoiceTaskStarted, VoiceToolRequest } from '@/types/api'
+import type { HarnessId, ApexApi, VoiceTaskStarted, VoiceToolRequest } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { DesktopPet, type DesktopPetProps } from './DesktopPet'
 import type { PetActivity } from './PetAvatar'
 import { voiceOrbMachine, type OrbState } from './voiceOrbMachine'
 
 interface VoiceOrbProps {
-  voice: PrimeWorkApi['voice']
+  voice: ApexApi['voice']
   harness: HarnessId
   onClose(): void
   onTaskStarted(task: VoiceTaskStarted): Promise<void>

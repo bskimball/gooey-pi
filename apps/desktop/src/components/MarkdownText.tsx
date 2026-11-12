@@ -18,7 +18,7 @@ async function openMarkdownLink(event: MouseEvent<HTMLAnchorElement>, href: stri
     try { document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' }) } catch { /* malformed fragment */ }
     return null
   }
-  if (window.prime) return openExternalUrl(window.prime.app, href)
+  if (window.apex) return openExternalUrl(window.apex.app, href)
   if (/^file:/i.test(href)) return 'Open this file from the desktop app.'
   window.open(href, '_blank', 'noopener,noreferrer')
   return null

@@ -49,9 +49,9 @@
   --border-subtle: #e5edf5;
   --border-strong: #c5d3e2;
   --focus: #3b7fb5;
-  --prime: #2d6595;
-  --prime-soft: #e8eff6;
-  --canvas-glow: color-mix(in srgb, var(--prime) 7%, transparent);
+  --apex: #2d6595;
+  --apex-soft: #e8eff6;
+  --canvas-glow: color-mix(in srgb, var(--apex) 7%, transparent);
   --accent: #2d6595;
   --success: #0d755a;
   --success-soft: #e6f6f1;
@@ -136,9 +136,9 @@
   --border-subtle: #111827;
   --border-strong: #232e46;
   --focus: #93bde3;
-  --prime: #7eb0dc;
-  --prime-soft: #16212c;
-  --canvas-glow: color-mix(in srgb, var(--prime) 14%, transparent);
+  --apex: #7eb0dc;
+  --apex-soft: #16212c;
+  --canvas-glow: color-mix(in srgb, var(--apex) 14%, transparent);
   --accent: #7eb0dc;
   --success: #4ade80;
   --success-soft: #0f2e28;
@@ -209,7 +209,7 @@ kbd { color: var(--text-tertiary); font: 10.5px/1.2 "SFMono-Regular", "SF Mono",
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drag-region { -webkit-app-region: drag; }
 .no-drag, .drag-region button, .drag-region input { -webkit-app-region: no-drag; }
-.prime-color { color: var(--prime); }
+.apex-color { color: var(--apex); }
 
 .scroll-area { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 .scroll-area::-webkit-scrollbar { width: 7px; height: 7px; }

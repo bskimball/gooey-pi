@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { AgentEventForwarder } from '../../apps/desktop/electron/main/agent-rpc/events'
-import type { PrimeEventEnvelope } from '../../apps/desktop/src/types/api'
+import type { ApexEventEnvelope } from '../../apps/desktop/src/types/api'
 
 function forwarder(limits: Partial<{ maxEvents: number; maxEnvelopeBytes: number; maxWindowBytes: number; windowMs: number }> = {}) {
-  const delivered: PrimeEventEnvelope[] = []
+  const delivered: ApexEventEnvelope[] = []
   const events = new AgentEventForwarder('runtime-1', (envelope) => delivered.push(envelope), limits)
   return { events, delivered }
 }

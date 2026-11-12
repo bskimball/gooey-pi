@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { PetDefinition, PrimeWorkApi } from '@/types/api'
+import type { PetDefinition, ApexApi } from '@/types/api'
 
 export type PetActivity = 'idle' | 'running-left' | 'running-right' | 'speaking' | 'working' | 'waiting' | 'jumping' | 'failed'
 
@@ -59,7 +59,7 @@ function OrbPet({ activity, size, reduceMotion }: { activity: PetActivity; size:
 
 export function PetAvatar({ pet, pets, activity = 'idle', size = 92, reduceMotion = false }: {
   pet: PetDefinition
-  pets: PrimeWorkApi['pets'] | null
+  pets: ApexApi['pets'] | null
   activity?: PetActivity
   size?: number
   reduceMotion?: boolean

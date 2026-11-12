@@ -1,33 +1,33 @@
 /** Self-contained Pi extension. Runtime dependencies live in the external bundled runtime, never beside this injected file. */
 import { pathToFileURL } from 'node:url'
 
-interface OmpSchemaOptions {
+interface ApexSchemaOptions {
   description?: string
 }
 
-interface OmpTypebox {
-  Object(properties: Record<string, unknown>, options?: OmpSchemaOptions): unknown
-  String(options?: OmpSchemaOptions): unknown
-  Number(options?: OmpSchemaOptions): unknown
-  Boolean(options?: OmpSchemaOptions): unknown
-  Array(items: unknown, options?: OmpSchemaOptions): unknown
-  Enum(values: readonly string[], options?: OmpSchemaOptions): unknown
+interface ApexTypebox {
+  Object(properties: Record<string, unknown>, options?: ApexSchemaOptions): unknown
+  String(options?: ApexSchemaOptions): unknown
+  Number(options?: ApexSchemaOptions): unknown
+  Boolean(options?: ApexSchemaOptions): unknown
+  Array(items: unknown, options?: ApexSchemaOptions): unknown
+  Enum(values: readonly string[], options?: ApexSchemaOptions): unknown
   Optional(schema: unknown): unknown
 }
 
-type OmpToolContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+type ApexToolContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 
-interface OmpToolResult {
-  content: OmpToolContent[]
+interface ApexToolResult {
+  content: ApexToolContent[]
   details: Record<string, unknown>
 }
 
-interface OmpToolDefinition<Params> {
+interface ApexToolDefinition<Params> {
   name: string
   label: string
   description: string
   parameters: unknown
-  execute(toolCallId: string, params: Params, signal?: AbortSignal, onUpdate?: (result: OmpToolResult) => void, ctx?: HostContext): Promise<OmpToolResult>
+  execute(toolCallId: string, params: Params, signal?: AbortSignal, onUpdate?: (result: ApexToolResult) => void, ctx?: HostContext): Promise<ApexToolResult>
 }
 
 interface HostModel {
@@ -47,9 +47,9 @@ interface TaskParams {
   timeout_s?: number
 }
 
-export interface OmpExtensionApi {
-  typebox?: { Type: OmpTypebox }
-  registerTool<Params>(tool: OmpToolDefinition<Params>): void
+export interface ApexExtensionApi {
+  typebox?: { Type: ApexTypebox }
+  registerTool<Params>(tool: ApexToolDefinition<Params>): void
 }
 
 async function importHostModule(specifier: string): Promise<Record<string, unknown> | undefined> {
@@ -60,10 +60,10 @@ async function importHostModule(specifier: string): Promise<Record<string, unkno
   }
 }
 
-async function resolveHostTypebox(): Promise<OmpTypebox> {
-  const hostType = (await importHostModule('typebox'))?.Type as (OmpTypebox & { Unsafe?(schema: unknown): unknown }) | undefined
-  const stringEnum = (await importHostModule('@earendil-works/pi-ai'))?.StringEnum as ((values: readonly string[], options?: OmpSchemaOptions) => unknown) | undefined
-  const Enum = (values: readonly string[], options?: OmpSchemaOptions): unknown => {
+async function resolveHostTypebox(): Promise<ApexTypebox> {
+  const hostType = (await importHostModule('typebox'))?.Type as (ApexTypebox & { Unsafe?(schema: unknown): unknown }) | undefined
+  const stringEnum = (await importHostModule('@earendil-works/pi-ai'))?.StringEnum as ((values: readonly string[], options?: ApexSchemaOptions) => unknown) | undefined
+  const Enum = (values: readonly string[], options?: ApexSchemaOptions): unknown => {
     if (stringEnum) return stringEnum(values, options)
     const schema = { type: 'string', enum: [...values], ...(options ?? {}) }
     return hostType?.Unsafe ? hostType.Unsafe(schema) : schema
@@ -81,7 +81,7 @@ async function resolveHostTypebox(): Promise<OmpTypebox> {
   }
   // Last resort: plain JSON Schema builders covering exactly this file's usage.
   const optionalSchemas = new WeakSet<object>()
-  const plain = (schema: Record<string, unknown>, options?: OmpSchemaOptions): unknown => ({ ...schema, ...(options ?? {}) })
+  const plain = (schema: Record<string, unknown>, options?: ApexSchemaOptions): unknown => ({ ...schema, ...(options ?? {}) })
   return {
     Object: (properties, options) => {
       const required = Object.keys(properties).filter((key) => {
@@ -102,8 +102,8 @@ async function resolveHostTypebox(): Promise<OmpTypebox> {
   }
 }
 
-const BRIDGE_URL = process.env.PRIME_WORK_BROWSER_URL
-const BRIDGE_TOKEN = process.env.PRIME_WORK_BROWSER_TOKEN
+const BRIDGE_URL = process.env.APEX_BROWSER_URL
+const BRIDGE_TOKEN = process.env.APEX_BROWSER_TOKEN
 
 async function call(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
   if (!BRIDGE_URL || !BRIDGE_TOKEN) throw new Error('Browser control is not available in this runtime')
@@ -163,7 +163,7 @@ function fenced(payload: unknown): string {
     '</untrusted-page-content>',
   ].join('\n')
 }
-export default function (pi: OmpExtensionApi): void | Promise<void> {
+export default function (pi: ApexExtensionApi): void | Promise<void> {
   if (!BRIDGE_URL || !BRIDGE_TOKEN) return
   if (pi.typebox?.Type) {
     registerTools(pi, pi.typebox.Type)
@@ -173,7 +173,7 @@ export default function (pi: OmpExtensionApi): void | Promise<void> {
     registerTools(pi, Type)
   })
 }
-function registerTools(pi: OmpExtensionApi, Type: OmpTypebox): void {
+function registerTools(pi: ApexExtensionApi, Type: ApexTypebox): void {
   pi.registerTool<TaskParams>({
     name: 'browser_task',
     label: 'Delegate browser task',

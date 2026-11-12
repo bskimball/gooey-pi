@@ -1,11 +1,11 @@
-import type { PrimeModelCatalog } from '../../src/types/api'
+import type { ApexModelCatalog } from '../../src/types/api'
 
 /** Applies Apex's synchronized provider/model visibility policy to a raw harness catalog. */
 export function withModelVisibility(
-  catalog: PrimeModelCatalog,
+  catalog: ApexModelCatalog,
   disabledProviders: ReadonlySet<string>,
   disabledModels: ReadonlySet<string>,
-): PrimeModelCatalog {
+): ApexModelCatalog {
   const modelKeysByProvider = new Map<string, string[]>()
   for (const model of catalog.models) {
     const keys = modelKeysByProvider.get(model.provider)

@@ -67,7 +67,7 @@ describe('PluginsPage bundled capability controls', () => {
 
   it('enables Browser directly and confirms before disabling it', async () => {
     const setBrowserEnabled = vi.fn(async () => undefined)
-    const browser: SkillRecord = { id: 'prime-work-browser', name: 'Browser', description: 'In-app browser.', kind: 'skill', location: 'system', enabled: false }
+    const browser: SkillRecord = { id: 'apex-browser', name: 'Browser', description: 'In-app browser.', kind: 'skill', location: 'system', enabled: false }
     const render = async (enabled: boolean) => act(async () => {
       root.render(<PluginsPage
         harness="pi" skills={[browser]} warnings={[]} loading={false}

@@ -355,12 +355,12 @@ export function BrowserPanel({
 						? sanitizeCapturedElement(parsed[0])
 						: null;
 					if (!element) return;
-					if (directCaptureRef.current && agentSessionKey && window.prime) {
+					if (directCaptureRef.current && agentSessionKey && window.apex) {
 						const owner = annotationsRef.current;
 						const pageUrl = view.getURL();
 						setCapturingSelection(true);
 						sendAnnotation({ type: "CANCEL" });
-						void captureBrowserSelection({ bridge: window.prime, sessionKey: agentSessionKey, tabId: "preview", pageUrl, pageTitle: view.getTitle(), cwd, element }).then(({ input, warning }) => {
+						void captureBrowserSelection({ bridge: window.apex, sessionKey: agentSessionKey, tabId: "preview", pageUrl, pageTitle: view.getTitle(), cwd, element }).then(({ input, warning }) => {
 							if (view.getURL() !== pageUrl || annotationsRef.current.add !== owner.add) return;
 							if (owner.add(input)) owner.focusComposer?.();
 							if (warning) sendAnnotation({ type: "CAPACITY_BLOCKED", notice: warning });

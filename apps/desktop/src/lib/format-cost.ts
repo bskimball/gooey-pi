@@ -1,4 +1,4 @@
-import type { PrimeContextUsage, SessionUsage } from '@/types/api'
+import type { ApexContextUsage, SessionUsage } from '@/types/api'
 
 export const PRICING_UNAVAILABLE = 'Pricing unavailable'
 
@@ -23,7 +23,7 @@ export function formatSessionCost(usage: SessionUsage | undefined): string | nul
 }
 
 /** Tooltip/aria text for the composer context dial: context tokens plus the session cost when known. */
-export function contextDialLabel(contextUsage: PrimeContextUsage | undefined, sessionUsage: SessionUsage | undefined): string {
+export function contextDialLabel(contextUsage: ApexContextUsage | undefined, sessionUsage: SessionUsage | undefined): string {
   if (!contextUsage || contextUsage.tokens === null) return 'Context usage unavailable until the next response'
   const label = `${contextUsage.tokens.toLocaleString('en-US')} / ${contextUsage.contextWindow.toLocaleString('en-US')} tokens`
   const cost = formatSessionCost(sessionUsage)

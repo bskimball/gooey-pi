@@ -2,10 +2,10 @@ import { useEffect, useRef } from 'react'
 import { startWorkspaceRuntime } from '@/lib/runtime-start'
 import { findRuntimeForWorkspace } from '@/lib/workspace'
 import type { WorkspaceSnapshot } from '@/app/workspace'
-import type { HarnessId, PrimeThinkingLevel, PrimeWorkApi, RuntimeInfo, SessionRecord } from '@/types/api'
+import type { HarnessId, ApexThinkingLevel, ApexApi, RuntimeInfo, SessionRecord } from '@/types/api'
 
 interface PrewarmOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   ready: boolean
   harness: HarnessId
   generation: number
@@ -14,7 +14,7 @@ interface PrewarmOptions {
   sessionStatus: SessionRecord['status'] | undefined
   sessionFile: string | undefined
   model: string
-  thinking: PrimeThinkingLevel
+  thinking: ApexThinkingLevel
   fast: boolean
   attachRuntime(runtime: RuntimeInfo, generation: number): void
 }

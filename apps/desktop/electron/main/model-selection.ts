@@ -1,5 +1,5 @@
-import { PRIME_THINKING_LEVELS } from '../../src/types/api'
-import type { PrimeModelDescriptor, PrimeThinkingLevel } from '../../src/types/api'
+import { APEX_THINKING_LEVELS } from '../../src/types/api'
+import type { ApexModelDescriptor, ApexThinkingLevel } from '../../src/types/api'
 import type { ModelCatalogProvider } from './model-catalog'
 
 const SPOKEN_NUMBER_TOKENS: Record<string, string> = {
@@ -16,7 +16,7 @@ function normalizedModelText(value: string): string {
     .join(' ')
 }
 
-function modelMatchScore(query: string, model: PrimeModelDescriptor): number {
+function modelMatchScore(query: string, model: ApexModelDescriptor): number {
   const wanted = normalizedModelText(query)
   if (!wanted) return 0
   const fields = [model.key, model.id, model.name, `${model.provider} ${model.name}`, `${model.provider} ${model.id}`]
@@ -37,7 +37,7 @@ function modelMatchScore(query: string, model: PrimeModelDescriptor): number {
   return best
 }
 
-export function rankedModelMatches(query: string, models: readonly PrimeModelDescriptor[]): PrimeModelDescriptor[] {
+export function rankedModelMatches(query: string, models: readonly ApexModelDescriptor[]): ApexModelDescriptor[] {
   return models
     .map((model) => ({ model, score: modelMatchScore(query, model) }))
     .filter(({ score }) => score > 0)
@@ -45,17 +45,17 @@ export function rankedModelMatches(query: string, models: readonly PrimeModelDes
     .map(({ model }) => model)
 }
 
-export function resolveModel(query: string, models: readonly PrimeModelDescriptor[]): PrimeModelDescriptor {
+export function resolveModel(query: string, models: readonly ApexModelDescriptor[]): ApexModelDescriptor {
   const match = rankedModelMatches(query, models)[0]
   if (!match) throw new Error(`No available model from a visible provider matched “${query}”`)
   return match
 }
 
-const REASONING_RANK = new Map(PRIME_THINKING_LEVELS.map((level, index) => [level, index]))
+const REASONING_RANK = new Map(APEX_THINKING_LEVELS.map((level, index) => [level, index]))
 
 function requestedReasoningRank(value: string): number {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-  const exact = PRIME_THINKING_LEVELS.find((level) => normalized === level)
+  const exact = APEX_THINKING_LEVELS.find((level) => normalized === level)
   if (exact) return REASONING_RANK.get(exact)!
   if (/\b(max|maximum|highest|ultra)\b/.test(normalized)) return REASONING_RANK.get('max')!
   if (/\b(xhigh|extra high|very high)\b/.test(normalized)) return REASONING_RANK.get('xhigh')!
@@ -67,7 +67,7 @@ function requestedReasoningRank(value: string): number {
   return REASONING_RANK.get('medium')!
 }
 
-export function resolveReasoning(value: string, available: readonly PrimeThinkingLevel[]): PrimeThinkingLevel {
+export function resolveReasoning(value: string, available: readonly ApexThinkingLevel[]): ApexThinkingLevel {
   if (!available.length) throw new Error('The selected model does not expose any reasoning levels')
   const wanted = requestedReasoningRank(value)
   return [...available].sort((left, right) => {
@@ -78,7 +78,7 @@ export function resolveReasoning(value: string, available: readonly PrimeThinkin
   })[0]
 }
 
-export async function availableModels(catalog: ModelCatalogProvider, disabledProviders: ReadonlySet<string>, disabledModels: ReadonlySet<string> = new Set()): Promise<PrimeModelDescriptor[]> {
+export async function availableModels(catalog: ModelCatalogProvider, disabledProviders: ReadonlySet<string>, disabledModels: ReadonlySet<string> = new Set()): Promise<ApexModelDescriptor[]> {
   const snapshot = await catalog.catalog(false, disabledProviders, disabledModels)
   const enabledProviders = new Set(snapshot.providers.filter((provider) => provider.enabled).map((provider) => provider.id))
   return snapshot.models.filter((model) => model.available && model.enabled !== false && enabledProviders.has(model.provider))

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import type { PrimeContextUsage, PrimeEventEnvelope, PrimeModelDescriptor, PrimeServiceTier, RuntimeInfo } from '../../../src/types/api'
+import type { ApexContextUsage, ApexEventEnvelope, ApexModelDescriptor, ApexServiceTier, RuntimeInfo } from '../../../src/types/api'
 import { emptySessionActionSnapshot, parseSessionActionSnapshot } from '../../../src/lib/session-actions'
 import { blockingExtensionUiRequestId } from '../../../src/lib/extension-ui'
 import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
@@ -104,7 +104,7 @@ export class RpcRuntime {
       const title = text.replace(/\s+/g, ' ').trim()
       const existingName = isRecord(state.data) && typeof state.data.sessionName === 'string' ? state.data.sessionName : ''
       // This request runs in the child after message_end's synchronous append.
-      // A session_info entry also flushes Prime's buffered first user message.
+      // A session_info entry also flushes Pi's buffered first user message.
       await this.request({ type: 'set_session_name', name: existingName || (title.length > 100 ? `${title.slice(0, 99)}…` : title) || 'New session' }, 60_000)
       this.emit({ type: 'session_persisted', sessionFile: this.info.sessionFile, harness: this.adapter.id })
     } catch (error) {
@@ -112,11 +112,11 @@ export class RpcRuntime {
     }
   }
   private info: Omit<RuntimeInfo, 'isStreaming' | 'isCompacting'>
-  private requestedServiceTier: PrimeServiceTier = 'default'
+  private requestedServiceTier: ApexServiceTier = 'default'
   private contextUsageRefresh: Promise<void> | null = null
   private contextUsageRefreshRequest: ContextUsageRefreshRequest | null = null
   private readonly liveContextUsage = new LiveContextUsageTracker()
-  private authoritativeContextUsage: PrimeContextUsage | undefined
+  private authoritativeContextUsage: ApexContextUsage | undefined
   private contextUsageActivityBaseline = 0
   private contextUsageGeneration = 0
   private contextUsageEmitTimer: NodeJS.Timeout | null = null
@@ -144,7 +144,7 @@ export class RpcRuntime {
     executable: string,
     args: string[],
     cwd: string,
-    onEvent: (envelope: PrimeEventEnvelope) => void,
+    onEvent: (envelope: ApexEventEnvelope) => void,
     private readonly onExit: (runtime: RpcRuntime) => void,
     extraEnvironment: NodeJS.ProcessEnv = {},
     watchdogTimings: Partial<CompactionWatchdogTimings> = {},
@@ -209,7 +209,7 @@ export class RpcRuntime {
     return this.snapshot()
   }
 
-  applyCapabilities(model: PrimeModelDescriptor | undefined): void {
+  applyCapabilities(model: ApexModelDescriptor | undefined): void {
     this.info.availableThinkingLevels = model?.availableThinkingLevels ?? ['off']
     this.info.fastModeSupported = model?.fastModeSupported ?? false
     this.info.imageInputSupported = model ? model.input.includes('image') : undefined
@@ -686,7 +686,7 @@ export class RpcRuntime {
     } catch { /* older Pi versions may not expose session stats */ }
   }
 
-  private applyAuthoritativeContextUsage(usage: PrimeContextUsage, activityTokens?: number): void {
+  private applyAuthoritativeContextUsage(usage: ApexContextUsage, activityTokens?: number): void {
     if (activityTokens !== undefined) {
       const previous = this.authoritativeContextUsage
       const activityDelta = Math.max(0, activityTokens - this.contextUsageActivityBaseline)

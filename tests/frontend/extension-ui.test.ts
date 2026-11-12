@@ -27,7 +27,7 @@ describe('extension UI request parsing', () => {
       id: 'question-1',
       method: 'select',
       title: 'Choose a release channel',
-      options: ['__prime_ask_user__group-1:0:2', 'Stable', 'Beta', 'Other (type your own answer)'],
+      options: ['__apex_ask_user__group-1:0:2', 'Stable', 'Beta', 'Other (type your own answer)'],
     })).toEqual({
       method: 'select',
       id: 'question-1',
@@ -51,7 +51,7 @@ describe('extension UI request parsing', () => {
   })
 
   it('keeps the 32-option bound for grouped questionnaire questions', () => {
-    const options = (count: number) => ['__prime_ask_user__group-1:0:2', ...Array.from({ length: count }, (_, index) => `Choice ${index}`)]
+    const options = (count: number) => ['__apex_ask_user__group-1:0:2', ...Array.from({ length: count }, (_, index) => `Choice ${index}`)]
     expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'q', method: 'select', title: 'Pick', options: options(31) })).toMatchObject({ questionnaire: { groupId: 'group-1' } })
     expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'q', method: 'select', title: 'Pick', options: options(32) })).toBeUndefined()
   })
@@ -88,16 +88,16 @@ describe('extension UI request parsing', () => {
 
   it('treats an unusable questionnaire marker as a plain option', () => {
     const request = (marker: string) => parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: [marker, 'Stable'] })
-    expect(request('__prime_ask_user__group-1:0')).toMatchObject({ options: ['__prime_ask_user__group-1:0', 'Stable'] })
-    expect(request('__prime_ask_user__:0:2')).toMatchObject({ options: ['__prime_ask_user__:0:2', 'Stable'] })
-    expect(request('__prime_ask_user__group 1:0:2')).toMatchObject({ options: ['__prime_ask_user__group 1:0:2', 'Stable'] })
-    expect(request('__prime_ask_user__group-1:1:1')).toMatchObject({ options: ['__prime_ask_user__group-1:1:1', 'Stable'] })
-    expect(request('__prime_ask_user__group-1:0:6')).toMatchObject({ options: ['__prime_ask_user__group-1:0:6', 'Stable'] })
-    expect(request('__prime_ask_user__group-1:0.5:2')).toMatchObject({ options: ['__prime_ask_user__group-1:0.5:2', 'Stable'] })
+    expect(request('__apex_ask_user__group-1:0')).toMatchObject({ options: ['__apex_ask_user__group-1:0', 'Stable'] })
+    expect(request('__apex_ask_user__:0:2')).toMatchObject({ options: ['__apex_ask_user__:0:2', 'Stable'] })
+    expect(request('__apex_ask_user__group 1:0:2')).toMatchObject({ options: ['__apex_ask_user__group 1:0:2', 'Stable'] })
+    expect(request('__apex_ask_user__group-1:1:1')).toMatchObject({ options: ['__apex_ask_user__group-1:1:1', 'Stable'] })
+    expect(request('__apex_ask_user__group-1:0:6')).toMatchObject({ options: ['__apex_ask_user__group-1:0:6', 'Stable'] })
+    expect(request('__apex_ask_user__group-1:0.5:2')).toMatchObject({ options: ['__apex_ask_user__group-1:0.5:2', 'Stable'] })
   })
 
   it('rejects a questionnaire marker with no visible options left', () => {
-    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: ['__prime_ask_user__group-1:0:2'] })).toBeUndefined()
+    expect(parseExtensionUiRequest({ type: 'extension_ui_request', id: 'x', method: 'select', title: 'Pick', options: ['__apex_ask_user__group-1:0:2'] })).toBeUndefined()
   })
 
   it('rejects a confirm request without a message and an input request with an unusable placeholder', () => {

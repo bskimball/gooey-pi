@@ -1,4 +1,4 @@
-import type { PrimeModelCatalog, PrimeModelDescriptor, PrimeProviderDescriptor } from '../../src/types/api'
+import type { ApexModelCatalog, ApexModelDescriptor, ApexProviderDescriptor } from '../../src/types/api'
 import type { ProviderCatalog } from './agent-rpc'
 
 /**
@@ -11,19 +11,18 @@ import type { ProviderCatalog } from './agent-rpc'
  * - The `providers:catalog` IPC handler calls `catalog(force, disabledProviders, disabledModels)`.
  *
  * Auth mutations (API keys, logout, OAuth flows) are intentionally excluded:
- * the manager never touches them and they are Prime-specific — OMP
- * authentication is owned by the omp CLI itself.
+ * the manager never touches them and they are Pi-specific.
  */
 export interface ModelCatalogProvider extends ProviderCatalog {
-  catalog(force?: boolean, disabledProviders?: ReadonlySet<string>, disabledModels?: ReadonlySet<string>): Promise<PrimeModelCatalog>
+  catalog(force?: boolean, disabledProviders?: ReadonlySet<string>, disabledModels?: ReadonlySet<string>): Promise<ApexModelCatalog>
 }
 
 export const MAX_CATALOG_MODELS = 5_000
 export const MAX_CATALOG_PROVIDERS = 256
 
 export interface CatalogLimitResult {
-  models: PrimeModelDescriptor[]
-  providers: PrimeProviderDescriptor[]
+  models: ApexModelDescriptor[]
+  providers: ApexProviderDescriptor[]
   totalModelCount: number
   totalProviderCount: number
   modelsOmittedWithProviders: number
@@ -38,8 +37,8 @@ export interface CatalogLimitResult {
  * stale provider total.
  */
 export function limitCatalogRelations(
-  rawModels: ReadonlyArray<PrimeModelDescriptor>,
-  rawProviders: ReadonlyArray<PrimeProviderDescriptor>,
+  rawModels: ReadonlyArray<ApexModelDescriptor>,
+  rawProviders: ReadonlyArray<ApexProviderDescriptor>,
 ): CatalogLimitResult {
   const seenProviderIds = new Set<string>()
   const uniqueProviders = [...rawProviders]

@@ -1137,7 +1137,7 @@ describe('session live reducer and sectioning', () => {
         id: 'req-1',
         method: 'select',
         title: 'First question?',
-        options: ['__prime_ask_user__grp1:0:2', 'Option A', 'Option B'],
+        options: ['__apex_ask_user__grp1:0:2', 'Option A', 'Option B'],
       },
       now: 10_000,
     })
@@ -1159,7 +1159,7 @@ describe('session live reducer and sectioning', () => {
         id: 'req-2',
         method: 'select',
         title: 'Second question?',
-        options: ['__prime_ask_user__grp1:1:2', 'Option C', 'Option D'],
+        options: ['__apex_ask_user__grp1:1:2', 'Option C', 'Option D'],
       },
       now: 12_000,
     })

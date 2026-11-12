@@ -87,7 +87,7 @@ const baseEnvironment = {
 }
 
 function createUnpackedFixture(architectures = new Set(['arm64'])) {
-  const directory = mkdtempSync(join(tmpdir(), 'prime-work-unpacked-'))
+  const directory = mkdtempSync(join(tmpdir(), 'apex-unpacked-'))
   const relativePaths = expectedUnpackedNativeLayout(architectures).files
   for (const relativePath of relativePaths) {
     const path = join(directory, relativePath)
@@ -131,7 +131,7 @@ function writeMacReleaseFixture(directory: string, { omit }: { omit?: string } =
 }
 
 function createBundleSizeFixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'prime-work-bundle-size-'))
+  const directory = mkdtempSync(join(tmpdir(), 'apex-bundle-size-'))
   writeSizedFile(join(directory, 'main/index.js'), 101)
   writeSizedFile(join(directory, 'preload/index.js'), 102)
   writeSizedFile(join(directory, 'renderer/assets/entry.js'), 103)
@@ -1493,7 +1493,7 @@ describe('cross-platform packaging repair', () => {
   })
 
   test('requires the exact target native layout and rejects removed runtime addons', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'prime-work-cross-platform-unpacked-'))
+    const directory = mkdtempSync(join(tmpdir(), 'apex-cross-platform-unpacked-'))
     const nativeFiles = expectedNativeFiles('linux', 'x64')
     for (const relativePath of nativeFiles) {
       const path = join(directory, relativePath)
@@ -1635,7 +1635,7 @@ describe('release size budgets', () => {
   })
 
   test('measures deterministic package fixtures and enforces every artifact budget', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'prime-work-package-size-'))
+    const directory = mkdtempSync(join(tmpdir(), 'apex-package-size-'))
     const paths = {
       app: join(directory, 'Prime Work.app'),
       asar: join(directory, 'Prime Work.app/Contents/Resources/app.asar'),

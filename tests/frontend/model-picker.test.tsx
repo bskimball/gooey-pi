@@ -5,11 +5,11 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelPicker } from '../../apps/desktop/src/components/ModelPicker'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
-import type { PrimeModelDescriptor, PrimeProviderDescriptor } from '../../apps/desktop/src/types/api'
+import type { ApexModelDescriptor, ApexProviderDescriptor } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const model = (key: string, provider: string, name: string, available = true): PrimeModelDescriptor => ({
+const model = (key: string, provider: string, name: string, available = true): ApexModelDescriptor => ({
   key,
   provider,
   id: key.slice(key.indexOf('/') + 1),
@@ -29,7 +29,7 @@ const models = [
   model('anthropic/claude-opus-4-8', 'anthropic', 'Claude Opus 4.8'),
   model('anthropic/claude-sonnet-4-7', 'anthropic', 'Claude Sonnet 4.7', false),
 ]
-const providers: PrimeProviderDescriptor[] = [
+const providers: ApexProviderDescriptor[] = [
   { id: 'openai', name: 'OpenAI', authMethod: 'oauth', configured: true, modelCount: 2, availableModelCount: 2, enabled: true },
   { id: 'anthropic', name: 'Anthropic', authMethod: 'api_key', configured: false, modelCount: 2, availableModelCount: 1, enabled: true },
 ]
@@ -112,7 +112,7 @@ describe('ModelPicker', () => {
       model('all/local-large', 'all', 'Local Large'),
       model('openai/gpt-5.6-sol', 'openai', 'GPT-5.6 Sol'),
     ]
-    const collidingProviders: PrimeProviderDescriptor[] = [
+    const collidingProviders: ApexProviderDescriptor[] = [
       { id: 'all', name: 'All Hands', authMethod: 'api_key', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
       { id: 'openai', name: 'OpenAI', authMethod: 'oauth', configured: true, modelCount: 1, availableModelCount: 1, enabled: true },
     ]

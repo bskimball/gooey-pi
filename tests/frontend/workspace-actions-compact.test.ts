@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
-import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { ApexApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 import { runBashCommand, runExtensionCommandNow } from '../../apps/desktop/src/lib/runtime-commands'
 import { parseRuntimeCommands } from '../../apps/desktop/src/lib/composer-commands'
@@ -16,7 +16,7 @@ describe('runtime command response contracts', () => {
 
   it('dispatches only listed extension commands through immediate prompt RPC', async () => {
     const command = vi.fn(async () => ({ data: { commands: [{ name: 'deploy', source: 'extension' }, { name: 'template', source: 'prompt' }] } }))
-    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command } } as unknown as ApexApi
     let messages: TranscriptMessage[] = []
     const echo = { isCurrent: () => true, setMessages: (update: TranscriptMessage[] | ((items: TranscriptMessage[]) => TranscriptMessage[])) => { messages = typeof update === 'function' ? update(messages) : update } }
     expect(await runExtensionCommandNow(bridge, 'r', 'plain text', () => true, echo)).toBe(false)
@@ -37,7 +37,7 @@ describe('runtime command response contracts', () => {
   ])('renders bash results without losing response semantics: $text', async ({ data, exclude, text, error }) => {
     let messages: TranscriptMessage[] = [{ id: 'other', role: 'user', parts: [] }]
     const command = vi.fn(async () => ({ data }))
-    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command } } as unknown as ApexApi
     await runBashCommand({ bridge, runtimeId: 'r', bash: { command: 'echo hello', excludeFromContext: exclude }, isCurrent: () => true, setMessages: (update) => { messages = typeof update === 'function' ? update(messages) : update } })
     expect(command).toHaveBeenCalledWith('r', { type: 'bash', command: 'echo hello', ...(exclude ? { excludeFromContext: true } : {}) })
     expect(messages[0].id).toBe('other')
@@ -49,14 +49,14 @@ describe('runtime command response contracts', () => {
     let messages: TranscriptMessage[] = [{ id: 'other', role: 'user', parts: [] }]
     const setMessages: Parameters<typeof runBashCommand>[0]['setMessages'] = (update) => { messages = typeof update === 'function' ? update(messages) : update }
     const command = vi.fn(async () => { throw new Error('failed') })
-    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command } } as unknown as ApexApi
     const args = { bridge, runtimeId: 'r', bash: { command: 'false', excludeFromContext: false }, isCurrent: () => current, setMessages }
     await expect(runBashCommand(args)).rejects.toThrow('failed')
     expect(messages.map((item) => item.id)).toEqual(['other'])
     command.mockImplementationOnce(async () => { current = false; messages = [{ id: 'replacement', role: 'user', parts: [] }]; throw new Error('gone') })
     await expect(runBashCommand(args)).rejects.toThrow('gone')
     expect(messages.map((item) => item.id)).toEqual(['replacement'])
-    const idleBridge = { agent: { command: vi.fn(async () => ({ data: {} })) } } as unknown as PrimeWorkApi
+    const idleBridge = { agent: { command: vi.fn(async () => ({ data: {} })) } } as unknown as ApexApi
     await runBashCommand({ ...args, bridge: idleBridge })
     expect(messages.map((item) => item.id)).toEqual(['replacement'])
   })
@@ -172,7 +172,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     projects: { touch: vi.fn(async () => true) },
     agent: { list: agentList, command, start, stop: vi.fn(async () => false) },
     sessions: { create: vi.fn(async () => session()), followUp, list: vi.fn(async () => []) },
-  } as unknown as PrimeWorkApi
+  } as unknown as ApexApi
   let workspaceSessions = currentSession ? [currentSession] : []
   const agentTurn = createAgentTurnHandle()
   // Seed the turn from main's streaming flag, as the App runtime mirror does.

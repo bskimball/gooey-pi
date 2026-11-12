@@ -45,7 +45,7 @@ import { useComposerCommands } from '@/hooks/useComposerCommands'
 import type { SettingsSection } from '@/pages/settings/contracts'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import { useWorkspaceRuntime } from '@/hooks/useWorkspaceRuntime'
-import { HARNESS_IDS, type CheckoutAction, type CheckoutCatalog, type GitStatus, type HarnessId, type InspectorTab, type PrimeModelDescriptor, type PrimeProviderDescriptor, type ProjectRecord, type AutomationScheduleRecord, type QueuedPrompt, type ScheduleTiming, type SessionRecord, type TerminalPromptContext, type TranscriptMessage, type VoiceTaskStarted, type WorkspaceView } from '@/types/api'
+import { HARNESS_IDS, type CheckoutAction, type CheckoutCatalog, type GitStatus, type HarnessId, type InspectorTab, type ApexModelDescriptor, type ApexProviderDescriptor, type ProjectRecord, type AutomationScheduleRecord, type QueuedPrompt, type ScheduleTiming, type SessionRecord, type TerminalPromptContext, type TranscriptMessage, type VoiceTaskStarted, type WorkspaceView } from '@/types/api'
 
 const Transcript = lazy(() => import('@/components/Transcript').then((module) => ({ default: module.Transcript })))
 const Inspector = lazy(() => import('@/components/Inspector').then((module) => ({ default: module.Inspector })))
@@ -60,10 +60,10 @@ const ScheduledPage = lazy(() => import('@/pages/ScheduledPage').then((module) =
 const PluginsPage = lazy(() => import('@/pages/PluginsPage').then((module) => ({ default: module.PluginsPage })))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
-const hasBridge = () => typeof window !== 'undefined' && typeof window.prime !== 'undefined'
+const hasBridge = () => typeof window !== 'undefined' && typeof window.apex !== 'undefined'
 // Stable fallback identities keep memoized children from re-rendering while the catalog loads.
-const EMPTY_MODELS: PrimeModelDescriptor[] = []
-const EMPTY_PROVIDERS: PrimeProviderDescriptor[] = []
+const EMPTY_MODELS: ApexModelDescriptor[] = []
+const EMPTY_PROVIDERS: ApexProviderDescriptor[] = []
 // Stable identity for the Inspector while the Summary tab is inactive: the
 // streaming transcript array must not reach the memoized inspector subtree.
 const EMPTY_MESSAGES: TranscriptMessage[] = []
@@ -83,7 +83,7 @@ interface TerminalSessionMount {
 
 
 export default function App() {
-  const bridge = hasBridge() ? window.prime : null
+  const bridge = hasBridge() ? window.apex : null
   const initialProject = bridge ? undefined : SAMPLE_PROJECTS[0]
   const initialSession = bridge ? undefined : SAMPLE_SESSIONS[0]
   const [clearedAttention, setClearedAttention] = useState<Record<string, string>>(() => readClearedAttention())

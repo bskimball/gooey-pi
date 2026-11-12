@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
-import type { PrimeWorkApi, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { ApexApi, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 interface Deferred<T> {
   promise: Promise<T>
@@ -54,7 +54,7 @@ function stopRuntimeFixture(command: ReturnType<typeof deferred<unknown>>) {
   }
   const agentTurn = createAgentTurnHandle()
   const actions = createWorkspaceActions(() => ({
-    bridge: { agent: { command: agentCommand } } as unknown as PrimeWorkApi,
+    bridge: { agent: { command: agentCommand } } as unknown as ApexApi,
     workspace,
     reportError,
     agentTurn,

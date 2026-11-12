@@ -3,7 +3,7 @@ import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, Transcr
 export type BrowserMethod = 'getExtensionStatus' | 'state' | 'setActiveSession' | 'setTabPaused' | 'focusExtensionTab' | 'popOutTab'
 
 // Messages exchanged between the extension host and the Apex webview.
-// Model/provider shapes mirror pi-desktop's PrimeModelDescriptor/PrimeProviderDescriptor.
+// Model/provider shapes mirror pi-desktop's ApexModelDescriptor/ApexProviderDescriptor.
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 

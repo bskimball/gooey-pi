@@ -34,7 +34,7 @@ import {
 	type AppUpdateState,
 	BROWSER_PARTITION,
 	type HarnessId,
-	type PrimeEventEnvelope,
+	type ApexEventEnvelope,
 	type RuntimeInfo,
 	type ThemeMode,
 } from "../../src/types/api";
@@ -133,7 +133,7 @@ let trustedRendererUrl = "";
 let packagedSmokeMarkerFile: string | null = null;
 let windowCreation: Promise<BrowserWindow | null> | null = null;
 let startInBackground = false;
-const keepTestWindowsHidden = process.env.PRIME_WORK_E2E_HIDE_WINDOWS === "1";
+const keepTestWindowsHidden = process.env.APEX_E2E_HIDE_WINDOWS === "1";
 
 installCrashGuards({
 	logPath: () => {
@@ -738,25 +738,25 @@ export function extensionRuntimeEnvironment(
 	browserEnabled = true,
 ): NodeJS.ProcessEnv {
 	const {
-		PRIME_WORK_SCHEDULE_SKILL_PATH: _scheduleSkill,
+		APEX_SCHEDULE_SKILL_PATH: _scheduleSkill,
 		...scheduleEnvironment
 	} = scheduleBridgeEnvironment;
 	const browserEnvironment = browserEnabled ? browserBridgeEnvironment() : {};
 	const {
-		PRIME_WORK_BROWSER_SKILL_PATH: _browserSkill,
+		APEX_BROWSER_SKILL_PATH: _browserSkill,
 		...runtimeBrowserEnvironment
 	} = browserEnvironment;
 	return {
 		...scheduleEnvironment,
 		...runtimeBrowserEnvironment,
-		PRIME_WORK_SCHEDULE_EXTENSION_PATH: extensionPaths.schedule,
-		PRIME_WORK_BROWSER_EXTENSION_PATH: browserEnabled
+		APEX_SCHEDULE_EXTENSION_PATH: extensionPaths.schedule,
+		APEX_BROWSER_EXTENSION_PATH: browserEnabled
 			? extensionPaths.browser
 			: undefined,
 		APEX_BROWSER_AGENT_EXTENSION_PATH: browserEnabled ? extensionPaths.browserAgent?.extension : undefined,
 		APEX_BROWSER_AGENT_RUNTIME_PATH: browserEnabled ? extensionPaths.browserAgent?.runtime : undefined,
 		APEX_BROWSER_AGENT_STATE_DIR: browserEnabled ? extensionPaths.browserAgent?.stateDir : undefined,
-		PRIME_WORK_ASK_USER_EXTENSION_PATH: askUserEnabled
+		APEX_ASK_USER_EXTENSION_PATH: askUserEnabled
 			? extensionPaths.askUser
 			: undefined,
 		GOOEYPI_MANAGES_ASK_USER: "1",
@@ -973,11 +973,11 @@ async function bootstrap(): Promise<void> {
 		),
 	);
 	const scheduleSkillPath = app.isPackaged
-		? join(process.resourcesPath, "skills", "prime-work-schedules")
-		: join(resolveDesktopAppRoot(app.getAppPath()), "assets", "skills", "prime-work-schedules");
+		? join(process.resourcesPath, "skills", "apex-schedules")
+		: join(resolveDesktopAppRoot(app.getAppPath()), "assets", "skills", "apex-schedules");
 	const browserSkillPath = app.isPackaged
-		? join(process.resourcesPath, "skills", "prime-work-browser")
-		: join(resolveDesktopAppRoot(app.getAppPath()), "assets", "skills", "prime-work-browser");
+		? join(process.resourcesPath, "skills", "apex-browser")
+		: join(resolveDesktopAppRoot(app.getAppPath()), "assets", "skills", "apex-browser");
 	const computerUseSkillPath = app.isPackaged
 		? join(process.resourcesPath, "skills", "gooeypi-computer-use", "SKILL.md")
 		: join(
@@ -1002,9 +1002,9 @@ async function bootstrap(): Promise<void> {
 		);
 	const piBrowserExtensionPath = extensionPathFor("pi", "browser");
 	const browserAgentExtensionPath = extensionPathFor("pi", "browserAgent");
-	const ompBrowserExtensionPath = extensionPathFor("pi", "browser");
-	const ompScheduleExtensionPath = extensionPathFor("pi", "schedule");
-	const ompAskUserExtensionPath = extensionPathFor("pi", "askUser");
+	const apexBrowserExtensionPath = extensionPathFor("pi", "browser");
+	const apexScheduleExtensionPath = extensionPathFor("pi", "schedule");
+	const apexAskUserExtensionPath = extensionPathFor("pi", "askUser");
 	const collaborationExtensionPath = extensionPathFor("pi", "collaboration");
 	const piFastModeExtensionPath = extensionPathFor("pi", "piFastMode");
 	const computerUseSkill = async () => {
@@ -1025,8 +1025,8 @@ async function bootstrap(): Promise<void> {
 			},
 		};
 	};
-	// Pi's extension API is the ancestor of OMP's, so pi runtimes inject the
-	// same omp-work-* extension files (accepted naming drift; never forked).
+	// Pi runtimes inject the
+	// same apex-* extension files (accepted naming drift; never forked).
 	const piPlugins = new PluginService(
 		piExecutable,
 		(path) => piProjects.authorizeProjectRoot(path),
@@ -1034,22 +1034,22 @@ async function bootstrap(): Promise<void> {
 			harness: "pi",
 			builtInSkills: async () => [
 				{
-					id: "omp-work-schedules",
+					id: "apex-schedules",
 					name: "Scheduled tasks",
 					description:
 						"Pi extension for durable project and thread schedules managed by Apex.",
 					kind: "extension",
 					location: "system",
-					path: ompScheduleExtensionPath,
+					path: apexScheduleExtensionPath,
 					enabled: true,
 				},
 				{
-					id: "omp-work-browser",
+					id: "apex-browser",
 					name: "Browser",
 					description: "Pi extension for driving this thread's in-app browser.",
 					kind: "extension",
 					location: "system",
-					path: ompBrowserExtensionPath,
+					path: apexBrowserExtensionPath,
 					enabled: stateStore.getSettings().browserEnabled,
 				},
 				{
@@ -1068,7 +1068,7 @@ async function bootstrap(): Promise<void> {
 						"Pi extension for asking focused multiple-choice questions in the Apex app.",
 					kind: "extension",
 					location: "system",
-					path: ompAskUserExtensionPath,
+					path: apexAskUserExtensionPath,
 					enabled: stateStore.getSettings().askUserEnabled,
 				},
 				await computerUseSkill(),
@@ -1183,9 +1183,9 @@ async function bootstrap(): Promise<void> {
 			[
 				"schedule",
 				runtimeScheduleBridge,
-				environment.PRIME_WORK_SCHEDULE_TOKEN,
+				environment.APEX_SCHEDULE_TOKEN,
 			],
-			["browser", browserBridge, environment.PRIME_WORK_BROWSER_TOKEN],
+			["browser", browserBridge, environment.APEX_BROWSER_TOKEN],
 			...(desktopLink ? [["editor", desktopLink.editor, environment.APEX_EDITOR_TOKEN] as [string, { revoke(token: string | undefined): boolean }, string | undefined]] : []),
 			[
 				"collaboration",
@@ -1204,8 +1204,8 @@ async function bootstrap(): Promise<void> {
 		}
 	};
 	const capabilityExtensionPaths: CapabilityExtensionPaths = {
-		schedule: ompScheduleExtensionPath,
-		browser: ompBrowserExtensionPath,
+		schedule: apexScheduleExtensionPath,
+		browser: apexBrowserExtensionPath,
 		browserAgent: {
 			extension: browserAgentExtensionPath,
 			runtime: app.isPackaged
@@ -1213,10 +1213,9 @@ async function bootstrap(): Promise<void> {
 				: join(app.getAppPath(), "out", "browser-agent", "runtime.mjs"),
 			stateDir: join(app.getPath("userData"), "browser-agent"),
 		},
-		askUser: ompAskUserExtensionPath,
+		askUser: apexAskUserExtensionPath,
 	};
-	// Pi runtimes receive the identical capability surface: pi's extension API
-	// is the ancestor of OMP's, so the omp-work-* files are shared by design.
+	// Pi runtimes receive the capability extensions shipped in assets/extensions.
 	piManager.setRuntimeEnvironmentProvider((scope) => ({
 		...desktopLink?.editor.environmentFor(scope),
 		APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),
@@ -1241,7 +1240,7 @@ async function bootstrap(): Promise<void> {
 	piManager.setRuntimeStartListener((environment, info) => {
 		desktopLink?.editor.bindRuntime(environment.APEX_EDITOR_TOKEN, info.runtimeId);
 		browserBridge.bindSession(
-			environment.PRIME_WORK_BROWSER_TOKEN,
+			environment.APEX_BROWSER_TOKEN,
 			info.sessionFile,
 		);
 		collaborationBridge.bindSession(
@@ -1299,7 +1298,7 @@ async function bootstrap(): Promise<void> {
 		trustedRendererUrl,
 	);
 	// Runtime events share one trusted renderer forwarding path.
-	const forwardAgentEvent = (envelope: PrimeEventEnvelope): void => {
+	const forwardAgentEvent = (envelope: ApexEventEnvelope): void => {
 		const renderer = mainWindow?.webContents;
 		if (
 			!isShutdownStarted(shutdown) &&

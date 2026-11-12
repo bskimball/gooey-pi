@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
-  Reflect.deleteProperty(window, 'prime')
+  Reflect.deleteProperty(window, 'apex')
   vi.restoreAllMocks()
 })
 
@@ -60,7 +60,7 @@ describe('ChangesPanel status states', () => {
   it('confirms undoing the selected file before restoring it', async () => {
     const restore = vi.fn(async () => true)
     const diff = vi.fn(async () => ({ path: 'file.txt', staged: false, text: '', truncated: false }))
-    Object.defineProperty(window, 'prime', { configurable: true, value: { git: { diff, restore } } })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { git: { diff, restore } } })
     const onRefreshGit = vi.fn(async () => undefined)
 
     await act(async () => {

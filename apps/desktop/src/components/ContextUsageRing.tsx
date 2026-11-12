@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react'
-import type { PrimeContextUsage, SessionUsage } from '@/types/api'
+import type { ApexContextUsage, SessionUsage } from '@/types/api'
 import { contextDialLabel } from '@/lib/format-cost'
 
 /** How much of the model's context the session has used, as a ring beside the send controls. */
-export function ContextUsageRing({ contextUsage, sessionUsage }: { contextUsage?: PrimeContextUsage | null; sessionUsage?: SessionUsage | null }) {
+export function ContextUsageRing({ contextUsage, sessionUsage }: { contextUsage?: ApexContextUsage | null; sessionUsage?: SessionUsage | null }) {
   const percent = contextUsage?.percent === null || contextUsage?.percent === undefined ? null : Math.min(100, Math.max(0, contextUsage.percent))
   const label = contextDialLabel(contextUsage ?? undefined, sessionUsage ?? undefined)
   return (

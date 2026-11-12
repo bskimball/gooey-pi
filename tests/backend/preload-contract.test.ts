@@ -176,7 +176,7 @@ describe('preload bridge contract', () => {
 
   it('freezes the exposed API and every domain', () => {
     const api = electronMocks.api as BridgeApi
-    expect(electronMocks.contextBridge.exposeInMainWorld).toHaveBeenCalledWith('prime', api)
+    expect(electronMocks.contextBridge.exposeInMainWorld).toHaveBeenCalledWith('apex', api)
     expect(Object.isFrozen(api)).toBe(true)
     for (const domain of Object.values(api)) expect(Object.isFrozen(domain)).toBe(true)
   })

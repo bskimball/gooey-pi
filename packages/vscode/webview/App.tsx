@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CircleNotch, Composer, createSessionSummarySelector, ExtensionUiModal, Robot, SpecialistsPanel, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
-import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, PrimeModelDescriptor, PrimeThinkingLevel, QueuedPrompt, SessionRecord, TranscriptMessage } from 'apex-core/types/api'
+import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, ApexModelDescriptor, ApexThinkingLevel, QueuedPrompt, SessionRecord, TranscriptMessage } from 'apex-core/types/api'
 import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost, sessions } from './host'
 import { SessionPicker } from './SessionPicker'
@@ -85,10 +85,10 @@ export function App() {
   }, [state?.statuses])
 
   const modelsByProvider = useMemo(() => {
-    const grouped = new Map<string, PrimeModelDescriptor[]>()
+    const grouped = new Map<string, ApexModelDescriptor[]>()
     for (const model of state?.models ?? []) {
       const list = grouped.get(model.provider) ?? []
-      list.push(model as PrimeModelDescriptor)
+      list.push(model as ApexModelDescriptor)
       grouped.set(model.provider, list)
     }
     return grouped
@@ -242,10 +242,10 @@ export function App() {
                   disabled={state?.status === 'exited'}
                   messageEnterAction={state?.messageEnterAction ?? 'queue'}
                   model={state?.model ?? ''}
-                  effort={(state?.thinkingLevel ?? 'off') as PrimeThinkingLevel}
+                  effort={(state?.thinkingLevel ?? 'off') as ApexThinkingLevel}
                   modelsByProvider={modelsByProvider}
                   providers={state?.providers ?? []}
-                  reasoningLevels={(state?.thinkingLevels ?? ['off']) as PrimeThinkingLevel[]}
+                  reasoningLevels={(state?.thinkingLevels ?? ['off']) as ApexThinkingLevel[]}
                   fast={false}
                   fastSupported={false}
                   fastAvailable={false}

@@ -37,6 +37,6 @@ Preconditions:
   `button` hits both the sidebar and the tab (strict-mode failure); assert the
   level-1 `^Extend ` heading and the level-2 `Capabilities` directory heading.
 - The exact harness word in `Extend <harness>` depends on the active harness
-  (Pi/OMP/Prime), which the switcher in the top-left controls; do not hard-code it.
+  (Pi).
 - Network MCP capabilities render but are read-only in GooeyPi; a row appearing
   is not proof it was installed by this run.

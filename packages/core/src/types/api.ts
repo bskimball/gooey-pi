@@ -6,9 +6,9 @@ export type { BrowserSourceHint, BrowserSourceResult } from '../browser/source'
  * webview attribute must match the main process's will-attach-webview gate
  * exactly, or webview attach is silently blocked.
  */
-export const BROWSER_PARTITION = 'persist:prime-work-browser'
+export const BROWSER_PARTITION = 'persist:apex-browser'
 
-export interface OmpExtensionTool {
+export interface ApexExtensionTool {
   name: string
   label: string
   description: string
@@ -22,8 +22,8 @@ export interface OmpExtensionTool {
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; details?: unknown; isError?: boolean }>
 }
 
-export interface OmpExtensionApi {
-  registerTool(tool: OmpExtensionTool): void
+export interface ApexExtensionApi {
+  registerTool(tool: ApexExtensionTool): void
 }
 
 export type ThemeMode = 'system' | 'light' | 'dark'
@@ -160,9 +160,9 @@ export interface BrowserAnnotation {
   createdAt: number
 }
 
-export type PrimeCompactionReason = 'manual' | 'threshold' | 'overflow' | 'requested'
-export type PrimeCompactionStatus = 'running' | 'done' | 'failed' | 'cancelled'
-export type PrimeCompactionOutcome = 'failed' | 'cancelled' | 'skipped'
+export type ApexCompactionReason = 'manual' | 'threshold' | 'overflow' | 'requested'
+export type ApexCompactionStatus = 'running' | 'done' | 'failed' | 'cancelled'
+export type ApexCompactionOutcome = 'failed' | 'cancelled' | 'skipped'
 
 export type MessagePart =
   | { type: 'text'; partId?: string; text: string }
@@ -183,9 +183,9 @@ export type MessagePart =
   | {
       type: 'compaction'
       partId?: string
-      status: PrimeCompactionStatus
-      reason?: PrimeCompactionReason
-      outcome?: PrimeCompactionOutcome
+      status: ApexCompactionStatus
+      reason?: ApexCompactionReason
+      outcome?: ApexCompactionOutcome
       tokensBefore?: number
       firstKeptEntryId?: string
       summary?: string
@@ -211,7 +211,7 @@ export interface TranscriptMessage {
   streaming?: boolean
 }
 
-export interface PrimeContextUsage {
+export interface ApexContextUsage {
   tokens: number | null
   contextWindow: number
   percent: number | null
@@ -245,21 +245,21 @@ export interface RuntimeInfo {
   /** Renderer-local notice; never persisted or used to update the model picker. */
   executingModel?: { provider?: string; id: string; label: string; isFallback: true } | null
   thinkingLevel?: string
-  availableThinkingLevels?: PrimeThinkingLevel[]
+  availableThinkingLevels?: ApexThinkingLevel[]
   fastModeSupported?: boolean
   imageInputSupported?: boolean
   fastModeAvailable?: boolean
-  serviceTier?: PrimeServiceTier
-  contextUsage?: PrimeContextUsage
+  serviceTier?: ApexServiceTier
+  contextUsage?: ApexContextUsage
   sessionUsage?: SessionUsage
 }
 
-export const PRIME_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
-export type PrimeThinkingLevel = (typeof PRIME_THINKING_LEVELS)[number]
-export type PrimeServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority' | null
+export const APEX_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+export type ApexThinkingLevel = (typeof APEX_THINKING_LEVELS)[number]
+export type ApexServiceTier = 'auto' | 'default' | 'flex' | 'scale' | 'priority' | null
 export type ProviderAuthMethod = 'oauth' | 'api_key' | 'external'
 
-export interface PrimeModelDescriptor {
+export interface ApexModelDescriptor {
   key: string
   provider: string
   id: string
@@ -268,14 +268,14 @@ export interface PrimeModelDescriptor {
   input: Array<'text' | 'image'>
   contextWindow: number
   maxTokens: number
-  availableThinkingLevels: PrimeThinkingLevel[]
+  availableThinkingLevels: ApexThinkingLevel[]
   fastModeSupported: boolean
   available: boolean
   /** Apex visibility policy for this harness; absent catalogs predate per-model controls. */
   enabled?: boolean
 }
 
-export interface PrimeProviderDescriptor {
+export interface ApexProviderDescriptor {
   id: string
   name: string
   authMethod: ProviderAuthMethod
@@ -285,15 +285,15 @@ export interface PrimeProviderDescriptor {
   enabled: boolean
 }
 
-export interface PrimeModelCatalog {
-  primeVersion: string
+export interface ApexModelCatalog {
+  apexVersion: string
   refreshedAt: string
-  models: PrimeModelDescriptor[]
-  providers: PrimeProviderDescriptor[]
+  models: ApexModelDescriptor[]
+  providers: ApexProviderDescriptor[]
   warning?: string
 }
 
-export interface PrimeEventEnvelope {
+export interface ApexEventEnvelope {
   runtimeId: string
   event: Record<string, unknown>
 }
@@ -546,9 +546,9 @@ export interface AppSettings {
   browserEnabled: boolean
   /** Expose the separately installed TryCUA driver to new sessions through its official CLI. */
   computerUseEnabled: boolean
-  /** Providers hidden from Prime Work's pi model picker; pi config is untouched. */
+  /** Providers hidden from Apex's pi model picker; pi config is untouched. */
   piDisabledProviders: string[]
-  /** Models hidden from Prime Work's pi model picker; pi config is untouched. */
+  /** Models hidden from Apex's pi model picker; pi config is untouched. */
   piDisabledModels: string[]
   /** Last usable model selected in each harness; blank falls back to the first usable catalog model. */
   lastSelectedModels: Record<HarnessId, string>
@@ -622,8 +622,8 @@ export interface VoiceTaskStarted {
   runtimeId: string
   sessionId?: string
   sessionFile: string
-  model?: Pick<PrimeModelDescriptor, 'key' | 'provider' | 'id' | 'name'>
-  reasoning?: PrimeThinkingLevel
+  model?: Pick<ApexModelDescriptor, 'key' | 'provider' | 'id' | 'name'>
+  reasoning?: ApexThinkingLevel
 }
 
 export type VoiceToolRequest =
@@ -652,7 +652,7 @@ export type ScheduleTiming =
 
 export interface ScheduleExecution {
   model: 'auto' | string
-  thinking: 'auto' | PrimeThinkingLevel
+  thinking: 'auto' | ApexThinkingLevel
   speed: 'normal' | 'fast'
 }
 
@@ -774,7 +774,7 @@ export interface AgentBrowserPointerEvent {
   durationMs: number
 }
 
-export interface PrimeWorkApi {
+export interface ApexApi {
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
     getState(): Promise<AppUpdateState>
@@ -818,13 +818,13 @@ export interface PrimeWorkApi {
     command(runtimeId: string, command: Record<string, unknown>): Promise<Record<string, unknown>>
     stop(runtimeId: string): Promise<boolean>
     list(): Promise<RuntimeInfo[]>
-    onEvent(callback: (envelope: PrimeEventEnvelope) => void): () => void
+    onEvent(callback: (envelope: ApexEventEnvelope) => void): () => void
   }
   providers: {
-    catalog(force?: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
-    setEnabled(providerId: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
-    setDisabled(providerIds: string[], harness?: HarnessId): Promise<PrimeModelCatalog>
-    setModelEnabled(modelKey: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
+    catalog(force?: boolean, harness?: HarnessId): Promise<ApexModelCatalog>
+    setEnabled(providerId: string, enabled: boolean, harness?: HarnessId): Promise<ApexModelCatalog>
+    setDisabled(providerIds: string[], harness?: HarnessId): Promise<ApexModelCatalog>
+    setModelEnabled(modelKey: string, enabled: boolean, harness?: HarnessId): Promise<ApexModelCatalog>
   }
   voice: {
     credentialStatus(): Promise<VoiceCredentialStatus>
@@ -897,4 +897,4 @@ export interface PrimeWorkApi {
   }
 }
 
-declare global { interface Window { prime: PrimeWorkApi } }
+declare global { interface Window { apex: ApexApi } }

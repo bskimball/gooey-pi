@@ -9,7 +9,7 @@ import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
 function store(): JsonStateStore {
-  const dir = mkdtempSync(join(tmpdir(), 'prime-work-automation-'))
+  const dir = mkdtempSync(join(tmpdir(), 'apex-automation-'))
   dirs.push(dir)
   return new JsonStateStore(join(dir, 'state.json'))
 }

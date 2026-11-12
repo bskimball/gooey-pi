@@ -16,7 +16,7 @@ import { readSavedPiBehaviorMode } from '../../apps/desktop/src/lib/harness'
 import { usePluginSkills } from '../../apps/desktop/src/hooks/usePluginSkills'
 import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRuntime'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
-import type { AppSettings, PluginCatalog, PrimeWorkApi, ProjectRecord, RuntimeInfo, SessionRecord, SkillRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { AppSettings, PluginCatalog, ApexApi, ProjectRecord, RuntimeInfo, SessionRecord, SkillRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -83,7 +83,7 @@ describe('settings queue reconciliation', () => {
       .mockImplementationOnce(() => second.promise)
     const bridge = {
       settings: { get: async () => DEFAULT_SETTINGS, update },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const external = vi.fn(async () => ({ settings: { ...DEFAULT_SETTINGS, sidebarOpen: false, terminalOpen: true, activeHarness: 'pi' as const } }))
     const reportError = vi.fn()
     let state!: ReturnType<typeof useAppSettings>
@@ -117,7 +117,7 @@ describe('settings queue reconciliation', () => {
     const persisted = deferred<AppSettings>()
     const bridge = {
       settings: { get: () => persisted.promise },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useAppSettings>
     function SettingsProbe() {
@@ -140,7 +140,7 @@ describe('settings queue reconciliation', () => {
       .mockImplementationOnce(() => second.promise)
     const bridge = {
       settings: { get: async () => DEFAULT_SETTINGS, update },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const errors: unknown[] = []
     const reportError = (error: unknown) => { errors.push(error) }
     let state!: ReturnType<typeof useAppSettings>
@@ -171,7 +171,7 @@ describe('settings queue reconciliation', () => {
     const save = deferred<AppSettings>()
     const bridge = {
       settings: { get: async () => DEFAULT_SETTINGS, update: () => save.promise },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useAppSettings>
     function SettingsProbe() {
@@ -194,7 +194,7 @@ describe('settings queue reconciliation', () => {
 
   it('keeps a local-only panel close across later unrelated saves', async () => {
     const update = vi.fn(async (patch: Partial<AppSettings>) => ({ ...DEFAULT_SETTINGS, ...patch }))
-    const bridge = { settings: { get: async () => DEFAULT_SETTINGS, update } } as unknown as PrimeWorkApi
+    const bridge = { settings: { get: async () => DEFAULT_SETTINGS, update } } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useAppSettings>
     function SettingsProbe() {
@@ -226,7 +226,7 @@ describe('transcript read ownership', () => {
     const read = vi.fn()
       .mockResolvedValueOnce([message('loaded')])
       .mockImplementationOnce(() => staleRead.promise)
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     let state!: ReturnType<typeof useWorkspaceRuntime>
     function WorkspaceProbe() {
       state = useWorkspaceRuntime({
@@ -261,7 +261,7 @@ describe('transcript read ownership', () => {
     const read = vi.fn()
       .mockResolvedValueOnce([message('loaded:')])
       .mockImplementationOnce(() => staleRead.promise)
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useWorkspaceRuntime>
     function WorkspaceProbe() {
@@ -294,7 +294,7 @@ describe('transcript read ownership', () => {
 
   it('clears prompt admission on transport_error and runtime_exit so reconciliation recovers', async () => {
     const read = vi.fn().mockResolvedValue([message('loaded:')])
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useWorkspaceRuntime>
     function WorkspaceProbe() {
@@ -322,7 +322,7 @@ describe('transcript read ownership', () => {
 
   it('starts an admitted load even when the session catalog record has diverged', async () => {
     const read = vi.fn().mockResolvedValue([message('loaded:')])
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     const reportError = vi.fn()
     const renamedRecord: SessionRecord = { ...session, id: 'two', filePath: '/sessions/two-renamed.jsonl', title: 'Two' }
     const activatedSession: SessionRecord = { ...session, id: 'two', filePath: '/sessions/two.jsonl', title: 'Two' }
@@ -352,7 +352,7 @@ describe('transcript read ownership', () => {
       .mockResolvedValueOnce([message('loaded:')])
       .mockImplementationOnce(() => pendingRead.promise)
     const nextSession: SessionRecord = { ...session, id: 'next', filePath: '/sessions/next.jsonl', title: 'Next' }
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useWorkspaceRuntime>
     function WorkspaceProbe() {
@@ -380,7 +380,7 @@ describe('transcript read ownership', () => {
 
 describe('agent event frame queue', () => {
   function mountWorkspace(read: ReturnType<typeof vi.fn>) {
-    const bridge = { sessions: { read } } as unknown as PrimeWorkApi
+    const bridge = { sessions: { read } } as unknown as ApexApi
     const reportError = vi.fn()
     let state!: ReturnType<typeof useWorkspaceRuntime>
     function WorkspaceProbe() {
@@ -474,7 +474,7 @@ describe('agent event git refresh timer', () => {
       const unsubscribe = vi.fn()
       const bridge = {
         agent: { onEvent: (callback: typeof handler) => { handler = callback; return unsubscribe } },
-      } as unknown as PrimeWorkApi
+      } as unknown as ApexApi
       const refreshGit = vi.fn(async () => undefined)
       function AgentEventsProbe() {
         useAgentEvents({
@@ -534,9 +534,9 @@ describe('bootstrap critical path', () => {
           list: async () => [runtime],
           onEvent: (callback: typeof agentEvent) => { agentEvent = callback; return () => undefined },
         },
-        app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', primeAvailable: true }) },
+        app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', apexAvailable: true }) },
         schedules: { list: async () => [] },
-      } as unknown as PrimeWorkApi
+      } as unknown as ApexApi
       const runtimeIdRef = { current: runtime.runtimeId as string | null }
       const runtimeSessionsRef = { current: new Map([[runtime.runtimeId, session.filePath]]) }
       const runtimeOwnerRef = { current: null }
@@ -626,7 +626,7 @@ describe('bootstrap critical path', () => {
       agent: { list: async () => [] },
       app: { getMeta: async () => ({ version: '1' }) },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const workspaceRef = { current: { generation: 0 } }
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const activateWorkspace = vi.fn(() => 1)
@@ -653,7 +653,7 @@ describe('bootstrap critical path', () => {
     try {
       const starting = deferred<RuntimeInfo>()
       const start = vi.fn(() => starting.promise)
-      const bridge = { agent: { list: async () => [], start } } as unknown as PrimeWorkApi
+      const bridge = { agent: { list: async () => [], start } } as unknown as ApexApi
       const initialFile = change === 'session' ? undefined : session.filePath
       const workspaceRef = { current: { generation: 1, project, cwd: project.path, sessionFile: initialFile } }
       const attachRuntime = vi.fn()
@@ -680,7 +680,7 @@ describe('bootstrap critical path', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const start = vi.fn(async () => runtime)
-      const bridge = { agent: { list: async () => [], start } } as unknown as PrimeWorkApi
+      const bridge = { agent: { list: async () => [], start } } as unknown as ApexApi
       const workspaceRef = { current: { generation: 1, project, cwd: project.path, sessionFile: session.filePath } }
       function PrewarmProbe({ runtimeId }: { runtimeId: string | undefined }) {
         useRuntimePrewarm({ bridge, ready: true, harness: 'pi', generation: 1, workspaceRef,
@@ -701,7 +701,7 @@ describe('bootstrap critical path', () => {
       projects: { list: () => pendingProjects.promise },
       sessions: { list: async () => [session], onChanged: () => () => undefined },
       agent: { list: async () => [] }, app: { getMeta: async () => ({ version: '1' }) }, schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const workspaceRef = { current: { generation: 0 } }
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const noop = () => undefined
@@ -730,9 +730,9 @@ describe('bootstrap critical path', () => {
       projects: { list: async () => [project] },
       sessions: { list: async () => [session], onChanged: () => () => undefined },
       agent: { list: () => runtimes.promise },
-      app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', primeAvailable: true }) },
+      app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', apexAvailable: true }) },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const workspaceRef = { current: { generation: 0 } as { generation: number; project?: ProjectRecord; session?: SessionRecord; cwd?: string; sessionFile?: string } }
     const activated: Array<{ project?: ProjectRecord; session?: SessionRecord }> = []
     const attached: RuntimeInfo[] = []
@@ -773,9 +773,9 @@ describe('bootstrap critical path', () => {
       projects: { list: async () => [project] },
       sessions: { list: async () => [session], onChanged: () => () => undefined },
       agent: { list: () => runtimes.promise },
-      app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', primeAvailable: true }) },
+      app: { getMeta: async () => ({ version: '1', platform: 'darwin', arch: 'arm64', apexAvailable: true }) },
       schedules: { list: async () => [] },
-    } as unknown as PrimeWorkApi
+    } as unknown as ApexApi
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const workspaceRef = { current: { generation: 0 } }
     const setProjects = vi.fn()
@@ -812,7 +812,7 @@ describe('extension UI runtime ownership', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const command = vi.fn().mockResolvedValue({})
-      const bridge = { agent: { command } } as unknown as PrimeWorkApi
+      const bridge = { agent: { command } } as unknown as ApexApi
       const runtimeSessionsRef = { current: new Map<string, string>() }
       const setSessions = vi.fn()
       const setRuntime = vi.fn()
@@ -848,7 +848,7 @@ describe('extension UI runtime ownership', () => {
   it('retains a background request and surfaces it when that runtime activates', async () => {
     const command = vi.fn().mockResolvedValue({})
     const stop = vi.fn().mockResolvedValue(true)
-    const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command, stop } } as unknown as ApexApi
     const agentTurn = createAgentTurnHandle()
     agentTurn.send({ type: 'ADMITTED' })
     agentTurn.send({ type: 'MIRRORED_IDLE' })
@@ -882,7 +882,7 @@ describe('extension UI runtime ownership', () => {
     let questionNumber = 0
     const askBackground = () => state.showExtensionUi('background', {
       type: 'extension_ui_request', id: 'question', method: 'select', title: 'Question',
-      options: [`__prime_ask_user__background-group-${++questionNumber}:0:1`, 'Yes'],
+      options: [`__apex_ask_user__background-group-${++questionNumber}:0:1`, 'Yes'],
     })
     await act(async () => { askBackground(); await state.respondForRuntime('background', { values: { question: 'Yes' } }) })
     expect(isAgentBusy(agentTurn.current())).toBe(false)
@@ -897,7 +897,7 @@ describe('extension UI runtime ownership', () => {
 
   it('groups ask_user question requests and responds to every pending question', async () => {
     const command = vi.fn().mockResolvedValue({})
-    const bridge = { agent: { command } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command } } as unknown as ApexApi
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const setSessions = vi.fn()
     const setRuntime = vi.fn()
@@ -912,11 +912,11 @@ describe('extension UI runtime ownership', () => {
     await act(async () => {
       state.showExtensionUi('runtime', {
         type: 'extension_ui_request', id: 'question-1', method: 'select', title: 'First question',
-        options: ['__prime_ask_user__group-1:0:2', 'A', 'B'],
+        options: ['__apex_ask_user__group-1:0:2', 'A', 'B'],
       })
       state.showExtensionUi('runtime', {
         type: 'extension_ui_request', id: 'question-2', method: 'select', title: 'Second question',
-        options: ['__prime_ask_user__group-1:1:2', 'C', 'D'],
+        options: ['__apex_ask_user__group-1:1:2', 'C', 'D'],
       })
     })
 
@@ -940,7 +940,7 @@ describe('extension UI runtime ownership', () => {
   it('stops the agent when an ask_user questionnaire is dismissed', async () => {
     const command = vi.fn().mockResolvedValue({})
     const stop = vi.fn().mockResolvedValue(true)
-    const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command, stop } } as unknown as ApexApi
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const setSessions = vi.fn()
     const setRuntime = vi.fn()
@@ -955,7 +955,7 @@ describe('extension UI runtime ownership', () => {
     await act(async () => {
       state.showExtensionUi('runtime', {
         type: 'extension_ui_request', id: 'question-1', method: 'select', title: 'First question',
-        options: ['__prime_ask_user__group-1:0:1', 'A', 'B'],
+        options: ['__apex_ask_user__group-1:0:1', 'A', 'B'],
       })
     })
     await act(async () => { await state.respondToExtensionUi({ cancelled: true }) })
@@ -970,7 +970,7 @@ describe('extension UI runtime ownership', () => {
     try {
       const command = vi.fn().mockResolvedValue({})
       const stop = vi.fn().mockResolvedValue(true)
-      const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+      const bridge = { agent: { command, stop } } as unknown as ApexApi
       const runtimeSessionsRef = { current: new Map<string, string>() }
       const setSessions = vi.fn()
       const setRuntime = vi.fn()
@@ -985,7 +985,7 @@ describe('extension UI runtime ownership', () => {
       await act(async () => {
         state.showExtensionUi('runtime', {
           type: 'extension_ui_request', id: 'question-1', method: 'select', title: 'First question',
-          options: ['__prime_ask_user__group-1:0:1', 'A', 'B'],
+          options: ['__apex_ask_user__group-1:0:1', 'A', 'B'],
         })
       })
       expect(state.extensionUi?.request.method === 'questionnaire' ? state.extensionUi.request.timeout : undefined).toBe(120_000)
@@ -1007,7 +1007,7 @@ describe('extension UI runtime ownership', () => {
   it('tracks behavior mode status per runtime and cancels non-questionnaire dialogs without stopping the runtime', async () => {
     const command = vi.fn().mockResolvedValue({})
     const stop = vi.fn().mockResolvedValue(true)
-    const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+    const bridge = { agent: { command, stop } } as unknown as ApexApi
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const setSessions = vi.fn()
     const setRuntime = vi.fn()
@@ -1051,7 +1051,7 @@ describe('plugin request ownership', () => {
     const requests = Array.from({ length: 4 }, () => deferred<PluginCatalog>())
     const list = vi.fn()
     for (const request of requests) list.mockImplementationOnce(() => request.promise)
-    const bridge = { plugins: { list } } as unknown as PrimeWorkApi
+    const bridge = { plugins: { list } } as unknown as ApexApi
     const reportError = vi.fn()
     const skill = (id: string): SkillRecord => ({ id, name: id, description: id, kind: 'skill', location: 'project', enabled: true })
     let state!: ReturnType<typeof usePluginSkills>

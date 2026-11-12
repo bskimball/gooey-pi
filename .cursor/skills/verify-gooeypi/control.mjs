@@ -6,7 +6,7 @@
 // would (sidebar clicks, keyboard shortcuts), and captures evidence
 // (screenshot + ARIA snapshot). Each invocation is a self-contained session:
 // launch -> drive -> capture -> tear down. It never touches your real
-// ~/.prime / ~/.omp / ~/.pi state or an app instance it did not start.
+// ~/.pi state or an app instance it did not start.
 //
 // Requires a display. On a headless machine wrap the command in `xvfb-run -a`.
 //
@@ -54,7 +54,7 @@ async function launch() {
   mkdirSync(home, { recursive: true })
   mkdirSync(userData, { recursive: true })
 
-  const env = { ...process.env, HOME: home, PRIME_WORK_E2E_HIDE_WINDOWS: '0' }
+  const env = { ...process.env, HOME: home, APEX_E2E_HIDE_WINDOWS: '0' }
   if (!env.DISPLAY) throw new Error('No DISPLAY set. Run under `xvfb-run -a` or an X server.')
 
   const app = await electron.launch({
@@ -72,7 +72,7 @@ async function launch() {
   return { app, page, fixtureRoot, errors }
 }
 
-// A fresh HOME has no Pi/OMP/Prime harness, so GooeyPi shows a modal that makes
+// A fresh HOME has no Pi harness, so GooeyPi shows a modal that makes
 // the shell `inert`. Dismiss it so the sidebar is interactive. This is expected
 // verification-only state, not a defect.
 async function dismissNoHarnessPrompt(page) {

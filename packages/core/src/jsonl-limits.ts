@@ -7,13 +7,13 @@
  * session appear in the catalog while its transcript refused to open.
  *
  * Tiers, largest to smallest:
- * - SESSION_FILE_RECORD_LIMIT_BYTES (64 MiB): records in `~/.prime` session
+ * - SESSION_FILE_RECORD_LIMIT_BYTES (64 MiB): records in `~/.pi` session
  *   .jsonl files. Session files are produced by the local Pi, so this
  *   tier is deliberately generous; downstream display budgets
  *   (`MAX_TRANSCRIPT_GRAPH_BYTES` and friends) bound retained memory.
  * - RPC_READ_FRAME_LIMIT_BYTES (16 MiB): frames read from an agent RPC child's
  *   stdout. Larger than the write tier because responses embed tool output.
- * - RPC_WRITE_FRAME_LIMIT_BYTES (2 MiB): frames Prime Work writes to an agent
+ * - RPC_WRITE_FRAME_LIMIT_BYTES (2 MiB): frames Apex writes to an agent
  *   RPC child's stdin (commands, prompts, and base64 image payloads).
  */
 export const SESSION_FILE_RECORD_LIMIT_BYTES = 64 * 1024 * 1024

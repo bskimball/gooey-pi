@@ -2,15 +2,15 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser-agent'
+import type { ApexExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser-agent'
 
-type Tool = Parameters<OmpExtensionApi['registerTool']>[0]
+type Tool = Parameters<ApexExtensionApi['registerTool']>[0]
 let root: string
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'apex-browser-shim-'))
   vi.resetModules()
-  vi.stubEnv('PRIME_WORK_BROWSER_URL', 'https://broker.test')
-  vi.stubEnv('PRIME_WORK_BROWSER_TOKEN', 'test-token')
+  vi.stubEnv('APEX_BROWSER_URL', 'https://broker.test')
+  vi.stubEnv('APEX_BROWSER_TOKEN', 'test-token')
   vi.stubEnv('APEX_BROWSER_AGENT_RUNTIME_PATH', undefined)
   vi.stubEnv('APEX_BROWSER_AGENT_STATE_DIR', root)
   vi.stubEnv('APEX_BROWSER_AGENT_MODEL', undefined)
@@ -51,7 +51,7 @@ function text(result: Awaited<ReturnType<Tool['execute']>>) {
 }
 
 describe('browser agent extension', () => {
-  it.each(['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'])('registers nothing without %s', async (variable) => {
+  it.each(['APEX_BROWSER_URL', 'APEX_BROWSER_TOKEN'])('registers nothing without %s', async (variable) => {
     vi.stubEnv(variable, undefined)
     expect((await load()).tools.size).toBe(0)
   })

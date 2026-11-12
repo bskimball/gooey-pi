@@ -5,12 +5,12 @@
  * identity).
  */
 export {
-  applyPrimeEvent,
+  applyApexEvent,
   createSteerAcceptedEvent,
   createSteerPickupEvent,
-  createPrimeEventBuffer,
-  replayPrimeEvents,
-  type PrimeEventBuffer,
-  type PrimeEventReplayStats,
+  createApexEventBuffer,
+  replayApexEvents,
+  type ApexEventBuffer,
+  type ApexEventReplayStats,
 } from './events/reduce'
 export { resetTranscriptIdsForTests } from './events/ids'

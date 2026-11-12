@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EXTENSION_INJECTIONS, SHIPPED_EXTENSION_FILENAMES, resolveExtensionPath, type ExtensionInjection } from '../../apps/desktop/electron/main/extension-manifest'
-import type { OmpExtensionApi } from '../../apps/desktop/assets/extensions/omp-work-browser'
+import type { ApexExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser'
 import type { PiFastModeExtensionApi } from '../../apps/desktop/assets/extensions/pi-work-fast-mode'
 
 type Registration = { kind: 'tool' | 'command' | 'event'; name: string }
@@ -13,12 +13,12 @@ interface Fixture {
   registrations: Registration[]
 }
 
-type PiFixtureApi = PiFastModeExtensionApi & Omit<OmpExtensionApi, 'typebox'>
+type PiFixtureApi = PiFastModeExtensionApi & Omit<ApexExtensionApi, 'typebox'>
 
-function ompHost(): Fixture {
+function apexHost(): Fixture {
   const registrations: Registration[] = []
   const schema = (kind: string) => (...args: unknown[]) => ({ kind, args })
-  const target: OmpExtensionApi = {
+  const target: ApexExtensionApi = {
     typebox: {
       Type: {
         Object: schema('object'),
@@ -66,14 +66,14 @@ const fixtureFactories = { pi: piHost }
 const expectedRegistrations: Record<string, Registration[]> = {
   'apex-editor.ts': ['editor_context', 'editor_read', 'editor_diagnostics', 'editor_open'].map((name) => ({ kind: 'tool', name })),
   'apex-browser-agent.ts': [{ kind: 'tool', name: 'browser_task' }, { kind: 'tool', name: 'browser_run' }],
-  'omp-work-browser.ts': [
+  'apex-browser.ts': [
     ...['terminal_read', 'browser_tabs', 'browser_navigate', 'browser_screenshot', 'browser_read_page', 'browser_click', 'browser_type', 'browser_press_key', 'browser_scroll', 'browser_evaluate'].map((name) => ({ kind: 'tool' as const, name })),
   ],
-  'omp-work-ask-user.ts': [{ kind: 'tool', name: 'ask_user' }],
-  'omp-work-collaboration.ts': [
+  'apex-ask-user.ts': [{ kind: 'tool', name: 'ask_user' }],
+  'apex-collaboration.ts': [
     ...['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_wait'].map((name) => ({ kind: 'tool' as const, name })),
   ],
-  'omp-work-schedules.ts': [
+  'apex-schedules.ts': [
     ...['scheduled_tasks_list', 'scheduled_task_create_once', 'scheduled_task_create_recurring', 'scheduled_task_update', 'scheduled_task_manage'].map((name) => ({ kind: 'tool' as const, name })),
   ],
   'pi-work-fast-mode.ts': [
@@ -85,9 +85,9 @@ const expectedRegistrations: Record<string, Registration[]> = {
 
 const brokerVariables: Partial<Record<ExtensionInjection['capability'], readonly [string, string]>> = {
   editor: ['APEX_EDITOR_URL', 'APEX_EDITOR_TOKEN'],
-  browser: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
-  browserAgent: ['PRIME_WORK_BROWSER_URL', 'PRIME_WORK_BROWSER_TOKEN'],
-  schedule: ['PRIME_WORK_SCHEDULE_URL', 'PRIME_WORK_SCHEDULE_TOKEN'],
+  browser: ['APEX_BROWSER_URL', 'APEX_BROWSER_TOKEN'],
+  browserAgent: ['APEX_BROWSER_URL', 'APEX_BROWSER_TOKEN'],
+  schedule: ['APEX_SCHEDULE_URL', 'APEX_SCHEDULE_TOKEN'],
   collaboration: ['GOOEYPI_COLLABORATION_URL', 'GOOEYPI_COLLABORATION_TOKEN'],
 }
 
@@ -152,11 +152,11 @@ describe('shipped extension contracts', () => {
   })
 
   it('rejects an extension that reaches for a capability its host does not inject', () => {
-    const badExtension = (api: OmpExtensionApi) => {
+    const badExtension = (api: ApexExtensionApi) => {
       api.typebox!.Type.Object({})
     }
-    expect(() => badExtension(ompHost().api as OmpExtensionApi)).not.toThrow()
-    expect(() => badExtension(piHost().api as OmpExtensionApi)).toThrow()
+    expect(() => badExtension(apexHost().api as ApexExtensionApi)).not.toThrow()
+    expect(() => badExtension(piHost().api as ApexExtensionApi)).toThrow()
   })
 
   it('keeps tool registrations namespaced', () => {
@@ -204,7 +204,7 @@ describe('describeEffectiveRunConfig', () => {
       writeFileSync(join(agentDir, 'AGENTS.md'), 'global')
       writeFileSync(join(agentDir, 'SYSTEM.md'), 'sys')
       writeFileSync(join(agentDir, 'auth.json'), '{"secret":true}')
-      writeFileSync(join(assets, 'omp-work-ask-user.ts'), '')
+      writeFileSync(join(assets, 'apex-ask-user.ts'), '')
       const result = describeEffectiveRunConfig({ cwd: project, harness: 'pi', home: join(root, 'home'), agentDir, extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
       expect(result.instructionSources.map(({ scope, kind, bytes }) => [scope, kind, bytes])).toEqual([['user', 'AGENTS.md', 6], ['project', 'AGENTS.md', 7], ['parent', 'AGENTS.override.md', 8], ['user', 'SYSTEM.md', 3]])
       const linked = join(root, 'linked')

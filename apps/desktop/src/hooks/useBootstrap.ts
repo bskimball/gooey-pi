@@ -8,7 +8,7 @@ import { hasRendererStatusProvenance, isSessionWaiting } from '@/app/session-att
 import type {
   AppMeta,
   HarnessId,
-  PrimeWorkApi,
+  ApexApi,
   ProjectRecord,
   RuntimeInfo,
   AutomationScheduleRecord,
@@ -16,7 +16,7 @@ import type {
 } from '@/types/api'
 
 interface UseBootstrapOptions {
-  bridge: PrimeWorkApi | null
+  bridge: ApexApi | null
   queryClient?: QueryClient
   /** Wait until persisted settings select the authoritative startup harness. */
   ready?: boolean
