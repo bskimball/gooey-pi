@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ChatCircleDots, Check, CheckCircle, Clock, Square, WarningCircle } from '@/components/icons'
+import { ApexButton, IconButton } from '@/components/ui'
 import { ContextUsageRing } from '@/components/ContextUsageRing'
 import { StatusMark } from './StatusMark'
 import {
@@ -264,48 +265,51 @@ export function ActivityRow({
                 onKeyDown={handleConfirmKeyDown}
               >
                 <span className="activity-stop-confirm__prompt">Stop this run?</span>
-                <button
+                <ApexButton
                   ref={cancelStopRef}
                   type="button"
-                  className="button button--compact activity-stop-confirm__cancel"
+                  compact
+                  className="activity-stop-confirm__cancel"
                   onClick={cancelStopConfirm}
                 >
                   Cancel
-                </button>
-                <button
+                </ApexButton>
+                <ApexButton
                   type="button"
-                  className="button button--compact button--danger activity-stop-confirm__confirm"
+                  compact
+                  variant="danger"
+                  className="activity-stop-confirm__confirm"
                   onClick={() => {
                     setConfirmingStop(false)
                     onStop?.(session, live?.runtimeId)
                   }}
                 >
                   Stop
-                </button>
+                </ApexButton>
               </div>
             ) : (
-              <button
+              <IconButton
                 ref={stopTriggerRef}
-                type="button"
-                className="icon-button icon-button--small activity-row__stop"
-                aria-label={`Stop ${session.title}`}
+                size="small"
+                className="activity-row__stop"
+                label={`Stop ${session.title}`}
                 title="Stop run"
                 onClick={() => setConfirmingStop(true)}
               >
                 <Square size={12} weight="fill" />
-              </button>
+              </IconButton>
             )
           ) : (
-            <button
+            <ApexButton
               type="button"
               className={`activity-row__clear activity-row__clear--${session.status}`}
               aria-label={`Mark ${session.title} reviewed`}
               title="Mark reviewed"
               onClick={() => onClear([session])}
+              icon={<Check size={13} />}
             >
-              <Check size={13} />
-              <span>Mark reviewed</span>
-            </button>
+              Mark reviewed
+            </ApexButton>
           )}
         </div>
       ) : null}

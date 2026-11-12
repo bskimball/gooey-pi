@@ -1,7 +1,5 @@
 /* Modal and palette */
-.modal-backdrop, .palette-backdrop { position: fixed; z-index: 200; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6, 11, 18, .46); backdrop-filter: blur(4px); animation: fade-in 130ms ease-out; }
-.palette-backdrop { animation: none; }
-.modal { width: min(100%, 500px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: modal-in 150ms ease-out; }
+.modal { margin: auto; width: min(100%, 500px); overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: modal-in 150ms ease-out; }
 .modal__header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); }
 .modal__header h2 { margin: 0; font-size: 14px; font-weight: 550; }
 .modal__body { padding: 16px; color: var(--text-secondary); font-size: var(--fs-ui); }
@@ -50,9 +48,6 @@
 .command-results small { overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-micro); white-space: nowrap; text-overflow: ellipsis; }
 .command-results > p { padding: 26px; color: var(--text-tertiary); text-align: center; }
 .command-palette footer { height: 33px; display: flex; align-items: center; gap: 13px; padding: 0 12px; border-top: 1px solid var(--border); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-micro); }
-.toast { position: fixed; z-index: 300; left: 50%; bottom: 18px; max-width: min(520px, calc(100% - 32px)); min-height: 36px; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px; transform: translateX(-50%); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); color: var(--text); background: var(--surface-raised); box-shadow: var(--shadow-popover); font-size: var(--fs-ui); }
-.toast button { width: 22px; height: 22px; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; }
-.toast button:hover { background: var(--surface-hover); }
 .panel-scrim { display: none; }
 
 .spin { animation: spin .9s linear infinite; }

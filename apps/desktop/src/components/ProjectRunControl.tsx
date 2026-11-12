@@ -1,5 +1,8 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import { ArrowCounterClockwise, CaretDown, CheckCircle, CircleNotch, Play, Square, WarningCircle } from './icons'
 import { StatusMark } from './activity/StatusMark'
+import { ApexButton, IconButton } from './ui'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ProjectRecord } from '@/types/api'
 
@@ -93,30 +96,58 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
   return (
     <div ref={rootRef} className="project-run-control">
       <div className={`project-run-split ${running ? 'is-running' : ''}`}>
-        <button type="button" title={running ? (activeKind === 'setup' ? 'Stop setup' : 'Stop project') : 'Run project'} className="project-run-split__primary" aria-label={running ? `Stop ${activeKind} script` : 'Run project'} onClick={runPrimary}>
+        <IconButton
+          size="small"
+          title={running ? (activeKind === 'setup' ? 'Stop setup' : 'Stop project') : 'Run project'}
+          className="project-run-split__primary"
+          label={running ? `Stop ${activeKind} script` : 'Run project'}
+          onClick={runPrimary}
+        >
           {running ? <Square size={11} fill="currentColor" /> : <Play size={15} />}
-        </button>
-        <button type="button" title="Configure project scripts" className="project-run-split__menu" aria-label="Configure project scripts" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => setOpen((value) => !value)}>
+        </IconButton>
+        <IconButton
+          size="small"
+          title="Configure project scripts"
+          className="project-run-split__menu"
+          label="Configure project scripts"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => setOpen((value) => !value)}
+        >
           <CaretDown size={13} />
-        </button>
+        </IconButton>
       </div>
       {open ? (
         <section id={menuId} className="project-run-menu" role="dialog" aria-label={`Scripts for ${project.name}`}>
           <header><strong>Project scripts</strong><small>{project.name}</small></header>
-          <label htmlFor={`${menuId}-setup`}>
-            <span>Setup command</span>
-            <textarea id={`${menuId}-setup`} className="mono" rows={2} value={setup} placeholder="npm install" spellCheck={false} onChange={(event) => setSetup(event.target.value)} />
-            <small>Runs once when first configured, and again whenever this command changes.</small>
-          </label>
+          <TextArea
+            id={`${menuId}-setup`}
+            label="Setup command"
+            description="Runs once when first configured, and again whenever this command changes."
+            rows={2}
+            value={setup}
+            placeholder="npm install"
+            hasSpellCheck={false}
+            controlClassName="mono"
+            onChange={(value) => setSetup(value)}
+          />
           {setupStatus}
-          <label htmlFor={`${menuId}-run`}>
-            <span>Run command</span>
-            <textarea ref={runInputRef} id={`${menuId}-run`} className="mono" rows={2} value={run} placeholder="npm run dev" spellCheck={false} onChange={(event) => setRun(event.target.value)} />
-          </label>
-          {error ? <p className="project-run-menu__error" role="alert">{error}</p> : null}
+          <TextArea
+            ref={runInputRef}
+            id={`${menuId}-run`}
+            label="Run command"
+            rows={2}
+            value={run}
+            placeholder="npm run dev"
+            hasSpellCheck={false}
+            controlClassName="mono"
+            onChange={(value) => setRun(value)}
+          />
+          {error ? <Banner status="error" role="alert" className="project-run-menu__error" title={error} /> : null}
           <footer>
-            <button type="button" className="button button--quiet" disabled={!project.scripts?.setup.trim() || running || saving} onClick={() => startScript('setup')}><ArrowCounterClockwise size={13} /> Run setup again</button>
-            <button type="button" className="button button--primary" disabled={saving} onClick={() => void save()}>{saving ? <CircleNotch className="spin" size={13} /> : null} Save</button>
+            <ApexButton variant="quiet" disabled={!project.scripts?.setup.trim() || running || saving} icon={<ArrowCounterClockwise size={13} />} onClick={() => startScript('setup')}>Run setup again</ApexButton>
+            <ApexButton variant="primary" disabled={saving} icon={saving ? <CircleNotch className="spin" size={13} /> : undefined} onClick={() => void save()}>Save</ApexButton>
           </footer>
         </section>
       ) : null}

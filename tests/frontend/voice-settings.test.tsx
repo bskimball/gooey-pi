@@ -6,7 +6,8 @@ import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
 import { VoiceSettings } from '../../apps/desktop/src/pages/settings/VoiceSettings'
 import type { AppSettings, ApexApi, VoiceCredentialStatus } from '../../apps/desktop/src/types/api'
 
-vi.mock('../../apps/desktop/src/components/ui', () => ({
+vi.mock('../../apps/desktop/src/components/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../apps/desktop/src/components/ui')>()),
   Modal: ({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) => <div role="dialog" aria-label={title}>{children}{footer}</div>,
 }))
 

@@ -1,5 +1,7 @@
+import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleNotch, Composer, createSessionSummarySelector, ExtensionUiModal, Robot, SpecialistsPanel, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
+import { ApexButton, CircleNotch, Composer, createSessionSummarySelector, ExtensionUiModal, Robot, SpecialistsPanel, Transcript, detectRendererPlatform, parseExtensionUiRequest, type ComposerCommand, type ExtensionTabControls } from 'apex-ui'
 import type { AgentBrowserState, AgentBrowserExtensionStatus, GitStatus, ApexModelDescriptor, ApexThinkingLevel, QueuedPrompt, SessionRecord, TranscriptMessage } from 'apex-core/types/api'
 import type { EditorFileContext, HostState } from '../src/protocol'
 import { browser, onHostMessage, postToHost, sessions } from './host'
@@ -163,8 +165,9 @@ export function App() {
         />
         {state?.connection === 'desktop' ? <span className="apex-toolbar__workspace" title="Desktop owns the runtime. Prompts and controls go to the same session.">Desktop connected</span> : null}
         {state?.cwd ? <span className="apex-toolbar__workspace" title={state.cwd}>{folderName(state.cwd)}</span> : null}
-        <button
-          type="button"
+        <ApexButton
+          variant="quiet"
+          compact
           className={`permissions-chip apex-agents-trigger${specialistsOpen ? ' is-active' : ''}${runningSpecialists > 0 ? ' is-running' : ''}`}
           aria-pressed={specialistsOpen}
           aria-label={specialists.length ? `Sub-agents (${specialists.length})` : 'Sub-agents'}
@@ -173,17 +176,26 @@ export function App() {
         >
           {runningSpecialists > 0 ? <CircleNotch className="spin" size={13} /> : <Robot size={13} />}
           <span className="apex-agents-trigger__label">Agents</span>
-          {specialists.length > 0 ? <span className="apex-agents-trigger__count">{specialists.length}</span> : null}
-        </button>
+          {specialists.length > 0 ? <Badge label={String(specialists.length)} className="apex-agents-trigger__count" /> : null}
+        </ApexButton>
       </header>
       <div className="workbench__content">
         <div className="session-workspace">
           <div className="conversation-column">
             <main className="conversation-pane" data-specialists-open={specialistsOpen ? 'true' : 'false'}>
-              {state?.status === 'exited' ? <div className="apex-banner" role="alert">
-                <pre>{state.error ?? 'Pi stopped.'}</pre>
-                <button type="button" onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>{state?.connection === 'desktop' ? 'Reconnect to Desktop' : 'Restart Pi'}</button>
-              </div> : null}
+              {state?.status === 'exited' ? (
+                <Banner
+                  status="error"
+                  role="alert"
+                  className="apex-banner"
+                  title={<pre>{state.error ?? 'Pi stopped.'}</pre>}
+                  endContent={
+                    <ApexButton compact onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>
+                      {state?.connection === 'desktop' ? 'Reconnect to Desktop' : 'Restart Pi'}
+                    </ApexButton>
+                  }
+                />
+              ) : null}
               <Transcript
                 messages={messages}
                 git={git}
@@ -204,9 +216,9 @@ export function App() {
                       <Robot size={13} aria-hidden="true" />
                       <span>Sub-agents</span>
                     </span>
-                    <button type="button" className="apex-specialists-pane__close" onClick={() => setSpecialistsOpen(false)}>
+                    <ApexButton compact className="apex-specialists-pane__close" onClick={() => setSpecialistsOpen(false)}>
                       Back to chat
-                    </button>
+                    </ApexButton>
                   </div>
                   <SpecialistsPanel
                     key={currentSessionPath ?? state?.cwd ?? 'current-session'}
@@ -228,9 +240,9 @@ export function App() {
                   {editorFile?.selection ? <span className="apex-editor-context__detail">
                     {selectionLabel(editorFile.selection)}
                   </span> : null}
-                  <button type="button" className="apex-editor-context__toggle" aria-pressed={attachEditor} aria-label="Include editor context" title={attachEditor ? 'Editor context will be sent' : 'Editor context will not be sent'} onClick={() => setAttachEditor(current => !current)}>
+                  <ApexButton variant="quiet" compact className="apex-editor-context__toggle" aria-pressed={attachEditor} aria-label="Include editor context" title={attachEditor ? 'Editor context will be sent' : 'Editor context will not be sent'} onClick={() => setAttachEditor(current => !current)}>
                     {attachEditor ? 'On' : 'Off'}
-                  </button>
+                  </ApexButton>
                 </div>
                 <Composer
                   extensionTab={extensionTab}

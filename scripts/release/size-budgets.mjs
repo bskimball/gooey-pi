@@ -17,9 +17,11 @@ export const BUNDLE_SIZE_BUDGETS = Object.freeze({
   // effective-config IPC alongside the existing XState lifecycle owners.
   mainBytes: 664 * KIB,
   preloadBytes: 16 * KIB,
-  initialRendererBytes: 1280 * KIB,
+  // Measured 1455430 initialRendererBytes and 3077079 rendererJsCssBytes with @astryxdesign/core
+  // across packages/ui, Settings, Pages, Activity, CommandPalette, TitleToolbar, Sidebar, Composer, Inspector, and VS Code webview + @stylexjs/stylex.
+  initialRendererBytes: 1424 * KIB,
   largestRendererChunkBytes: 600 * KIB,
-  rendererJsCssBytes: 2320 * KIB,
+  rendererJsCssBytes: 3008 * KIB,
 })
 
 /**

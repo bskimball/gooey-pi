@@ -19,6 +19,10 @@ import {
   Trash,
   Warning,
 } from '@/components/icons'
+import { Banner } from '@astryxdesign/core/Banner'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { TextArea } from '@astryxdesign/core/TextArea'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type {
   AutomationScheduleRecord,
@@ -39,7 +43,7 @@ import { APEX_THINKING_LEVELS } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { errorMessage } from '@/lib/errors'
-import { EmptyState, Modal, Segmented } from '@/components/ui'
+import { ApexButton, EmptyState, Modal, Segmented, SelectControl } from '@/components/ui'
 
 type ScheduleFilter = 'active' | 'paused' | 'attention' | 'all'
 type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'advanced'
@@ -440,10 +444,10 @@ export function ScheduledPage({
     <Modal title={editor.mode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
       <>
         <span className="schedule-editor__save-status" aria-live="polite">{saving ? 'Saving without closing your draft…' : ''}</span>
-        <button type="button" className="button" disabled={saving} onClick={closeEditor}>Cancel</button>
-        <button type="submit" form="schedule-editor-form" className="button button--primary" disabled={saving}>
+        <ApexButton disabled={saving} onClick={closeEditor}>Cancel</ApexButton>
+        <ApexButton variant="primary" type="submit" form="schedule-editor-form" disabled={saving}>
           {saving ? 'Saving…' : editor.mode === 'create' ? 'Create schedule' : 'Save changes'}
-        </button>
+        </ApexButton>
       </>
     )}>
       <form id="schedule-editor-form" className="schedule-editor" onSubmit={(event) => void save(event)}>
@@ -452,8 +456,8 @@ export function ScheduledPage({
           <p>{HARNESS_SHORT_NAMES[harness]} runs this prompt unattended. You can always pause it or open the session produced by a run.</p>
         </div>
         <div className="schedule-editor__copy">
-          <label className="field"><span>Title</span><input autoFocus required value={form.title} disabled={saving} placeholder="Morning issue triage" onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
-          <label className="field"><span>Prompt</span><textarea required rows={4} value={form.prompt} disabled={saving} placeholder="Review new high-priority issues, identify blockers, and propose owners…" onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))} /></label>
+          <TextInput label="Title" hasAutoFocus isRequired isDisabled={saving} value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} placeholder="Morning issue triage" containerClassName="field" />
+          <TextArea label="Prompt" isRequired isDisabled={saving} value={form.prompt} onChange={(value) => setForm((current) => ({ ...current, prompt: value }))} rows={4} placeholder="Review new high-priority issues, identify blockers, and propose owners…" containerClassName="field" />
         </div>
         <div className="schedule-editor__grid">
           <fieldset className="schedule-fieldset">
@@ -462,8 +466,8 @@ export function ScheduledPage({
               <label className={form.targetKind === 'project' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'project'} onChange={() => setForm((current) => ({ ...current, targetKind: 'project' }))} /><span><strong>New session</strong><small>Start fresh in a project</small></span></label>
               <label className={form.targetKind === 'session' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'session'} onChange={() => setForm((current) => ({ ...current, targetKind: 'session' }))} /><span><strong>Existing session</strong><small>Continue a thread</small></span></label>
             </div>
-            <label className="field"><span>Authorized project</span><select value={form.projectId} disabled={saving || !authorizedProjects.length} onChange={(event) => setProject(event.target.value)}><option value="">Choose a project</option>{authorizedProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
-            {form.targetKind === 'session' ? <label className="field"><span>Session</span><select value={form.sessionId} disabled={saving || !eligibleSessions.length} onChange={(event) => setForm((current) => ({ ...current, sessionId: event.target.value }))}><option value="">Choose a session</option>{eligibleSessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}</select></label> : null}
+            <div className="field"><span>Authorized project</span><SelectControl label="Authorized project" value={form.projectId} disabled={saving || !authorizedProjects.length} onChange={(event) => setProject(event.target.value)}><option value="">Choose a project</option>{authorizedProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</SelectControl></div>
+            {form.targetKind === 'session' ? <div className="field"><span>Session</span><SelectControl label="Session" value={form.sessionId} disabled={saving || !eligibleSessions.length} onChange={(event) => setForm((current) => ({ ...current, sessionId: event.target.value }))}><option value="">Choose a session</option>{eligibleSessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}</SelectControl></div> : null}
             {!authorizedProjects.length ? <p className="schedule-field-note schedule-field-note--warning"><Warning size={13} /> Add or authorize a project before scheduling work.</p> : <p className="schedule-field-note">{selectedProject?.primaryFolder}</p>}
           </fieldset>
 
@@ -494,7 +498,14 @@ export function ScheduledPage({
           <div className="schedule-execution-grid">
             <label className="field"><span>Model</span><select value={form.model} onChange={(event) => selectModel(event.target.value)}>{!form.model ? <option value="" disabled>No model available</option> : null}{form.model && !models.some((model) => model.key === form.model && model.enabled !== false && model.available) ? <option value={form.model}>{form.model} (unavailable)</option> : null}{availableModels.map((model) => <option key={model.key} value={model.key}>{model.name} · {model.provider}</option>)}</select></label>
             <label className="field"><span>Reasoning</span><select value={form.thinking} onChange={(event) => setForm((current) => ({ ...current, thinking: event.target.value as ScheduleForm['thinking'] }))}><option value="auto">Auto</option>{THINKING_LEVELS.filter((level) => !selectedModel || selectedModel.availableThinkingLevels.includes(level) || level === form.thinking).map((level) => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1)}</option>)}</select></label>
-            <label className={`schedule-fast-toggle ${selectedModel && !selectedModel.fastModeSupported ? 'is-disabled' : ''}`}><input type="checkbox" checked={form.fast} disabled={Boolean(selectedModel && !selectedModel.fastModeSupported)} onChange={(event) => setForm((current) => ({ ...current, fast: event.target.checked }))} /><span><Play size={13} /><strong>Fast</strong><small>{selectedModel && !selectedModel.fastModeSupported ? 'Unavailable for model' : 'Prioritize latency'}</small></span></label>
+            <CheckboxInput
+              className={`schedule-fast-toggle ${selectedModel && !selectedModel.fastModeSupported ? 'is-disabled' : ''}`}
+              value={form.fast}
+              isDisabled={Boolean(selectedModel && !selectedModel.fastModeSupported)}
+              onChange={(checked) => setForm((current) => ({ ...current, fast: checked }))}
+              label="Fast"
+              description={selectedModel && !selectedModel.fastModeSupported ? 'Unavailable for model' : 'Prioritize latency'}
+            />
           </div>
         </fieldset>
 
@@ -502,7 +513,7 @@ export function ScheduledPage({
           <div><span><Clock size={14} /> Next occurrences</span>{previewing ? <small>Checking server…</small> : null}</div>
           {previewError ? <p className="schedule-preview__error">Preview unavailable: {previewError}</p> : preview?.occurrences.length ? <ol>{preview.occurrences.slice(0, 5).map((occurrence) => <li key={occurrence}><i /><span>{formatDateTime(occurrence)}</span><small>{formatRelative(occurrence)}</small></li>)}</ol> : <p>{currentTiming ? 'No future occurrences returned.' : 'Complete the timing fields to preview runs.'}</p>}
         </section>
-        {formError ? <p className="page-inline-error" role="alert">{formError}</p> : null}
+        {formError ? <Banner status="error" role="alert" className="page-inline-error" title={formError} /> : null}
       </form>
     </Modal>
   ) : null
@@ -514,21 +525,21 @@ export function ScheduledPage({
     const busy = Boolean(action)
     return (
       <div className="page scroll-area"><div className="page-container schedule-page schedule-page--detail">
-        <button type="button" className="schedule-back" onClick={() => { setSelectedId(null); setActionError(''); setActionNotice('') }}><ArrowLeft size={15} /> All schedules</button>
+        <ApexButton variant="quiet" className="schedule-back" icon={<ArrowLeft size={15} />} onClick={() => { setSelectedId(null); setActionError(''); setActionNotice('') }}>All schedules</ApexButton>
         <header className="schedule-detail__header">
           <div className={`schedule-detail__mark schedule-detail__mark--${needsAttention(selected) ? 'attention' : selected.status}`}>{statusIcon(selected, 18)}</div>
           <div><span className={`schedule-state schedule-state--${needsAttention(selected) ? 'attention' : selected.status}`}>{statusLabel(selected)}</span><h1>{selected.title}</h1><p>Revision {selected.revision} · Updated {formatRelative(selected.updatedAt)}</p></div>
         </header>
         <div className="schedule-detail__actions" aria-label="Schedule actions">
-          <button type="button" className="button button--primary" disabled={busy || selected.status === 'completed'} onClick={() => void perform(`run:${selected.id}`, () => onRunNow(selected.id), 'Run queued.')}><Play size={13} />{action === `run:${selected.id}` ? 'Queuing…' : 'Run now'}</button>
-          <button type="button" className="button" disabled={busy} onClick={() => openEdit(selected)}><PencilSimple size={13} /> Edit</button>
-          {selected.status === 'active' || selected.status === 'blocked' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`pause:${selected.id}`, () => onPause(selected.id), 'Schedule paused.')}><Pause size={13} />{action === `pause:${selected.id}` ? 'Pausing…' : 'Pause'}</button> : selected.status === 'paused' ? <button type="button" className="button" disabled={busy} onClick={() => void perform(`resume:${selected.id}`, () => onResume(selected.id), 'Schedule resumed.')}><ArrowClockwise size={13} />{action === `resume:${selected.id}` ? 'Resuming…' : 'Resume'}</button> : null}
-          <button type="button" className="button schedule-delete" disabled={busy} onClick={() => deleteSchedule(selected)}><Trash size={13} /> Delete</button>
+          <ApexButton variant="primary" disabled={busy || selected.status === 'completed'} icon={<Play size={13} />} onClick={() => void perform(`run:${selected.id}`, () => onRunNow(selected.id), 'Run queued.')}>{action === `run:${selected.id}` ? 'Queuing…' : 'Run now'}</ApexButton>
+          <ApexButton disabled={busy} icon={<PencilSimple size={13} />} onClick={() => openEdit(selected)}>Edit</ApexButton>
+          {selected.status === 'active' || selected.status === 'blocked' ? <ApexButton disabled={busy} icon={<Pause size={13} />} onClick={() => void perform(`pause:${selected.id}`, () => onPause(selected.id), 'Schedule paused.')}>{action === `pause:${selected.id}` ? 'Pausing…' : 'Pause'}</ApexButton> : selected.status === 'paused' ? <ApexButton disabled={busy} icon={<ArrowClockwise size={13} />} onClick={() => void perform(`resume:${selected.id}`, () => onResume(selected.id), 'Schedule resumed.')}>{action === `resume:${selected.id}` ? 'Resuming…' : 'Resume'}</ApexButton> : null}
+          <ApexButton className="schedule-delete" disabled={busy} icon={<Trash size={13} />} onClick={() => deleteSchedule(selected)}>Delete</ApexButton>
         </div>
-        {error ? <p className="page-inline-error" role="alert">Schedule catalog unavailable: {error}</p> : null}
-        {actionError ? <p className="page-inline-error" role="alert">{actionError}</p> : null}
-        {actionNotice ? <p className="schedule-action-notice" role="status"><CheckCircle size={14} />{actionNotice}</p> : null}
-        {selected.blockedReason ? <div className="schedule-blocked" role="status"><Warning size={16} /><div><strong>Schedule needs attention</strong><p>{selected.blockedReason}</p></div></div> : null}
+        {error ? <Banner status="error" role="alert" className="page-inline-error" title={`Schedule catalog unavailable: ${error}`} /> : null}
+        {actionError ? <Banner status="error" role="alert" className="page-inline-error" title={actionError} /> : null}
+        {actionNotice ? <Banner status="success" role="status" className="schedule-action-notice" title={actionNotice} /> : null}
+        {selected.blockedReason ? <Banner status="warning" role="status" className="schedule-blocked" title="Schedule needs attention" description={selected.blockedReason} /> : null}
 
         <div className="schedule-detail__grid">
           <section className="schedule-detail__card schedule-detail__card--prompt"><span className="schedule-detail__eyebrow">Instruction</span><p>{selected.prompt}</p></section>
@@ -556,15 +567,15 @@ export function ScheduledPage({
 
   return (
     <div className="page scroll-area"><div className="page-container schedule-page">
-      <header className="page-header schedule-page__header"><div><span className="schedule-page__kicker"><span /> Automation desk</span><h1>Scheduled</h1><p>Unattended {HARNESS_SHORT_NAMES[harness]} work, with every run accounted for.</p></div><button type="button" className="button button--primary" onClick={openCreate}><Plus size={14} /> New schedule</button></header>
+      <header className="page-header schedule-page__header"><div><span className="schedule-page__kicker"><span /> Automation desk</span><h1>Scheduled</h1><p>Unattended {HARNESS_SHORT_NAMES[harness]} work, with every run accounted for.</p></div><ApexButton variant="primary" icon={<Plus size={14} />} onClick={openCreate}>New schedule</ApexButton></header>
       <div className="schedule-ledger-summary" aria-label="Schedule summary">
         <span><i className="is-active" /> <strong>{counts.active}</strong> active</span>
         <span><i className="is-paused" /> <strong>{counts.paused}</strong> paused</span>
         <span><i className="is-attention" /> <strong>{counts.attention}</strong> need attention</span>
       </div>
       <div className="page-tools schedule-tools"><Segmented value={filter} label="Schedule filter" onChange={(value) => setFilter(value as ScheduleFilter)} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'attention', label: 'Needs attention' }, { value: 'all', label: 'All' }]} /><span>{visible.length} {visible.length === 1 ? 'schedule' : 'schedules'}</span></div>
-      {error ? <p className="page-inline-error" role="alert">Schedule catalog unavailable: {error}</p> : null}
-      {actionError ? <p className="page-inline-error" role="alert">{actionError}</p> : null}
+      {error ? <Banner status="error" role="alert" className="page-inline-error" title={`Schedule catalog unavailable: ${error}`} /> : null}
+      {actionError ? <Banner status="error" role="alert" className="page-inline-error" title={actionError} /> : null}
       {visible.length ? <div className="schedule-ledger">{visible.map((item) => {
         const project = projectMap.get(item.target.projectId)
         const targetSession = item.target.kind === 'session' ? sessionMap.get(item.target.sessionId) : undefined
@@ -574,7 +585,7 @@ export function ScheduledPage({
           <span className="schedule-row__next"><small>Next</small><strong>{item.nextRunAt ? formatDateTime(item.nextRunAt) : '—'}</strong><span>{item.nextRunAt ? formatRelative(item.nextRunAt) : 'No future run'}</span></span>
           <CaretRight className="schedule-row__chevron" size={16} />
         </button>
-      })}</div> : <EmptyState icon={<CalendarDots size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <button type="button" className="button button--primary" onClick={openCreate}><Plus size={13} /> Create schedule</button>}> {schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
+      })}</div> : <EmptyState icon={<CalendarDots size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <ApexButton variant="primary" icon={<Plus size={13} />} onClick={openCreate}>Create schedule</ApexButton>}>{schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
       {editorModal}
     </div></div>
   )

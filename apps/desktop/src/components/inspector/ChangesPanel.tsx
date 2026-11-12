@@ -3,7 +3,9 @@ import { memo, useEffect, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
 import type { GitStatus } from '@/types/api'
 import { boundLines } from '@/lib/render-bounds'
-import { EmptyState, IconButton, Modal, Segmented } from '../ui'
+import { Banner } from '@astryxdesign/core/Banner'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { EmptyState, ApexButton, IconButton, Modal, Segmented } from '../ui'
 
 const MAX_RENDERED_DIFF_CHARACTERS = 2 * 1024 * 1024
 const MAX_RENDERED_DIFF_LINES = 4_000
@@ -107,7 +109,7 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
     return <EmptyState
       icon={<GitBranch size={24} />}
       title="Git status unavailable"
-      action={<button type="button" className="button" onClick={() => void onRefreshGit()}><ArrowsClockwise size={13} /> Try again</button>}
+      action={<ApexButton icon={<ArrowsClockwise size={13} />} onClick={() => void onRefreshGit()}>Try again</ApexButton>}
     >{git.error}</EmptyState>
   }
   return (
@@ -115,24 +117,24 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
       <div className="changes-toolbar">
         <div className="changes-toolbar__branch" title={`${git.branch ?? 'Repository'}${git.ahead ? ` · ${git.ahead} ahead` : ''}`}><GitBranch size={13} /><strong>{git.branch ?? 'Repository'}</strong>{git.ahead ? <small>{git.ahead} ahead</small> : null}</div>
         <Segmented value={scope} label="Diff scope" options={[{ value: 'unstaged', label: 'Unstaged' }, { value: 'staged', label: 'Staged' }]} onChange={(value) => { if (value === 'unstaged' || value === 'staged') { setActionError(''); setScope(value) } }} />
-        <button type="button" className="button button--compact" disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => setCommitOpen(true)}>Commit</button>
+        <ApexButton compact disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => setCommitOpen(true)}>Commit</ApexButton>
         <IconButton label="Refresh changes" onClick={() => void onRefreshGit()}><ArrowsClockwise size={14} /></IconButton>
       </div>
-      {readOnly ? <div className="changes-read-only" role="note"><span>This project is read-only because it was discovered from session history.</span>{onGrantProject ? <button type="button" className="button button--compact" onClick={() => void onGrantProject()}>Add project</button> : null}</div> : null}
-      {actionError ? <p className="changes-error" role="alert">{actionError}</p> : null}
+      {readOnly ? <div className="changes-read-only" role="note"><span>This project is read-only because it was discovered from session history.</span>{onGrantProject ? <ApexButton compact onClick={() => void onGrantProject()}>Add project</ApexButton> : null}</div> : null}
+      {actionError ? <Banner status="error" role="alert" title={actionError} /> : null}
       <div className="changes-body">
         <div className="file-changes scroll-area">
-          <div className="file-changes__header"><span>{visibleFiles.length} changed {visibleFiles.length === 1 ? 'file' : 'files'}</span>{visibleFiles.length ? <button type="button" disabled={readOnly} onClick={() => void mutate(scope === 'staged' ? 'unstage' : 'stage', visibleFiles.map((file) => file.path))}>{scope === 'staged' ? 'Unstage all' : 'Stage all'}</button> : null}</div>
+          <div className="file-changes__header"><span>{visibleFiles.length} changed {visibleFiles.length === 1 ? 'file' : 'files'}</span>{visibleFiles.length ? <ApexButton variant="quiet" compact disabled={readOnly} onClick={() => void mutate(scope === 'staged' ? 'unstage' : 'stage', visibleFiles.map((file) => file.path))}>{scope === 'staged' ? 'Unstage all' : 'Stage all'}</ApexButton> : null}</div>
           {visibleFiles.map((file) => <button type="button" key={file.path} className={selectedPath === file.path ? 'is-selected' : ''} onClick={() => setSelectedPath(file.path)}><File size={13} /><FilePathLabel path={file.path} /><small className="additions">+{file.additions}</small><small className="deletions">−{file.deletions}</small><span className="file-status">{file.status}</span></button>)}
           {visibleFiles.length === 0 ? <p className="file-changes__empty">No {scope} changes.</p> : null}
         </div>
         <div className="diff-pane scroll-area">
-          {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><FilePathLabel path={selectedPath} /></div><div>{scope === 'unstaged' ? <button type="button" disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}><ArrowLineDown size={12} /> Stage</button> : <button type="button" disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}><ArrowUUpLeft size={12} /> Unstage</button>}<button type="button" className="danger-action" disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}><ArrowUUpLeft size={12} /> Undo changes</button></div></div> : null}
+          {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><FilePathLabel path={selectedPath} /></div><div>{scope === 'unstaged' ? <ApexButton compact icon={<ArrowLineDown size={12} />} disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}>Stage</ApexButton> : <ApexButton compact icon={<ArrowUUpLeft size={12} />} disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}>Unstage</ApexButton>}<ApexButton compact className="danger-action" icon={<ArrowUUpLeft size={12} />} disabled={readOnly} onClick={() => setConfirmUndo(selectedPath)}>Undo changes</ApexButton></div></div> : null}
           {loading ? <div className="diff-loading"><CircleNotch className="spin" size={15} /> Loading diff…</div> : <DiffView text={diff} />}
         </div>
       </div>
-      {commitOpen ? <Modal title="Commit staged changes" onClose={() => setCommitOpen(false)} footer={<><button className="button" type="button" onClick={() => setCommitOpen(false)}>Cancel</button><button className="button button--primary" type="button" disabled={readOnly || !commitMessage.trim()} onClick={() => void commit()}>Commit changes</button></>}><label className="field"><span>Commit message</span><div className="commit-message-input"><input autoFocus value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Describe this change" /><button type="button" className="button button--compact" onClick={fillCommitSummary} title="Generate a summary from staged files"><Sparkle size={13} /> Generate summary</button></div></label><p className="muted-copy">This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
-      {confirmUndo ? <Modal title="Undo file changes?" onClose={() => setConfirmUndo(null)} footer={<><button className="button" type="button" onClick={() => setConfirmUndo(null)}>Cancel</button><button className="button button--danger" type="button" disabled={readOnly} onClick={() => { const path = confirmUndo; void mutate('restore', [path]).then((ok) => { if (ok) setConfirmUndo(null) }) }}>Undo changes</button></>}><p>This discards the staged and unstaged changes to <code>{confirmUndo}</code> and restores the file to its last commit. A new untracked file will be deleted.</p></Modal> : null}
+      {commitOpen ? <Modal title="Commit staged changes" onClose={() => setCommitOpen(false)} footer={<><ApexButton onClick={() => setCommitOpen(false)}>Cancel</ApexButton><ApexButton variant="primary" disabled={readOnly || !commitMessage.trim()} onClick={() => void commit()}>Commit changes</ApexButton></>}><label className="field"><span>Commit message</span><div className="commit-message-input"><TextInput label="Commit message" isLabelHidden hasAutoFocus value={commitMessage} onChange={setCommitMessage} placeholder="Describe this change" containerStyle={{ flex: 1, minWidth: 0 }} /><ApexButton compact icon={<Sparkle size={13} />} onClick={fillCommitSummary} title="Generate a summary from staged files">Generate summary</ApexButton></div></label><p className="muted-copy">This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
+      {confirmUndo ? <Modal title="Undo file changes?" onClose={() => setConfirmUndo(null)} footer={<><ApexButton onClick={() => setConfirmUndo(null)}>Cancel</ApexButton><ApexButton variant="danger" disabled={readOnly} onClick={() => { const path = confirmUndo; void mutate('restore', [path]).then((ok) => { if (ok) setConfirmUndo(null) }) }}>Undo changes</ApexButton></>}><p>This discards the staged and unstaged changes to <code>{confirmUndo}</code> and restores the file to its last commit. A new untracked file will be deleted.</p></Modal> : null}
     </div>
   )
 }

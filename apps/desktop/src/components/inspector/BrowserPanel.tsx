@@ -41,6 +41,7 @@ import {
 	ShieldCheck,
 	X,
 } from "../icons";
+import { Banner } from "@astryxdesign/core/Banner";
 import { IconButton } from "../ui";
 import { BrowserAnnotationPopover } from "./BrowserAnnotationPopover";
 import { browserAnnotationMachine } from "./browserAnnotationMachine";
@@ -639,9 +640,7 @@ export function BrowserPanel({
 						</div>
 					) : null}
 					{notice ? (
-						<p className="annotation-notice" role="alert">
-							{notice}
-						</p>
+						<Banner status="warning" role="alert" className="annotation-notice" title={notice} />
 					) : null}
 					<AgentCursorOverlay pointerEvent={previewPointerEvent} />
 				</div>

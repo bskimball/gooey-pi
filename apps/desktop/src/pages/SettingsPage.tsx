@@ -1,9 +1,12 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
+import * as stylex from '@stylexjs/stylex'
 import { ArrowLeft, CaretRight, Cube, Info, LockKey, PawPrint, Robot, SlidersHorizontal, Sun, Terminal, Waveform } from '@/components/icons'
 import { useEffect, useState, type ComponentType } from 'react'
 import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
-import { BrowserGlobe, Modal } from '@/components/ui'
+import { ApexButton, BrowserGlobe, Modal } from '@/components/ui'
 import type { AppMeta, AppSettings, AppUpdateState, ApexModelCatalog, ApexApi } from '@/types/api'
 import { AboutSettings } from './settings/AboutSettings'
 import { AgentSettings } from './settings/AgentSettings'
@@ -16,6 +19,33 @@ import { PetsSettings } from './settings/PetsSettings'
 import { ProvidersSettings } from './settings/ProviderSettings'
 import { TerminalSettings } from './settings/TerminalSettings'
 import { VoiceSettings } from './settings/VoiceSettings'
+
+const navStyles = stylex.create({
+  item: {
+    width: '100%',
+    minHeight: 34,
+    height: 34,
+    justifyContent: 'flex-start',
+    paddingInline: 9,
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text-secondary)',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+    fontWeight: 500,
+    ':hover': {
+      color: 'var(--text)',
+      backgroundColor: 'var(--surface-hover)',
+    },
+  },
+  itemActive: {
+    color: 'var(--text)',
+    backgroundColor: 'var(--surface-selected)',
+  },
+  close: {
+    marginBottom: 12,
+  },
+})
 
 const sections: Array<{ id: SettingsSection; label: MessageKey; icon: ComponentType<{ size?: number }> }> = [
   { id: 'general', label: 'settings.general', icon: SlidersHorizontal },
@@ -94,13 +124,34 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
   return (
     <div className="settings-page">
       <nav className="settings-nav" aria-label={t('settings.sections')}>
-        <button type="button" className="settings-nav__close" onClick={onClose}><ArrowLeft size={14} /><span>Back to session</span></button>
+        <AstryxButton
+          label="Back to session"
+          variant="ghost"
+          size="sm"
+          icon={<ArrowLeft size={14} />}
+          className="settings-nav__close"
+          xstyle={[navStyles.item, navStyles.close]}
+          onClick={onClose}
+        >
+          <span>Back to session</span>
+        </AstryxButton>
         {sections.map((item) => {
           const Icon = item.icon
+          const active = section === item.id
           return (
-            <button type="button" key={item.id} className={section === item.id ? 'is-active' : ''} onClick={() => setSection(item.id)}>
-              <Icon size={14} /><span>{t(item.label)}</span><CaretRight size={12} />
-            </button>
+            <AstryxButton
+              key={item.id}
+              label={t(item.label)}
+              variant="ghost"
+              size="sm"
+              icon={<Icon size={14} />}
+              endContent={<CaretRight size={12} />}
+              className={active ? 'is-active' : ''}
+              xstyle={[navStyles.item, active && navStyles.itemActive]}
+              onClick={() => setSection(item.id)}
+            >
+              <span>{t(item.label)}</span>
+            </AstryxButton>
           )
         })}
       </nav>
@@ -111,13 +162,13 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           onClose={() => { if (!resetting) setConfirmReset(false) }}
           footer={(
             <>
-              <button type="button" className="button" disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</button>
-              <button type="button" className="button button--danger" disabled={resetting} onClick={() => { void resetBrowser() }}>{resetting ? 'Clearing…' : 'Clear browsing data'}</button>
+              <ApexButton disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</ApexButton>
+              <ApexButton variant="danger" disabled={resetting} onClick={() => { void resetBrowser() }}>{resetting ? 'Clearing…' : 'Clear browsing data'}</ApexButton>
             </>
           )}
         >
           <p>This signs you out of websites opened in Apex and removes history, cache, cookies, and saved permissions. This cannot be undone.</p>
-          {resetError ? <p className="settings-error" role="alert">{resetError}</p> : null}
+          {resetError ? <Banner status="error" role="alert" className="settings-error" title={resetError} /> : null}
         </Modal>
       ) : null}
     </div>

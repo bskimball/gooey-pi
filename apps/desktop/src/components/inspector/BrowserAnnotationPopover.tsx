@@ -4,6 +4,7 @@ import type { BrowserAnnotationElement, BrowserSourceResult } from '@/types/api'
 import { MAX_COMMENT_LENGTH } from '@/lib/browser-annotations'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { ChatCircleText, X } from '../icons'
+import { ApexButton, IconButton } from '../ui'
 import { annotationSourceMachine } from './browserAnnotationMachine'
 
 interface Props {
@@ -61,9 +62,9 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
         <div>
           <ChatCircleText size={14} />
           <strong>Comment on element {index}</strong>
-          <button type="button" aria-label="Discard annotation" onClick={onCancel}>
+          <IconButton label="Discard annotation" onClick={onCancel}>
             <X size={13} />
-          </button>
+          </IconButton>
         </div>
         <section className="annotation-source" aria-label="Selected element source" aria-live="polite">
           {element.component ? (
@@ -93,14 +94,12 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
                 {source.line === undefined ? '' : `:${source.line}`}
               </code>
               <p>{source.evidence} metadata · file checked in this workspace. Recorded positions may be stale after edits.</p>
-              <button
-                className="button"
-                type="button"
+              <ApexButton
                 disabled={opening}
                 onClick={openSource}
               >
                 {opening ? 'Opening…' : 'Open source in VS Code'}
-              </button>
+              </ApexButton>
             </>
           ) : null}
           {error ? <p role="alert">{error}</p> : null}
@@ -127,12 +126,12 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
           </span>
         </p>
         <div>
-          <button type="button" className="button" onClick={onCancel}>
+          <ApexButton onClick={onCancel}>
             Cancel
-          </button>
-          <button type="button" className="button button--primary" disabled={!text.trim() || source.kind === 'checking'} onClick={save}>
+          </ApexButton>
+          <ApexButton variant="primary" disabled={!text.trim() || source.kind === 'checking'} onClick={save}>
             Add comment
-          </button>
+          </ApexButton>
         </div>
       </div>
     </div>

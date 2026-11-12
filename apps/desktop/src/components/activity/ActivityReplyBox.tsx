@@ -8,8 +8,31 @@ import {
 } from 'react'
 import { useMachine } from '@xstate/react'
 import { ArrowUp, Check, CircleNotch, WarningCircle } from '@/components/icons'
+import * as stylex from '@stylexjs/stylex'
+import { ApexButton } from '@/components/ui'
 import type { SessionRecord } from '@/types/api'
 import { activityReplyMachine, type ReplyFeedbackState } from './activityReplyMachine'
+
+const replyInputStyles = stylex.create({
+  input: {
+    minWidth: 0,
+    minHeight: 26,
+    maxHeight: 128,
+    flex: '1 1 auto',
+    paddingTop: 3,
+    paddingBottom: 3,
+    borderWidth: 0,
+    outlineStyle: 'none',
+    resize: 'none',
+    color: 'var(--text)',
+    backgroundColor: 'transparent',
+    fontFamily: 'inherit',
+    fontSize: 'var(--fs-ui)',
+    lineHeight: 1.4,
+  },
+})
+
+const replyInputStyleProps = stylex.props(replyInputStyles.input)
 
 export interface ActivityReplyBoxProps {
   session: SessionRecord
@@ -97,9 +120,10 @@ export function ActivityReplyBox({
     >
       <div className="activity-reply__box">
         <textarea
+          {...replyInputStyleProps}
           ref={assignRef}
           rows={1}
-          className="activity-reply__input"
+          className={`activity-reply__input ${replyInputStyleProps.className ?? ''}`.trim()}
           value={draft}
           disabled={!enabled || feedback === 'sending'}
           placeholder={placeholder}
@@ -109,9 +133,11 @@ export function ActivityReplyBox({
           }}
           onKeyDown={handleKeyDown}
         />
-        <button
+        <ApexButton
           type="submit"
-          className="button button--compact button--primary activity-reply__send"
+          variant="primary"
+          compact
+          className="activity-reply__send"
           disabled={!enabled || feedback === 'sending' || !draft.trim()}
           aria-label={isRunning ? 'Send steer' : 'Send follow-up'}
         >
@@ -121,7 +147,7 @@ export function ActivityReplyBox({
             <ArrowUp size={12} weight="bold" />
           )}
           <span>{isRunning ? 'Steer' : 'Send'}</span>
-        </button>
+        </ApexButton>
       </div>
 
       <div className="activity-reply__footer">

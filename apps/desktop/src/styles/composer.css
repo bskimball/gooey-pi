@@ -726,26 +726,26 @@
 	cursor: pointer;
 }
 .select-control:hover,
-.select-control:has(.select-control__trigger[aria-expanded="true"]) {
+.select-control:has([role="combobox"][aria-expanded="true"]) {
 	color: var(--text);
 	background: var(--surface-hover);
 }
-.select-control:focus-within:not(:has(.select-control__menu)),
-.select-control:has(.select-control__trigger:focus-visible, select:focus-visible) {
+.select-control:has([role="combobox"]:focus-visible, select:focus-visible) {
 	color: var(--text);
 	border-color: var(--focus);
 	outline: 2px solid var(--focus);
 	outline-offset: 1px;
 }
 .select-control__icon,
-.select-control__chevron {
+.select-control__chevron,
+.select-control .astryx-selector-indicator-icon {
 	display: inline-grid;
 	place-items: center;
 	flex: 0 0 auto;
 	pointer-events: none;
 }
 .select-control select,
-.select-control__trigger {
+.select-control [role="combobox"] {
 	min-width: 0;
 	max-width: 122px;
 	height: 100%;
@@ -762,9 +762,20 @@
 	font-weight: 550;
 	cursor: pointer;
 }
-.select-control__trigger:disabled {
+.select-control:has([role="combobox"][aria-disabled="true"], [role="combobox"]:disabled, select:disabled) {
 	opacity: 0.65;
 	cursor: default;
+}
+/* Constrain the Astryx Selector popup within the conversation pane (12px inset)
+   and cap its width at 320px even inside narrow panes or the VS Code side panel. */
+.select-control [data-astryx-layer-root] {
+	--_astryx-layer-clearance: 12px;
+	max-width: min(320px, calc(100cqi - 24px), calc(100vw - 24px));
+}
+.select-control .astryx-selector-popup {
+	width: min(320px, calc(100cqi - 24px), calc(100vw - 24px));
+	max-width: min(320px, calc(100cqi - 24px), calc(100vw - 24px));
+	max-height: min(420px, calc(100dvh - 80px));
 }
 .select-control--compact {
 	height: 26px;
@@ -905,50 +916,6 @@
 	font-size: var(--fs-micro);
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-.select-control__menu {
-	right: auto;
-	left: var(--select-menu-left, 0px);
-	width: var(--select-menu-width, min(320px, calc(100vw - 32px)));
-	min-width: 180px;
-	max-width: min(320px, calc(100vw - 32px));
-	max-height: var(--select-menu-max-height, min(420px, calc(100vh - 80px)));
-	display: flex;
-	flex-direction: column;
-}
-.select-control__menu .worktree-picker__options {
-	flex: 1 1 auto;
-	min-height: 0;
-	max-height: none;
-	overflow-y: auto;
-}
-.select-control__menu .worktree-picker__option {
-	align-items: flex-start;
-}
-.select-control__menu .worktree-picker__option:focus-visible {
-	background: var(--surface-hover);
-	outline: 2px solid var(--focus);
-	outline-offset: -2px;
-}
-.select-control__menu .worktree-picker__check {
-	margin-top: 1px;
-}
-.select-control__menu .worktree-picker__option-copy strong {
-	overflow: visible;
-	white-space: normal;
-	text-overflow: clip;
-	line-height: 1.3;
-}
-.select-control__menu .worktree-picker__option-copy > span {
-	overflow: visible;
-	color: var(--text-secondary);
-	font-family: inherit;
-	font-size: var(--fs-meta);
-	line-height: 1.35;
-	white-space: normal;
-	text-overflow: clip;
-	overflow-wrap: break-word;
-	text-wrap: pretty;
 }
 .worktree-picker__empty,
 .model-picker__empty {

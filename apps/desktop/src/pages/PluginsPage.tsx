@@ -1,11 +1,23 @@
 import { ArrowLeft, ArrowsClockwise, BookOpen, CaretRight, Check, FileCode, FileText, GitFork, Globe, MagicWand, MagnifyingGlass, Package, Palette, Plus, ShieldCheck, SlidersHorizontal, Sparkle, Trash, Warning, X } from '@/components/icons'
+import * as stylex from '@stylexjs/stylex'
+import { Banner } from '@astryxdesign/core/Banner'
+import { TabList, Tab } from '@astryxdesign/core/TabList'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import { useMemo, useState } from 'react'
 import type { CapabilityMutationInput, ExtensionInstallInput, HarnessId, McpConnectionInput, McpStateInput, PluginWarning, SkillRecord } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { NETWORK_MCP_UNAVAILABLE_DETAIL } from '@/lib/mcp-policy'
-import { EmptyState, Modal } from '@/components/ui'
+import { ApexButton, EmptyState, Modal, SelectControl } from '@/components/ui'
 import { type McpScope, useAddCapabilityFlow } from './addCapabilityMachine'
 import { usePluginOperation } from './pluginOperationMachine'
+
+const searchControlStyles = stylex.create({
+  control: {
+    minWidth: 0,
+    width: '100%',
+  },
+})
 
 const MCP_STDIO_HELP: Record<HarnessId, string> = {
   pi: 'Pi starts this stdio MCP server through the pi-mcp-adapter extension (pi install npm:pi-mcp-adapter) in each new session.',
@@ -216,7 +228,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       if (skill.kind === 'package') return mutate(skill, 'enable')
       return setMcp(skill, true)
     }
-    return <button type="button" className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} onClick={() => { if (skill.enabled) setConfirmDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</button>
+    return <ApexButton variant="quiet" aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} onClick={() => { if (skill.enabled) setConfirmDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</ApexButton>
   }
 
   return (
@@ -225,32 +237,27 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
         <header className="plugin-header">
           <div><span className="eyebrow">{HARNESS_SHORT_NAMES[harness]} capabilities</span><h1>Extend {HARNESS_SHORT_NAMES[harness]}</h1><p>Manage packages, extensions, MCP servers, and reusable skills for this harness.</p></div>
           <div>
-            <button type="button" className="button" onClick={() => void onRefresh()}><ArrowsClockwise className={loading ? 'spin' : ''} size={13}/> Refresh</button>
-            <button type="button" className="button" onClick={() => setFilter('installed')}><SlidersHorizontal size={13}/> Manage</button>
-            <button type="button" className="button button--primary" onClick={openAdd}><Plus size={14}/> Add</button>
+            <ApexButton onClick={() => void onRefresh()}><ArrowsClockwise className={loading ? 'spin' : ''} size={13}/> Refresh</ApexButton>
+            <ApexButton onClick={() => setFilter('installed')}><SlidersHorizontal size={13}/> Manage</ApexButton>
+            <ApexButton variant="primary" onClick={openAdd}><Plus size={14}/> Add</ApexButton>
           </div>
         </header>
-        <div className="directory-tabs">
-          <button type="button" className={tab === 'plugins' ? 'is-active' : ''} onClick={() => setTab('plugins')}>Capabilities</button>
-          <button type="button" className={tab === 'skills' ? 'is-active' : ''} onClick={() => setTab('skills')}>Skills</button>
-        </div>
+        <TabList value={tab} onChange={(value) => setTab(value as DirectoryTab)} role="tablist" size="sm" className="directory-tabs"><Tab value="plugins" label="Capabilities" /><Tab value="skills" label="Skills" /></TabList>
         <div className="directory-tools">
-          <label className="page-search"><MagnifyingGlass size={14}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`}/></label>
-          <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Directory filter">
+          <TextInput label={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} isLabelHidden placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} startIcon={<MagnifyingGlass size={14}/>} value={query} onChange={setQuery} containerClassName="page-search" controlXstyle={searchControlStyles.control} />
+          <SelectControl label="Directory filter" value={filter} onChange={(event) => setFilter(event.target.value)}>
             <option value="all">All sources</option><option value="installed">Installed</option><option value="bundled">Bundled</option><option value="user">Personal</option><option value="project">Project</option><option value="system">System</option>
-          </select>
+          </SelectControl>
         </div>
         {warnings.map((warning) => (
-          <p key={`${warning.scope}:${warning.path}`} className="page-inline-error" role="alert">
-            <Warning size={13} /> {warning.scope === 'project' ? 'Project' : 'Personal'} {warning.message} ({warning.path})
-          </p>
+          <Banner key={`${warning.scope}:${warning.path}`} status="error" role="alert" className="page-inline-error" title={`${warning.scope === 'project' ? 'Project' : 'Personal'} ${warning.message} (${warning.path})`} />
         ))}
-        {capabilityAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {capabilityAlert}</p> : null}
-        {computerUseAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {computerUseAlert}</p> : null}
-        {harness === 'pi' && mcpSupportAlert ? <p className="page-inline-error" role="alert"><Warning size={13}/> {mcpSupportAlert}</p> : null}
-        {harness === 'pi' && mcpSupportNotice ? <p className="connection-warning" role="status">{operation.busyId === MCP_SUPPORT_SKILL_ID ? <ArrowsClockwise className="spin" size={13}/> : <ShieldCheck size={13}/>} {mcpSupportNotice}</p> : null}
-        {harness === 'pi' && !piMcpAdapterInstalled ? <p className="connection-warning"><ShieldCheck size={13}/> Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers.</p> : null}
-        <p className="connection-warning"><ShieldCheck size={13}/> {NETWORK_MCP_UNAVAILABLE_DETAIL}</p>
+        {capabilityAlert ? <Banner status="error" role="alert" className="page-inline-error" title={capabilityAlert} /> : null}
+        {computerUseAlert ? <Banner status="error" role="alert" className="page-inline-error" title={computerUseAlert} /> : null}
+        {harness === 'pi' && mcpSupportAlert ? <Banner status="error" role="alert" className="page-inline-error" title={mcpSupportAlert} /> : null}
+        {harness === 'pi' && mcpSupportNotice ? <Banner status="warning" role="status" className="connection-warning" title={mcpSupportNotice} /> : null}
+        {harness === 'pi' && !piMcpAdapterInstalled ? <Banner status="warning" className="connection-warning" title="Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers." /> : null}
+        <Banner status="warning" className="connection-warning" title={NETWORK_MCP_UNAVAILABLE_DETAIL} />
         <div className="directory-heading"><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span>{visible.length} shown</span></div>
         {visible.length ? (
           <div className="directory-list">{visible.map((skill) => {
@@ -266,16 +273,16 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
           })}</div>
         ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
 
-        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => setConfirmDisable(null)} footer={<><button type="button" className="button" onClick={() => setConfirmDisable(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</button></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
-        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => setConfirmRemove(null)} footer={<><button type="button" className="button" onClick={() => setConfirmRemove(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</button></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
+        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => setConfirmDisable(null)} footer={<><ApexButton onClick={() => setConfirmDisable(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
+        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => setConfirmRemove(null)} footer={<><ApexButton onClick={() => setConfirmRemove(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
 
         {addOpen ? (
           <Modal
             title={addDraft.kind ? `Add ${addDraft.kind === 'mcp' ? 'MCP server' : addDraft.kind === 'extension' ? 'extension' : PACKAGE_LABELS[harness].toLowerCase()}` : `Add a ${HARNESS_SHORT_NAMES[harness]} capability`}
             onClose={() => sendAdd({ type: 'CLOSE' })}
             footer={addDraft.kind
-              ? <><button type="button" className="button" onClick={() => sendAdd({ type: 'BACK' })}><ArrowLeft size={13}/> Back</button><button type="button" className="button button--primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</button></>
-              : <button type="button" className="button" onClick={() => sendAdd({ type: 'CLOSE' })}>Cancel</button>}
+              ? <><ApexButton onClick={() => sendAdd({ type: 'BACK' })}><ArrowLeft size={13}/> Back</ApexButton><ApexButton variant="primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</ApexButton></>
+              : <ApexButton onClick={() => sendAdd({ type: 'CLOSE' })}>Cancel</ApexButton>}
           >
             {addDraft.kind === null ? (
               <div className="capability-choice-list">
@@ -293,26 +300,26 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
             ) : addDraft.kind === 'bundle' ? (
               <div className="add-tool-form">
                 <p className="modal-intro">{PACKAGE_HELP[harness]} This installs executable code; it does not connect to an arbitrary MCP endpoint.</p>
-                <label className="field"><span>{PACKAGE_LABELS[harness]} source</span><input autoFocus value={addDraft.source} onChange={(event) => setAddField('source', event.target.value)} placeholder="npm:@scope/package"/></label>
+                <TextInput label={`${PACKAGE_LABELS[harness]} source`} value={addDraft.source} hasAutoFocus onChange={(value) => setAddField('source', value)} placeholder="npm:@scope/package" containerClassName="field" />
                 <small className="field-help">Examples: a Git URL, <code>npm:@scope/package</code>, or an absolute local folder path.</small>
               </div>
             ) : addDraft.kind === 'extension' ? (
               <div className="add-tool-form">
                 <p className="modal-intro">Pi records a standalone local extension file through its native package manager. The original file remains the source of truth.</p>
-                <label className="field"><span>Extension file</span><input autoFocus value={addDraft.source} onChange={(event) => setAddField('source', event.target.value)} placeholder="/absolute/path/to/my-extension.ts"/></label>
+                <TextInput label="Extension file" value={addDraft.source} hasAutoFocus onChange={(value) => setAddField('source', value)} placeholder="/absolute/path/to/my-extension.ts" containerClassName="field" />
                 <small className="field-help">Choose an absolute local <code>.ts</code>, <code>.js</code>, <code>.mjs</code>, or <code>.cjs</code> file. Extensions run with your user permissions.</small>
-                <label className="field"><span>Available in</span><select value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></select></label>
-                <p className="connection-warning"><ShieldCheck size={13}/> Extension APIs differ between harnesses. Apex installs the file correctly, but CLI-specific UI may not render in the desktop app.</p>
+                <div className="field"><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
+                <Banner status="warning" className="connection-warning" title="Extension APIs differ between harnesses. Apex installs the file correctly, but CLI-specific UI may not render in the desktop app." />
               </div>
             ) : (
               <div className="add-tool-form">
                 <p className="modal-intro">Add a local stdio server to pi-mcp-adapter’s configuration. HTTP/SSE servers and OAuth are managed outside Apex.</p>
-                <label className="field"><span>Server name</span><input autoFocus value={addDraft.mcpName} onChange={(event) => setAddField('mcpName', event.target.value)} placeholder="my-local-tools"/></label>
+                <TextInput label="Server name" value={addDraft.mcpName} hasAutoFocus onChange={(value) => setAddField('mcpName', value)} placeholder="my-local-tools" containerClassName="field" />
                 <p className="field-help">{MCP_STDIO_HELP[harness]}</p>
-                <label className="field"><span>Executable</span><input value={addDraft.mcpCommand} onChange={(event) => setAddField('mcpCommand', event.target.value)} placeholder="npx"/></label>
-                <label className="field"><span>Arguments <small>(one per line)</small></span><textarea value={addDraft.mcpArgs} onChange={(event) => setAddField('mcpArgs', event.target.value)} rows={3} placeholder={'-y\n@modelcontextprotocol/server-filesystem\n/path/to/project'}/></label>
-                <label className="field"><span>Available in</span><select value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></select></label>
-                <p className="connection-warning"><ShieldCheck size={13}/> Only connect servers you trust. MCP tools can read data or run actions with your user permissions.</p>
+                <TextInput label="Executable" value={addDraft.mcpCommand} onChange={(value) => setAddField('mcpCommand', value)} placeholder="npx" containerClassName="field" />
+                <TextArea label="Arguments (one per line)" value={addDraft.mcpArgs} onChange={(value) => setAddField('mcpArgs', value)} rows={3} placeholder={'-y\n@modelcontextprotocol/server-filesystem\n/path/to/project'} containerClassName="field" />
+                <div className="field"><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
+                <Banner status="warning" className="connection-warning" title="Only connect servers you trust. MCP tools can read data or run actions with your user permissions." />
               </div>
             )}
             {addDraft.output ? <pre className="install-output" role="status">{addDraft.output}</pre> : null}

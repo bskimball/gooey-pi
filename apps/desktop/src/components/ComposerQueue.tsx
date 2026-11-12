@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import type { QueuedPrompt } from "@/types/api";
 import { ArrowUp, CaretDown, Clock, PencilSimpleLine, Trash } from "./icons";
-
+import { IconButton } from "./ui";
 interface ComposerQueueProps {
 	queuedMessages: QueuedPrompt[];
 	onSendNow(message: QueuedPrompt): void;
@@ -54,33 +54,33 @@ export function ComposerQueue({
 						<div className="composer-queue__item" key={queued.id}>
 							<span className="composer-queue__text">{queued.text}</span>
 							<span className="composer-queue__actions">
-								<button
-									type="button"
+								<IconButton
+									size="small"
+									label={`Send queued message immediately: ${queued.text}`}
 									className="composer-queue__action"
-									aria-label={`Send queued message immediately: ${queued.text}`}
 									title="Send queued message immediately"
 									onClick={() => onSendNow(queued)}
 								>
 									<ArrowUp size={13} />
-								</button>
-								<button
-									type="button"
+								</IconButton>
+								<IconButton
+									size="small"
+									label={`Edit queued message: ${queued.text}`}
 									className="composer-queue__action"
-									aria-label={`Edit queued message: ${queued.text}`}
 									title="Edit queued message"
 									onClick={() => onEdit(queued)}
 								>
 									<PencilSimpleLine size={13} />
-								</button>
-								<button
-									type="button"
+								</IconButton>
+								<IconButton
+									size="small"
+									label={`Delete queued message: ${queued.text}`}
 									className="composer-queue__action composer-queue__action--delete"
-									aria-label={`Delete queued message: ${queued.text}`}
 									title="Delete queued message"
 									onClick={() => onDelete?.(queued)}
 								>
 									<Trash size={13} />
-								</button>
+								</IconButton>
 							</span>
 						</div>
 					))}

@@ -1,4 +1,5 @@
 import { CaretDown, Check, FolderSimpleStar } from './icons'
+import { ApexButton } from './ui'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CheckoutAction, CheckoutCatalog } from '@/types/api'
 
@@ -70,8 +71,9 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   const label = checkoutLabel(catalog, fallbackLabel)
   return (
     <div className="worktree-picker" ref={rootRef}>
-      <button
-        type="button"
+      <ApexButton
+        variant="quiet"
+        compact
         className="permissions-chip worktree-picker__trigger"
         aria-label={`Checkout: ${label}`}
         aria-expanded={open}
@@ -82,7 +84,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
         <FolderSimpleStar size={12} />
         <span className="worktree-picker__label">{label}</span>
         <CaretDown className="worktree-picker__chevron" size={11} />
-      </button>
+      </ApexButton>
       {open && catalog ? (
         <div className="worktree-picker__menu" id={menuId} role="menu" aria-label={strategy === 'worktree' ? 'Git worktrees' : 'Git branches'}>
           <div className="worktree-picker__heading">Checkouts</div>
@@ -108,7 +110,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
             <label htmlFor={`${menuId}-branch`}>Create {strategy}</label>
             <div>
               <input id={`${menuId}-branch`} value={branch} placeholder="New branch name" onChange={(event) => { setBranch(event.target.value); setError('') }} />
-              <button type="submit" disabled={!branch.trim() || creating}>{creating ? 'Creating…' : 'Create'}</button>
+              <ApexButton type="submit" variant="primary" compact disabled={!branch.trim() || creating}>{creating ? 'Creating…' : 'Create'}</ApexButton>
             </div>
             {error ? <span role="alert">{error}</span> : null}
           </form>

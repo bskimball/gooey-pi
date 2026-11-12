@@ -9,9 +9,6 @@
 .traffic-light-clearance { width: 66px; flex: 0 0 66px; }
 .traffic-light-clearance--toolbar { width: 62px; flex-basis: 62px; }
 .windows-app-menu { position: relative; }
-.windows-app-menu__list { position: absolute; z-index: 140; top: calc(100% + 6px); left: 0; min-width: 148px; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-popover); animation: sidebar-menu-in var(--duration-fast) var(--ease-out); }
-.windows-app-menu__button { height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; font-size: var(--fs-ui); text-align: left; cursor: default; }
-.windows-app-menu__button:hover, .windows-app-menu__button:focus-visible { color: var(--text); background: var(--surface-hover); outline: 0; }
 .title-toolbar__nav, .title-toolbar__actions { display: flex; align-items: center; gap: 2px; }
 .title-toolbar__identity { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
 .title-toolbar__identity strong { max-width: 28vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-body); font-weight: 550; }

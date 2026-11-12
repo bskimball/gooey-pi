@@ -1,4 +1,6 @@
 import { Bell, MagnifyingGlass } from '@/components/icons'
+import * as stylex from '@stylexjs/stylex'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityPeek } from '@/components/activity/ActivityPeek'
 import { ActivityQuestionCard } from '@/components/activity/ActivityQuestionCard'
@@ -6,9 +8,20 @@ import { ActivityReplyBox } from '@/components/activity/ActivityReplyBox'
 import { ActivityRow, type ActivitySectionKind } from '@/components/activity/ActivityRow'
 import { buildActivitySections, type ActivityRowItem, type SessionLiveMap } from '@/app/session-live'
 import { activityNotificationSignature, isSessionRunning, signatureCleared } from '@/app/session-attention'
-import { EmptyState } from '@/components/ui'
+import { ApexButton, EmptyState } from '@/components/ui'
 import type { ActivityControls } from '@/hooks/useActivityControls'
 import type { ProjectRecord, SessionRecord } from '@/types/api'
+
+const filterControlStyles = stylex.create({
+  control: {
+    minWidth: 0,
+    flexGrow: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    outlineWidth: 0,
+    fontSize: 'var(--fs-ui)',
+  },
+})
 
 export type ActivityFilter = 'all' | 'attention' | 'running'
 export const ACTIVITY_BATCH = 250
@@ -262,22 +275,25 @@ export function ActivityPage({
 
             <div className="page-tools page-tools--activity">
               <div className="activity-tools__right">
-                <label className="page-search page-search--small">
-                  <MagnifyingGlass size={13} />
-                  <input
-                    value={query}
-                    onChange={(event) => setViewState((current) => updateActivityCriteria(current, { query: event.target.value }, RECENT_INITIAL_LIMIT))}
-                    placeholder="Filter activity"
-                  />
-                </label>
-                <button
+                <TextInput
+                  label="Filter activity"
+                  isLabelHidden
+                  placeholder="Filter activity"
+                  startIcon={<MagnifyingGlass size={13} />}
+                  value={query}
+                  onChange={(value) => setViewState((current) => updateActivityCriteria(current, { query: value }, RECENT_INITIAL_LIMIT))}
+                  containerClassName="page-search page-search--small"
+                  controlXstyle={filterControlStyles.control}
+                />
+                <ApexButton
                   type="button"
-                  className="button button--compact activity-clear-all"
+                  compact
+                  className="activity-clear-all"
                   disabled={!clearable.length}
                   onClick={() => onClear(clearable)}
                 >
                   Mark all reviewed
-                </button>
+                </ApexButton>
               </div>
             </div>
           </div>
@@ -317,13 +333,14 @@ export function ActivityPage({
                       ))}
                     </div>
                     {section.id === 'recent' && remainingRecent > 0 ? (
-                      <button
+                      <ApexButton
                         type="button"
+                        variant="quiet"
                         className="page-show-more activity-show-more"
                         onClick={() => setViewState((current) => growActivityBatch(current, sections.recent.length))}
                       >
                         Show {Math.min(ACTIVITY_BATCH, remainingRecent)} more sessions
-                      </button>
+                      </ApexButton>
                     ) : null}
                   </section>
                 ))}

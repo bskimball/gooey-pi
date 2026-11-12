@@ -1,3 +1,4 @@
+import { Banner } from '@astryxdesign/core/Banner'
 import { useMemo, useState } from 'react'
 import type { TranscriptMessage } from '@/types/api'
 import { specialistEvidence } from '@/lib/specialist-evidence'
@@ -16,6 +17,6 @@ export function SpecialistFiles({ messages, cwd }: { messages: TranscriptMessage
       if (!window.apex) { setError('Source navigation requires the Desktop app.'); return }
       void window.apex.app.openInVsCode(file.path, file.line).then((opened) => { if (!opened) setError('Could not open this source path. Confirm it still exists in a granted project.') }).catch((reason) => setError(errorMessage(reason)))
     }}><code>{file.path}{file.line ? `:${file.line}` : ''}</code><small>{file.tool}</small></button></li>)}</ul>
-    {error ? <p className="changes-error" role="alert">{error}</p> : null}
+    {error ? <Banner status="error" role="alert" title={error} /> : null}
   </details>
 }

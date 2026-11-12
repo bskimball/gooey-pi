@@ -1,6 +1,8 @@
+import { Banner } from '@astryxdesign/core/Banner'
 import { ArrowsClockwise, PawPrint, Sparkle } from '@/components/icons'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { PetAvatar } from '@/components/PetAvatar'
+import { ApexButton } from '@/components/ui'
 import type { PetDefinition, ApexApi } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
 import { SettingsToggle } from './SettingsToggle'
@@ -66,10 +68,10 @@ export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps 
         </div>
       </section>
       <section className="settings-group">
-        <div className="settings-group__heading"><h2>Codex Pets</h2><button type="button" className="button button--compact" disabled={!pets || loading} onClick={() => { void refresh() }}><ArrowsClockwise size={12} className={loading ? 'spin' : ''} /> Refresh</button></div>
+        <div className="settings-group__heading"><h2>Codex Pets</h2><ApexButton compact disabled={!pets || loading} icon={<ArrowsClockwise size={12} className={loading ? 'spin' : ''} />} onClick={() => { void refresh() }}>Refresh</ApexButton></div>
         <p className="settings-group__description">Apex safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and Apex are always bundled.</p>
         <div className="settings-row"><span><strong>{codexCount ? `${codexCount} Codex ${codexCount === 1 ? 'pet' : 'pets'} found` : 'No additional Codex pets found'}</strong><small>{codexCount ? 'They are available in the companion picker above.' : 'Install or hatch pets later, then refresh this list.'}</small></span></div>
-        {loadError ? <p className="settings-error" role="alert">{loadError}</p> : null}
+        {loadError ? <Banner status="error" role="alert" className="settings-error" title={loadError} /> : null}
       </section>
     </>
   )

@@ -80,7 +80,8 @@ import {
 } from "./icons";
 import { ModelPicker } from "./ModelPicker";
 import { PiModeControl } from "./PiModeControl";
-import { IconButton, SelectControl } from "./ui";
+import { Banner } from "@astryxdesign/core/Banner";
+import { ApexButton, IconButton, SelectControl } from "./ui";
 
 interface ComposerProps {
 	busy: boolean;
@@ -716,7 +717,7 @@ export const Composer = memo(function Composer({
 					</div>
 				) : null}
 				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
-				{browserTarget && !extensionTab ? <button type="button" className="composer-browser-target" title={browserTarget.url} onClick={onOpenBrowser}><Globe size={12} /><span>{browserTarget.title || browserTarget.url}</span></button> : null}
+				{browserTarget && !extensionTab ? <ApexButton variant="quiet" compact className="composer-browser-target" label={browserTarget.title || browserTarget.url} title={browserTarget.url} onClick={onOpenBrowser}><Globe size={12} /><span>{browserTarget.title || browserTarget.url}</span></ApexButton> : null}
 				{images.length ||
 				unsupportedFiles.length ||
 				terminalSelection?.text ||
@@ -745,14 +746,14 @@ export const Composer = memo(function Composer({
 										className={terminalSelectionOpen ? "is-open" : ""}
 									/>
 								</button>
-								<button
-									type="button"
+								<IconButton
+									size="small"
 									className="composer-attachment__clear"
-									aria-label="Clear terminal selection"
+									label="Clear terminal selection"
 									onClick={onClearTerminalSelection}
 								>
 									<X size={12} />
-								</button>
+								</IconButton>
 							</div>
 						) : null}
 						{images.map((image) => (
@@ -948,11 +949,7 @@ export const Composer = memo(function Composer({
 						))}
 					</div>
 				) : null}
-				{attachmentError ? (
-					<p className="composer-attachment-error" role="alert">
-						{attachmentError}
-					</p>
-				) : null}
+				{attachmentError ? <Banner status="error" role="alert" className="composer-attachment-error" title={attachmentError} /> : null}
 				<p
 					id={imageStatusId}
 					className="sr-only"
@@ -1017,8 +1014,10 @@ export const Composer = memo(function Composer({
 						/>
 						<ExecutingModelChip executingModel={executingModel ?? undefined} />
 						{fastSupported ? (
-							<button
-								type="button"
+							<ApexButton
+								variant="quiet"
+								compact
+								label="Fast"
 								className={`fast-mode-toggle ${fast ? "is-active" : ""}`}
 								aria-pressed={fast}
 								disabled={!fastAvailable}
@@ -1031,7 +1030,7 @@ export const Composer = memo(function Composer({
 							>
 								<Lightning size={12} />{" "}
 								<span className="fast-mode-toggle__label">Fast</span>
-							</button>
+							</ApexButton>
 						) : null}
 					</div>
 					<div className="composer__actions">

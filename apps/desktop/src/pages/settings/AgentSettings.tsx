@@ -1,4 +1,7 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { ArrowsClockwise, Keyboard, Robot, ShieldCheck } from '@/components/icons'
+import { ApexButton } from '@/components/ui'
 import { useState } from 'react'
 import { HARNESS_IDS, type HarnessId } from '@/types/api'
 import { errorMessage } from '@/lib/errors'
@@ -32,11 +35,11 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
       <section className="settings-group">
         <div className="settings-group__heading">
           <h2>Runtime</h2>
-          <button type="button" className="button button--compact" disabled={refreshing} onClick={() => { void refreshHarnesses() }}>
-            <ArrowsClockwise className={refreshing ? 'spin' : ''} size={13} />{refreshing ? 'Refreshing…' : 'Refresh harnesses'}
-          </button>
+          <ApexButton compact disabled={refreshing} icon={<ArrowsClockwise className={refreshing ? 'spin' : ''} size={13} />} onClick={() => { void refreshHarnesses() }}>
+            {refreshing ? 'Refreshing…' : 'Refresh harnesses'}
+          </ApexButton>
         </div>
-        {refreshError ? <p className="settings-error" role="alert">{refreshError}</p> : null}
+        {refreshError ? <Banner status="error" role="alert" className="settings-error" title={refreshError} /> : null}
         {HARNESS_IDS.map((harness) => {
           const name = HARNESS_AGENT_NAMES[harness]
           const status = meta?.harnesses[harness]
@@ -73,12 +76,27 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
       </section>
       <section className="settings-group">
         <h2>Message shortcuts</h2>
-        <label className="settings-row">
+        <div className="settings-row">
           <span><strong>Primary Enter action while an agent is working</strong><small>{oppositeActionShortcut} always uses the opposite action. {newLineShortcut} adds a new line.</small></span>
-          <span className="shortcut-choice" role="radiogroup" aria-label="Primary Enter action">
-            {(['queue', 'steer'] as const).map((action) => <button key={action} type="button" className={`button button--compact ${settings.messageEnterAction === action ? 'is-active' : ''}`} role="radio" aria-checked={settings.messageEnterAction === action} onClick={() => { void onUpdate({ messageEnterAction: action }) }}>{action === 'queue' ? 'Queue' : 'Steer'}</button>)}
-          </span>
-        </label>
+          <SegmentedControl
+            label="Primary Enter action"
+            size="sm"
+            value={settings.messageEnterAction}
+            onChange={(next) => {
+              if (next === 'queue' || next === 'steer') void onUpdate({ messageEnterAction: next })
+            }}
+            className="shortcut-choice"
+          >
+            {(['queue', 'steer'] as const).map((action) => (
+              <SegmentedControlItem
+                key={action}
+                value={action}
+                label={action === 'queue' ? 'Queue' : 'Steer'}
+                className={settings.messageEnterAction === action ? 'is-active' : ''}
+              />
+            ))}
+          </SegmentedControl>
+        </div>
         <div className="shortcut-row"><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Queue message' : 'Steer current turn'}</span><kbd>Enter</kbd></div>
         <div className="shortcut-row"><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Steer current turn' : 'Queue message'}</span><kbd>{oppositeActionShortcut}</kbd></div>
       </section>

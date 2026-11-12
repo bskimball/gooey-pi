@@ -1151,17 +1151,17 @@ describe("Composer sendSignal", () => {
 				.click();
 		});
 		expect(onModelChange).toHaveBeenCalledWith("provider/vision");
+		const effortTrigger = container.querySelector<HTMLButtonElement>(
+			'[aria-label="Reasoning effort"][role="combobox"]',
+		)!;
 		await act(async () => {
-			container
-				.querySelector<HTMLButtonElement>(
-					'[aria-label="Reasoning effort"][role="combobox"]',
-				)!
-				.click();
+			effortTrigger.click();
 		});
+		const effortListbox = container.querySelector<HTMLElement>(
+			`#${CSS.escape(effortTrigger.getAttribute("aria-controls")!)}`,
+		)!;
 		await act(async () => {
-			container
-				.querySelector<HTMLButtonElement>('.select-control [role="option"]')!
-				.click();
+			effortListbox.querySelector<HTMLElement>('[role="option"]')!.click();
 		});
 		expect(onEffortChange).toHaveBeenCalledWith("low");
 		await act(async () => {
@@ -1212,13 +1212,22 @@ describe("Composer sendSignal", () => {
 			container.querySelector<HTMLButtonElement>(
 				`button[aria-label="${label}"]`,
 			)!;
+		const listboxOptions = (controlLabel: string) => {
+			const button = trigger(controlLabel);
+			const controlsId = button.getAttribute("aria-controls");
+			const scope = controlsId
+				? container.querySelector<HTMLElement>(`#${CSS.escape(controlsId)}`)
+				: container;
+			return [...(scope?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+		};
 		const choose = async (label: string, text: string) => {
 			await act(async () => {
 				trigger(label).click();
 			});
-			const option = [
-				...container.querySelectorAll<HTMLButtonElement>('[role="option"]'),
-			].find((item) => item.querySelector("strong")?.textContent === text)!;
+			const option = listboxOptions(label).find(
+				(item) =>
+					(item.querySelector("strong")?.textContent ?? item.textContent?.trim()) === text,
+			)!;
 			await act(async () => {
 				option.click();
 			});
@@ -1245,14 +1254,10 @@ describe("Composer sendSignal", () => {
 			trigger("Sidekick thinking").click();
 		});
 		expect(
-			[...container.querySelectorAll('[role="option"] strong')].map(
-				(option) => option.textContent,
-			),
+			listboxOptions("Sidekick thinking").map((option) => option.textContent?.trim()),
 		).toEqual(["Sidekick: Off", "Sidekick: Low"]);
 		await act(async () => {
-			container
-				.querySelectorAll<HTMLButtonElement>('[role="option"]')[1]
-				.click();
+			listboxOptions("Sidekick thinking")[1].click();
 		});
 		expect(onSend).toHaveBeenLastCalledWith(
 			"/mode fusion-set sidekick thinking low",
@@ -1309,9 +1314,7 @@ describe("Composer sendSignal", () => {
 			trigger("Sidekick thinking").click();
 		});
 		expect(
-			[...container.querySelectorAll('[role="option"] strong')].map(
-				(option) => option.textContent,
-			),
+			listboxOptions("Sidekick thinking").map((option) => option.textContent?.trim()),
 		).toEqual(["Sidekick: High", "Sidekick: Extra high"]);
 		await act(async () => {
 			trigger("Sidekick thinking").click();
@@ -1400,56 +1403,49 @@ describe("Composer sendSignal", () => {
 		)!;
 
 		await act(async () => {
-			const mousedown = new MouseEvent("mousedown", {
-				bubbles: true,
-				cancelable: true,
-			});
-			modeChevron.dispatchEvent(mousedown);
+			modeTrigger.focus();
 			modeChevron.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("true");
+		const modeListbox = modeControl.querySelector<HTMLElement>('[role="listbox"]')!;
+		expect(modeListbox).not.toBeNull();
 		expect(document.activeElement).toBe(modeTrigger);
 
 		await act(async () => {
-			const mousedown = new MouseEvent("mousedown", {
-				bubbles: true,
-				cancelable: true,
-			});
-			const prevented = !modeChevron.dispatchEvent(mousedown);
-			if (!prevented) modeTrigger.blur();
 			modeChevron.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("false");
 
 		await act(async () => {
 			modeChevron.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("true");
 
 		await act(async () => {
 			document.dispatchEvent(
 				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
 			);
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("false");
 		expect(document.activeElement).toBe(modeTrigger);
 
 		await setDraft("Unsent draft");
+		modeTrigger.focus();
 
 		await act(async () => {
 			modeTrigger.dispatchEvent(
 				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
 			);
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).not.toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("true");
 		expect(onSend).not.toHaveBeenCalled();
 
 		await act(async () => {
-			modeTrigger.dispatchEvent(
-				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+			document.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
 			);
 		});
-		expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("false");
 		expect(onSend).not.toHaveBeenCalled();
 
 		const scrollSpy = vi.fn();
@@ -1457,95 +1453,61 @@ describe("Composer sendSignal", () => {
 			configurable: true,
 			value: scrollSpy,
 		});
-		const rectSpy = vi
-			.spyOn(modeControl, "getBoundingClientRect")
-			.mockReturnValue({
-				x: 420,
-				y: 505,
-				top: 505,
-				bottom: 531,
-				left: 420,
-				right: 448,
-				width: 28,
-				height: 26,
-				toJSON: () => ({}),
-			});
 
-		try {
+		await act(async () => {
+			modeTrigger.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+			);
+		});
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("true");
+		const options = [
+			...modeListbox.querySelectorAll<HTMLElement>('[role="option"]'),
+		];
+		const activeOption = () => {
+			const activeId = modeTrigger.getAttribute("aria-activedescendant");
+			return activeId ? modeListbox.querySelector<HTMLElement>(`#${CSS.escape(activeId)}`) : null;
+		};
+		expect(activeOption()).toBe(options[0]);
+		expect(scrollSpy).toHaveBeenCalledWith({ block: "nearest" });
+
+		await act(async () => {
+			modeTrigger.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "End", bubbles: true }),
+			);
+		});
+		expect(activeOption()).toBe(options.at(-1));
+		expect(options.at(-1)?.textContent).toContain("Configure Fusion…");
+
+		await act(async () => {
+			modeTrigger.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+			);
+		});
+		expect(activeOption()).toBe(options[0]);
+
+		const fusionIndex = options.findIndex(
+			(opt) =>
+				opt.textContent?.includes("Fusion") &&
+				!opt.textContent?.includes("Configure"),
+		);
+		for (let step = 0; step < fusionIndex; step += 1) {
 			await act(async () => {
 				modeTrigger.dispatchEvent(
 					new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
 				);
 			});
-			const menu = modeControl.querySelector<HTMLElement>('[role="listbox"]')!;
-			expect(menu.style.getPropertyValue("--select-menu-width")).toBe("320px");
-			expect(menu.style.getPropertyValue("--select-menu-max-height")).toBe(
-				"482px",
-			);
-			rectSpy.mockReturnValue({
-				x: 420,
-				y: 123,
-				top: 123,
-				bottom: 149,
-				left: 420,
-				right: 448,
-				width: 28,
-				height: 26,
-				toJSON: () => ({}),
-			});
-			await act(async () => {
-				window.dispatchEvent(new Event("resize"));
-			});
-			expect(menu.style.getPropertyValue("--select-menu-max-height")).toBe(
-				"100px",
-			);
-			const options = [
-				...modeControl.querySelectorAll<HTMLButtonElement>('[role="option"]'),
-			];
-			expect(document.activeElement).toBe(options[0]);
-			expect(scrollSpy).toHaveBeenCalledWith({ block: "nearest" });
-
-			await act(async () => {
-				options[0].dispatchEvent(
-					new KeyboardEvent("keydown", { key: "End", bubbles: true }),
-				);
-			});
-			expect(document.activeElement).toBe(options.at(-1));
-			expect(options.at(-1)?.textContent).toContain("Configure Fusion…");
-
-			await act(async () => {
-				options.at(-1)!.dispatchEvent(
-					new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
-				);
-			});
-			expect(document.activeElement).toBe(options[0]);
-
-			const fusionIndex = options.findIndex(
-				(opt) =>
-					opt.textContent?.includes("Fusion") &&
-					!opt.textContent?.includes("Configure"),
-			);
-			for (let step = 0; step < fusionIndex; step += 1) {
-				await act(async () => {
-					(document.activeElement as HTMLElement).dispatchEvent(
-						new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
-					);
-				});
-			}
-			expect(document.activeElement).toBe(options[fusionIndex]);
-
-			await act(async () => {
-				options[fusionIndex].dispatchEvent(
-					new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-				);
-			});
-			expect(modeControl.querySelector('[role="listbox"]')).toBeNull();
-			expect(document.activeElement).toBe(modeTrigger);
-			expect(onSend).toHaveBeenCalledTimes(1);
-			expect(onSend).toHaveBeenCalledWith("/mode fusion", [], "queue");
-		} finally {
-			rectSpy.mockRestore();
 		}
+		expect(activeOption()).toBe(options[fusionIndex]);
+
+		await act(async () => {
+			modeTrigger.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+			);
+		});
+		expect(modeTrigger.getAttribute("aria-expanded")).toBe("false");
+		expect(document.activeElement).toBe(modeTrigger);
+		expect(onSend).toHaveBeenCalledTimes(1);
+		expect(onSend).toHaveBeenCalledWith("/mode fusion", [], "queue");
 	});
 });
 

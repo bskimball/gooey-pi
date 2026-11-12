@@ -1,4 +1,5 @@
 import { ArrowCounterClockwise } from '@/components/icons'
+import { ApexButton } from '@/components/ui'
 import type { SettingsSectionProps } from './contracts'
 import { browserHomeValidation, normalizeBrowserHome } from './draft-state'
 import { DraftSettingField } from './DraftSettingField'
@@ -29,7 +30,7 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
         <h2>Browser data</h2>
         <div className="danger-row">
           <span><strong>Clear browsing data</strong><small>Remove cookies, cache, permissions, and browsing history.</small></span>
-          <button type="button" className="button" onClick={onRequestReset}><ArrowCounterClockwise size={13} /> Clear data</button>
+          <ApexButton icon={<ArrowCounterClockwise size={13} />} onClick={onRequestReset}>Clear data</ApexButton>
         </div>
       </section>
     </>

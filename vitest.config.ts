@@ -1,3 +1,4 @@
+import stylex from '@stylexjs/unplugin'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import { createCoverageInventory, familyCoverageThresholds } from './scripts/release/coverage-inventory'
@@ -7,6 +8,7 @@ const coverageInventory = createCoverageInventory(projectRoot)
 
 export default defineConfig({
   root: projectRoot,
+  plugins: [stylex.vite({ runtimeInjection: false, devMode: 'css-only' })],
   resolve: { alias: { '@': fileURLToPath(new URL('./apps/desktop/src', import.meta.url)) } },
   esbuild: { jsx: 'automatic' },
   test: {

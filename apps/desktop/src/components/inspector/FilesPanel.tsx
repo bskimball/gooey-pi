@@ -9,6 +9,7 @@ import {
   FolderOpen,
   MagnifyingGlass,
 } from '../icons'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename } from '@/lib/data'
 import { errorMessage } from '@/lib/errors'
@@ -309,12 +310,7 @@ export function FilesPanel({
   return (
     <div className="files-panel">
       <div className="files-search">
-        <MagnifyingGlass size={13} />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Filter project paths"
-        />
+        <TextInput label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
         {!isSearching && allDirIds.size > 0 ? (
           expandedIds.size > 0 ? (
             <IconButton size="small" label="Collapse all folders" onClick={collapseAll}>

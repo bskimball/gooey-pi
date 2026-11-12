@@ -1,18 +1,27 @@
+/* Explicit cascade order so bare element defaults in `apex-base` never override
+   Astryx primitives in `astryx-base`, `astryx-theme` bridges Apex + VS Code
+   tokens onto Astryx, existing class-scoped Apex stylesheets live in `apex`,
+   authored StyleX rules emit into `stylex.*`, and container/viewport overrides
+   in `apex-responsive` win at narrow widths. */
+@layer reset, apex-base, astryx-base, astryx-theme, apex, stylex, apex-responsive;
+
 @import './styles/base.css';
-@import './styles/workbench.css';
-@import './styles/sidebar.css';
-@import './styles/transcript.css';
-@import './styles/composer.css';
-@import './styles/voice.css';
-@import './styles/pets.css';
-@import './styles/inspector.css';
-@import './styles/agents.css';
-@import './styles/annotation-source.css';
-@import './styles/browser-references.css';
-@import './styles/terminal.css';
-@import './styles/pages.css';
-@import './styles/activity.css';
-@import './styles/plugins.css';
-@import './styles/settings.css';
-@import './styles/overlays.css';
-@import './styles/responsive.css';
+@import '@astryxdesign/core/astryx.css';
+@import './styles/astryx-tokens.css' layer(astryx-theme);
+@import './styles/workbench.css' layer(apex);
+@import './styles/sidebar.css' layer(apex);
+@import './styles/transcript.css' layer(apex);
+@import './styles/composer.css' layer(apex);
+@import './styles/voice.css' layer(apex);
+@import './styles/pets.css' layer(apex);
+@import './styles/inspector.css' layer(apex);
+@import './styles/agents.css' layer(apex);
+@import './styles/annotation-source.css' layer(apex);
+@import './styles/browser-references.css' layer(apex);
+@import './styles/terminal.css' layer(apex);
+@import './styles/pages.css' layer(apex);
+@import './styles/activity.css' layer(apex);
+@import './styles/plugins.css' layer(apex);
+@import './styles/settings.css' layer(apex);
+@import './styles/overlays.css' layer(apex);
+@import './styles/responsive.css' layer(apex-responsive);

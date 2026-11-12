@@ -1,7 +1,9 @@
+import { TextArea } from '@astryxdesign/core/TextArea'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import type { ExtensionUiRequest } from '@/lib/extension-ui'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
-import { Modal } from './ui'
+import { ApexButton, Modal } from './ui'
 import {
   initialQuestionnaireSnapshot,
   questionnaireAnswer,
@@ -240,10 +242,10 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   return (
     <Modal title={request.title} onClose={cancel} footer={(
       <>
-        <button type="button" className="button" onClick={cancel}>Cancel</button>
-        {request.method === 'confirm' ? <button type="button" className="button button--primary" onClick={() => onRespond({ confirmed: true })}>Confirm</button> : null}
-        {request.method === 'input' || request.method === 'editor' ? <button type="button" className="button button--primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</button> : null}
-        {questionnaire ? <button type="button" className="button button--primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</button> : null}
+        <ApexButton onClick={cancel}>Cancel</ApexButton>
+        {request.method === 'confirm' ? <ApexButton variant="primary" onClick={() => onRespond({ confirmed: true })}>Confirm</ApexButton> : null}
+        {request.method === 'input' || request.method === 'editor' ? <ApexButton variant="primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</ApexButton> : null}
+        {questionnaire ? <ApexButton variant="primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</ApexButton> : null}
       </>
     )}>
       {questionnaire ? (
@@ -357,8 +359,32 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
         </div>
       ) : null}
       {request.method === 'confirm' ? <p className="modal-intro extension-question__message">{request.message}</p> : null}
-      {request.method === 'input' ? <label className="field extension-question__field"><span>Response</span><input autoFocus value={value} placeholder={request.placeholder} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && value.trim()) { event.preventDefault(); onRespond({ value }) } }} /></label> : null}
-      {request.method === 'editor' ? <label className="field extension-question__field"><span>Response</span><textarea autoFocus rows={7} value={value} onChange={(event) => setValue(event.target.value)} /></label> : null}
+      {request.method === 'input' ? (
+        <TextInput
+          label="Response"
+          hasAutoFocus
+          value={value}
+          placeholder={request.placeholder}
+          containerClassName="field extension-question__field"
+          onChange={(nextValue) => setValue(nextValue)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && value.trim()) {
+              event.preventDefault()
+              onRespond({ value })
+            }
+          }}
+        />
+      ) : null}
+      {request.method === 'editor' ? (
+        <TextArea
+          label="Response"
+          hasAutoFocus
+          rows={7}
+          value={value}
+          containerClassName="field extension-question__field"
+          onChange={(nextValue) => setValue(nextValue)}
+        />
+      ) : null}
     </Modal>
   )
 }
