@@ -89,6 +89,56 @@ describe('registerIpc verify gate', () => {
     registration = registerIpc(stubs as never, EXPECTED_URL)
   })
 
+  it('runs effective config only after sender, input and project authorization', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'apex-effect-config-'))
+    mkdirSync(join(directory, '.git'))
+    writeFileSync(join(directory, 'AGENTS.md'), 'project instructions')
+    const authorizeReadOnlyCwd = vi.fn(async () => directory)
+    stubs.projects = { authorizeReadOnlyCwd }
+    stubs.extensionPathContext = { isPackaged: false, appPath: directory, resourcesPath: directory }
+    const event = fakeEvent()
+    const invoke = handlers.get('runtime:effective-config')!
+    try {
+      expect(() => invoke(event, directory)).toThrow('IPC sender is not authorized')
+      expect(authorizeReadOnlyCwd).not.toHaveBeenCalled()
+      registration.authorize(event.sender as never)
+      await expect(invoke(event, 42)).rejects.toThrow('cwd must be a string')
+      expect(authorizeReadOnlyCwd).not.toHaveBeenCalled()
+      const result = await invoke(event, directory)
+      expect(result).toMatchObject({ instructionSources: expect.arrayContaining([
+        { scope: 'project', kind: 'AGENTS.md', path: join(directory, 'AGENTS.md'), bytes: 20 },
+      ]) })
+      expect(authorizeReadOnlyCwd).toHaveBeenCalledWith(directory)
+      const denied = new Error('Project is not granted')
+      authorizeReadOnlyCwd.mockRejectedValueOnce(denied)
+      await expect(invoke(event, directory)).rejects.toBe(denied)
+    } finally {
+      await registration.dispose()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('interrupts in-flight config requests on disposal before the scan can start', async () => {
+    const event = fakeEvent()
+    registration.authorize(event.sender as never)
+    let finishAuthorization!: (path: string) => void
+    const authorizeReadOnlyCwd = vi.fn(() => new Promise<string>((resolve) => { finishAuthorization = resolve }))
+    stubs.projects = { authorizeReadOnlyCwd }
+    const scanStarted = vi.fn(() => { throw new Error('Scan must not start after shutdown') })
+    Object.defineProperty(stubs, 'extensionPathContext', { get: scanStarted })
+    const invoke = handlers.get('runtime:effective-config')!
+    const pending = invoke(event, process.cwd())
+    const interrupted = expect(pending).rejects.toThrow()
+    await vi.waitFor(() => expect(authorizeReadOnlyCwd).toHaveBeenCalledOnce())
+    await registration.dispose()
+    await interrupted
+    finishAuthorization(process.cwd())
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(scanStarted).not.toHaveBeenCalled()
+    expect(() => invoke(event, process.cwd())).toThrow('IPC sender is not authorized')
+    await registration.dispose()
+  })
+
   it('enables a provider and clears only that provider model exclusions', async () => {
     const event = fakeEvent()
     registration.authorize(event.sender as never)

@@ -1,6 +1,10 @@
 import { lstat, realpath } from 'node:fs/promises'
 import { isIPv6 } from 'node:net'
 import { isAbsolute, relative, resolve } from 'node:path'
+import * as Schema from 'effect/Schema'
+
+// Schema.Int requires safe integers; retain this boundary's Number.isInteger contract.
+const isInteger = Schema.is(Schema.Number.check(Schema.makeFilter(Number.isInteger)))
 
 export type JsonObject = Record<string, unknown>
 
@@ -38,10 +42,10 @@ export function requireBoolean(value: unknown, label: string): boolean {
 }
 
 export function requireInteger(value: unknown, label: string, min: number, max: number): number {
-  if (!Number.isInteger(value) || (value as number) < min || (value as number) > max) {
+  if (!isInteger(value) || value < min || value > max) {
     throw new TypeError(`${label} must be an integer from ${min} to ${max}`)
   }
-  return value as number
+  return value
 }
 
 export function rejectUnknownKeys(value: JsonObject, allowed: readonly string[], label = 'value'): void {
