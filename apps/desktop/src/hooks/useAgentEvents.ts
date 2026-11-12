@@ -3,7 +3,7 @@ import { contextUsageFromEvent, sessionUsageFromEvent } from '@/app/agent-events
 import { applySessionLifecycleEvent, sessionLifecycleChange } from '@/app/session-attention'
 import { fallbackModelFromRecord } from '@/lib/events/model-fallback'
 import { parseSessionActionSnapshot } from '@/lib/session-actions'
-import { indexStartedSession } from './useWorkspaceActions'
+import { indexStartedSession } from './started-session-index'
 import type { WorkspaceSnapshot } from '@/app/workspace'
 import type { PrimeWorkApi, RuntimeInfo, SessionActionSnapshot, SessionRecord } from '@/types/api'
 

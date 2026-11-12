@@ -92,8 +92,8 @@ describe('TerminalDrawer project command handle', () => {
     act(() => { handle.current?.stopCommand(tabId) })
 
     expect(onExit).toHaveBeenCalledOnce()
-    expect(onExit).toHaveBeenCalledWith()
-    expect(onExit).not.toHaveBeenCalledWith(expect.any(Number))
+    expect(onExit).toHaveBeenCalledWith({ cancelled: true })
+    expect(onExit).not.toHaveBeenCalledWith(expect.objectContaining({ exitCode: expect.any(Number) }))
   })
 
   it('reports a real terminal exit once even when the tab is closed afterwards', async () => {
@@ -115,7 +115,7 @@ describe('TerminalDrawer project command handle', () => {
     act(() => { handle.current?.stopCommand(tabId) })
 
     expect(onExit).toHaveBeenCalledOnce()
-    expect(onExit).toHaveBeenCalledWith(7)
+    expect(onExit).toHaveBeenCalledWith({ exitCode: 7 })
   })
 
   it('kills a late create result after its tab unmounts without attaching or announcing an exit', async () => {
@@ -128,7 +128,7 @@ describe('TerminalDrawer project command handle', () => {
     let tabId = ''
     await act(async () => { tabId = handle.current?.runCommand('slow spawn', 'Late', onExit) ?? '' })
     act(() => { handle.current?.stopCommand(tabId) })
-    expect(onExit).toHaveBeenCalledExactlyOnceWith()
+    expect(onExit).toHaveBeenCalledExactlyOnceWith({ cancelled: true })
     await act(async () => {
       finish({ terminalId: 'late-terminal', shell: '/bin/sh' })
       await Promise.resolve()
@@ -141,7 +141,7 @@ describe('TerminalDrawer project command handle', () => {
     expect([...container.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('Late'))).toBe(false)
   })
 
-  it('reports terminal creation failures without fabricating an exit code', async () => {
+  it('reports terminal creation failures as an error outcome without an exit code', async () => {
     const handle = createHandle()
     renderDrawer(handle)
     const onExit = vi.fn()
@@ -152,6 +152,6 @@ describe('TerminalDrawer project command handle', () => {
 
     expect(onError).toHaveBeenCalledWith('spawn failed')
     expect(onExit).toHaveBeenCalledOnce()
-    expect(onExit).toHaveBeenCalledWith(undefined)
+    expect(onExit).toHaveBeenCalledWith({ error: 'spawn failed' })
   })
 })

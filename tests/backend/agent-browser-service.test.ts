@@ -396,6 +396,30 @@ describe("AgentBrowserService", () => {
 		expect(guest.listenerCount("did-navigate")).toBe(0);
 		service.beginShutdown();
 	});
+	it("closes the duplicate Chrome tab when two pop-outs of one tab race", async () => {
+		const bridge = new ExtensionBrowserBridge();
+		// Open as a webview tab first; the bridge joins only before the pop-outs.
+		let connected = false;
+		vi.spyOn(bridge, "isConnected").mockImplementation(() => connected);
+		const chromeIds = [42, 43];
+		const call = vi
+			.spyOn(bridge, "call")
+			.mockImplementation(async (method: string) =>
+				method === "create_tab" ? chromeIds.shift() : undefined,
+			);
+		const { service, openAttached } = fixture({ extensionBridge: bridge });
+		const { tabId } = await openAttached(sessionA, "https://example.com/");
+		connected = true;
+		const [first, second] = await Promise.all([
+			service.popOutTab(sessionA, tabId),
+			service.popOutTab(sessionA, tabId),
+		]);
+		expect(first).toMatchObject({ tabId, backend: "extension", chromeTabId: 42 });
+		expect(second).toMatchObject({ tabId, backend: "extension", chromeTabId: 42 });
+		expect(call).toHaveBeenCalledWith("close_tab", { chromeTabId: 43 }, sessionA);
+		expect(call).not.toHaveBeenCalledWith("close_tab", { chromeTabId: 42 }, sessionA);
+		service.beginShutdown();
+	});
 	it("opens a tab once the renderer attaches an approved guest and navigates it", async () => {
 		const { service, openAttached } = fixture();
 		const { guest, tabId, result } = await openAttached(

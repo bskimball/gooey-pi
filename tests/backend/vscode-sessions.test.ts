@@ -12,10 +12,13 @@ import { assertSessionFree, VsCodeRuntimeOwner } from '../../packages/vscode/src
 import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
 import { listSessions, readSessionTranscript, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
+import { createActor } from 'xstate'
+import { apexSessionConnectionMachine, canAct, hostConnection, type ApexConnectionEvent } from '../../packages/vscode/src/apexSessionConnectionMachine'
+import type { AttachedSession } from '../../packages/vscode/src/attached-session'
 
 vi.mock('vscode', () => ({
   env: { openExternal: vi.fn() },
-  workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts') },
+  workspace: { workspaceFolders: [], openTextDocument: vi.fn(), findFiles: vi.fn(), asRelativePath: vi.fn(() => 'src/file.ts'), getConfiguration: vi.fn(() => ({ get: (_key: string, fallback: unknown) => fallback })) },
   window: { tabGroups: { all: [] }, activeTextEditor: undefined, showTextDocument: vi.fn(), setStatusBarMessage: vi.fn() },
   languages: { getDiagnostics: vi.fn() },
   Uri: {
@@ -66,6 +69,18 @@ async function fixture(count = 1) {
   return { cwd, root, paths }
 }
 
+/** Connection actor a hand-built ApexSession fixture needs, advanced through the given lifecycle events. */
+function connectionIn(...events: ApexConnectionEvent[]) {
+  const actor = createActor(apexSessionConnectionMachine).start()
+  for (const event of events) actor.send(event)
+  return actor
+}
+
+/** Connection actor that has begun attaching to a Desktop session, then advanced through the given events. */
+function desktopIn(path: string, ...events: ApexConnectionEvent[]) {
+  return connectionIn({ type: 'ATTACH_DESKTOP', path, resumeLocal: false }, ...events)
+}
+
 describe('VS Code handoff lifecycle', () => {
   it('opens local file links within the workspace and reports denied or failed opens', async () => {
     const { cwd, root } = await fixture()
@@ -77,7 +92,7 @@ describe('VS Code handoff lifecycle', () => {
     const session = Object.create(ApexSession.prototype)
     const notice = vi.fn()
     Object.defineProperty(session, 'cwd', { value: cwd })
-    Object.assign(session, { notice })
+    Object.assign(session, { connectionActor: connectionIn(), notice })
     const openExternal = vi.mocked(vscode.env.openExternal).mockReset().mockResolvedValue(true)
     await session.handle({ type: 'openExternal', url: pathToFileURL(path).href })
     expect(openExternal).toHaveBeenCalledTimes(1)
@@ -108,7 +123,7 @@ describe('VS Code handoff lifecycle', () => {
     const session = Object.create(ApexSession.prototype)
     const post = vi.fn()
     Object.defineProperty(session, 'cwd', { value: cwd })
-    Object.assign(session, { post })
+    Object.assign(session, { connectionActor: connectionIn(), post })
     await session.handle({ type: 'editor:open', requestId: 1, path, line: 2 })
     expect(post).toHaveBeenLastCalledWith({ type: 'editor:opened', requestId: 1 })
     expect(revealRange.mock.calls[0][0].start.line).toBe(1)
@@ -193,25 +208,26 @@ describe('VS Code handoff lifecycle', () => {
 
   it('retains Desktop attachment intent through repeated failed reconnects', async () => {
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { desktopTarget: '/desktop-session.jsonl', state: {}, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false) })
+    Object.assign(session, { connectionActor: desktopIn('/desktop-session.jsonl', { type: 'DESKTOP_UNAVAILABLE', path: '/desktop-session.jsonl', error: 'Desktop is closed.' }), state: {}, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false) })
     await session.start()
     expect(session.state).toMatchObject({ status: 'exited', connection: 'desktop' })
     await session.start()
     expect(session.attachDesktop).toHaveBeenCalledTimes(2)
-    expect(session.desktopTarget).toBe('/desktop-session.jsonl')
+    expect(session.connectionActor.getSnapshot().context.path).toBe('/desktop-session.jsonl')
   })
 
   it('rejects an attachment during a standalone run without changing state, ownership, or the running RPC', async () => {
     const state = { status: 'ready', connection: 'standalone', isStreaming: true }
     const rpc = { dispose: vi.fn() }
     const owner = { set: vi.fn() }
+    const connectionActor = connectionIn({ type: 'LOCAL_STARTED' })
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { state, rpc, owner, desktopTarget: undefined, launchGeneration: 3, post: vi.fn(), attachDesktop: vi.fn() })
+    Object.assign(session, { state, rpc, owner, connectionActor, launchGeneration: 3, post: vi.fn(), attachDesktop: vi.fn() })
     Object.assign(vscode.window, { showWarningMessage: vi.fn() })
     await session.openFromDesktop('/desktop-session.jsonl', true)
     expect(session.state).toBe(state)
     expect(state).toEqual({ status: 'ready', connection: 'standalone', isStreaming: true })
-    expect(session.desktopTarget).toBeUndefined()
+    expect(connectionActor.getSnapshot().context.path).toBeUndefined()
     expect(session.rpc).toBe(rpc)
     expect(session.launchGeneration).toBe(3)
     expect(rpc.dispose).not.toHaveBeenCalled()
@@ -222,11 +238,11 @@ describe('VS Code handoff lifecycle', () => {
 
   it('does not fall back to standalone when an attachment-only URI cannot connect', async () => {
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { state: {}, launchGeneration: 0, stopping: Promise.resolve(), owner: { set: vi.fn() }, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false), switchSession: vi.fn(), start: vi.fn() })
+    Object.assign(session, { connectionActor: connectionIn(), state: {}, launchGeneration: 0, stopping: Promise.resolve(), owner: { set: vi.fn() }, post: vi.fn(), attachDesktop: vi.fn().mockResolvedValue(false), switchSession: vi.fn(), start: vi.fn() })
     const warning = vi.fn()
     Object.assign(vscode.window, { showWarningMessage: warning })
     await session.openFromDesktop('/desktop-session.jsonl', true)
-    expect(session.desktopTarget).toBe('/desktop-session.jsonl')
+    expect(session.connectionActor.getSnapshot().context.path).toBe('/desktop-session.jsonl')
     expect(session.state).toMatchObject({ status: 'exited', connection: 'desktop' })
     expect(session.switchSession).not.toHaveBeenCalled()
     expect(session.start).not.toHaveBeenCalled()
@@ -235,9 +251,10 @@ describe('VS Code handoff lifecycle', () => {
   it('opens a transfer without waiting on stale startup state from a previous Desktop attachment', async () => {
     vi.useFakeTimers()
     const session = Object.create(ApexSession.prototype)
+    const attached = {} as AttachedSession
     Object.assign(session, {
       state: { status: 'starting', isStreaming: false },
-      desktopTarget: '/desktop-session.jsonl', attached: {},
+      connectionActor: desktopIn('/desktop-session.jsonl', { type: 'ATTACHED', path: '/desktop-session.jsonl', view: attached }),
       attachDesktop: vi.fn(), switchSession: vi.fn().mockResolvedValue(undefined),
     })
     const opening = session.openFromDesktop('/desktop-session.jsonl')
@@ -254,9 +271,9 @@ describe('VS Code handoff lifecycle', () => {
 
   it('keeps the current attached view when a standalone transfer is still owned elsewhere', async () => {
     const assertFree = vi.spyOn(runtimeOwners, 'assertSessionNotOwnedElsewhere').mockRejectedValue(new Error('Open in Apex desktop'))
-    const attached = { dispose: vi.fn() }
+    const attached = { dispose: vi.fn() } as unknown as AttachedSession
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { desktopTarget: '/desktop-session.jsonl', attached, attachDesktop: vi.fn(), start: vi.fn() })
+    Object.assign(session, { connectionActor: desktopIn('/desktop-session.jsonl', { type: 'ATTACHED', path: '/desktop-session.jsonl', view: attached }), attachDesktop: vi.fn(), start: vi.fn() })
     try {
       await expect(session.switchSession('/desktop-session.jsonl', false)).rejects.toThrow('Open in Apex desktop')
       expect(session.attached).toBe(attached)
@@ -264,6 +281,35 @@ describe('VS Code handoff lifecycle', () => {
       expect(session.attachDesktop).not.toHaveBeenCalled()
       expect(session.start).not.toHaveBeenCalled()
     } finally { assertFree.mockRestore() }
+  })
+
+  it('hands a session to Desktop after its attached view disconnects', async () => {
+    const { cwd } = await fixture()
+    const view = {} as AttachedSession
+    const info = vi.fn()
+    Object.assign(vscode.window, { showInformationMessage: info, showWarningMessage: vi.fn() })
+    const session = Object.create(ApexSession.prototype)
+    const newSession = vi.fn(async () => { session.currentPath = '/next-session.jsonl' })
+    const connectionActor = connectionIn({ type: 'ATTACH_DESKTOP', path: '/desktop-session.jsonl', resumeLocal: false }, { type: 'ATTACHED', path: '/desktop-session.jsonl', view })
+    Object.assign(vscode.workspace, { workspaceFolders: [{ uri: vscode.Uri.file(cwd) }] })
+    Object.assign(session, { currentPath: '/desktop-session.jsonl', state: { status: 'ready', isStreaming: false }, connectionActor, post: vi.fn(), newSession })
+    connectionActor.send({ type: 'DESKTOP_DISCONNECTED', view, error: 'Desktop closed.' })
+    expect(session.attached).toBeUndefined()
+    await session.continueInDesktop()
+    expect(newSession).toHaveBeenCalledOnce()
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('is free to continue in Apex desktop'))
+  })
+
+  it('leaves attachment as unavailable when Desktop disconnects before the attach completes', () => {
+    const connectionActor = desktopIn('/desktop-session.jsonl')
+    connectionActor.send({ type: 'DESKTOP_DISCONNECTED', view: {} as AttachedSession, error: 'Desktop closed.' })
+    expect(connectionActor.getSnapshot()).toMatchObject({ context: { path: '/desktop-session.jsonl', view: undefined, error: 'Desktop closed.' } })
+    expect(connectionActor.getSnapshot().matches('desktopUnavailable')).toBe(true)
+    const local = connectionIn({ type: 'LOCAL_STARTED' }, { type: 'ATTACH_DESKTOP', path: '/desktop-session.jsonl', resumeLocal: true })
+    local.send({ type: 'DESKTOP_DISCONNECTED', view: {} as AttachedSession, error: 'Desktop closed.' })
+    expect(canAct(local.getSnapshot())).toBe(true)
+    expect(hostConnection(local.getSnapshot())).toMatchObject({ status: 'ready', connection: 'standalone' })
+    expect(local.getSnapshot().context.path).toBeUndefined()
   })
 
   it('overrides inherited Desktop editor credentials in a real standalone Pi child', async () => {
@@ -291,7 +337,7 @@ describe('VS Code handoff lifecycle', () => {
     const owner = { dispose: vi.fn(async () => { expect(exited).toHaveBeenCalledOnce() }) }
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
-      rpc, owner, stopping: Promise.resolve(), launchGeneration: 0,
+      rpc, owner, connectionActor: connectionIn(), stopping: Promise.resolve(), launchGeneration: 0,
       browser: { stop: vi.fn(async () => undefined) }, statusItem: { dispose: vi.fn() },
     })
     const shutdown = session.dispose()
@@ -311,6 +357,7 @@ describe('VS Code handoff lifecycle', () => {
     const owner = { set: vi.fn() }
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
+      connectionActor: connectionIn(),
       rpc: previous, owner, stopping: Promise.resolve(), launchGeneration: 0,
       browser: { capability: { revoke: vi.fn() }, start: vi.fn() },
     })
@@ -325,6 +372,39 @@ describe('VS Code handoff lifecycle', () => {
     await starting
     expect(owner.set).not.toHaveBeenCalled()
     expect(session.browser.start).not.toHaveBeenCalled()
+  })
+
+  it('reports ready with a notice when reading Pi state fails after launch', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'apex-fake-pi-'))
+    directories.push(directory)
+    // A stdin-only stand-in for pi: start() spawns it for real, but refreshAll is stubbed to reject.
+    const script = join(directory, 'pi.js')
+    await writeFile(script, 'process.stdin.resume()\n')
+    const configuration = vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({ get: (key: string, fallback: unknown) => (key === 'piPath' ? script : fallback) } as never)
+    const session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      connectionActor: connectionIn(), state: { status: 'starting', isStreaming: false }, post: vi.fn(),
+      ops: [], pendingOps: [], latestToolUpdate: new Map(), statuses: new Map(), uiQueue: [], seq: 0, currentPath: null,
+      launchGeneration: 0, stopping: Promise.resolve(), browserSessionKey: '/project', browserPortNotice: false,
+      owner: { set: vi.fn() }, statusItem: { hide: vi.fn() }, distDirectory: directory,
+      browser: {
+        bridge: { port: 29301 }, extensionPath: join(directory, 'extension'), start: vi.fn(async () => undefined),
+        capability: { revoke: vi.fn(), environmentFor: () => ({ PRIME_WORK_BROWSER_TOKEN: 'fixture-token' }) },
+        service: { setActiveSession: vi.fn(async () => undefined) },
+      },
+      refreshAll: vi.fn().mockRejectedValue(new Error('state unavailable')),
+    })
+    try {
+      await session.start()
+      await session.startup
+      expect(session.refreshAll).toHaveBeenCalledOnce()
+      expect(canAct(session.connectionActor.getSnapshot())).toBe(true)
+      expect(session.state).toMatchObject({ status: 'ready', connection: 'standalone' })
+      expect(session.pendingOps.at(-1)).toMatchObject({ kind: 'notice', text: "Could not read Pi's state: state unavailable" })
+    } finally {
+      await session.rpc?.dispose()
+      configuration.mockRestore()
+    }
   })
 })
 
@@ -359,6 +439,7 @@ describe('VS Code mode status', () => {
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
       post,
+      connectionActor: connectionIn({ type: 'LOCAL_STARTED' }),
       state: { statuses: {} },
       statuses: new Map(),
       statusItem: { show: vi.fn(), hide: vi.fn() },
@@ -368,9 +449,9 @@ describe('VS Code mode status', () => {
 
     session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'mode', statusText: 'Apex' })
     session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'hydra', statusText: 'hydra:max' })
-    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex', hydra: 'hydra:max' } } })
+    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex', hydra: 'hydra:max' }, status: 'ready', connection: 'standalone' } })
     session.onRecord({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'hydra' })
-    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex' } } })
+    expect(post).toHaveBeenLastCalledWith({ type: 'state', state: { statuses: { mode: 'Apex' }, status: 'ready', connection: 'standalone' } })
     expect(refreshState).toHaveBeenCalledTimes(3)
   })
 })
@@ -479,7 +560,7 @@ describe('VS Code saved sessions', () => {
 
     const post = vi.fn()
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { post })
+    Object.assign(session, { connectionActor: connectionIn(), post })
     await session.handle({ type: 'sessions:read', requestId: 42, path: '' })
     expect(post).toHaveBeenCalledWith({ type: 'sessions:read', requestId: 42, messages: [], error: 'Invalid session path.' })
   })
@@ -528,9 +609,31 @@ describe('VS Code saved sessions', () => {
     const command = vi.fn()
     // Exercise the host boundary without constructing VS Code UI or starting a child process.
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { rpc: { command }, state: { status: mode === 'starting' ? 'starting' : 'ready', isStreaming: mode === 'busy' } })
+    Object.assign(session, { rpc: { command }, connectionActor: mode === 'busy' ? connectionIn({ type: 'LOCAL_STARTED' }) : connectionIn(), state: { status: mode === 'starting' ? 'starting' : 'ready', isStreaming: mode === 'busy' } })
     await expect(session.switchSession('/unused.jsonl')).rejects.toThrow('Cannot switch sessions while Pi is starting, busy, or not running.')
     expect(command).not.toHaveBeenCalled()
+  })
+
+  it('does not report ready when local Pi exits during the restart that precedes a switch', async () => {
+    const connectionActor = desktopIn('/desktop-session.jsonl', { type: 'DESKTOP_UNAVAILABLE', path: '/desktop-session.jsonl', error: 'Desktop is closed.' })
+    let session: any
+    // Stands in for start(): the child exits before the restart settles, and the host publishes state afterwards.
+    const restart = vi.fn(async () => {
+      connectionActor.send({ type: 'START_LOCAL' })
+      connectionActor.send({ type: 'LOCAL_EXITED', error: 'Pi stopped (exit code 1).' })
+      session.update({ isStreaming: false })
+    })
+    session = Object.create(ApexSession.prototype)
+    Object.assign(session, {
+      connectionActor, post: vi.fn(),
+      state: { status: 'ready', isStreaming: false }, rpc: undefined, startup: Promise.resolve(),
+      attachDesktop: vi.fn().mockResolvedValue(false), start: restart, refreshAll: vi.fn().mockResolvedValue(undefined),
+    })
+    await expect(session.switchSession('/next-session.jsonl')).rejects.toThrow('Cannot switch sessions while Pi is starting, busy, or not running.')
+    expect(restart).toHaveBeenCalledOnce()
+    expect(canAct(connectionActor.getSnapshot())).toBe(false)
+    expect(session.state).toMatchObject({ status: 'exited', connection: 'standalone', error: 'Pi stopped (exit code 1).' })
+    expect(hostConnection(connectionActor.getSnapshot()).status).toBe('exited')
   })
 })
 
@@ -544,7 +647,7 @@ describe('VS Code editor integration', () => {
     ] as vscode.Uri[])
     const post = vi.fn()
     const session = Object.create(ApexSession.prototype)
-    Object.assign(session, { post })
+    Object.assign(session, { connectionActor: connectionIn(), post })
     try {
       await session.handle({ type: 'listFiles', requestId: 1 })
       expect(post).toHaveBeenCalledWith({ type: 'files', requestId: 1, entries: [
@@ -653,6 +756,7 @@ describe('VS Code editor integration', () => {
     const command = vi.fn().mockResolvedValue({})
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
+      connectionActor: connectionIn(),
       rpc: { command },
       seq: 0,
       state: { isStreaming: true, commands: [], queued: [] },
@@ -679,6 +783,7 @@ describe('VS Code editor integration', () => {
     const command = vi.fn().mockResolvedValue({ cancelled: true })
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
+      connectionActor: connectionIn(),
       rpc: { command },
       seq: 0,
       state: { isStreaming: true, commands: [], queued: [] },
@@ -809,6 +914,7 @@ describe('VS Code editor integration', () => {
     const command = vi.fn().mockResolvedValue({})
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
+      connectionActor: connectionIn(),
       rpc: { command },
       seq: 0,
       queuePaused: false,
@@ -875,6 +981,7 @@ describe('VS Code editor integration', () => {
     const addOp = vi.fn()
     const session = Object.create(ApexSession.prototype)
     Object.assign(session, {
+      connectionActor: connectionIn(),
       rpc: { command },
       seq: 0,
       queuePaused: false,

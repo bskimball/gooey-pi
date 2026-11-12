@@ -55,7 +55,6 @@ import type {
 	SessionUsage,
 	SkillRecord,
 	TerminalPromptContext,
-	TerminalSelectionContext,
 	VoiceTranscriptionProvider,
 } from "@/types/api";
 import { CheckoutPicker } from "./CheckoutPicker";
@@ -84,7 +83,7 @@ import { IconButton, SelectControl } from "./ui";
 
 interface ComposerProps {
 	busy: boolean;
-	submitting?: boolean;
+	admitting?: boolean; // agent-turn isSubmissionAdmitting
 	loading?: boolean;
 	disabled?: boolean;
 	model: string;
@@ -122,10 +121,8 @@ interface ComposerProps {
 	focusSignal?: number;
 	onOpenBrowser?(): void;
 	onRevealBrowserReference?(reference: BrowserReference): void;
-	/** The active terminal is visible as context; selected text expands this attachment. */
-	terminalSelection?: TerminalSelectionContext;
-	/** Reads the active xterm buffer only at submit time, avoiding output-driven renderer updates. */
-	getTerminalContext?(): TerminalPromptContext | undefined;
+	/** The active terminal's selection, updated on selection changes only; the chip shows and submit sends exactly this. */
+	terminalSelection?: TerminalPromptContext;
 	/** Messages waiting for a turn boundary. */
 	queuedMessages?: QueuedPrompt[];
 	onSendQueuedMessage?(message: QueuedPrompt): void;
@@ -186,7 +183,7 @@ function resolveDroppedFilePath(file: File): string {
 
 export const Composer = memo(function Composer({
 	busy,
-	submitting = false,
+	admitting = false,
 	loading = false,
 	disabled,
 	model,
@@ -215,7 +212,6 @@ export const Composer = memo(function Composer({
 	onOpenBrowser,
 	onRevealBrowserReference,
 	terminalSelection,
-	getTerminalContext,
 	queuedMessages = [],
 	onSendQueuedMessage,
 	onDeleteQueuedMessage,
@@ -303,7 +299,7 @@ export const Composer = memo(function Composer({
 	const menuId = useId();
 	const menuRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const submittingRef = useRef(false);
+	const submittingRef = useRef(false); // single-flight guard until the admitting prop re-renders
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const imageStatusId = useId();
 	const { annotation: sharedSelection, consume: consumeSharedSelection, processing: processingSelection, error: selectionError } = useSharedBrowserSelection(extensionTab, fileRoot);
@@ -504,9 +500,7 @@ export const Composer = memo(function Composer({
 		const currentImages = imagesRef.current;
 		const currentUnsupportedFiles = unsupportedFilesRef.current;
 		const currentAnnotations = annotationsRef.current;
-		const currentTerminalContext = terminalSelection?.text
-			? getTerminalContext?.()
-			: undefined;
+		const currentTerminalContext = terminalSelection?.text ? terminalSelection : undefined;
 		const hasTerminalSelection = Boolean(currentTerminalContext?.text);
 		const draftValue = valueOverride ?? value;
 		const prompt =
@@ -530,7 +524,7 @@ export const Composer = memo(function Composer({
 				!hasTerminalSelection) ||
 			loading ||
 			disabled ||
-			(intent !== "steer" && !busy && (submitting || submittingRef.current))
+			(intent !== "steer" && !busy && (admitting || submittingRef.current))
 		)
 			return;
 		const slash = parseSlashCommand(draftValue);
@@ -653,7 +647,7 @@ export const Composer = memo(function Composer({
 				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
 			}
 			if (mountedRef.current) {
-				setValue((current) => current || submittedValue);
+				setValue((current) => current.trim() ? `${submittedValue}\n\n${current}` : submittedValue);
 				const restoration = imageAttachments.restoreWithinLimits(
 					submittedComposerImages,
 				);
@@ -716,7 +710,7 @@ export const Composer = memo(function Composer({
 				/>
 			) : null}
 			<div
-				className={`composer ${busy || submitting ? "composer--busy" : ""} ${imageAttachments.dragging ? "composer--image-dragging" : ""}`}
+				className={`composer ${busy || admitting ? "composer--busy" : ""} ${imageAttachments.dragging ? "composer--image-dragging" : ""}`}
 				{...imageAttachments.dragHandlers}
 			>
 				{imageAttachments.dragging ? (
@@ -832,7 +826,7 @@ export const Composer = memo(function Composer({
 										? messageEnterAction === "steer"
 											? "Steer this run… (Enter to steer, Ctrl+Enter to queue)"
 											: "Steer this run… (Ctrl+Enter to steer, Enter to queue)"
-										: submitting
+										: admitting
 											? `Starting ${shortName}…`
 											: `Ask ${shortName} anything  ·  @ files  / commands  $ skills`
 						}
@@ -999,7 +993,7 @@ export const Composer = memo(function Composer({
 							tabIndex={-1}
 							aria-label="Choose files to attach"
 							aria-describedby={imageStatusId}
-							disabled={disabled || loading || submitting}
+							disabled={disabled || loading || admitting}
 							onChange={(event) => {
 								const files = Array.from(event.currentTarget.files ?? []);
 								event.currentTarget.value = "";
@@ -1008,7 +1002,7 @@ export const Composer = memo(function Composer({
 						/>
 						{harness === "pi" ? (
 							<PiModeControl
-								disabled={Boolean(disabled || loading || busy || submitting)}
+								disabled={Boolean(disabled || loading || busy || admitting)}
 								modelsByProvider={modelsByProvider}
 								providers={providers}
 								onCommand={(command) => onSend(command, [], "queue")}
@@ -1022,7 +1016,7 @@ export const Composer = memo(function Composer({
 							catalog={checkoutCatalog}
 							fallbackLabel={checkoutLabel}
 							loading={checkoutsLoading}
-							disabled={busy || submitting}
+							disabled={busy || admitting}
 							onExecute={onExecuteCheckout}
 						/>
 						<ExecutingModelChip executingModel={executingModel ?? undefined} />
@@ -1078,7 +1072,7 @@ export const Composer = memo(function Composer({
 								!voice ||
 								loading ||
 								disabled ||
-								submitting ||
+								admitting ||
 								dictation.state === "connecting" ||
 								dictation.state === "transcribing"
 							}
@@ -1120,7 +1114,7 @@ export const Composer = memo(function Composer({
 											annotations.length === 0 && !sharedSelection &&
 											!terminalSelection?.text) ||
 										processingImages ||
-										(!busy && submitting) ||
+										(!busy && admitting) ||
 										loading ||
 										disabled
 									}

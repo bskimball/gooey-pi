@@ -1,4 +1,4 @@
-import { assign, setup } from 'xstate'
+import { assign, setup, type SnapshotFrom } from 'xstate'
 
 export interface ApexTurnContext {
   promptToken: number
@@ -100,9 +100,8 @@ export const apexSessionTurnMachine = setup({
       }),
     },
     PAUSE_QUEUE: {
-      actions: assign(({ event }) => ({
-        queuePaused: event.paused,
-      })),
+      // While switching, the queue stays held; the caller's intent is restored when the switch ends.
+      actions: assign(({ context, event }) => (context.switching ? { wasPausedBeforeSwitch: event.paused } : { queuePaused: event.paused })),
     },
     BEGIN_PROMPT: {
       target: '.optimisticPrompt',
@@ -214,3 +213,6 @@ export const apexSessionTurnMachine = setup({
     compacting: {},
   },
 })
+
+/** Whether a prompt, run, or compaction is in flight; the single source for the host's isStreaming flag. */
+export const isRunActive = (snapshot: SnapshotFrom<typeof apexSessionTurnMachine>) => snapshot.matches('optimisticPrompt') || snapshot.matches('streaming') || snapshot.matches('compacting')

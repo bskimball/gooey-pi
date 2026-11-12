@@ -158,11 +158,20 @@ export function replayPrimeEvents(
     if (call.next?.part.type === 'toolResult') call.next.part = { ...result, partId: call.next.part.partId }
     else insertAfter(draft, call, withPartId(result))
   }
+  // A tool whose end event never arrived would otherwise read as running forever.
+  const closeOrphanedResults = (index: number, message: TranscriptMessage) => {
+    const isOrphan = (part: MessagePart) => part.type === 'toolResult' && part.streaming === true
+    if (!partDrafts.has(index) && !message.parts.some(isOrphan)) return
+    for (let node = draftParts(index).head; node; node = node.next) {
+      if (isOrphan(node.part)) node.part = { ...node.part, streaming: false, isError: true } as MessagePart
+    }
+  }
   const finalizeStreaming = (completedAt: number, addFallback: boolean) => {
     for (const index of streaming) {
       const message = draftMessage(index)
       message.streaming = false
       message.completedAt = completedAt
+      closeOrphanedResults(index, message)
       const parts = partDrafts.get(index)
       if (addFallback && !message.errorMessage && (parts?.length ?? message.parts.length) === 0) {
         appendNode(draftParts(index), withPartId({ type: 'text', text: EMPTY_TURN_FALLBACK }))

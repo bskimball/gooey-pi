@@ -4,6 +4,7 @@ import { createCatalogQueryClient, projectCatalogKey, sessionCatalogKey } from '
 import { errorMessage } from '@/lib/errors'
 import { findRuntimeForWorkspace, selectStartupWorkspace } from '@/lib/workspace'
 import type { WorkspaceSnapshot } from '@/app/workspace'
+import { hasRendererStatusProvenance, isSessionWaiting } from '@/app/session-attention'
 import type {
   AppMeta,
   HarnessId,
@@ -67,16 +68,13 @@ function catalogMergeStatus(
 ): SessionRecord['status'] {
   // The catalog cannot see an open extension-UI request, so renderer-owned
   // waiting state remains authoritative until that request settles.
-  if (previous?.status === 'waiting' && sessionHasOpenExtensionUi(record.filePath)) return previous.status
+  if (previous && isSessionWaiting(previous) && sessionHasOpenExtensionUi(record.filePath)) return previous.status
   // Runtime-backed catalog scans can report idle after agent_end (or an
   // earlier in-flight running snapshot) even though the renderer has already
   // observed the terminal event. The matching status revision proves that this
   // non-idle status is live renderer state; startup/external records and
   // catalog-owned transitions have no provenance.
-  if (typeof previous?.statusEventRevision === 'number'
-    && previous.statusEventRevision === previous.eventRevision
-    && (previous.status === 'running' || previous.status === 'waiting'
-      || previous.status === 'complete' || previous.status === 'failed')
+  if (previous && hasRendererStatusProvenance(previous)
     && (record.status === 'idle' || Date.parse(record.updatedAt) < Date.parse(previous.updatedAt))) return previous.status
   return record.status
 }

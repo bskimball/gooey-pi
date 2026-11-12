@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalService } from '../../apps/desktop/electron/main/terminal'
+import { createTerminalLifecycle } from '../../apps/desktop/electron/main/terminalLifecycleMachine'
 
 const dirs: string[] = []
 const windows = process.platform === 'win32'
@@ -208,6 +209,8 @@ describe('TerminalService', () => {
   it('short-circuits termination without signalling anything when the pty already exited', async () => {
     const service = new TerminalService(async (cwd) => cwd, () => testShell)
     const killSpy = vi.spyOn(process, 'kill')
+    const lifecycle = createTerminalLifecycle()
+    lifecycle.send({ type: 'EXITED' })
     const owned = {
       terminal: { pid: process.pid, kill: vi.fn() },
       owner: { isDestroyed: () => true },
@@ -218,8 +221,7 @@ describe('TerminalService', () => {
       outputWindowBytes: 0,
       pendingOutput: '',
       pendingOutputBytes: 0,
-      terminating: true,
-      exited: true,
+      lifecycle,
     }
     try {
       const started = Date.now()

@@ -9,7 +9,7 @@ import '@xterm/xterm/css/xterm.css'
 import { boundTerminalText, TERMINAL_CONTEXT_MAX_CHARS, TERMINAL_SELECTION_MAX_CHARS } from '@/lib/terminal-context'
 import { openExternalUrl } from '@/lib/desktop-actions'
 import { terminalLinkOpensExternally } from '@/lib/terminal-links'
-import type { TerminalPromptContext, TerminalSelectionContext } from '@/types/api'
+import type { TerminalPromptContext } from '@/types/api'
 import { IconButton } from './ui'
 import { ResizeHandle } from './ResizeHandle'
 
@@ -18,7 +18,7 @@ interface TerminalDrawerProps {
   cwd?: string
   sessionPath?: string
   shell?: string
-  initialCommand?: { id: string; command: string; label: string; onExit(exitCode?: number): void }
+  initialCommand?: { id: string; command: string; label: string; onExit(outcome: TerminalCommandOutcome): void }
   height: number
   minHeight: number
   maxHeight: number
@@ -29,8 +29,10 @@ interface TerminalDrawerProps {
   onOpenLink?(url: string, external: boolean): void
   onInitialCommandConsumed?(): void
   onReady?(): void
-  onSelectionChange?(selection?: TerminalSelectionContext): void
+  onSelectionChange?(selection?: TerminalPromptContext): void
 }
+
+export type TerminalCommandOutcome = { exitCode: number } | { error: string } | { cancelled: true }
 
 interface TerminalTab {
   id: string
@@ -39,7 +41,6 @@ interface TerminalTab {
   connected: boolean
   command?: string
   label?: string
-  onExit?(exitCode?: number): void
 }
 
 interface TerminalViewHandle {
@@ -59,13 +60,13 @@ interface TerminalViewProps {
   onSelectionChange(text: string, truncated: boolean): void
   onError?(message: string): void
   onOpenLink?(url: string, external: boolean): void
-  onExit?(exitCode?: number): void
+  onExit?(outcome: TerminalCommandOutcome): void
 }
 
 export interface TerminalDrawerHandle {
   clearSelection(): void
   readSelectionContext(): TerminalPromptContext | undefined
-  runCommand(command: string, label: string, onExit: (exitCode?: number) => void): string
+  runCommand(command: string, label: string, onExit: (outcome: TerminalCommandOutcome) => void): string
   stopCommand(tabId: string): void
 }
 
@@ -229,7 +230,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
     const announceExit = (exitCode: number) => {
       terminal.writeln(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m`)
       onStateChangeRef.current({ shellName: shell?.split('/').at(-1) ?? 'terminal', connected: false })
-      onExitRef.current?.(exitCode)
+      onExitRef.current?.({ exitCode })
     }
     const inputDisposable = terminal.onData((data) => {
       const id = terminalIdRef.current
@@ -267,7 +268,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
           const message = error instanceof Error ? error.message : 'Unable to start terminal'
           terminal.writeln(`\x1b[31m${message}\x1b[0m`)
           onErrorRef.current?.(message)
-          onExitRef.current?.()
+          onExitRef.current?.({ error: message })
         },
       } })
     } else {
@@ -304,7 +305,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
   return <div className="terminal-surface" ref={containerRef} hidden={!visible}/>
 })
 
-function createTab(number: number, shell?: string, command?: string, label?: string, onExit?: (exitCode?: number) => void, id: string = crypto.randomUUID()): TerminalTab {
+function createTab(number: number, shell?: string, command?: string, label?: string, id: string = crypto.randomUUID()): TerminalTab {
   return {
     id,
     number,
@@ -312,12 +313,15 @@ function createTab(number: number, shell?: string, command?: string, label?: str
     connected: false,
     command,
     label,
-    onExit,
   }
 }
 export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(function TerminalDrawer({ visible = true, cwd, sessionPath, shell, initialCommand, height, minHeight, maxHeight, defaultHeight, onHeightChange, onClose, onError, onInitialCommandConsumed, onOpenLink, onReady, onSelectionChange }, ref) {
   const firstTabRef = useRef<TerminalTab | undefined>(undefined)
-  firstTabRef.current ??= createTab(1, shell, initialCommand?.command, initialCommand?.label, initialCommand?.onExit, initialCommand?.id)
+  const commandExitsRef = useRef(new Map<string, (outcome: TerminalCommandOutcome) => void>())
+  if (!firstTabRef.current) {
+    firstTabRef.current = createTab(1, shell, initialCommand?.command, initialCommand?.label, initialCommand?.id)
+    if (initialCommand) commandExitsRef.current.set(initialCommand.id, initialCommand.onExit)
+  }
   const nextNumberRef = useRef(2)
   const viewRefs = useRef(new Map<string, TerminalViewHandle>())
   const [tabs, setTabs] = useState<TerminalTab[]>(() => [firstTabRef.current!])
@@ -334,25 +338,22 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
     if (initialCommand) onInitialCommandConsumed?.()
   }, [])
   useEffect(() => { onReady?.() }, [])
-  const currentSelection = (tabId: string): TerminalSelectionContext | undefined => {
+  // The one shape every selection consumer sees: what the composer shows is what it sends.
+  const selectionContext = (tab: TerminalTab, value: { text: string; truncated: boolean }): TerminalPromptContext =>
+    ({ tabId: tab.id, label: tab.label ?? `${tab.shellName} ${tab.number}`, cwd, text: value.text, truncated: value.truncated })
+  const currentSelection = (tabId: string): TerminalPromptContext | undefined => {
     const tab = tabsRef.current.find((candidate) => candidate.id === tabId)
     const value = viewRefs.current.get(tabId)?.readSelection()
-    if (!tab || !value) return undefined
-    return { tabId, label: `${tab.shellName} ${tab.number}`, text: value.text, truncated: value.truncated }
+    return tab && value?.text ? selectionContext(tab, value) : undefined
   }
 
   useImperativeHandle(ref, () => ({
     clearSelection: () => viewRefs.current.get(activeTabIdRef.current)?.clearSelection(),
-    readSelectionContext: () => {
-      const tabId = activeTabIdRef.current
-      const tab = tabsRef.current.find((candidate) => candidate.id === tabId)
-      const value = viewRefs.current.get(tabId)?.readSelection()
-      if (!tab || !value?.text) return undefined
-      return { tabId, label: tab.label ?? `${tab.shellName} ${tab.number}`, cwd, ...value }
-    },
+    readSelectionContext: () => currentSelection(activeTabIdRef.current),
     runCommand: (command, label, onExit) => {
       if (tabsRef.current.length >= MAX_TERMINAL_TABS) throw new Error(`Apex supports at most ${MAX_TERMINAL_TABS} concurrent terminals.`)
-      const tab = createTab(nextNumberRef.current++, shell, command, label, onExit)
+      const tab = createTab(nextNumberRef.current++, shell, command, label)
+      commandExitsRef.current.set(tab.id, onExit)
       setTabs((current) => [...current, tab])
       setActiveTabId(tab.id)
       return tab.id
@@ -379,8 +380,7 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
   const closeTerminal = (tabId: string) => {
     const index = tabs.findIndex((tab) => tab.id === tabId)
     if (index === -1) return
-    const tab = tabs[index]
-    tab.onExit?.()
+    finishCommand(tabId, { cancelled: true })
     if (tabs.length === 1) {
       onClose()
       return
@@ -395,11 +395,11 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
     setTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, ...state } : tab))
   }
 
-  const finishCommand = (tabId: string, exitCode?: number) => {
-    const callback = tabsRef.current.find((tab) => tab.id === tabId)?.onExit
+  const finishCommand = (tabId: string, outcome: TerminalCommandOutcome) => {
+    const callback = commandExitsRef.current.get(tabId)
     if (!callback) return
-    setTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, onExit: undefined } : tab))
-    callback(exitCode)
+    commandExitsRef.current.delete(tabId)
+    callback(outcome)
   }
 
   return (
@@ -441,11 +441,11 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
             onStateChange={(state) => updateTab(tab.id, state)}
             onSelectionChange={(text, truncated) => {
               if (activeTabIdRef.current !== tab.id) return
-              onSelectionChangeRef.current?.({ tabId: tab.id, label: `${tab.shellName} ${tab.number}`, text, truncated })
+              onSelectionChangeRef.current?.(text ? selectionContext(tab, { text, truncated }) : undefined)
             }}
             onError={onError}
             onOpenLink={onOpenLink}
-            onExit={(exitCode) => finishCommand(tab.id, exitCode)}
+            onExit={(outcome) => finishCommand(tab.id, outcome)}
           />
         ))}
       </div>

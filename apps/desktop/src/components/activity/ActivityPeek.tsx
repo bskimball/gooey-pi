@@ -26,9 +26,10 @@ import {
   summarizeToolArgs,
   type ActivityRowItem,
 } from '@/app/session-live'
-import { activityNotificationSignature } from '@/app/session-attention'
+import { activityNotificationSignature, isSessionRunning } from '@/app/session-attention'
 import { runTranscriptRead } from '@/app/transcript-load'
 import { extractPiSessionWidgets } from '@/components/inspector/session-summary'
+import { isLiveSpecialist } from '@/lib/specialist-status'
 import { formatSessionCost, PRICING_UNAVAILABLE } from '@/lib/format-cost'
 import { boundText } from '@/lib/render-bounds'
 import type { MessagePart, SessionRecord, TranscriptMessage } from '@/types/api'
@@ -173,11 +174,7 @@ export function ActivityPeek({
   const lastReadAtRef = useRef(0)
   const lastFilePathRef = useRef<string | undefined>(undefined)
 
-  const isRunning = Boolean(
-    section === 'running'
-    || (live && live.phase !== 'idle' && !live.pendingQuestion)
-    || (!attention && session?.status === 'running'),
-  )
+  const isRunning = isSessionRunning(session, live)
   const isQuestion = attention?.kind === 'question'
   const isFailed = attention?.kind === 'failed' || (!isRunning && !isQuestion && session?.status === 'failed')
   const reviewable = Boolean(session && !isRunning && !isQuestion && activityNotificationSignature(session))
@@ -318,7 +315,7 @@ export function ActivityPeek({
     [widgets.todos],
   )
   const runningSubagents = useMemo(
-    () => widgets.specialists.filter((specialist) => specialist.status === 'running').length,
+    () => widgets.specialists.filter((specialist) => isLiveSpecialist(specialist.status)).length,
     [widgets.specialists],
   )
   const hasProgressLine = widgets.todos.length > 0 || runningSubagents > 0

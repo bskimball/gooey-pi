@@ -1,9 +1,16 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
-import type { ExtensionUiQuestion, ExtensionUiRequest } from '@/lib/extension-ui'
+import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
+import type { ExtensionUiRequest } from '@/lib/extension-ui'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { Modal } from './ui'
+import {
+  initialQuestionnaireSnapshot,
+  questionnaireAnswer,
+  questionnaireRequestEvent,
+  reduceQuestionnaire,
+  selectQuestionnaireComplete,
+  selectQuestionnaireValues,
+} from './extensionQuestionnaireMachine'
 
-const OTHER_OPTION = 'Other (type your own answer)'
 /** Plain selects longer than this get a search field; short lists stay a button stack. */
 const SELECT_SEARCH_THRESHOLD = 8
 
@@ -17,27 +24,8 @@ interface ExtensionUiModalProps {
   request: ExtensionUiRequest
   onRespond(response: ExtensionUiResponse): void
   platform?: NodeJS.Platform
-}
-
-function questionnaireAnswer(
-  question: ExtensionUiQuestion,
-  selectedIndex: number,
-  contexts: Record<string, string>,
-) {
-  const selected = question.options[selectedIndex]
-  const typed = contexts[question.id]?.trim()
-  if (selected === OTHER_OPTION) {
-    if (!typed) return undefined
-    return {
-      answer: typed,
-      answerSource: 'freeform' as const,
-    }
-  }
-  return {
-    answer: selected,
-    answerSource: 'option' as const,
-    ...(typed ? { context: typed } : {}),
-  }
+  /** Host-owned expiry timestamp (epoch ms). Without it, the modal starts a countdown when this request first shows. */
+  deadline?: number
 }
 
 /** Case-insensitive match on every whitespace-separated term, keeping original positions. */
@@ -51,17 +39,33 @@ function filterSelectOptions(options: readonly string[], query: string): Array<{
     })
 }
 
-export function ExtensionUiModal({ request, onRespond, platform = 'darwin' }: ExtensionUiModalProps) {
+/** Milliseconds left until `deadline`, re-rendered once a second; undefined when there is no deadline. */
+function useRemainingMs(deadline: number | undefined): number | undefined {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (deadline === undefined) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [deadline])
+  return deadline === undefined ? undefined : Math.max(0, deadline - now)
+}
+
+export function ExtensionUiModal({ request, onRespond, platform = 'darwin', deadline }: ExtensionUiModalProps) {
   const prefill = request.method === 'editor' ? request.prefill : undefined
   const questionnaireTimeout = request.method === 'questionnaire' ? request.timeout : undefined
+  const fallbackDeadline = useMemo(
+    () => questionnaireTimeout === undefined ? undefined : Date.now() + questionnaireTimeout,
+    [request.id, questionnaireTimeout],
+  )
+  const remainingMs = useRemainingMs(deadline ?? fallbackDeadline)
   const [value, setValue] = useState(prefill ?? '')
   const [selected, setSelected] = useState(0)
-  const [questionIndex, setQuestionIndex] = useState(0)
-  const [selectedByQuestion, setSelectedByQuestion] = useState<Record<string, number>>({})
-  const [answeredByQuestion, setAnsweredByQuestion] = useState<Record<string, boolean>>({})
-  const [contexts, setContexts] = useState<Record<string, string>>({})
-  const [remainingMs, setRemainingMs] = useState<number | undefined>(questionnaireTimeout)
   const [query, setQuery] = useState('')
+  const questionnaire = request.method === 'questionnaire' ? request : undefined
+  const [wizard, dispatchWizard] = useReducer(reduceQuestionnaire, questionnaire, initialQuestionnaireSnapshot)
+  const wizardContext = wizard.context
+  const questionIndex = wizardContext.index
   const contextInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const questionnaireRef = useRef<HTMLDivElement | null>(null)
   const selectOptionRefs = useRef<Record<number, HTMLButtonElement | null>>({})
@@ -133,93 +137,51 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin' }: Ex
     selectOptionRefs.current[selectOptions[target].index]?.focus()
   }
 
+  // Sync the wizard with each delivered request: a new id resets answers, a refreshed one keeps them.
   useEffect(() => {
-    if (request.method !== 'questionnaire') return
-    setQuestionIndex((current) => Math.min(current, request.questions.length))
-    setSelectedByQuestion((current) => {
-      const next = { ...current }
-      for (const question of request.questions) if (next[question.id] === undefined) next[question.id] = 0
-      return next
-    })
-  }, [request.method, request.id, request.method === 'questionnaire' ? request.questions.length : 0])
+    if (questionnaire) dispatchWizard(questionnaireRequestEvent(questionnaire))
+  }, [questionnaire])
 
   useEffect(() => {
-    if (request.method !== 'questionnaire') return
-    setQuestionIndex(0)
-    setSelectedByQuestion(Object.fromEntries(request.questions.map((question) => [question.id, 0])))
-    setAnsweredByQuestion({})
-    setContexts({})
-  }, [request.id])
-
-  useEffect(() => {
-    if (request.method !== 'questionnaire' || !request.complete) return
+    if (!questionnaire?.complete) return
     const container = questionnaireRef.current
     if (!container || container.contains(document.activeElement)) return
     const focusTarget = container.querySelector<HTMLElement>('.extension-question__options button')
       ?? container.querySelector<HTMLElement>('.extension-questionnaire__progress button.is-active')
     focusTarget?.focus()
-  }, [request.id, request.method === 'questionnaire' ? request.complete : false, questionIndex])
-
-  useEffect(() => {
-    if (questionnaireTimeout === undefined) {
-      setRemainingMs(undefined)
-      return
-    }
-    const deadline = Date.now() + questionnaireTimeout
-    const updateRemaining = () => setRemainingMs(Math.max(0, deadline - Date.now()))
-    updateRemaining()
-    const timer = window.setInterval(updateRemaining, 1_000)
-    return () => window.clearInterval(timer)
-  }, [questionnaireTimeout, request.id])
+  }, [request.id, questionnaire?.complete, questionIndex])
 
   const cancel = () => onRespond({ cancelled: true })
 
-  const questionnaire = request.method === 'questionnaire' ? request : undefined
   const activeQuestion = questionnaire && questionIndex < questionnaire.questions.length
     ? questionnaire.questions[questionIndex]
     : undefined
-  const activeSelected = activeQuestion ? selectedByQuestion[activeQuestion.id] ?? 0 : 0
-  const allAnswered = Boolean(questionnaire?.complete && questionnaire.questions.length > 0 && questionnaire.questions.every((question) => answeredByQuestion[question.id]))
+  const activeSelected = activeQuestion ? wizardContext.selectedByQuestion[activeQuestion.id] ?? 0 : 0
+  const canSubmit = (wizard.matches('answering') || wizard.matches('reviewing')) && selectQuestionnaireComplete(wizardContext)
 
   const selectQuestionOption = (index: number) => {
-    if (!activeQuestion) return
-    const bounded = Math.max(0, Math.min(activeQuestion.options.length - 1, index))
-    setSelectedByQuestion((current) => ({ ...current, [activeQuestion.id]: bounded }))
-    setAnsweredByQuestion((current) => ({ ...current, [activeQuestion.id]: false }))
+    if (activeQuestion) dispatchWizard({ type: 'SELECT', index })
   }
 
   const navigateQuestion = (index: number) => {
-    if (!questionnaire) return
-    if (activeQuestion) {
-      const answer = questionnaireAnswer(activeQuestion, activeSelected, contexts)
-      setAnsweredByQuestion((current) => ({ ...current, [activeQuestion.id]: Boolean(answer) }))
-    }
-    setQuestionIndex(Math.max(0, Math.min(questionnaire.questions.length, index)))
+    if (questionnaire) dispatchWizard({ type: 'NAVIGATE', index })
   }
 
   const commitQuestion = (index = activeSelected) => {
     if (!activeQuestion) return
     const bounded = Math.max(0, Math.min(activeQuestion.options.length - 1, index))
-    setSelectedByQuestion((current) => ({ ...current, [activeQuestion.id]: bounded }))
-    const answer = questionnaireAnswer(activeQuestion, bounded, contexts)
-    if (!answer) {
-      setAnsweredByQuestion((current) => ({ ...current, [activeQuestion.id]: false }))
+    if (!questionnaireAnswer(activeQuestion, bounded, wizardContext.contexts)) {
       contextInputRefs.current[activeQuestion.id]?.focus()
-      return
     }
-    setAnsweredByQuestion((current) => ({ ...current, [activeQuestion.id]: true }))
-    setQuestionIndex((current) => Math.min(current + 1, questionnaire?.questions.length ?? current + 1))
+    dispatchWizard({ type: 'COMMIT', index: bounded })
   }
 
   const submitQuestionnaire = () => {
-    if (!questionnaire || !allAnswered) return
-    const values: Record<string, string> = {}
-    for (const question of questionnaire.questions) {
-      const answer = questionnaireAnswer(question, selectedByQuestion[question.id] ?? 0, contexts)
-      if (!answer) return
-      values[question.id] = JSON.stringify(answer)
-    }
+    const values = selectQuestionnaireValues(wizardContext)
+    if (!canSubmit || !values) return
+    dispatchWizard({ type: 'SUBMIT' })
     onRespond({ values })
+    dispatchWizard({ type: 'RESPONDED' })
   }
 
   const handleQuestionnaireKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -273,39 +235,41 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin' }: Ex
     // native key handling and typing context happens in the context field.
   }
 
+  const remainingSeconds = remainingMs === undefined ? undefined : Math.max(0, Math.ceil(remainingMs / 1_000))
+
   return (
     <Modal title={request.title} onClose={cancel} footer={(
       <>
         <button type="button" className="button" onClick={cancel}>Cancel</button>
         {request.method === 'confirm' ? <button type="button" className="button button--primary" onClick={() => onRespond({ confirmed: true })}>Confirm</button> : null}
         {request.method === 'input' || request.method === 'editor' ? <button type="button" className="button button--primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</button> : null}
-        {request.method === 'questionnaire' ? <button type="button" className="button button--primary" disabled={!allAnswered} onClick={submitQuestionnaire}>Submit answers</button> : null}
+        {questionnaire ? <button type="button" className="button button--primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</button> : null}
       </>
     )}>
-      {request.method === 'questionnaire' ? (
+      {questionnaire ? (
         <div ref={questionnaireRef} className="extension-questionnaire" onKeyDown={handleQuestionnaireKeyDown}>
-          {!request.complete ? <p className="modal-intro">Preparing questions…</p> : null}
-          {request.complete ? (
+          {!questionnaire.complete ? <p className="modal-intro">Preparing questions…</p> : null}
+          {questionnaire.complete ? (
             <>
-              {remainingMs !== undefined ? (
+              {remainingSeconds !== undefined ? (
                 <div className="extension-questionnaire__timer" role="timer" aria-live="polite">
                   <span>Time remaining</span>
-                  <strong aria-label={`${Math.max(0, Math.ceil(remainingMs / 1_000))} seconds remaining`}>
-                    {Math.max(0, Math.ceil(remainingMs / 1_000))}s
+                  <strong aria-label={`${remainingSeconds} seconds remaining`}>
+                    {remainingSeconds}s
                   </strong>
                 </div>
               ) : null}
               <div className="extension-questionnaire__progress" aria-label="Question progress">
-                {request.questions.map((question, index) => (
+                {questionnaire.questions.map((question, index) => (
                   <button type="button" key={question.id} aria-current={questionIndex === index ? 'step' : undefined} className={questionIndex === index ? 'is-active' : ''} onClick={() => navigateQuestion(index)}>
-                    {answeredByQuestion[question.id] ? '✓' : '○'} {index + 1}
+                    {wizardContext.answeredByQuestion[question.id] ? '✓' : '○'} {index + 1}
                   </button>
                 ))}
-                <button type="button" aria-current={questionIndex === request.questions.length ? 'step' : undefined} className={questionIndex === request.questions.length ? 'is-active' : ''} onClick={() => navigateQuestion(request.questions.length)}>✓ Submit</button>
+                <button type="button" aria-current={questionIndex === questionnaire.questions.length ? 'step' : undefined} className={questionIndex === questionnaire.questions.length ? 'is-active' : ''} onClick={() => navigateQuestion(questionnaire.questions.length)}>✓ Submit</button>
               </div>
               {activeQuestion ? (
                 <div className="extension-questionnaire__question">
-                  <p className="modal-intro">Question {questionIndex + 1} of {request.questions.length}</p>
+                  <p className="modal-intro">Question {questionIndex + 1} of {questionnaire.questions.length}</p>
                   <h3>{activeQuestion.title}</h3>
                   <div className="extension-question__options" role="listbox" aria-label={activeQuestion.title}>
                     {activeQuestion.options.map((option, index) => {
@@ -327,21 +291,18 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin' }: Ex
                     <span>Type to add context</span>
                     <input
                       ref={(element) => { contextInputRefs.current[activeQuestion.id] = element }}
-                      value={contexts[activeQuestion.id] ?? ''}
+                      value={wizardContext.contexts[activeQuestion.id] ?? ''}
                       placeholder="Type to add context"
                       aria-label="Additional context"
-                      onChange={(event) => {
-                        setContexts((values) => ({ ...values, [activeQuestion.id]: event.target.value }))
-                        setAnsweredByQuestion((values) => ({ ...values, [activeQuestion.id]: false }))
-                      }}
+                      onChange={(event) => dispatchWizard({ type: 'TYPE_CONTEXT', text: event.target.value })}
                     />
                   </label>
                   <p className="extension-questionnaire__hint">{shortcutLabel(platform, ['Primary', 'ArrowLeft'])} / {shortcutLabel(platform, ['Primary', 'ArrowRight'])} or PgUp/PgDn questions · ↑ ↓ choices · 1–9 select · Enter continue</p>
                 </div>
               ) : (
                 <div className="extension-questionnaire__submit" role="listbox" aria-label="Submit answers">
-                  {request.questions.map((question) => {
-                    const answer = questionnaireAnswer(question, selectedByQuestion[question.id] ?? 0, contexts)
+                  {questionnaire.questions.map((question) => {
+                    const answer = questionnaireAnswer(question, wizardContext.selectedByQuestion[question.id] ?? 0, wizardContext.contexts)
                     return <p key={question.id}><strong>{question.index + 1}.</strong> {answer?.answer ?? 'Not answered'}</p>
                   })}
                 </div>

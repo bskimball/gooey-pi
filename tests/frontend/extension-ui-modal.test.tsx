@@ -124,6 +124,44 @@ describe('extension questionnaire keyboard handling', () => {
   })
 })
 
+describe('extension questionnaire wizard', () => {
+  it('counts down from the host deadline instead of restarting on mount', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      const deadline = Date.now() + 10_000
+      await act(async () => { root.render(<ExtensionUiModal request={{ ...request, timeout: 10_000 }} deadline={deadline} onRespond={vi.fn()} />) })
+      const timer = () => document.querySelector('.extension-questionnaire__timer strong')?.textContent
+      expect(timer()).toBe('10s')
+      await act(async () => { vi.advanceTimersByTime(4_000) })
+      expect(timer()).toBe('6s')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('submits the collected answers once from the summary or an answered question', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={request} onRespond={onRespond} />) })
+    await clickButton(questionnaireElement().querySelector<HTMLButtonElement>('.extension-question__options button')!)
+    await clickButton(questionnaireElement().querySelector<HTMLButtonElement>('.extension-question__options button')!)
+    const submit = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Submit answers')!
+    expect(submit.disabled).toBe(false)
+    await clickButton(questionnaireElement().querySelector<HTMLButtonElement>('.extension-questionnaire__progress button')!)
+    expect(currentQuestionTitle()).toBe('Pick a framework')
+    expect(submit.disabled).toBe(false)
+    await clickButton(submit)
+    expect(submit.disabled).toBe(true)
+    await clickButton(submit)
+    expect(onRespond).toHaveBeenCalledTimes(1)
+    expect(onRespond).toHaveBeenCalledWith({
+      values: {
+        q1: JSON.stringify({ answer: 'React', answerSource: 'option' }),
+        q2: JSON.stringify({ answer: 'TypeScript', answerSource: 'option' }),
+      },
+    })
+  })
+})
+
 describe('extension select search', () => {
   const models = Array.from({ length: 40 }, (_, index) => `${index % 2 ? 'openai' : 'claude-bridge'}/model-${index}`)
   const selectRequest: ExtensionUiRequest = { method: 'select', id: 'lead', title: 'Fusion lead model', options: ['openai/gpt-6-astra', ...models] }

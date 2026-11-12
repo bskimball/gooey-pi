@@ -27,7 +27,7 @@ describe('composer queue tray', () => {
     const queued = { id: 'queue-1', text: 'run tests', intent: 'queue' as const }
     act(() => root.render(<Composer
       busy
-      submitting={false}
+      admitting={false}
       loading={false}
       disabled={false}
       model="auto"

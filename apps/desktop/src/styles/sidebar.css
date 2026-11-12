@@ -28,12 +28,6 @@
 .sidebar__new-session.icon-button:hover { color: var(--text); background: var(--surface-hover); }
 .sidebar__new-session.icon-button:active:not(:disabled) { color: var(--text); background: var(--surface-selected); }
 .sidebar__new-session.icon-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.sidebar__footer > button { width: 100%; height: 33px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border-radius: var(--radius-md); color: var(--text-secondary); background: transparent; text-align: left; transition: color 120ms ease-out, background 120ms ease-out; }
-.sidebar__footer > button:hover { color: var(--text); background: var(--surface-hover); }
-.sidebar__footer > button.is-active { color: var(--text); background: var(--surface-selected); }
-.sidebar__footer > button span { flex: 1; }
-.sidebar__footer kbd { opacity: 0; transition: opacity 130ms ease-out; }
-.sidebar__footer button:hover kbd { opacity: 1; }
 /* Destinations share one icon row; the title tooltip and sr-only label carry the name. */
 /* One shared selection pill slides to the active destination; --i is its column index. */
 .sidebar__destinations { --i: 0; position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
@@ -132,4 +126,3 @@
 @keyframes sidebar-menu-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } }
 .project-working { width: 14px; height: 14px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--prime); }
 .project-attention { flex: 0 0 auto; min-width: 16px; height: 16px; display: inline-grid; place-items: center; padding: 0 4px; border-radius: 999px; color: var(--canvas); background: var(--warning); font-size: 10px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.sidebar__footer { flex: 0 0 auto; padding: 8px 10px 10px; }

@@ -1,3 +1,4 @@
+import { setup, transition, type SnapshotFrom } from 'xstate'
 import type { MessagePart, TranscriptMessage } from '@/types/api'
 
 export type CheckKind = 'test' | 'lint' | 'typecheck' | 'build' | 'format'
@@ -26,6 +27,38 @@ export interface Readiness {
 }
 
 type ToolResultPart = Extract<MessagePart, { type: 'toolResult' }>
+
+/** One check kind's latest outcome. The newest run wins, except that an unverifiable run cannot hide a failure. */
+const checkMachine = setup({
+  types: { events: {} as { type: 'OBSERVED'; outcome: CheckOutcome } },
+  guards: {
+    passed: ({ event }) => event.outcome === 'passed',
+    failed: ({ event }) => event.outcome === 'failed',
+    running: ({ event }) => event.outcome === 'running',
+    unknown: ({ event }) => event.outcome === 'unknown',
+  },
+}).createMachine({
+  id: 'readinessCheck',
+  initial: 'running',
+  on: {
+    OBSERVED: [
+      { guard: 'passed', target: '.passed' },
+      { guard: 'failed', target: '.failed' },
+      { guard: 'running', target: '.running' },
+      { guard: 'unknown', target: '.unknown' },
+    ],
+  },
+  states: {
+    running: {},
+    passed: {},
+    unknown: {},
+    failed: { on: { OBSERVED: [{ guard: 'unknown' }, { guard: 'passed', target: 'passed' }, { guard: 'running', target: 'running' }, { guard: 'failed', target: 'failed' }] } },
+  },
+})
+
+function observeCheck(previous: SnapshotFrom<typeof checkMachine> | undefined, outcome: CheckOutcome) {
+  return transition(checkMachine, previous ?? checkMachine.resolveState({ value: outcome }), { type: 'OBSERVED', outcome })[0]
+}
 
 const SHELL_TOOLS = new Set(['bash', 'powershell'])
 const FILE_MUTATING_TOOLS = new Set(['edit', 'write', 'apply_patch', 'multi_edit'])
@@ -201,7 +234,7 @@ function agentsOf(args: Record<string, unknown> | undefined, workerAgents: Reado
 
 function readinessFromParts(parts: readonly MessagePart[]): Readiness {
   const changeIndexes: number[] = []
-  const latestChecks = new Map<CheckKind, { outcome: CheckOutcome; index: number }>()
+  const latestChecks = new Map<CheckKind, { state: SnapshotFrom<typeof checkMachine>; index: number }>()
   const latestReviews = new Map<ReviewAgent, { verdict: string; index: number }>()
   const workerAgents = new Map<string, string>()
 
@@ -215,8 +248,10 @@ function readinessFromParts(parts: readonly MessagePart[]): Readiness {
     } else if (SHELL_TOOLS.has(name) && typeof args?.command === 'string') {
       const found = findResult(parts, index, name)
       for (const [kind, outcome] of checkOutcomes(args.command, found?.part)) {
-        if (latestChecks.get(kind)?.outcome === 'failed' && outcome === 'unknown') continue
-        latestChecks.set(kind, { outcome, index })
+        const previous = latestChecks.get(kind)
+        const state = observeCheck(previous?.state, outcome)
+        // A suppressed run keeps the failure's position, so later changes still count against it.
+        if (state.value === outcome) latestChecks.set(kind, { state, index })
       }
       if (mayChangeWorkspace(args.command)) changeIndexes.push(index)
     } else if (TASK_TOOLS.has(name)) {
@@ -239,7 +274,7 @@ function readinessFromParts(parts: readonly MessagePart[]): Readiness {
   return {
     checks: CHECK_KINDS.flatMap((kind) => {
       const latest = latestChecks.get(kind)
-      return latest ? [{ kind, outcome: latest.outcome, changesSince: changesAfter(latest.index) }] : []
+      return latest ? [{ kind, outcome: latest.state.value as CheckOutcome, changesSince: changesAfter(latest.index) }] : []
     }),
     reviews: REVIEW_AGENTS.flatMap((agent) => {
       const latest = latestReviews.get(agent as ReviewAgent)

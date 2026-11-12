@@ -182,6 +182,9 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
     expect(render(finished, false, false)).toContain('role="status"><span class="sr-only">Thinking</span>')
+
+    const ended = replayPrimeEvents(updating, [{ type: 'agent_end' }])
+    expect(ended[0].parts.find((part) => part.type === 'toolResult')).toMatchObject({ streaming: false, isError: true })
   })
 
   it('keeps late results at their call site and follows newer reasoning or narrative', () => {

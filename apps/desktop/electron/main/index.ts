@@ -74,6 +74,7 @@ import {
 } from "./packaged-smoke";
 import { PetService } from "./pets";
 import { beginPluginDiscoveryShutdown, PluginService } from "./plugins";
+import { createAppShutdown, isShutdownApproved, isShutdownConfirming, isShutdownStarted } from "./appShutdownMachine";
 import {
 	beginProcessShutdown,
 	runProcess,
@@ -127,9 +128,7 @@ let agentBrowserBridge: AgentBrowserBridge | null = null;
 let desktopLink: DesktopLinkServer | null = null;
 let agentCollaborationBridge: AgentCollaborationBridge | null = null;
 let backgroundMode: MacBackgroundController | null = null;
-let shutdownStarted = false;
-let shutdownApproved = false;
-let confirmingShutdown = false;
+const shutdown = createAppShutdown();
 let trustedRendererUrl = "";
 let packagedSmokeMarkerFile: string | null = null;
 let windowCreation: Promise<BrowserWindow | null> | null = null;
@@ -443,11 +442,12 @@ function requestShutdown(
 	window: BrowserWindow | null,
 	prompt: ShutdownPrompt,
 ): void {
-	confirmingShutdown = true;
+	if (isShutdownConfirming(shutdown)) return;
+	shutdown.send({ type: "CONFIRM" });
 	void confirmAppClose(window, prompt)
 		.then((approved) => {
 			if (!approved) return;
-			shutdownApproved = true;
+			shutdown.send({ type: "APPROVE" });
 			app.quit();
 		})
 		.catch((error: unknown) => {
@@ -456,7 +456,7 @@ function requestShutdown(
 			);
 		})
 		.finally(() => {
-			confirmingShutdown = false;
+			shutdown.send({ type: "DISMISS" });
 		});
 }
 
@@ -570,8 +570,21 @@ export function setTitleBarTheme(
 	return true;
 }
 
+/** The one gate that reveals the main window after its first load; test runs, background mode, and shutdown all keep it hidden. */
+function showWhenReady(window: BrowserWindow): void {
+	if (
+		keepTestWindowsHidden ||
+		backgroundMode?.isBackgrounded() ||
+		isShutdownStarted(shutdown) ||
+		window.isDestroyed() ||
+		mainWindow !== window
+	)
+		return;
+	window.show();
+}
+
 async function createWindow(): Promise<BrowserWindow | null> {
-	if (shutdownStarted) return null;
+	if (isShutdownStarted(shutdown)) return null;
 	const window = new BrowserWindow({
 		width: 1440,
 		height: 920,
@@ -625,18 +638,10 @@ async function createWindow(): Promise<BrowserWindow | null> {
 	let readyToShow = false;
 	window.once("ready-to-show", () => {
 		readyToShow = true;
-		if (
-			!keepTestWindowsHidden &&
-			!backgroundMode?.isBackgrounded() &&
-			rendererLoaded &&
-			!shutdownStarted &&
-			!window.isDestroyed() &&
-			mainWindow === window
-		)
-			window.show();
+		if (rendererLoaded) showWhenReady(window);
 	});
 	window.on("close", (event) => {
-		if (shutdownStarted || shutdownApproved) return;
+		if (isShutdownStarted(shutdown) || isShutdownApproved(shutdown)) return;
 		if (backgroundMode?.handleWindowClose(window)) {
 			event.preventDefault();
 			return;
@@ -644,7 +649,7 @@ async function createWindow(): Promise<BrowserWindow | null> {
 		const prompt = pendingShutdownPrompt();
 		if (!prompt) return;
 		event.preventDefault();
-		if (!confirmingShutdown) requestShutdown(window, prompt);
+		requestShutdown(window, prompt);
 	});
 	window.on("closed", () => {
 		ipc?.revoke(rendererId);
@@ -657,24 +662,19 @@ async function createWindow(): Promise<BrowserWindow | null> {
 		if (mainWindow === window) mainWindow = null;
 		throw error;
 	}
-	if (shutdownStarted || window.isDestroyed() || mainWindow !== window) {
+	if (isShutdownStarted(shutdown) || window.isDestroyed() || mainWindow !== window) {
 		ipc?.revoke(rendererId);
 		if (!window.isDestroyed()) window.destroy();
 		if (mainWindow === window) mainWindow = null;
 		return null;
 	}
 	rendererLoaded = true;
-	if (
-		!keepTestWindowsHidden &&
-		!backgroundMode?.isBackgrounded() &&
-		readyToShow
-	)
-		window.show();
+	if (readyToShow) showWhenReady(window);
 	return window;
 }
 
 function ensureWindow(): Promise<BrowserWindow | null> {
-	if (shutdownStarted) return Promise.resolve(null);
+	if (isShutdownStarted(shutdown)) return Promise.resolve(null);
 	if (mainWindow && !mainWindow.isDestroyed())
 		return windowCreation ?? Promise.resolve(mainWindow);
 	if (windowCreation) return windowCreation;
@@ -800,7 +800,7 @@ function requestWindow(
 ): void {
 	void ensureWindow()
 		.then((window) => {
-			if (!window || shutdownStarted || window.isDestroyed()) return;
+			if (!window || isShutdownStarted(shutdown) || window.isDestroyed()) return;
 			if (!keepTestWindowsHidden) {
 				if (window.isMinimized()) window.restore();
 				window.show();
@@ -809,7 +809,7 @@ function requestWindow(
 			afterOpen?.(window);
 		})
 		.catch((error: unknown) => {
-			if (!shutdownStarted)
+			if (!isShutdownStarted(shutdown))
 				console.error(
 					`Apex failed to open a window after ${reason}: ${boundedErrorMessage(error)}`,
 				);
@@ -856,7 +856,7 @@ async function bootstrap(): Promise<void> {
 	);
 	const initialHarnesses = await discovery.refresh();
 	await reconcileActiveHarness(stateStore, initialHarnesses);
-	if (shutdownStarted) return;
+	if (isShutdownStarted(shutdown)) return;
 	const piExecutable = () => discovery.executable("pi");
 	// Pi likewise has no live-CLI overlay; its catalog is JSONL-only.
 	const piSessions = new SessionService(
@@ -1253,7 +1253,7 @@ async function bootstrap(): Promise<void> {
 	piManager.setRuntimeEndListener((environment) =>
 		revokeRuntimeCapabilities(environment, piScheduleBridge),
 	);
-	if (shutdownStarted) return;
+	if (isShutdownStarted(shutdown)) return;
 	const meta: AppMeta = {
 		version: app.getVersion(),
 		platform: process.platform,
@@ -1302,7 +1302,7 @@ async function bootstrap(): Promise<void> {
 	const forwardAgentEvent = (envelope: PrimeEventEnvelope): void => {
 		const renderer = mainWindow?.webContents;
 		if (
-			!shutdownStarted &&
+			!isShutdownStarted(shutdown) &&
 			renderer &&
 			!renderer.isDestroyed() &&
 			isTrustedRendererUrl(renderer.getURL(), trustedRendererUrl) &&
@@ -1315,7 +1315,7 @@ async function bootstrap(): Promise<void> {
 	updates.setEventSink((state: AppUpdateState) => {
 		const renderer = mainWindow?.webContents;
 		if (
-			!shutdownStarted &&
+			!isShutdownStarted(shutdown) &&
 			renderer &&
 			!renderer.isDestroyed() &&
 			isTrustedRendererUrl(renderer.getURL(), trustedRendererUrl) &&
@@ -1378,7 +1378,7 @@ async function runPackagedSmoke(
 		mode: 0o600,
 	});
 	console.log(`${PACKAGED_SMOKE_READY_EVENT} ${trustedRendererUrl}`);
-	shutdownApproved = true;
+	shutdown.send({ type: "APPROVE" });
 	app.quit();
 }
 
@@ -1464,11 +1464,11 @@ else
 			}
 			await bootstrap();
 			app.on("second-instance", () => {
-				if (!shutdownStarted) revealApplication("second instance");
+				if (!isShutdownStarted(shutdown)) revealApplication("second instance");
 			});
 			app.on("activate", () => {
 				if (
-					!shutdownStarted &&
+					!isShutdownStarted(shutdown) &&
 					(!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible())
 				)
 					revealApplication("activation");
@@ -1478,33 +1478,33 @@ else
 			const failureDialog = startupFailureDialog(error);
 			if (failureDialog)
 				dialog.showErrorBox(failureDialog.title, failureDialog.detail);
-			if (!shutdownStarted)
+			if (!isShutdownStarted(shutdown))
 				console.error(`Apex failed to start: ${boundedErrorMessage(error)}`);
 			app.quit();
 		});
 
 app.on("window-all-closed", () => {
-	routeAllWindowsClosed(shutdownStarted, backgroundMode, () => app.quit());
+	routeAllWindowsClosed(isShutdownStarted(shutdown), backgroundMode, () => app.quit());
 });
 
 app.on("before-quit", (event) => {
-	if (shutdownStarted) return;
-	if (!shutdownApproved) {
+	if (isShutdownStarted(shutdown)) return;
+	event.preventDefault();
+	// An open close dialog owns this quit; its answer re-enters through APPROVE or DISMISS.
+	if (isShutdownConfirming(shutdown)) return;
+	if (!isShutdownApproved(shutdown)) {
 		const prompt = pendingShutdownPrompt();
 		if (prompt) {
-			event.preventDefault();
-			if (!confirmingShutdown)
-				requestShutdown(
-					mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
-						? mainWindow
-						: null,
-					prompt,
-				);
+			requestShutdown(
+				mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+					? mainWindow
+					: null,
+				prompt,
+			);
 			return;
 		}
 	}
-	event.preventDefault();
-	shutdownStarted = true;
+	shutdown.send({ type: "START" });
 
 	const registration = ipc;
 	ipc = null;

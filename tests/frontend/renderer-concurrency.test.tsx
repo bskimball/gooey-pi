@@ -11,6 +11,7 @@ import { useSidebarCatalog } from '../../apps/desktop/src/hooks/useSidebarCatalo
 import { useRuntimePrewarm } from '../../apps/desktop/src/hooks/useRuntimePrewarm'
 import { startWorkspaceRuntime } from '../../apps/desktop/src/lib/runtime-start'
 import { useExtensionUi } from '../../apps/desktop/src/hooks/useExtensionUi'
+import { createAgentTurnHandle, isAgentBusy } from '../../apps/desktop/src/app/agentTurnMachine'
 import { readSavedPiBehaviorMode } from '../../apps/desktop/src/lib/harness'
 import { usePluginSkills } from '../../apps/desktop/src/hooks/usePluginSkills'
 import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRuntime'
@@ -189,6 +190,33 @@ describe('settings queue reconciliation', () => {
 
     expect(state.settings).toEqual(saved)
     expect([state.sidebarOpen, state.inspectorOpen]).toEqual([false, false])
+  })
+
+  it('keeps a local-only panel close across later unrelated saves', async () => {
+    const update = vi.fn(async (patch: Partial<AppSettings>) => ({ ...DEFAULT_SETTINGS, ...patch }))
+    const bridge = { settings: { get: async () => DEFAULT_SETTINGS, update } } as unknown as PrimeWorkApi
+    const reportError = vi.fn()
+    let state!: ReturnType<typeof useAppSettings>
+    function SettingsProbe() {
+      state = useAppSettings({ bridge, reportError })
+      return <Probe />
+    }
+    await act(async () => { root.render(<SettingsProbe />); await Promise.resolve() })
+
+    await act(async () => { state.setSidebarOpen(false) })
+    for (const showToolCalls of [false, true]) {
+      let mutation!: Promise<void>
+      await act(async () => { mutation = state.updateSettings({ showToolCalls }) })
+      await act(async () => { await mutation })
+    }
+    expect(update).toHaveBeenCalledTimes(2)
+    expect(state.settings.sidebarOpen).toBe(true)
+    expect(state.sidebarOpen).toBe(false)
+
+    let persist!: Promise<void>
+    await act(async () => { persist = state.updateSettings({ sidebarOpen: true }) })
+    await act(async () => { await persist })
+    expect(state.sidebarOpen).toBe(true)
   })
 })
 
@@ -791,7 +819,7 @@ describe('extension UI runtime ownership', () => {
       const reportError = vi.fn()
       let state!: ReturnType<typeof useExtensionUi>
       function ExtensionProbe() {
-        state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError })
+        state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn: createAgentTurnHandle() })
         return <Probe />
       }
       await act(async () => { root.render(<ExtensionProbe />) })
@@ -818,7 +846,15 @@ describe('extension UI runtime ownership', () => {
   })
 
   it('retains a background request and surfaces it when that runtime activates', async () => {
-    const bridge = { agent: { command: vi.fn().mockResolvedValue({}) } } as unknown as PrimeWorkApi
+    const command = vi.fn().mockResolvedValue({})
+    const stop = vi.fn().mockResolvedValue(true)
+    const bridge = { agent: { command, stop } } as unknown as PrimeWorkApi
+    const agentTurn = createAgentTurnHandle()
+    agentTurn.send({ type: 'ADMITTED' })
+    agentTurn.send({ type: 'MIRRORED_IDLE' })
+    expect(isAgentBusy(agentTurn.current())).toBe(true)
+    agentTurn.send({ type: 'PROMPT_SETTLED' })
+    expect(isAgentBusy(agentTurn.current())).toBe(false)
     const runtimeIdRef = { current: 'active' as string | null }
     const runtimeSessionsRef = { current: new Map<string, string>() }
     const setSessions = vi.fn()
@@ -827,7 +863,7 @@ describe('extension UI runtime ownership', () => {
     let state!: ReturnType<typeof useExtensionUi>
     function ExtensionProbe({ activeRuntimeId }: { activeRuntimeId: string }) {
       runtimeIdRef.current = activeRuntimeId
-      state = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef, setSessions, setRuntime, reportError })
+      state = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn })
       return <Probe />
     }
     await act(async () => { root.render(<ExtensionProbe activeRuntimeId="active" />) })
@@ -842,6 +878,21 @@ describe('extension UI runtime ownership', () => {
     expect(state.extensionUi?.runtimeId).toBe('background')
     expect(state.extensionUi?.request.id).toBe('background-question')
     expect(bridge.agent.command).not.toHaveBeenCalled()
+    await act(async () => { root.render(<ExtensionProbe activeRuntimeId="active" />) })
+    let questionNumber = 0
+    const askBackground = () => state.showExtensionUi('background', {
+      type: 'extension_ui_request', id: 'question', method: 'select', title: 'Question',
+      options: [`__prime_ask_user__background-group-${++questionNumber}:0:1`, 'Yes'],
+    })
+    await act(async () => { askBackground(); await state.respondForRuntime('background', { values: { question: 'Yes' } }) })
+    expect(isAgentBusy(agentTurn.current())).toBe(false)
+    agentTurn.send({ type: 'RUNTIME_STREAMING' })
+    command.mockRejectedValueOnce(new Error('background response failed'))
+    await act(async () => { askBackground(); await state.respondForRuntime('background', { values: { question: 'Yes' } }) })
+    expect(isAgentBusy(agentTurn.current())).toBe(true)
+    await act(async () => { askBackground(); await state.respondForRuntime('background', { cancelled: true }) })
+    expect(stop).toHaveBeenCalledWith('background')
+    expect(isAgentBusy(agentTurn.current())).toBe(true)
   })
 
   it('groups ask_user question requests and responds to every pending question', async () => {
@@ -853,7 +904,7 @@ describe('extension UI runtime ownership', () => {
     const reportError = vi.fn()
     let state!: ReturnType<typeof useExtensionUi>
     function ExtensionProbe() {
-      state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError })
+      state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn: createAgentTurnHandle() })
       return <Probe />
     }
 
@@ -896,7 +947,7 @@ describe('extension UI runtime ownership', () => {
     const reportError = vi.fn()
     let state!: ReturnType<typeof useExtensionUi>
     function ExtensionProbe() {
-      state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError })
+      state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn: createAgentTurnHandle() })
       return <Probe />
     }
 
@@ -926,7 +977,7 @@ describe('extension UI runtime ownership', () => {
       const reportError = vi.fn()
       let state!: ReturnType<typeof useExtensionUi>
       function ExtensionProbe() {
-        state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError })
+        state = useExtensionUi({ bridge, activeRuntimeId: 'runtime', runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn: createAgentTurnHandle() })
         return <Probe />
       }
 
@@ -963,7 +1014,7 @@ describe('extension UI runtime ownership', () => {
     const reportError = vi.fn()
     let state!: ReturnType<typeof useExtensionUi>
     function ExtensionProbe({ activeRuntimeId }: { activeRuntimeId?: string }) {
-      state = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef, setSessions, setRuntime, reportError })
+      state = useExtensionUi({ bridge, activeRuntimeId, runtimeSessionsRef, setSessions, setRuntime, reportError, agentTurn: createAgentTurnHandle() })
       return <Probe />
     }
 

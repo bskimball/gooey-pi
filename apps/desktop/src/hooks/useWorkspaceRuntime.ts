@@ -1,3 +1,4 @@
+import { useActorRef, useSelector } from '@xstate/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AGENT_EVENT_FLUSH_CHUNK,
@@ -15,9 +16,9 @@ import { runTranscriptRead } from '@/app/transcript-load'
 import { reconcileTranscripts } from '@/app/transcript-reconcile'
 import type { WorkspaceSnapshot } from '@/app/workspace'
 import { createPrimeEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayPrimeEvents } from '@/lib/events'
-import type { PrimeEventBuffer } from '@/lib/events'
 import { findRuntimeForWorkspace, workspaceCwd } from '@/lib/workspace'
 import type { HarnessId, MessagePart, PrimeWorkApi, ProjectRecord, PromptDeliveryIntent, QueuedPrompt, RuntimeInfo, SessionActionSnapshot, SessionRecord, TranscriptMessage } from '@/types/api'
+import { workspaceLoadMachine, type TranscriptLoad } from './workspaceLoadMachine'
 
 let queuedPromptSequence = 0
 
@@ -37,15 +38,6 @@ function queuedPromptOwner(
   if (runtime) return `${runtime.harness}:runtime:${runtime.runtimeId}`
   if (project) return `${project.harness}:new:${project.id}:${generation}`
   return undefined
-}
-
-interface TranscriptLoad {
-  generation: number
-  sessionFile: string
-  eventBuffer: PrimeEventBuffer
-  runtimeId?: string
-  reconciliation: boolean
-  admissionRevision: number
 }
 
 interface UseWorkspaceRuntimeOptions {
@@ -78,7 +70,8 @@ export function useWorkspaceRuntime({
   const [activeSessionId, setActiveSessionId] = useState(initialSession?.id)
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null)
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0)
-  const [loadingSession, setLoadingSession] = useState(false)
+  const loadActor = useActorRef(workspaceLoadMachine)
+  const loadingSession = useSelector(loadActor, (snapshot) => snapshot.matches('admitted') || snapshot.matches('reading'))
   const harnessRef = useRef(harness)
   harnessRef.current = harness
   const runtimeIdRef = useRef<string | null>(null)
@@ -91,11 +84,6 @@ export function useWorkspaceRuntime({
     cwd: workspaceCwd(initialProject, initialSession),
     sessionFile: initialSession?.filePath,
   })
-  const transcriptLoadRef = useRef<TranscriptLoad | null>(null)
-  const promptAdmissionRevisionRef = useRef(0)
-  const promptAdmissionGenerationRef = useRef<number | null>(null)
-  const reconciliationNeededRef = useRef<TranscriptReconciliationMarker | null>(null)
-  const deferredReconciliationRef = useRef<TranscriptReconciliationMarker | null>(null)
   const pendingAgentEventsRef = useRef<PendingAgentEvent[]>([])
   const lastTranscriptReadWorkspaceRef = useRef<{ generation: number; sessionFile: string } | null>(null)
   const lastObservedCatalogRef = useRef<{ generation: number; filePath: string; updatedAt: string; syncRevision?: number } | null>(null)
@@ -184,10 +172,6 @@ export function useWorkspaceRuntime({
 
   const activateWorkspace = useCallback((project?: ProjectRecord, session?: SessionRecord, nextRuntime?: RuntimeInfo) => {
     pendingAgentEventsRef.current = []
-    promptAdmissionRevisionRef.current = 0
-    promptAdmissionGenerationRef.current = null
-    reconciliationNeededRef.current = null
-    deferredReconciliationRef.current = null
     reconcileOnVisibleRef.current = false
     if (agentEventFrameRef.current !== null) {
       cancelAnimationFrame(agentEventFrameRef.current)
@@ -205,9 +189,12 @@ export function useWorkspaceRuntime({
       cwd: workspaceCwd(project, session),
       sessionFile: session?.filePath,
     }
-    transcriptLoadRef.current = bridge && session?.filePath
-      ? { generation, sessionFile: session.filePath, eventBuffer: createPrimeEventBuffer(), reconciliation: false, admissionRevision: 0 }
-      : null
+    loadActor.send({
+      type: 'ACTIVATE',
+      load: bridge && session?.filePath
+        ? { generation, sessionFile: session.filePath, eventBuffer: createPrimeEventBuffer(), reconciliation: false, admissionRevision: 0 }
+        : null,
+    })
     const queueOwner = queuedPromptOwner(project, session, nextRuntime, generation)
     const queuedPrompts = queueOwner ? queuedPromptsByOwnerRef.current.get(queueOwner) ?? [] : []
     activeQueuedPromptOwnerRef.current = queueOwner
@@ -219,10 +206,9 @@ export function useWorkspaceRuntime({
     attachRuntime(nextRuntime, generation)
     if (bridge) {
       setMessages([])
-      setLoadingSession(Boolean(session?.filePath))
     }
     return generation
-  }, [attachRuntime, bridge])
+  }, [attachRuntime, bridge, loadActor])
 
   const reconcileRuntime = useCallback(async (generation: number) => {
     if (!bridge) return
@@ -244,7 +230,7 @@ export function useWorkspaceRuntime({
     admittedLoad?: TranscriptLoad,
   ) => {
     if (!bridge || !selected.sessionFile) return
-    const previousLoad = transcriptLoadRef.current
+    const previousLoad = loadActor.getSnapshot().context.load
     const pendingLoad = admittedLoad ?? {
       generation: selected.generation,
       sessionFile: selected.sessionFile,
@@ -254,13 +240,13 @@ export function useWorkspaceRuntime({
         : createPrimeEventBuffer(),
       runtimeId,
       reconciliation,
-      admissionRevision: promptAdmissionRevisionRef.current,
+      admissionRevision: loadActor.getSnapshot().context.promptRevision,
     }
-    transcriptLoadRef.current = pendingLoad
+    loadActor.send({ type: 'READ_STARTED', load: pendingLoad })
 
     void runTranscriptRead({
       read: () => bridge.sessions.read(selected.sessionFile!),
-      isCurrent: () => transcriptLoadRef.current === pendingLoad
+      isCurrent: () => loadActor.getSnapshot().context.load === pendingLoad
         && workspaceRef.current.generation === pendingLoad.generation
         && workspaceRef.current.sessionFile === pendingLoad.sessionFile,
       onValue: (value) => {
@@ -274,7 +260,7 @@ export function useWorkspaceRuntime({
         if (pendingLoad.reconciliation && readMarker
           && !authoritativeTranscriptReadIsCurrent(readMarker, {
             ...current,
-            admissionRevision: promptAdmissionRevisionRef.current,
+            admissionRevision: loadActor.getSnapshot().context.promptRevision,
           }, runtimeIdRef.current)) {
           setMessages((messages) => pendingLoad.eventBuffer.replay(messages))
           return
@@ -295,13 +281,10 @@ export function useWorkspaceRuntime({
         reportError(error)
       },
       onFinally: () => {
-        if (transcriptLoadRef.current === pendingLoad) transcriptLoadRef.current = null
-        if (workspaceRef.current.generation === pendingLoad.generation && !pendingLoad.reconciliation) {
-          setLoadingSession(false)
-        }
-        const deferred = deferredReconciliationRef.current
-        if (!deferred || transcriptLoadRef.current) return
-        deferredReconciliationRef.current = null
+        loadActor.send({ type: 'READ_SETTLED', load: pendingLoad })
+        const deferred = loadActor.getSnapshot().context.deferredReconciliation
+        if (!deferred || loadActor.getSnapshot().context.load) return
+        loadActor.send({ type: 'RECONCILIATION_DEFERRED', marker: null })
         const current = workspaceRef.current
         if (reconciliationMatches(deferred, current.generation, deferred.runtimeId, current.sessionFile)) {
           flushAgentEvents()
@@ -309,7 +292,7 @@ export function useWorkspaceRuntime({
         }
       },
     })
-  }, [bridge, flushAgentEvents, reportError])
+  }, [bridge, flushAgentEvents, loadActor, reportError])
 
   const runOverflowReconciliation = useCallback(() => {
     reconcileOnVisibleRef.current = false
@@ -329,7 +312,7 @@ export function useWorkspaceRuntime({
 
   const queueAgentEvent = useCallback((event: Record<string, unknown>) => {
     const generation = workspaceRef.current.generation
-    const owner = admitAgentEvent(generation, event, transcriptLoadRef.current, pendingAgentEventsRef.current)
+    const owner = admitAgentEvent(generation, event, loadActor.getSnapshot().context.load, pendingAgentEventsRef.current)
     if (owner === 'overflow') {
       // The replay queue is beyond its bound; an authoritative transcript read
       // replaces replay. Defer the read until the document is visible again so a
@@ -346,7 +329,7 @@ export function useWorkspaceRuntime({
     if (owner === 'frame' && agentEventFrameRef.current === null && chunkedFlushTimerRef.current === null) {
       agentEventFrameRef.current = requestAnimationFrame(flushAgentEvents)
     }
-  }, [flushAgentEvents, runOverflowReconciliation])
+  }, [flushAgentEvents, loadActor, runOverflowReconciliation])
 
   const reconcileTranscriptForEvent = useCallback((runtimeId: string, event: Record<string, unknown>) => {
     const selected = workspaceRef.current
@@ -355,18 +338,17 @@ export function useWorkspaceRuntime({
     // agent_end that scheduled it did not actually end the turn, and the disk
     // read would replace the still-streaming transcript with finalized rows.
     if (type === 'agent_start' || type === 'turn_start' || type === 'compaction_start' || type === 'auto_retry_start') {
-      const load = transcriptLoadRef.current
+      const load = loadActor.getSnapshot().context.load
       if (load?.generation === selected.generation) {
-        transcriptLoadRef.current = null
-        deferredReconciliationRef.current = null
+        loadActor.send({ type: 'LOAD_CANCELLED' })
         setMessages((current) => load.eventBuffer.replay(current))
       }
     }
-    if (promptAdmissionGenerationRef.current === selected.generation) {
+    if (loadActor.getSnapshot().context.promptGeneration === selected.generation) {
       // transport_error and runtime_exit mean the admitted prompt will never
       // start; clear the admission so reconciliation stops being suppressed.
       if (type === 'agent_start' || type === 'turn_start' || type === 'transport_error' || type === 'runtime_exit') {
-        promptAdmissionGenerationRef.current = null
+        loadActor.send({ type: 'PROMPT_SETTLED' })
       } else if (needsTranscriptReconciliation(event) || isTranscriptTerminalEvent(event)) return
     }
     if (!selected.sessionFile) return
@@ -376,40 +358,36 @@ export function useWorkspaceRuntime({
       sessionFile: selected.sessionFile,
     }
     if (needsTranscriptReconciliation(event)) {
-      reconciliationNeededRef.current = marker
+      loadActor.send({ type: 'RECONCILIATION_NEEDED', marker })
       return
     }
     if (!isTranscriptTerminalEvent(event)) return
 
-    const needed = reconciliationNeededRef.current
+    const needed = loadActor.getSnapshot().context.reconciliationNeeded
     if (needed && !reconciliationMatches(needed, selected.generation, runtimeId, selected.sessionFile)) return
-    reconciliationNeededRef.current = null
-    if (transcriptLoadRef.current) {
-      deferredReconciliationRef.current = marker
+    loadActor.send({ type: 'RECONCILIATION_NEEDED', marker: null })
+    if (loadActor.getSnapshot().context.load) {
+      loadActor.send({ type: 'RECONCILIATION_DEFERRED', marker })
       return
     }
     flushAgentEvents()
     startTranscriptRead(selected, true, runtimeId)
-  }, [flushAgentEvents, startTranscriptRead])
+  }, [flushAgentEvents, loadActor, startTranscriptRead])
 
   const prepareForPrompt = useCallback((generation: number): boolean => {
     if (workspaceRef.current.generation !== generation) return false
-    promptAdmissionRevisionRef.current += 1
-    promptAdmissionGenerationRef.current = generation
-    reconciliationNeededRef.current = null
-    const load = transcriptLoadRef.current
+    loadActor.send({ type: 'PROMPT_ADMITTED', generation })
+    const load = loadActor.getSnapshot().context.load
     // Supersede every pending transcript load, not only reconciliations: a
     // background read resolving after the prompt would otherwise replace the
     // optimistic user message with older on-disk state. The reconciliation
     // read after the turn's terminal event restores disk authority.
     if (load?.generation === generation) {
-      transcriptLoadRef.current = null
-      deferredReconciliationRef.current = null
-      if (!load.reconciliation) setLoadingSession(false)
+      loadActor.send({ type: 'LOAD_CANCELLED' })
       setMessages((current) => load.eventBuffer.replay(current))
     }
     return true
-  }, [])
+  }, [loadActor])
 
   const queuePrompt = useCallback((text: string, intent: PromptDeliveryIntent, parts?: MessagePart[], timestamp = Date.now()): string => {
     const queued: QueuedPrompt = { id: nextQueuedPromptId(), text, intent, timestamp, ...(parts ? { parts } : {}) }
@@ -540,9 +518,10 @@ export function useWorkspaceRuntime({
   }, [reconcileQueuedPrompts])
 
   const activeSession = sessions.find((session) => session.id === activeSessionId)
+  const promptAdmitted = useSelector(loadActor, (snapshot) => snapshot.context.promptRevision > 0)
   const locallyOwnedActiveSession = Boolean(
     activeSession?.filePath && runtime?.sessionFile === activeSession.filePath
-    && (runtime.isStreaming || runtime.isCompacting || promptAdmissionRevisionRef.current > 0),
+    && (runtime.isStreaming || runtime.isCompacting || promptAdmitted),
   )
   const externalSessionUpdatedAt = activeSession?.updatedAt
   const externalSessionSyncRevision = activeSession?.syncRevision
@@ -550,11 +529,13 @@ export function useWorkspaceRuntime({
   useEffect(() => {
     if (!bridge || !activeSession?.filePath) {
       if (bridge && !activeSession) {
-        transcriptLoadRef.current = null
+        loadActor.send({ type: 'LOAD_CANCELLED' })
         lastTranscriptReadWorkspaceRef.current = null
         setMessages([])
+      } else if (loadActor.getSnapshot().matches('admitted')) {
+        // An admitted load with no readable file would buffer events forever.
+        loadActor.send({ type: 'LOAD_CANCELLED' })
       }
-      setLoadingSession(false)
       return
     }
     const selected = workspaceRef.current
@@ -563,7 +544,7 @@ export function useWorkspaceRuntime({
       // started even when this render's catalog view diverges (for example a
       // renamed session record), or its events buffer forever and the session
       // never finishes loading.
-      const admitted = transcriptLoadRef.current
+      const admitted = loadActor.getSnapshot().context.load
       if (admitted && !admitted.reconciliation
         && admitted.generation === selected.generation
         && admitted.sessionFile === selected.sessionFile
@@ -585,8 +566,10 @@ export function useWorkspaceRuntime({
     lastObservedCatalogRef.current = { generation: selected.generation, filePath: activeSession.filePath,
       updatedAt: activeSession.updatedAt, syncRevision: activeSession.syncRevision }
     // A warm attachment or busy/idle transition alone is not a disk change.
-    if (!workspaceChanged && (locallyOwnedActiveSession || !catalogChanged)) return
-    const admittedLoad = transcriptLoadRef.current
+    const awaitingRead = loadActor.getSnapshot().matches('admitted')
+    // An admitted load has never been read, so the no-change guard must not skip it.
+    if (!awaitingRead && !workspaceChanged && (locallyOwnedActiveSession || !catalogChanged)) return
+    const admittedLoad = loadActor.getSnapshot().context.load
     if (admittedLoad?.generation === workspaceGeneration && admittedLoad.sessionFile === activeSession.filePath) {
       if (!admittedLoad.reconciliation) startTranscriptRead(selected, false, undefined, admittedLoad)
     } else {
@@ -608,7 +591,7 @@ export function useWorkspaceRuntime({
   }, [flushAgentEventsChunked, runOverflowReconciliation])
 
   useEffect(() => () => {
-    transcriptLoadRef.current = null
+    loadActor.send({ type: 'LOAD_CANCELLED' })
     if (agentEventFrameRef.current !== null) cancelAnimationFrame(agentEventFrameRef.current)
     if (chunkedFlushTimerRef.current !== null) window.clearTimeout(chunkedFlushTimerRef.current)
   }, [])

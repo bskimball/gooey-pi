@@ -74,6 +74,55 @@ function deferred<T>() {
 }
 
 describe('ProjectService list enrichment', () => {
+  it.each(['persisted', 'inferred'])('fails closed when %s removal starts after a grant persists but before it publishes authorization', async (kind) => {
+    const { root, service, store } = setup()
+    const discovered = session('discovered', root, '2026-01-01', '2026-01-01')
+    service.bindProviders({ sessions: async () => [discovered], branch: async () => undefined })
+    const inferred = (await service.list()).find((project) => project.inferred)
+    expect(inferred).toBeDefined()
+    const persisted = deferred<void>()
+    const releaseGrant = deferred<void>()
+    const stopStarted = deferred<void>()
+    const releaseStop = deferred<void>()
+    const update = store.update.bind(store)
+    let pauseNextUpdate = true
+    store.update = async (mutator) => {
+      const result = await update(mutator)
+      if (pauseNextUpdate) {
+        pauseNextUpdate = false
+        persisted.resolve()
+        await releaseGrant.promise
+      }
+      return result
+    }
+    service.bindProviders({ sessions: async () => [discovered], branch: async () => undefined,
+      stopProjectProcesses: async () => { stopStarted.resolve(); await releaseStop.promise },
+    })
+    electronMocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [root] })
+    const grant = service.add()
+    await persisted.promise
+    const removal = service.remove(kind === 'inferred' ? inferred!.id : store.snapshot().projects[0].id)
+    await stopStarted.promise
+    releaseGrant.resolve()
+    await expect(grant).rejects.toThrow(/being removed/)
+    await expect(service.authorizeCwd(root)).rejects.toThrow(/not inside/)
+    await expect(service.authorizeReadOnlyCwd(root)).rejects.toThrow(/not inside/)
+    releaseStop.resolve()
+    await expect(removal).resolves.toBe(true)
+    expect(store.snapshot().projects).toHaveLength(0)
+    await expect(service.authorizeCwd(root)).rejects.toThrow(/not inside/)
+  })
+
+  it('does not persist or authorize a grant when enrichment fails', async () => {
+    const { root, service, store } = setup()
+    service.bindProviders({ sessions: async () => [], branch: async () => { throw new Error('branch unavailable') } })
+    electronMocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [root] })
+    await expect(service.add()).rejects.toThrow('branch unavailable')
+    expect(store.snapshot().projects).toHaveLength(0)
+    expect(Reflect.get(service, 'authorizedRoots').has(realpathSync(root))).toBe(false)
+    expect(Reflect.get(service, 'readOnlyRoots').has(realpathSync(root))).toBe(false)
+  })
+
   it('coalesces concurrent denied read-only checks without branch enrichment', async () => {
     const { root, service } = setup()
     const sessionsStarted = deferred<void>()

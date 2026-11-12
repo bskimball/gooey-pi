@@ -267,13 +267,24 @@ export class ExtensionBrowserService {
     if (typeof paused !== 'boolean') throw new TypeError('paused must be a boolean')
     const tab = this.requireSessionTab(canonicalSessionPath(session), id)
     if (tab.backend !== 'extension') return null
+    const previous = tab.paused
     tab.paused = paused
     tab.generation = this.nextGeneration++
     this.push()
-    await this.options.extensionBridge?.call('sync_tab_state', {
-      chromeTabId: tab.chromeTabId,
-      paused,
-    })
+    try {
+      await this.options.extensionBridge?.call('sync_tab_state', {
+        chromeTabId: tab.chromeTabId,
+        paused,
+      })
+    } catch (error) {
+      // Chrome never confirmed the pause, so the local record must not claim it.
+      if (this.tabs.has(tab.tabId)) {
+        tab.paused = previous
+        tab.generation = this.nextGeneration++
+        this.push()
+      }
+      throw error
+    }
     return this.state().tabs.find((item) => item.tabId === id) ?? null
   }
 

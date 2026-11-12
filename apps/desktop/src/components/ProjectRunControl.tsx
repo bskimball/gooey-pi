@@ -8,12 +8,13 @@ export type ProjectScriptKind = 'setup' | 'run'
 interface ProjectRunControlProps {
   project: ProjectRecord
   activeKind?: ProjectScriptKind
+  setupError?: string
   onRun(kind: ProjectScriptKind): Promise<void> | void
   onStop(): void
   onSave(scripts: { setup: string; run: string }): Promise<void>
 }
 
-export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }: ProjectRunControlProps) {
+export function ProjectRunControl({ project, activeKind, setupError, onRun, onStop, onSave }: ProjectRunControlProps) {
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const runInputRef = useRef<HTMLTextAreaElement>(null)
@@ -83,6 +84,7 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop, onSave }
     if (!setup.trim()) return null
     if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><StatusMark state="running" size={12} /> Setup running</span>
     if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className="project-run-menu__status">Runs automatically after save</span>
+    if (setupError) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup could not start: {setupError}</span>
     if (scripts.setupLastExitCode === 0) return <span className="project-run-menu__status is-success"><CheckCircle size={12} /> Setup completed</span>
     if (scripts.setupLastExitCode !== undefined) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
     return <span className="project-run-menu__status">Setup did not finish</span>

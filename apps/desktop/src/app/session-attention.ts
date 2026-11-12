@@ -1,31 +1,28 @@
+import { transition } from 'xstate'
 import type { SessionRecord, SessionStatus } from '@/types/api'
-
-interface SessionLifecycleChange {
-  status: SessionStatus
-  markUnread?: boolean
-}
+import { sessionStatusMachine, sessionStatusSnapshot, type SessionStatusState, type SessionStatusTrigger } from './sessionStatusMachine'
+import { SESSION_RUN_TERMINAL_EVENT_TYPES, type SessionLive } from './sessionLiveMachine'
 
 const BLOCKING_EXTENSION_UI_METHODS = new Set(['select', 'confirm', 'input', 'editor'])
 
-export function sessionLifecycleChange(event: Record<string, unknown>): SessionLifecycleChange | undefined {
+export function sessionLifecycleChange(event: Record<string, unknown>): SessionStatusTrigger | undefined {
   const type = typeof event.type === 'string' ? event.type : ''
   if (type === 'extension_ui_request') {
     const method = event.method
     if (method === undefined || (typeof method === 'string' && BLOCKING_EXTENSION_UI_METHODS.has(method))) {
-      return { status: 'waiting', markUnread: true }
+      return { type: 'ATTENTION_REQUIRED' }
     }
     return undefined
   }
-  if (type === 'agent_start' || type === 'turn_start') return { status: 'running', markUnread: false }
-  if (type === 'compaction_start') return { status: 'running', markUnread: false }
-  if (type === 'compaction_end' && event.willRetry !== true && (event.reason === 'manual' || event.reason === 'requested')) return { status: 'complete', markUnread: false }
+  if (type === 'agent_start' || type === 'turn_start') return { type: 'AGENT_STARTED' }
+  if (type === 'compaction_start') return { type: 'AGENT_STARTED' }
+  if (type === 'compaction_end' && event.willRetry !== true && (event.reason === 'manual' || event.reason === 'requested')) return { type: 'COMPACTION_FINISHED' }
   // A provider auto-retry continues the turn that the preceding agent_end
   // seemed to finish; a failed auto_retry_end is the turn's real terminal.
-  if (type === 'auto_retry_start') return { status: 'running', markUnread: false }
-  if (type === 'auto_retry_end' && event.success !== true) return { status: 'failed' }
-  if (type === 'agent_end') return { status: 'complete', markUnread: true }
-  if (type === 'extension_error' || type === 'error' || type === 'transport_error') return { status: 'failed' }
-  if (type === 'runtime_exit') return { status: event.expected === true ? 'complete' : 'failed', markUnread: event.expected === true }
+  if (type === 'auto_retry_start') return { type: 'AGENT_STARTED' }
+  if (type === 'auto_retry_end' && event.success !== true) return { type: 'TURN_FAILED' }
+  if (SESSION_RUN_TERMINAL_EVENT_TYPES.has(type)) return type === 'agent_end' ? { type: 'TURN_ENDED' } : { type: 'TURN_FAILED' }
+  if (type === 'runtime_exit') return { type: 'RUNTIME_EXITED', expected: event.expected === true }
   return undefined
 }
 
@@ -34,26 +31,60 @@ function nextUpdatedAt(previous: string, now: number): string {
   return new Date(Math.max(now, Number.isFinite(previousTime) ? previousTime + 1 : now)).toISOString()
 }
 
+/**
+ * The only writer of renderer session status. A trigger the machine does not
+ * handle in the current status (e.g. a runtime exit on an idle session, or a
+ * question resolution on a running one) returns the session unchanged.
+ */
+export function applySessionStatusEvent(
+  session: SessionRecord,
+  trigger: SessionStatusTrigger,
+  visible = false,
+  now = Date.now(),
+): SessionRecord {
+  const before = sessionStatusSnapshot(session)
+  const [after] = transition(sessionStatusMachine, before, { ...trigger, visible })
+  if (after.context.revision === before.context.revision) return session
+  const eventRevision = after.context.revision
+  return {
+    ...session,
+    status: after.value as SessionStatusState,
+    updatedAt: nextUpdatedAt(session.updatedAt, now),
+    eventRevision,
+    statusEventRevision: eventRevision,
+    unread: after.context.unread,
+  }
+}
+
 export function applySessionLifecycleEvent(
   session: SessionRecord,
   event: Record<string, unknown>,
   visible: boolean,
   now = Date.now(),
 ): SessionRecord {
-  if (event.type === 'runtime_exit' && session.status !== 'running' && session.status !== 'waiting') {
-    return session
-  }
-  const change = sessionLifecycleChange(event)
-  if (!change) return session
-  const eventRevision = (session.eventRevision ?? 0) + 1
-  return {
-    ...session,
-    status: change.status,
-    updatedAt: nextUpdatedAt(session.updatedAt, now),
-    eventRevision,
-    statusEventRevision: eventRevision,
-    unread: change.markUnread === undefined ? session.unread : change.markUnread && !visible,
-  }
+  const trigger = sessionLifecycleChange(event)
+  return trigger ? applySessionStatusEvent(session, trigger, visible, now) : session
+}
+
+/**
+ * The single running predicate. A pending question or waiting status is never running, even when the
+ * live phase is still non-idle; a live phase otherwise counts as running whatever the stored status says.
+ */
+export function isSessionRunning(session: { status: SessionStatus } | undefined, live?: SessionLive): boolean {
+  if (live?.pendingQuestion || session?.status === 'waiting') return false
+  return session?.status === 'running' || (live !== undefined && live.phase !== 'idle')
+}
+
+export function isSessionWaiting(session: { status: SessionStatus } | undefined): boolean {
+  return session?.status === 'waiting'
+}
+
+/** True when the renderer, not the catalog, authored the current status. */
+export function hasRendererStatusProvenance(session: SessionRecord): boolean {
+  return typeof session.statusEventRevision === 'number'
+    && session.statusEventRevision === session.eventRevision
+    && session.status !== 'idle'
+    && session.status !== 'unknown'
 }
 
 export function sessionAttentionSignature(session: SessionRecord): string | undefined {

@@ -1,4 +1,11 @@
 import { randomBytes } from "node:crypto";
+import {
+	applyTabLifecycle,
+	awaitGuestAttach,
+	isChromeTab,
+	lifecycleOf,
+	settleAttachWaiters,
+} from "./tabStateMachine";
 import type { NativeImage, WebContents } from "electron";
 import { applySharedTabEvent } from "apex-core/browser/element-selection";
 import {
@@ -281,9 +288,20 @@ export class AgentBrowserService {
 			);
 			if (!Number.isSafeInteger(chromeTabId))
 				throw new Error("Invalid Chrome tab id");
+			// The await may have raced with close, revoke, or a concurrent pop-out.
+			// Only a still-local tab may adopt the new Chrome tab; otherwise close it
+			// so it is not orphaned.
+			if (lifecycleOf(tab).value !== "local" || this.tabs.get(tab.tabId) !== tab) {
+				await this.options.extensionBridge
+					.call("close_tab", { chromeTabId }, tab.sessionKey)
+					.catch(() => undefined);
+				return this.state().tabs.find((item) => item.tabId === id) ?? null;
+			}
 			this.detachTab(tab, false);
-			tab.backend = "extension";
-			tab.chromeTabId = chromeTabId as number;
+			applyTabLifecycle(tab, {
+				type: "POP_OUT_COMPLETED",
+				chromeTabId: chromeTabId as number,
+			});
 			this.push();
 		}
 		return this.state().tabs.find((item) => item.tabId === id) ?? null;
@@ -309,7 +327,10 @@ export class AgentBrowserService {
 				typeof event.url === "string" ? event.url : "",
 				"extension",
 			);
-			tab.chromeTabId = event.chromeTabId as number;
+			applyTabLifecycle(tab, {
+				type: "CHROME_TAB_BOUND",
+				chromeTabId: event.chromeTabId as number,
+			});
 			if (serial) tab.serial = serial;
 			tab.pairedByUser = true;
 		}
@@ -408,6 +429,7 @@ export class AgentBrowserService {
 
 	state(): AgentBrowserState {
 		const tabs: AgentBrowserTabRecord[] = [...this.tabs.values()].map((tab) => {
+			const lifecycle = lifecycleOf(tab);
 			const guest =
 				tab.webContentsId === null
 					? undefined
@@ -422,11 +444,10 @@ export class AgentBrowserService {
 				sessionFile: tab.sessionKey,
 				url: tab.url,
 				title: tab.title,
-				attached:
-					tab.backend === "extension"
-						? tab.chromeTabId !== undefined &&
-							!!this.options.extensionBridge?.isConnected()
-						: tab.webContentsId !== null,
+				attached: isChromeTab(lifecycle)
+					? lifecycle.context.chromeTabId !== undefined &&
+						!!this.options.extensionBridge?.isConnected()
+					: lifecycle.context.webContentsId !== null,
 				active: this.activeBySession.get(tab.sessionKey) === tab.tabId,
 				canGoBack: alive && guest.canGoBack(),
 				canGoForward: alive && guest.canGoForward(),
@@ -494,7 +515,7 @@ export class AgentBrowserService {
 		}
 		if (tab.webContentsId === webContentsId) return true;
 		if (tab.unbindGuest) this.detachTab(tab, false);
-		tab.webContentsId = webContentsId;
+		applyTabLifecycle(tab, { type: "ATTACH_GUEST", webContentsId });
 		this.bindGuestEvents(tab, guest);
 		guest.setBackgroundThrottling(false);
 		// A recreated webview (renderer reload) starts at about:blank; restore the
@@ -504,10 +525,7 @@ export class AgentBrowserService {
 				.loadURL(tab.url)
 				.catch((error: unknown) => logNavigationFailure(tab.url, error));
 		}
-		for (const waiter of tab.attachWaiters.splice(0)) {
-			clearTimeout(waiter.timer);
-			waiter.resolve();
-		}
+		settleAttachWaiters(tab);
 		this.push();
 		return true;
 	}
@@ -682,7 +700,10 @@ export class AgentBrowserService {
 						const id = await this.options.extensionBridge.call("create_tab", { url }, sessionKey);
 						if (!Number.isSafeInteger(id))
 							throw new Error("Invalid Chrome tab id");
-						tab.chromeTabId = id as number;
+						applyTabLifecycle(tab, {
+							type: "CHROME_TAB_BOUND",
+							chromeTabId: id as number,
+						});
 					}
 					this.push();
 					return {
@@ -1265,7 +1286,7 @@ export class AgentBrowserService {
 			const guest = await this.waitForGuest(tab);
 			this.assertActionAuthority(tab, sessionKey, generation);
 			if (
-				(tab.backend !== "extension" && tab.webContentsId !== guest.id) ||
+				(!isChromeTab(lifecycleOf(tab)) && tab.webContentsId !== guest.id) ||
 				guest.isDestroyed()
 			)
 				throw new Error(ACTION_REVOKED_MESSAGE);
@@ -1284,13 +1305,14 @@ export class AgentBrowserService {
 		sessionKey: string,
 		generation: number,
 	): void {
-		if (tab.backend === "extension" && tab.paused)
+		const lifecycle = lifecycleOf(tab);
+		if (isChromeTab(lifecycle) && tab.paused)
 			throw new Error(PAUSED_MESSAGE);
 		const current =
 			tab.tabId === PREVIEW_TAB_ID ? this.previewTab : this.tabs.get(tab.tabId);
 		if (
 			this.closed ||
-			tab.revoked ||
+			lifecycle.value === "revoked" ||
 			tab.generation !== generation ||
 			tab.sessionKey !== sessionKey ||
 			current !== tab
@@ -1338,8 +1360,9 @@ export class AgentBrowserService {
 		return { tab, guest };
 	}
 	private async waitForGuest(tab: TabState): Promise<WebContents> {
-		if (tab.backend === "extension") {
-			if (tab.chromeTabId === undefined)
+		const lifecycle = lifecycleOf(tab);
+		if (isChromeTab(lifecycle)) {
+			if (lifecycle.value === "chromePending")
 				throw new Error("Navigate this pending tab to a URL first");
 			const bridge = this.options.extensionBridge;
 			if (!bridge?.isConnected())
@@ -1365,24 +1388,11 @@ export class AgentBrowserService {
 			throw new Error(
 				"The user's Preview tab closed. Open a tab with browser_tabs instead.",
 			);
-		await new Promise<void>((resolveAttach, reject) => {
-			const waiter = {
-				resolve: resolveAttach,
-				reject,
-				timer: setTimeout(() => {
-					tab.attachWaiters = tab.attachWaiters.filter(
-						(candidate) => candidate !== waiter,
-					);
-					reject(
-						new Error(
-							"The Apex browser pane did not attach this tab. Make sure the Apex window is open.",
-						),
-					);
-				}, this.attachTimeoutMs),
-			};
-			waiter.timer.unref?.();
-			tab.attachWaiters.push(waiter);
-		});
+		await awaitGuestAttach(
+			tab,
+			this.attachTimeoutMs,
+			"The Apex browser pane did not attach this tab. Make sure the Apex window is open.",
+		);
 		const guest =
 			tab.webContentsId === null
 				? undefined
@@ -1412,7 +1422,7 @@ export class AgentBrowserService {
 	private detachTab(tab: TabState, notify = true): void {
 		tab.unbindGuest?.();
 		tab.unbindGuest = null;
-		tab.webContentsId = null;
+		applyTabLifecycle(tab, { type: "DETACH_GUEST" });
 		// Detachment ends this guest incarnation's authority without revoking the
 		// tab itself. Work queued afterward may wait for and use a replacement,
 		// while work that captured the destroyed/replaced guest is rejected.
@@ -1427,13 +1437,10 @@ export class AgentBrowserService {
 	}
 
 	private revokeTab(tab: TabState): void {
-		if (tab.revoked) return;
-		tab.revoked = true;
+		if (lifecycleOf(tab).value === "revoked") return;
+		applyTabLifecycle(tab, { type: "REVOKE" });
 		tab.generation = this.nextGeneration++;
-		for (const waiter of tab.attachWaiters.splice(0)) {
-			clearTimeout(waiter.timer);
-			waiter.reject(new Error(ACTION_REVOKED_MESSAGE));
-		}
+		settleAttachWaiters(tab, new Error(ACTION_REVOKED_MESSAGE));
 	}
 
 	private removeTab(tab: TabState): void {

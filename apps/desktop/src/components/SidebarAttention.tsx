@@ -1,12 +1,15 @@
 import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
+import { isSessionRunning } from '@/app/session-attention'
+import type { SessionLiveMap } from '@/app/session-live'
+import type { SessionLive } from '@/app/sessionLiveMachine'
 import { StatusMark } from './activity/StatusMark'
 
 /**
  * Trailing status for a session row: a crest while running, a crossed crest for a failure that still needs review,
  * and an amber dot for anything waiting on the user. The wrapper always takes its slot so titles never shift.
  */
-export function SessionStatusGlyph({ session, attention }: { session: SessionRecord; attention: boolean }) {
-  const mark = session.status === 'running' ? <StatusMark state="running" size={14} />
+export function SessionStatusGlyph({ session, attention, live }: { session: SessionRecord; attention: boolean; live?: SessionLive }) {
+  const mark = isSessionRunning(session, live) ? <StatusMark state="running" size={14} />
     : session.status === 'failed' && attention ? <StatusMark state="failed" size={14} />
       : attention || session.status === 'waiting' ? <span className="session-row__dot" />
         : null
@@ -16,6 +19,7 @@ export function SessionStatusGlyph({ session, attention }: { session: SessionRec
 interface SidebarAttentionGroupsProps {
   attention: SessionRecord[]
   running: SessionRecord[]
+  liveBySession?: SessionLiveMap
   projects: ProjectRecord[]
   activeSessionId?: string
   activeView: WorkspaceView
@@ -34,7 +38,7 @@ export function SidebarAttentionGroups({ attention, running, ...shared }: Sideba
 
 type AttentionGroupProps = Omit<SidebarAttentionGroupsProps, 'attention' | 'running'> & { label: string; sessions: SessionRecord[]; attention: boolean }
 
-function AttentionGroup({ label, sessions, attention, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
+function AttentionGroup({ label, sessions, attention, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
   return (
     <section className="sidebar-attention" aria-label={label}>
       <h2 className="sidebar__label">{label} <span className="n">{sessions.length}</span></h2>
@@ -45,7 +49,7 @@ function AttentionGroup({ label, sessions, attention, projects, activeSessionId,
           <button key={session.id} type="button" title={session.title} className={`sidebar-attention__row ${selected ? 'is-selected' : ''}`} onClick={() => onOpenSession(session, project?.id)}>
             <span className="sidebar-attention__title">{session.title}</span>
             <span className="sidebar-attention__project">{project?.name ?? session.projectPath.split(/[\\/]/).pop()}</span>
-            <SessionStatusGlyph session={session} attention={attention} />
+            <SessionStatusGlyph session={session} attention={attention} live={liveBySession?.[session.filePath]} />
           </button>
         )
       })}

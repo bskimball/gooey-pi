@@ -1,5 +1,7 @@
 import type { MessagePart, TranscriptMessage } from '@/types/api'
-import { specialistOutcome, specialistStepStatus, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
+import { parseSpecialistRecords, type PiSpecialistSummary } from '@/lib/specialist-records'
+
+export type { PiSpecialistSummary } from '@/lib/specialist-records'
 
 export interface TranscriptSummary {
   toolCount: number
@@ -13,14 +15,6 @@ export interface PiTodoItemSummary {
   note?: string
 }
 
-export interface PiSpecialistSummary {
-  id: string
-  agent: string
-  mission: string
-  status: SpecialistStatus
-  activity?: string
-}
-
 export function extractPiSessionWidgets(messages: TranscriptMessage[]): {
   todos: PiTodoItemSummary[]
   specialists: PiSpecialistSummary[]
@@ -30,27 +24,6 @@ export function extractPiSessionWidgets(messages: TranscriptMessage[]): {
 
 function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
   let todos: PiTodoItemSummary[] = []
-  const specialists: PiSpecialistSummary[] = []
-  const workerById = new Map<string, PiSpecialistSummary>()
-
-  const findNextToolResult = (
-    startIndex: number,
-    toolName: string,
-    includeStreaming = false,
-  ): Extract<TranscriptMessage['parts'][number], { type: 'toolResult' }> | undefined => {
-    for (let cursor = startIndex + 1; cursor < flatParts.length; cursor += 1) {
-      const candidate = flatParts[cursor]
-      if (candidate.type === 'toolCall' && candidate.name === toolName) return undefined
-      if (candidate.type === 'toolResult' && (candidate.name === undefined || candidate.name === toolName)) {
-        if (candidate.streaming && !includeStreaming) return undefined
-        return candidate
-      }
-    }
-    return undefined
-  }
-  const findNextFinalToolResult = (startIndex: number, toolName: string) =>
-    findNextToolResult(startIndex, toolName, false)
-
   for (let index = 0; index < flatParts.length; index += 1) {
     const part = flatParts[index]
     if (part.type !== 'toolCall') continue
@@ -70,116 +43,9 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
         })
       }
       if (parsed.length) todos = parsed
-    } else if (part.name === 'task' && typeof args?.agent === 'string') {
-      const result = findNextToolResult(index, 'task', true)
-      const finalResult = result && !result.streaming ? result : undefined
-      const status: PiSpecialistSummary['status'] = finalResult
-        ? (finalResult.isError ? 'error' : 'done')
-        : 'running'
-      const rawPrompt = typeof args.prompt === 'string' ? args.prompt.replace(/\s+/g, ' ').trim() : ''
-      let activity: string | undefined
-      if (status === 'running' && result?.details && typeof result.details === 'object') {
-        const rawActivities = (result.details as Record<string, unknown>).activities
-        if (Array.isArray(rawActivities)) {
-          for (let i = rawActivities.length - 1; i >= 0; i -= 1) {
-            const act = rawActivities[i] as Record<string, unknown> | undefined
-            if (act && act.status === 'running' && typeof act.tool === 'string') {
-              const summary = typeof act.summary === 'string' ? act.summary : typeof act.args === 'string' ? act.args : ''
-              activity = (summary ? `${act.tool}: ${summary}` : act.tool).slice(0, 80)
-              break
-            }
-          }
-        }
-      }
-      specialists.push({
-        id: part.id ?? `task-${specialists.length + 1}`,
-        agent: args.agent,
-        mission: rawPrompt.slice(0, 120),
-        status,
-        ...(activity ? { activity } : {}),
-      })
-    } else if (part.name === 'task_chain' && Array.isArray(args?.steps)) {
-      const result = findNextToolResult(index, 'task_chain', true)
-      const steps = workerDetails(result?.details)?.steps
-      const detailSteps = Array.isArray(steps) ? steps : []
-      const baseId = part.id ?? `chain-${specialists.length + 1}`
-      const anyStepFailed = typeof result?.text === 'string' && /^step\s+\d+\s+(?:failed|aborted|timeout)\b/m.test(result.text)
-      let failedEarlier = false
-      for (let stepIndex = 0; stepIndex < args.steps.length; stepIndex += 1) {
-        const rawStep = args.steps[stepIndex]
-        if (!rawStep || typeof rawStep !== 'object') continue
-        const step = rawStep as Record<string, unknown>
-        if (typeof step.agent !== 'string' || !step.agent.trim()) continue
-        const rawPrompt = typeof step.prompt === 'string' ? step.prompt.replace(/\s+/g, ' ').trim() : ''
-        let status: PiSpecialistSummary['status'] = 'running'
-        const stepStatus = specialistStepStatus(workerDetails(detailSteps[stepIndex])?.status)
-        if (stepStatus) {
-          status = stepStatus
-          if (status === 'error' || status === 'stopped') failedEarlier = true
-        } else if (result && !result.streaming) {
-          const stepNumber = stepIndex + 1
-          const stepOk = new RegExp(`^step\\s+${stepNumber}\\s+ok\\b`, 'm').test(result.text)
-          const stepBad = new RegExp(`^step\\s+${stepNumber}\\s+(?:failed|aborted|timeout)\\b`, 'm').test(result.text)
-          if (stepOk) {
-            status = 'done'
-          } else if (stepBad || failedEarlier || anyStepFailed) {
-            status = 'error'
-            failedEarlier = true
-          } else {
-            status = result.isError ? 'error' : 'done'
-          }
-        }
-        specialists.push({
-          id: `${baseId}-step-${stepIndex + 1}`,
-          agent: step.agent.trim(),
-          mission: rawPrompt.slice(0, 120),
-          status,
-        })
-      }
-    } else if (part.name === 'task_start' && typeof args?.agent === 'string') {
-      const result = findNextFinalToolResult(index, 'task_start')
-      const rawPrompt = typeof args.prompt === 'string' ? args.prompt.replace(/\s+/g, ' ').trim() : ''
-      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/i.exec(result.text) : null
-      const worker = workerDetails(result?.details)
-      const workerId = typeof worker?.id === 'string' ? worker.id : match?.[1]
-      const existing = workerId ? workerById.get(workerId) : undefined
-      if (existing) {
-        existing.agent = args.agent
-        if (rawPrompt) existing.mission = rawPrompt.slice(0, 120)
-        existing.status = result?.isError ? 'error' : 'running'
-        delete existing.activity
-      } else {
-        const entry: PiSpecialistSummary = {
-          id: workerId ?? part.id ?? `task-${specialists.length + 1}`,
-          agent: args.agent,
-          mission: rawPrompt.slice(0, 120),
-          status: result?.isError ? 'error' : 'running',
-        }
-        specialists.push(entry)
-        if (workerId) workerById.set(workerId, entry)
-      }
-    } else if (part.name === 'task_send' && typeof args?.id === 'string') {
-      const target = workerById.get(args.id)
-      if (!target) continue
-      const result = findNextFinalToolResult(index, 'task_send')
-      if (result?.isError) continue
-      const rawMessage = typeof args.message === 'string' ? args.message.replace(/\s+/g, ' ').trim() : ''
-      if (rawMessage && (args.mode === 'prompt' || !target.mission)) {
-        target.mission = rawMessage.slice(0, 120)
-      }
-      target.status = specialistOutcome({ previous: target.status, tool: part.name, result, startsGeneration: args.mode === 'prompt' })
-      if (target.status !== 'running' || args.mode === 'prompt') delete target.activity
-    } else if ((part.name === 'task_wait' || part.name === 'task_status' || part.name === 'task_close' || part.name === 'task_abort') && typeof args?.id === 'string') {
-      const target = workerById.get(args.id)
-      if (!target) continue
-      const result = findNextToolResult(index, part.name, part.name === 'task_wait' || part.name === 'task_status')
-      if (!result) continue
-      target.status = specialistOutcome({ previous: target.status, tool: part.name, result })
-      const rawActivity = target.status === 'running' ? /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '') : undefined
-      if (rawActivity && rawActivity !== '(none)') target.activity = rawActivity.slice(0, 80)
-      else delete target.activity
     }
   }
+  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity }): PiSpecialistSummary => activity ? { id, agent, mission, status, activity } : { id, agent, mission, status })
   return { todos, specialists }
 }
 

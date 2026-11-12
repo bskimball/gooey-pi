@@ -174,7 +174,19 @@ export class AutomationService {
     this.closed = true
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    this.pending.splice(0)
+    const dropped = this.pending.splice(0)
+    if (dropped.length) {
+      // Dropped queue entries would otherwise stay `queued` in the store until the next launch.
+      const finishedAt = this.now().toISOString()
+      await this.store.update((state) => {
+        for (const { task, runId } of dropped) {
+          const current = state.schedules.filter(isPiSchedule).find((candidate) => candidate.id === task.id)
+          const run = current?.runs.find((candidate) => candidate.id === runId)
+          if (run?.status !== 'queued') continue
+          Object.assign(run, { status: 'interrupted', finishedAt, error: 'Apex quit before this run could start.' })
+        }
+      })
+    }
     if (this.activeRuns === 0) return
     await new Promise<void>((resolveStop) => this.stopWaiters.add(resolveStop))
   }

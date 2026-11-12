@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { observedPath, specialistEvidence } from '../../apps/desktop/src/lib/specialist-evidence'
 import { createSessionSummarySelector, extractPiSessionWidgets, summarizeTranscript } from '../../apps/desktop/src/components/inspector/session-summary'
 import { createReadinessSelector, extractReadiness } from '../../apps/desktop/src/components/inspector/readiness'
+import { specialistMarkState, specialistOutcome, specialistStatusLabel, specialistStepStatus, type SpecialistStatus } from '../../apps/desktop/src/lib/specialist-status'
 import { extractPiSpecialistSessions } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
 import type { MessagePart, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
@@ -62,6 +63,35 @@ describe('recorded specialist outcomes', () => {
     expect(summary.map(({ id, status }) => ({ id, status }))).toEqual(details.map(({ id, status }) => ({ id, status })))
     expect(summary[0].status).toBe('error')
     expect(summary.slice(-2).map((item) => item.status)).toEqual(['done', 'stopped'])
+  })
+
+  it('keeps terminal outcomes until a new generation, and agrees on waiting and mode-less sends', () => {
+    const start: MessagePart[] = [
+      { type: 'toolCall', id: 'start-1', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', waiting_ui_requests: [{ id: 'q1' }] } } },
+    ]
+    const waiting = [message('m', start)]
+    expect(extractPiSessionWidgets(waiting).specialists[0].status).toBe('waiting')
+    expect(extractPiSpecialistSessions(waiting)[0].status).toBe('waiting')
+
+    const settledThenAborted = [message('m', [
+      ...start,
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled', details: { worker: { waiting_ui_requests: [] } } },
+      { type: 'toolCall', name: 'task_abort', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_abort', text: 'lifecycle: aborted' },
+      { type: 'toolCall', name: 'task_send', args: { id: 'task_1', message: 'note' } },
+      { type: 'toolResult', name: 'task_send', text: 'queued' },
+    ])]
+    expect(extractPiSessionWidgets(settledThenAborted).specialists[0].status).toBe('done')
+    expect(extractPiSpecialistSessions(settledThenAborted)[0].status).toBe('done')
+
+    const reprompted = [message('m', [
+      ...settledThenAborted[0].parts,
+      { type: 'toolCall', name: 'task_send', args: { id: 'task_1', mode: 'prompt', message: 'Next' } },
+      { type: 'toolResult', name: 'task_send', text: 'prompt sent' },
+    ])]
+    expect(extractPiSessionWidgets(reprompted).specialists[0].status).toBe('running')
   })
 
   it('distinguishes a final report from interim text and preserves it through close receipts', () => {
@@ -238,5 +268,190 @@ describe('readiness extraction', () => {
     const chatter = message('chat', [{ type: 'text', text: 'hi' }])
     expect(select([...messages, chatter])).toBe(first)
     expect(select([...messages, chatter, edit('e1')])).not.toBe(first)
+  })
+})
+
+describe('specialist record details', () => {
+  const start = (extra: Record<string, unknown>, text = 'started task_1'): MessagePart[] => [
+    { type: 'toolCall', id: 'start-1', name: 'task_start', args: { agent: 'scout', prompt: '  Inspect   the project  ', cwd: '/repo' } },
+    { type: 'toolResult', name: 'task_start', text, details: extra },
+  ]
+
+  it('reads every worker field a receipt reports and ignores ones that are missing or implausible', () => {
+    const [record] = extractPiSpecialistSessions([message('m', start({
+      close: { sessionFile: '/workers/closed.jsonl' },
+      worker: {
+        id: 'task_1', cwd: '/work', instanceId: 'inst-1', sessionFile: '/workers/task_1.jsonl', model: 'm1', thinking: 'high',
+        turns: 4, maxTurns: 900, generation: 2, killReason: 'budget', waiting_ui_requests: [{ id: 'q' }],
+      },
+    }))])
+    expect(record).toMatchObject({
+      id: 'task_1', agent: 'scout', mission: 'Inspect the project', prompt: 'Inspect   the project', cwd: '/work',
+      instanceId: 'inst-1', sessionFile: '/workers/task_1.jsonl', model: 'm1', thinking: 'high', turns: 4, maxTurns: 900,
+      generation: 2, killReason: 'budget', status: 'waiting',
+    })
+
+    const [guarded] = extractPiSpecialistSessions([message('m', [
+      ...start({ close: { sessionFile: '' }, worker: { id: 'task_1', instanceId: '', maxTurns: 200_000 } }, 'Worker launched'),
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'activity: read_file: src/a.ts', details: { worker: { maxTurns: 200_000, waiting_ui_requests: [] } } },
+    ])])
+    expect(guarded.maxTurns).toBeUndefined()
+    expect(guarded.instanceId).toBeUndefined()
+    expect(guarded.sessionFile).toBeUndefined()
+    expect(guarded.activity).toBe('read_file: src/a.ts')
+  })
+
+  it('turns worker activity into transcript parts, including running labels, durations and JSON args', () => {
+    const [record] = extractPiSpecialistSessions([message('m', start({
+      worker: {
+        id: 'task_1',
+        activities: [
+          { tool: 'read_file', status: 'running', summary: 'src/a.ts' },
+          { tool: 'bash', status: 'error', args: '{"command":"npm test"}', duration: 12 },
+          { tool: '', status: 'completed' },
+          { tool: 'grep', status: 'running' },
+          'not-a-record',
+        ],
+      },
+    }))])
+    // The label follows the last running activity, which here carries no summary.
+    expect(record.activity).toBe('grep')
+    const [assistant] = record.messages.filter((entry) => entry.role === 'assistant')
+    expect(assistant.parts).toEqual([
+      { type: 'toolCall', id: 'spec-act-1', name: 'read_file', args: { command: 'src/a.ts' } },
+      { type: 'toolResult', name: 'read_file', text: 'src/a.ts', isError: false, streaming: true },
+      { type: 'toolCall', id: 'spec-act-2', name: 'bash', args: { command: 'npm test' } },
+      { type: 'toolResult', name: 'bash', text: '{"command":"npm test"}\n\nDuration: 12ms', isError: true, streaming: false },
+      { type: 'toolCall', id: 'spec-act-4', name: 'grep', args: { command: '' } },
+      { type: 'toolResult', name: 'grep', text: '', isError: false, streaming: true },
+    ])
+  })
+
+  it('ignores control receipts for unknown workers and failed sends', () => {
+    const messages = [message('m', [
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_9' } },
+      { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled' },
+      ...start({ worker: { id: 'task_1' } }),
+      { type: 'toolCall', name: 'task_send', args: { id: 'task_1', mode: 'prompt', message: 'Next' } },
+      { type: 'toolResult', name: 'task_send', text: 'not settled', isError: true },
+    ])]
+    const [record] = extractPiSpecialistSessions(messages)
+    expect(record).toMatchObject({ id: 'task_1', status: 'running', mission: 'Inspect the project' })
+  })
+
+  it('reads chain steps from their own details and settled result bodies', () => {
+    const records = extractPiSpecialistSessions([message('m', [
+      { type: 'toolCall', id: 'chain-1', name: 'task_chain', args: { steps: [
+        { agent: 'scout', prompt: 'First' },
+        { agent: 'oracle', prompt: 'Second' },
+        { agent: 'scribe', prompt: 'Third' },
+        { prompt: 'no agent' },
+      ] } },
+      { type: 'toolResult', name: 'task_chain', text: 'step 1 ok\nstep 2 failed', details: { steps: [
+        { status: 'done', report: 'Step one report', activities: [{ tool: 'read', status: 'completed' }] },
+        { status: 'aborted' },
+        { status: 'running' },
+      ] } },
+    ])])
+    expect(records.map(({ id, status }) => ({ id, status }))).toEqual([
+      { id: 'chain-1-step-1', status: 'done' },
+      { id: 'chain-1-step-2', status: 'stopped' },
+      { id: 'chain-1-step-3', status: 'running' },
+    ])
+    expect(records[0].finalReport).toBe('Step one report')
+  })
+
+  it('preserves unstructured task and chain result text as the report', () => {
+    const withBody = extractPiSpecialistSessions([message('m', [
+      { type: 'toolCall', name: 'task', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task', text: 'lifecycle: settled\n--- result ---\nBody text' },
+    ])])[0]
+    expect(withBody.finalReport).toBe('lifecycle: settled\n--- result ---\nBody text')
+
+    const empty = extractPiSpecialistSessions([message('m', [
+      { type: 'toolCall', name: 'task', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task', text: '--- result ---\n(empty)' },
+    ])])[0]
+    expect(empty.finalReport).toBe('--- result ---\n(empty)')
+    expect(empty.status).toBe('done')
+
+    const chainEmpty = extractPiSpecialistSessions([message('m', [
+      { type: 'toolCall', name: 'task_chain', args: { steps: [{ agent: 'scout', prompt: 'First' }] } },
+      { type: 'toolResult', name: 'task_chain', text: 'step 1 ok\n--- result ---\n(empty)' },
+    ])])[0]
+    expect(chainEmpty.finalReport).toBe('step 1 ok\n--- result ---\n(empty)')
+  })
+})
+
+describe('specialist status rules', () => {
+  const statusOf = (parts: MessagePart[]): string => extractPiSessionWidgets([message('m', parts)]).specialists[0].status
+  const started: MessagePart[] = [
+    { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+    { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1' } } },
+  ]
+
+  it('maps each status to one mark, with stopped and closed reading as stale rather than pending', () => {
+    const statuses: SpecialistStatus[] = ['running', 'waiting', 'done', 'error', 'stopped', 'closed']
+    expect(statuses.map(specialistMarkState)).toEqual(['running', 'running', 'done', 'failed', 'stale', 'stale'])
+    expect(specialistStatusLabel.waiting).toBe('Waiting for input')
+  })
+
+  it('reads step status words, and treats unknown words as absent', () => {
+    expect(['completed', 'ok', 'failed', 'timeout', 'aborted', 'cancelled', 'starting', 'retrying'].map(specialistStepStatus))
+      .toEqual(['done', 'done', 'error', 'error', 'stopped', 'stopped', 'running', 'running'])
+    expect(specialistStepStatus('queued')).toBeUndefined()
+    expect(specialistStepStatus(undefined)).toBeUndefined()
+  })
+
+  it('takes the lifecycle from details, then from receipt text, and ignores a missing result', () => {
+    expect(specialistOutcome({ previous: 'running', tool: 'task_wait' })).toBe('running')
+    expect(specialistOutcome({ previous: 'running', tool: 'task_wait', result: { type: 'toolResult', name: 'task_wait', text: 'lifecycle: failed' } })).toBe('error')
+    expect(specialistOutcome({ previous: 'running', tool: 'task_wait', result: { type: 'toolResult', name: 'task_wait', text: 'LIFECYCLE=failed' } })).toBe('error')
+    expect(specialistOutcome({ previous: 'running', tool: 'task_wait', result: { type: 'toolResult', name: 'task_wait', text: 'still going' } })).toBe('running')
+  })
+
+  it('closes a worker without claiming its outcome, and keeps a generation start busy', () => {
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_close', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_close', text: 'closed' },
+    ])).toBe('closed')
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_close', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_close', text: 'closed' },
+      { type: 'toolCall', name: 'task_send', args: { id: 'task_1', mode: 'prompt', message: 'Again' } },
+      { type: 'toolResult', name: 'task_send', text: 'prompt sent' },
+    ])).toBe('running')
+  })
+
+  it('reports a kill reason as a failure but not while a new generation starts', () => {
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_status', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_status', text: 'kill_reason: budget' },
+    ])).toBe('error')
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_send', args: { id: 'task_1', mode: 'prompt', message: 'Continue' } },
+      { type: 'toolResult', name: 'task_send', text: 'kill_reason: budget' },
+    ])).toBe('running')
+  })
+
+  it('treats a streaming receipt with no running lifecycle as no news', () => {
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_wait', text: 'waiting', streaming: true },
+    ])).toBe('running')
+  })
+
+  it('clears waiting when a later receipt reports no pending dialogs', () => {
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_status', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_status', text: 'asking', details: { worker: { waiting_ui_requests: [{ id: 'q' }] } } },
+    ])).toBe('waiting')
+    expect(statusOf([...started,
+      { type: 'toolCall', name: 'task_status', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_status', text: 'asking', details: { worker: { waiting_ui_requests: [{ id: 'q' }] } } },
+      { type: 'toolCall', name: 'task_status', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_status', text: 'answered', details: { worker: { waiting_ui_requests: [] } } },
+    ])).toBe('running')
   })
 })

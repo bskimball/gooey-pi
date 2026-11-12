@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activityNotificationSignature, applySessionLifecycleEvent, readClearedActivity, readClearedAttention, sessionAttentionSignature, sessionCompanionNotificationSignature, sessionShowsCompanionNotification, signatureCleared } from '../../apps/desktop/src/app/session-attention'
+import { activityNotificationSignature, applySessionLifecycleEvent, applySessionStatusEvent, isSessionRunning, isSessionWaiting, readClearedActivity, readClearedAttention, sessionAttentionSignature, sessionCompanionNotificationSignature, sessionShowsCompanionNotification, signatureCleared } from '../../apps/desktop/src/app/session-attention'
 import {
   buildActivitySections,
   deriveAttention,
@@ -145,6 +145,18 @@ describe('session lifecycle attention', () => {
       status: 'failed',
       eventRevision: 2,
     })
+  })
+
+  it('resolves a question only while the session is waiting on it', () => {
+    const waiting = applySessionLifecycleEvent(session(), { type: 'extension_ui_request' }, false, 1)
+    const answered = applySessionStatusEvent(waiting, { type: 'QUESTION_RESOLVED' })
+    expect(answered).toMatchObject({ status: 'running', unread: false, eventRevision: 2, statusEventRevision: 2 })
+    expect(isSessionRunning(answered)).toBe(true)
+    expect(isSessionWaiting(waiting)).toBe(true)
+
+    const completed = applySessionLifecycleEvent(waiting, { type: 'agent_end' }, false, 2)
+    expect(applySessionStatusEvent(completed, { type: 'QUESTION_RESOLVED' })).toBe(completed)
+    expect(applySessionStatusEvent(session(), { type: 'QUESTION_RESOLVED' })).toEqual(session())
   })
 })
 
@@ -695,6 +707,7 @@ describe('session live reducer and sectioning', () => {
       phase: 'compacting',
       runStartedAt: 1_000,
       lastEventAt: 1_000,
+      compactionResume: 'idle',
     })
 
     // Calling again with identical runtime snapshots returns the exact same map reference
@@ -767,8 +780,7 @@ describe('session live reducer and sectioning', () => {
     })
     expect(synced[fileB]).toEqual({
       runtimeId: 'rt-b',
-      phase: 'thinking',
-      runStartedAt: 1_000,
+      phase: 'idle',
       lastEventAt: 1_000,
       pendingQuestion: {
         id: 'q-b',
@@ -918,11 +930,25 @@ describe('session live reducer and sectioning', () => {
     expect(state[file]?.phase).toBe('thinking')
     expect(state[file]?.runStartedAt).toBe(1_000)
 
+    // compaction_end without retry resumes the interrupted run (compactionResume: thinking)
     state = reduceSessionLive(state, {
       runtimeId: 'rt-1',
       sessionFile: file,
       event: { type: 'compaction_end', willRetry: false },
       now: afterWindow + 700,
+    })
+    expect(state[file]?.phase).toBe('thinking')
+    expect(state[file]?.runStartedAt).toBe(1_000)
+
+    // A compaction that starts with no active run ends idle
+    state = reduceSessionLive(state, { runtimeId: 'rt-1', sessionFile: file, event: { type: 'agent_end' }, now: afterWindow + 710 })
+    state = reduceSessionLive(state, { runtimeId: 'rt-1', sessionFile: file, event: { type: 'compaction_start' }, now: afterWindow + 720 })
+    expect(state[file]?.phase).toBe('compacting')
+    state = reduceSessionLive(state, {
+      runtimeId: 'rt-1',
+      sessionFile: file,
+      event: { type: 'compaction_end', willRetry: false },
+      now: afterWindow + 730,
     })
     expect(state[file]?.phase).toBe('idle')
     expect(state[file]?.runStartedAt).toBeUndefined()
@@ -1221,7 +1247,6 @@ describe('session live reducer and sectioning', () => {
       kind: 'question',
       title: 'Approve deployment',
       method: 'wait',
-      runtimeId: '',
     })
     expect(deriveAttention(waitingWithPreview, undefined, 'waiting:2')).toBeNull()
 
@@ -1230,7 +1255,6 @@ describe('session live reducer and sectioning', () => {
       kind: 'question',
       title: 'Waiting for your input',
       method: 'wait',
-      runtimeId: '',
     })
 
     // Failed session uses live.lastError or session.preview, and respects clearedSignature

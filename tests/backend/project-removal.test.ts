@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { markRootRemoval, releaseRootRemoval, type RootRemovals } from '../../apps/desktop/electron/main/projectRootRemovalMachine'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 import type { SessionRecord } from '../../apps/desktop/src/types/api'
 
@@ -28,6 +29,34 @@ function fixture() {
 }
 
 describe('project removal', () => {
+  it('deduplicates removal owners and releases only the requested owner', () => {
+    const removals: RootRemovals = new Map()
+    markRootRemoval(removals, 'root', 'first')
+    markRootRemoval(removals, 'root', 'first')
+    expect(removals.get('root')?.context.owners).toEqual(['first'])
+    markRootRemoval(removals, 'root', 'second')
+    releaseRootRemoval(removals, 'root', 'first')
+    expect(removals.get('root')?.context.owners).toEqual(['second'])
+    releaseRootRemoval(removals, 'root', 'first')
+    expect(removals.has('root')).toBe(true)
+    releaseRootRemoval(removals, 'root', 'second')
+    releaseRootRemoval(removals, 'root', 'second')
+    expect(removals.has('root')).toBe(false)
+  })
+
+  it('releases duplicate canonical folder marks so the root can be granted again', async () => {
+    const { folder, store, service } = fixture()
+    const now = new Date().toISOString()
+    await store.update((state) => { state.projects.push({
+      id: 'duplicate-folders', harness: 'pi', name: 'Project', path: folder,
+      folders: [folder, join(folder, '.')], primaryFolder: folder, pinned: false,
+      createdAt: now, lastOpenedAt: now, folderIdentities: identities(folder),
+    }) })
+    await expect(service.remove('duplicate-folders')).resolves.toBe(true)
+    await expect(service.grantInferred(folder)).resolves.toMatchObject({ path: realpathSync(folder) })
+    await expect(service.authorizeCwd(folder)).resolves.toBe(realpathSync(folder))
+  })
+
   it('keeps a removed persisted project dismissed instead of immediately re-inferring it', async () => {
     const { folder, marker, store, service } = fixture()
     const now = new Date().toISOString()

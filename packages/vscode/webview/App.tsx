@@ -238,7 +238,7 @@ export function App() {
                   draftKey={state?.cwd ? `apex-vscode:${state.cwd}` : undefined}
                   busy={busy}
                   loading={!state}
-                  submitting={state?.status === 'starting'}
+                  admitting={state?.status === 'starting'}
                   disabled={state?.status === 'exited'}
                   messageEnterAction={state?.messageEnterAction ?? 'queue'}
                   model={state?.model ?? ''}

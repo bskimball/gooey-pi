@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import type { PrimeWorkApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
@@ -173,6 +174,9 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     sessions: { create: vi.fn(async () => session()), followUp, list: vi.fn(async () => []) },
   } as unknown as PrimeWorkApi
   let workspaceSessions = currentSession ? [currentSession] : []
+  const agentTurn = createAgentTurnHandle()
+  // Seed the turn from main's streaming flag, as the App runtime mirror does.
+  if (ownsStreaming && configuredRuntime?.isStreaming) agentTurn.send({ type: 'RUNTIME_STREAMING' })
   const actions = createWorkspaceActions(() => ({
     bridge,
     projects: [project],
@@ -181,7 +185,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     workspace,
     settingsState: { settings: { activeHarness: harness } },
     provider: { model: 'auto', effort: 'medium', fast: false, flushPendingMutations },
-    submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
+    agentTurn,
     initialized: true,
     layout: {},
     pluginSkills: {},

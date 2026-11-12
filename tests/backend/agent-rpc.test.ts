@@ -9,6 +9,7 @@ import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/mai
 import { validateRpcCommand } from '../../apps/desktop/electron/main/agent-rpc/command-schema'
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from '../../apps/desktop/electron/main/agent-rpc/limits'
 import { RpcRuntime } from '../../apps/desktop/electron/main/agent-rpc/runtime'
+import { createRuntimeActivityActor, streamingActivity } from '../../apps/desktop/electron/main/agent-rpc/runtimeActivityMachine'
 import { FramedRpcTransport } from '../../apps/desktop/electron/main/agent-rpc/transport'
 import type { RpcObject } from '../../apps/desktop/electron/main/agent-rpc/types'
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
@@ -1504,6 +1505,46 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     } finally {
       await runtime.stop()
     }
+  })
+})
+
+describe('runtime activity continuation bound', () => {
+  const continuationActor = () => {
+    const actor = createRuntimeActivityActor({ endGraceMs: 10, continuationBoundMs: 40, emit: () => undefined, refreshContextUsage: () => undefined })
+    actor.send({ type: 'COMPACTION_ENDED', willRetry: true })
+    return actor
+  }
+  const pastBound = () => new Promise((resolveWait) => setTimeout(resolveWait, 120))
+
+  it('stays busy past the bound until the harness reports idle', async () => {
+    const actor = continuationActor()
+    await pastBound()
+    expect(streamingActivity(actor.getSnapshot())).toBe(true)
+    actor.send({ type: 'REPORTED_IDLE' })
+    expect(streamingActivity(actor.getSnapshot())).toBe(false)
+    actor.stop()
+  })
+
+  it('stays busy past the bound while the latest report says streaming', async () => {
+    const actor = continuationActor()
+    actor.send({ type: 'REPORTED_IDLE' })
+    actor.send({ type: 'REPORTED_STREAMING' })
+    await pastBound()
+    expect(streamingActivity(actor.getSnapshot())).toBe(true)
+    actor.send({ type: 'AUTO_RETRY_START' })
+    actor.send({ type: 'CANCEL' })
+    expect(streamingActivity(actor.getSnapshot())).toBe(false)
+    expect(actor.getSnapshot().matches({ retry: 'clear' })).toBe(true)
+    expect(actor.getSnapshot().matches({ continuation: 'clear' })).toBe(true)
+    actor.stop()
+  })
+
+  it('closes at the bound when the harness reported idle before it', async () => {
+    const actor = continuationActor()
+    actor.send({ type: 'REPORTED_IDLE' })
+    await pastBound()
+    expect(streamingActivity(actor.getSnapshot())).toBe(false)
+    actor.stop()
   })
 })
 

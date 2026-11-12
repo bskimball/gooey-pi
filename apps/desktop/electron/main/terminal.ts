@@ -8,6 +8,7 @@ import * as pty from 'node-pty'
 import type { TerminalActiveContext, TerminalDataEvent, TerminalExitEvent } from '../../src/types/api'
 import type { WorkspaceUseLease, WorkspaceUseOwner } from './repository-use-gate'
 import { killProcessTree, safeChildEnvironment } from './process-utils'
+import { createTerminalLifecycle, isTerminalExited, isTerminalRunning, isTerminalTerminating, type TerminalLifecycle } from './terminalLifecycleMachine'
 import { canonicalSessionPath } from 'apex-core/session-paths'
 import { isPathWithin, rejectUnknownKeys, requireInteger, requireRecord, requireString } from 'apex-core/validation'
 
@@ -26,8 +27,7 @@ interface OwnedTerminal {
   pendingOutput: string
   pendingOutputBytes: number
   flushTimer?: NodeJS.Timeout
-  terminating: boolean
-  exited: boolean
+  lifecycle: TerminalLifecycle
   workspaceUse: WorkspaceUseLease
 }
 
@@ -163,11 +163,11 @@ export class TerminalService {
       throw error
     }
     if (owner.isDestroyed()) { try { terminal.kill() } catch { /* owner closed during spawn */ }; workspaceUse.release(); throw new Error('Terminal owner was closed') }
-    const owned: OwnedTerminal = { terminal, owner, ownerId: owner.id, cwd, shell, sessionPath, outputWindowStartedAt: Date.now(), outputWindowBytes: 0, pendingOutput: '', pendingOutputBytes: 0, terminating: false, exited: false, workspaceUse }
+    const owned: OwnedTerminal = { terminal, owner, ownerId: owner.id, cwd, shell, sessionPath, outputWindowStartedAt: Date.now(), outputWindowBytes: 0, pendingOutput: '', pendingOutputBytes: 0, lifecycle: createTerminalLifecycle(), workspaceUse }
     this.terminals.set(terminalId, owned)
     terminal.onData((data) => this.forwardOutput(terminalId, owned, data))
     terminal.onExit(({ exitCode, signal }) => {
-      owned.exited = true
+      owned.lifecycle.send({ type: 'EXITED' })
       owned.workspaceUse.release()
       this.terminals.delete(terminalId)
       this.removeActive(terminalId, owned)
@@ -230,7 +230,7 @@ export class TerminalService {
     const sessionPath = canonicalSessionPath(sessionPathValue)
     const id = this.activeBySession.get(sessionPath)
     const terminal = id ? this.terminals.get(id) : undefined
-    if (!terminal || terminal.sessionPath !== sessionPath || !terminal.activeContext || terminal.terminating) return undefined
+    if (!terminal || terminal.sessionPath !== sessionPath || !terminal.activeContext || isTerminalTerminating(terminal.lifecycle)) return undefined
     return { ...terminal.activeContext, cwd: terminal.cwd }
   }
 
@@ -243,7 +243,9 @@ export class TerminalService {
   }
 
   async killOwner(ownerId: number): Promise<void> {
-    await Promise.all([...this.terminals].filter(([, terminal]) => terminal.ownerId === ownerId).map(([id, terminal]) => this.terminate(id, terminal)))
+    const starting = [...this.terminals].filter(([, terminal]) => terminal.ownerId === ownerId).map(([id, terminal]) => this.terminate(id, terminal))
+    const pending = [...this.terminationPromises].filter(([terminal]) => terminal.ownerId === ownerId).map(([, operation]) => operation)
+    await Promise.all([...new Set([...starting, ...pending])])
   }
 
   async killAll(): Promise<void> {
@@ -258,15 +260,24 @@ export class TerminalService {
       if (terminal.pendingBind?.sessionPath === sessionPath) terminal.pendingBind = undefined
       if (terminal.sessionPath === sessionPath) this.detachSession(id, terminal)
     }
+    for (const terminal of this.terminationPromises.keys()) {
+      if (terminal.pendingBind?.sessionPath === sessionPath) terminal.pendingBind = undefined
+      if (terminal.sessionPath === sessionPath) {
+        terminal.sessionPath = undefined
+        terminal.activeContext = undefined
+      }
+    }
   }
 
   async killForProjectRoots(roots: string[]): Promise<void> {
     const matches = [...this.terminals].filter(([, terminal]) => roots.some((root) => isPathWithin(root, terminal.cwd)))
-    await Promise.all(matches.map(([id, terminal]) => this.terminate(id, terminal)))
+    const starting = matches.map(([id, terminal]) => this.terminate(id, terminal))
+    const pending = [...this.terminationPromises].filter(([terminal]) => roots.some((root) => isPathWithin(root, terminal.cwd))).map(([, operation]) => operation)
+    await Promise.all([...new Set([...starting, ...pending])])
   }
 
   private forwardOutput(id: string, owned: OwnedTerminal, data: string): void {
-    if (owned.terminating || owned.owner.isDestroyed()) return
+    if (isTerminalTerminating(owned.lifecycle) || owned.owner.isDestroyed()) return
     const now = Date.now()
     if (now - owned.outputWindowStartedAt >= 1_000) { owned.outputWindowStartedAt = now; owned.outputWindowBytes = 0 }
     const bytes = Buffer.byteLength(data)
@@ -294,11 +305,15 @@ export class TerminalService {
   private terminate(id: string, owned: OwnedTerminal): Promise<void> {
     const active = this.terminationPromises.get(owned)
     if (active) return active
-    owned.terminating = true
+    owned.lifecycle.send({ type: 'KILL' })
     this.terminals.delete(id)
     this.removeActive(id, owned)
     const operation = this.terminateProcess(id, owned).catch((error) => {
-      if (!owned.exited) this.terminals.set(id, owned)
+      owned.lifecycle.send({ type: 'KILL_FAILED' })
+      if (isTerminalRunning(owned.lifecycle)) {
+        this.terminals.set(id, owned)
+        this.restoreActive(id, owned)
+      }
       throw error
     })
     this.terminationPromises.set(owned, operation)
@@ -309,7 +324,7 @@ export class TerminalService {
   private async terminateProcess(id: string, owned: OwnedTerminal): Promise<void> {
     if (owned.flushTimer) { clearTimeout(owned.flushTimer); owned.flushTimer = undefined }
     this.flushOutput(id, owned)
-    if (owned.exited) return
+    if (isTerminalExited(owned.lifecycle)) return
     // Shell children can detach from the process group, so signal a snapshot of
     // the descendant tree alongside the group at every rung.
     const descendants = await processTree(owned.terminal.pid)
@@ -317,7 +332,7 @@ export class TerminalService {
       ladder: process.platform === 'win32'
         ? [{ signal: 'SIGKILL', waitMs: 2_000 }]
         : [{ signal: 'SIGHUP', waitMs: 150 }, { signal: 'SIGTERM', waitMs: 350 }],
-      hasExited: () => owned.exited,
+      hasExited: () => isTerminalExited(owned.lifecycle),
       waitForExit: (timeoutMs) => this.waitForExit(owned, timeoutMs),
       descendants,
       signalDirect: (signal) => owned.terminal.kill(process.platform === 'win32' ? undefined : signal),
@@ -331,7 +346,7 @@ export class TerminalService {
     // recycled PID could be hit with the stale snapshot.
     const survivors = new Set(await processTree(owned.terminal.pid))
     const remaining = descendants.filter((pid) => survivors.has(pid))
-    if (graceful || owned.exited) {
+    if (graceful || isTerminalExited(owned.lifecycle)) {
       for (const pid of remaining) { try { process.kill(pid, 'SIGKILL') } catch { /* already exited */ } }
       return
     }
@@ -343,12 +358,12 @@ export class TerminalService {
   }
 
   private waitForExit(owned: OwnedTerminal, timeoutMs: number): Promise<boolean> {
-    if (owned.exited) return Promise.resolve(true)
+    if (isTerminalExited(owned.lifecycle)) return Promise.resolve(true)
     return new Promise((resolve) => {
       const finish = (): void => {
         clearTimeout(timer)
         subscription.dispose()
-        resolve(owned.exited)
+        resolve(isTerminalExited(owned.lifecycle))
       }
       const subscription = owned.terminal.onExit(finish)
       const timer = setTimeout(finish, timeoutMs)
@@ -371,5 +386,10 @@ export class TerminalService {
 
   private removeActive(id: string, terminal: OwnedTerminal): void {
     if (terminal.sessionPath && this.activeBySession.get(terminal.sessionPath) === id) this.activeBySession.delete(terminal.sessionPath)
+  }
+
+  /** Re-claims the session slot after a failed kill, unless another terminal has taken it meanwhile. */
+  private restoreActive(id: string, terminal: OwnedTerminal): void {
+    if (terminal.sessionPath && terminal.activeContext && !this.activeBySession.has(terminal.sessionPath)) this.activeBySession.set(terminal.sessionPath, id)
   }
 }

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { initialTransition, transition } from 'xstate'
 import type { InspectorTab, WorkspaceView } from '@/types/api'
+import { inspectorRestoreMachine } from './inspectorRestoreMachine'
 
 export const INSPECTOR_MIN = 340
 export const INSPECTOR_DEFAULT = 410
@@ -71,7 +73,9 @@ export function usePanelLayout({
   const [terminalMax, setTerminalMax] = useState(520)
   const workspaceRowRef = useRef<HTMLDivElement>(null)
   const sessionWorkspaceRef = useRef<HTMLDivElement>(null)
+  // Mirrors the restore machine for useWorkspaceActions, which clears it on explicit toggles.
   const compactRestoreRef = useRef<'inspector' | null>(null)
+  const restoreSnapshotRef = useRef(initialTransition(inspectorRestoreMachine)[0])
   const sidebarSuppressed = smallestLayout && sidebarOpen && !smallestSidebarAllowed
   const inspectorSuppressed = smallestLayout && inspectorOpen && !smallestInspectorAllowed
   const visibleSidebarOpen = sidebarOpen && !sidebarSuppressed
@@ -101,14 +105,20 @@ export function usePanelLayout({
   }, [closeSmallestPanels, inspectorSuppressed, sidebarSuppressed, smallestLayout])
 
   useEffect(() => {
+    const sendRestore = (event: { type: 'HIDE' | 'CLEAR' }) => {
+      restoreSnapshotRef.current = transition(inspectorRestoreMachine, restoreSnapshotRef.current, event)[0]
+      compactRestoreRef.current = restoreSnapshotRef.current.matches('compactHidden') ? 'inspector' : null
+    }
+    // An external clear (toggle) or a user reopen while hidden both end the pending restore.
+    if (compactRestoreRef.current === null || inspectorOpen) sendRestore({ type: 'CLEAR' })
     if (compactLayout && visibleSidebarOpen && visibleInspectorOpen) {
-      compactRestoreRef.current = 'inspector'
+      sendRestore({ type: 'HIDE' })
       setInspectorOpen(false)
-    } else if (!compactLayout && compactRestoreRef.current === 'inspector' && visibleSidebarOpen && !visibleInspectorOpen) {
-      compactRestoreRef.current = null
+    } else if (!compactLayout && restoreSnapshotRef.current.matches('compactHidden') && visibleSidebarOpen && !visibleInspectorOpen) {
+      sendRestore({ type: 'CLEAR' })
       setInspectorOpen(true)
     }
-  }, [compactLayout, setInspectorOpen, visibleInspectorOpen, visibleSidebarOpen])
+  }, [compactLayout, inspectorOpen, setInspectorOpen, visibleInspectorOpen, visibleSidebarOpen])
 
   useEffect(() => {
     if (!compactLayout || !visibleInspectorOpen) return

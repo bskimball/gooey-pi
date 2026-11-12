@@ -19,11 +19,32 @@ export async function routeExtensionNavigation(bridge: ExtensionBrowserBridge | 
     tab.url = url
     push()
   } else if (tab.chromeTabId === undefined) {
-    const id = await bridge?.call('create_tab', { url })
+    const id = await openChromeTab(bridge, tab, url)
     if (!Number.isSafeInteger(id)) throw new Error('Invalid Chrome tab id')
-    tab.chromeTabId = id as number
+    tab.chromeTabId = id
     tab.url = url
   }
+}
+
+/** Per-tab create_tab in flight. Concurrent navigations share it instead of creating a second Chrome tab. */
+const opening = new WeakMap<TabState, { url: string; id: Promise<number> }>()
+
+function openChromeTab(bridge: ExtensionBrowserBridge | undefined, tab: TabState, url: string): Promise<number> {
+  const inFlight = opening.get(tab)
+  if (inFlight) {
+    return inFlight.id.then(async (id) => {
+      if (inFlight.url !== url) await bridge?.call('navigate', { url, chromeTabId: id })
+      return id
+    })
+  }
+  const create = Promise.resolve(bridge?.call('create_tab', { url })) as Promise<number>
+  const record = { url, id: create }
+  opening.set(tab, record)
+  const settle = () => {
+    if (opening.get(tab) === record) opening.delete(tab)
+  }
+  create.then(settle, settle)
+  return create
 }
 
 export const PAUSED_MESSAGE = 'Tab is paused by the user. Ask the user to resume agent control or wait until they finish.'

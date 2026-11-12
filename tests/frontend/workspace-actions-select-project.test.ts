@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest'
+import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { readComposerDraft, saveComposerDraft } from '../../apps/desktop/src/lib/composer-draft'
 import type { ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
@@ -151,7 +152,7 @@ describe('selectProject workspace resume', () => {
       },
       settingsState: { settings: { activeHarness: 'pi' } },
       provider: { model: 'openai-codex/gpt-5.6', effort: 'medium', fast: false, flushPendingMutations: vi.fn() },
-      submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
+      agentTurn: createAgentTurnHandle(),
       demoTimerRef: { current: [] },
       setSessions: vi.fn(),
       setSubmitting: vi.fn(),

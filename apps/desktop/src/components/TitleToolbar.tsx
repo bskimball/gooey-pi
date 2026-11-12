@@ -1,6 +1,7 @@
 import {
   Code,
   DotsThree,
+  Gear,
   GitBranch,
   SidebarLeft,
   SidebarRight,
@@ -93,6 +94,7 @@ interface TitleToolbarProps {
   voiceOpen?: boolean
   onToggleVoice?(): void
   activeProjectScriptKind?: ProjectScriptKind
+  projectSetupError?: string
   onRunProjectScript?(kind: ProjectScriptKind): Promise<void> | void
   onStopProjectScript?(): void
   onSaveProjectScripts?(scripts: { setup: string; run: string }): Promise<void>
@@ -100,19 +102,21 @@ interface TitleToolbarProps {
   liveBySession?: SessionLiveMap
   clearedActivity?: Readonly<Record<string, string>>
   onOpenActivity?(): void
+  onOpenSettings?(): void
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onOpenSettings, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
+  const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
   const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
   return (
     <header className="title-toolbar drag-region">
       {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
       <div className="title-toolbar__nav no-drag">
-        {!sidebarOpen ? <IconButton label={`Show sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton> : null}
+        <IconButton className={sidebarOpen ? 'is-active' : ''} label={`${sidebarOpen ? 'Hide' : 'Show'} sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton>
         {platform === 'win32' ? <WindowsAppMenu /> : null}
       </div>
       <div className="title-toolbar__identity">
@@ -122,12 +126,13 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
       <div className="title-toolbar__actions no-drag">
         {sessions ? <ActivityStatusPill sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} active={view === 'activity'} onOpen={onOpenActivity} /> : null}
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
-          ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
+          ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} setupError={projectSetupError} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}
         {view === 'session' && onToggleVoice ? <IconButton className={`title-toolbar__optional ${voiceOpen ? 'is-active voice-toggle--active' : ''}`} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><Waveform size={17} /></IconButton> : null}
         {view === 'session' && project && onOpenInVsCode ? <IconButton className="title-toolbar__optional" label={`Open ${project.name} in VS Code`} onClick={() => onOpenInVsCode(project.path)}><Code size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className={terminalOpen ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className="title-toolbar__optional" label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
+        {onOpenSettings ? <IconButton className={view === 'settings' ? 'is-active' : ''} label={`${t('nav.settings')} (${settingsShortcut})`} onClick={onOpenSettings}><Gear size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>
     </header>

@@ -4,6 +4,8 @@ import { connectDesktopSession, type DesktopSessionClient } from 'apex-core/sess
 import { isRecord } from 'apex-core/validation'
 import type { HostMessage, HostState, ModelDescriptor, WebviewMessage } from './protocol'
 import { editorPromptContext, scopedEditorRequest } from './editor'
+import { apexSessionTurnMachine, isRunActive, type ApexTurnEvent } from './apexSessionMachine'
+import { initialTransition, transition, type SnapshotFrom } from 'xstate'
 
 type Json = Record<string, unknown>
 const levels: HostState['thinkingLevels'] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -14,12 +16,15 @@ export class AttachedSession {
   private dialogs: Json[] = []
   private ops: Extract<HostMessage, { type: 'reset' }>['ops'] = []
   private disposed = false
+  private disconnected = false
+  private publishing = false
   private pendingOps: Extract<HostMessage, { type: 'ops' }>['ops'] = []
   private flushTimer: NodeJS.Timeout | undefined
   private refreshPending: Promise<void> | undefined
   private state: HostState
+  private turn: SnapshotFrom<typeof apexSessionTurnMachine> = initialTransition(apexSessionTurnMachine)[0]
 
-  constructor(readonly path: string, private readonly cwd: string, private readonly post: (message: HostMessage) => void) {
+  constructor(readonly path: string, private readonly cwd: string, private readonly publish: (message: HostMessage) => void, private readonly onDisconnected: (error: string) => void) {
     this.state = { status: 'starting', connection: 'desktop', homeDir: homedir(), cwd, isStreaming: false, thinkingLevel: 'off', thinkingLevels: ['off'], models: [], providers: [], commands: [], statuses: {}, queued: [], messageEnterAction: vscode.workspace.getConfiguration('apex').get('messageEnterAction', 'queue') }
   }
 
@@ -28,28 +33,45 @@ export class AttachedSession {
       sessionPath: this.path, cwd: this.cwd,
       onEvent: (event) => this.onEvent(event),
       onDisconnect: (reason) => {
-        if (this.disposed) return
+        if (this.disposed || this.disconnected) return
+        const error = `${reason} Reconnect to read the current state. Sent commands are not retried.`
         this.dialogs = []
         this.post({ type: 'extensionUi', request: null })
-        this.update({ status: 'exited', isStreaming: false, error: `${reason} Reconnect to read the current state. Sent commands are not retried.` })
+        this.update({ status: 'exited', isStreaming: false, error })
+        this.disconnected = true
+        clearTimeout(this.flushTimer)
+        this.pendingOps = []
+        this.onDisconnected(error)
       },
       editorRequest: (method, params) => scopedEditorRequest(this.cwd, method, params),
     })
     if (!client) return false
-    if (this.disposed) { await client.close(); return false }
+    if (this.disposed || this.disconnected) { await client.close(); return false }
     this.client = client
     const { runtime, messages, dialogs, statuses } = client.snapshot
     this.ops = messages.map((message) => ({ kind: 'saved', message }))
     this.dialogs = dialogs
-    this.state = { ...this.state, status: 'ready', isStreaming: Boolean(runtime.isStreaming || runtime.isCompacting), statuses, pendingCount: runtime.sessionActions?.queuedCount ?? 0, contextUsage: runtime.contextUsage, sessionUsage: runtime.sessionUsage }
-    this.replay()
+    const running = Boolean(runtime.isStreaming || runtime.isCompacting)
+    this.state = { ...this.state, status: 'ready', isStreaming: running && this.fold({ type: 'AGENT_START' }), statuses, pendingCount: runtime.sessionActions?.queuedCount ?? 0, contextUsage: runtime.contextUsage, sessionUsage: runtime.sessionUsage }
     void this.refresh().catch((error: unknown) => this.notice(error))
     return true
   }
 
-  get isConnected(): boolean { return this.state.status === 'ready' && !this.disposed }
+  get isConnected(): boolean { return this.state.status === 'ready' && !this.disposed && !this.disconnected }
+
+  private post(message: HostMessage) {
+    if (this.publishing && !this.disposed && !this.disconnected) this.publish(message)
+  }
+
+  /** Folds a Desktop event through the same turn machine ApexSession uses, so isStreaming means the same thing in both views. */
+  private fold(event: ApexTurnEvent): boolean {
+    this.turn = transition(apexSessionTurnMachine, this.turn, event)[0]
+    return isRunActive(this.turn)
+  }
 
   replay() {
+    if (!this.isConnected) return
+    this.publishing = true
     this.flush()
     this.post({ type: 'state', state: this.state })
     this.post({ type: 'reset', ops: this.ops })
@@ -57,10 +79,10 @@ export class AttachedSession {
     this.post({ type: 'extensionUi', request: this.dialogs[0] ?? null })
   }
 
-  async dispose() { this.disposed = true; clearTimeout(this.flushTimer); this.pendingOps = []; await this.client?.close() }
+  async dispose() { if (this.disposed) return; this.disposed = true; clearTimeout(this.flushTimer); this.pendingOps = []; await this.client?.close() }
 
   private async command(command: Json): Promise<Json> {
-    if (!this.client || this.state.status !== 'ready') throw new Error('Desktop is disconnected. Reconnect before sending commands.')
+    if (!this.client || !this.isConnected) throw new Error('Desktop is disconnected. Reconnect before sending commands.')
     const response = await this.client.command(command)
     return isRecord(response.data) ? response.data : {}
   }
@@ -120,7 +142,7 @@ export class AttachedSession {
   }
 
   private onEvent(event: Json) {
-    if (this.disposed) return
+    if (this.disposed || this.disconnected) return
     if (event.type === 'desktop_user_message' && isRecord(event.message) && typeof event.message.id === 'string' && Array.isArray(event.message.parts)) {
       const message = event.message as unknown as import('apex-core/types/api').TranscriptMessage
       this.addOps([{ kind: 'saved', message }])
@@ -144,12 +166,14 @@ export class AttachedSession {
       } else if (event.method === 'notify' && typeof event.message === 'string') this.notice(event.message)
       return
     }
-    if (event.type === 'agent_start' || event.type === 'compaction_start' || event.type === 'auto_retry_start') this.update({ isStreaming: true })
+    if (event.type === 'agent_start' || event.type === 'auto_retry_start') this.update({ isStreaming: this.fold({ type: 'AGENT_START' }) })
+    if (event.type === 'compaction_start') this.update({ isStreaming: this.fold({ type: 'COMPACTION_START', manualOrIdle: event.reason === 'manual' || !this.state.isStreaming }) })
     if (event.type === 'agent_settled' || event.type === 'agent_end') {
-      this.update({ isStreaming: false })
+      this.update({ isStreaming: this.fold({ type: 'AGENT_SETTLED', onSettled: () => undefined }) })
       void this.refresh().catch((error: unknown) => this.notice(error))
     }
-    if (event.type === 'compaction_end') this.update({ isStreaming: event.willRetry === true })
+    // A retrying compaction keeps the run going; a finished one ends the compaction the same way ApexSession does.
+    if (event.type === 'compaction_end') this.update({ isStreaming: event.willRetry === true ? this.fold({ type: 'AGENT_START' }) : this.fold({ type: 'COMPACTION_END', onExtensionCompactionSettled: () => undefined }) })
     if (event.type === 'model_change') void this.refresh().catch((error: unknown) => this.notice(error))
     if (event.type === 'message_update') {
       const delta = isRecord(event.assistantMessageEvent) ? event.assistantMessageEvent : undefined
@@ -171,7 +195,7 @@ export class AttachedSession {
   private flush() {
     clearTimeout(this.flushTimer)
     this.flushTimer = undefined
-    if (!this.pendingOps.length || this.disposed) return
+    if (!this.pendingOps.length || this.disposed || this.disconnected) return
     const ops = this.pendingOps
     this.pendingOps = []
     this.ops.push(...ops)
@@ -211,7 +235,7 @@ export class AttachedSession {
   }
 
   private notice(error: unknown) {
-    if (!this.disposed) this.addOps([{ kind: 'notice', id: `desktop-notice-${Date.now()}`, timestamp: Date.now(), text: error instanceof Error ? error.message : String(error) }])
+    if (!this.disposed && !this.disconnected) this.addOps([{ kind: 'notice', id: `desktop-notice-${Date.now()}`, timestamp: Date.now(), text: error instanceof Error ? error.message : String(error) }])
   }
   private update(patch: Partial<HostState>) { this.state = { ...this.state, ...patch }; this.post({ type: 'state', state: this.state }) }
 }

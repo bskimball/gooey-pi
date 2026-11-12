@@ -113,8 +113,7 @@ interface RenderOptions {
 	>;
 	onRemoveAnnotation?: Mock<(id: string) => void>;
 	onClearAnnotations?: Mock<() => void>;
-	terminalSelection?: TerminalSelectionContext;
-	getTerminalContext?: () => TerminalPromptContext | undefined;
+	terminalSelection?: TerminalPromptContext;
 	onClearTerminalSelection?: Mock<() => void>;
 	sessions?: SessionRecord[];
 	skills?: SkillRecord[];
@@ -127,7 +126,6 @@ function renderComposer({
 	onRemoveAnnotation = vi.fn(),
 	onClearAnnotations = vi.fn(),
 	terminalSelection,
-	getTerminalContext,
 	onClearTerminalSelection = vi.fn(),
 	sessions = [],
 	skills = [],
@@ -151,7 +149,6 @@ function renderComposer({
 				sessions={sessions}
 				annotations={annotations}
 				terminalSelection={terminalSelection}
-				getTerminalContext={getTerminalContext}
 				sendSignal={sendSignal}
 				onModelChange={vi.fn()}
 				onEffortChange={vi.fn()}
@@ -1059,16 +1056,10 @@ describe("Composer terminal context attachment", () => {
 		).toBeNull();
 	});
 
-	it("reads and appends only the current terminal selection when submitting", async () => {
-		const getTerminalContext = vi.fn(() => terminalContext);
-		const { onSend } = renderComposer({
-			terminalSelection: selection,
-			getTerminalContext,
-		});
-		expect(getTerminalContext).not.toHaveBeenCalled();
+	it("appends exactly the terminal selection the chip shows when submitting", async () => {
+		const { onSend } = renderComposer({ terminalSelection: terminalContext });
 		await setDraft("Explain the failure");
 		await clickSend();
-		expect(getTerminalContext).toHaveBeenCalledTimes(1);
 		expect(onSend.mock.calls[0][0]).toContain(
 			"Explain the failure\n\n===== BEGIN TERMINAL SELECTION CONTEXT =====",
 		);

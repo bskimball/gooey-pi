@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { applySessionLifecycleEvent } from '../../apps/desktop/src/app/session-attention'
-import { indexStartedSession } from '../../apps/desktop/src/hooks/useWorkspaceActions'
+import { indexStartedSession } from '../../apps/desktop/src/hooks/started-session-index'
 import type { PrimeWorkApi, SessionRecord } from '../../apps/desktop/src/types/api'
 
 const existing: SessionRecord = {

@@ -355,8 +355,7 @@ export class AgentRpcManager {
     // attached_prompt is resolved here, after validation, against owner state.
     const attachedPrompt = command.type === 'attached_prompt'
     if (attachedPrompt) {
-      const state = runtime.snapshot()
-      const busy = state.isStreaming || state.isCompacting || Boolean(state.sessionActions?.active) || this.promptAdmissions.has(runtime.runtimeId)
+      const busy = this.isBusy(runtime)
       command.type = busy ? command.intent === 'steer' ? 'steer' : 'follow_up' : 'prompt'
       delete command.intent
     }
@@ -551,14 +550,17 @@ export class AgentRpcManager {
     }
   }
 
+  /** Busy from the runtime's activity and session actions, or from a prompt the manager is admitting. */
+  private isBusy(runtime: RpcRuntime): boolean {
+    const snapshot = runtime.snapshot()
+    return snapshot.isStreaming || snapshot.isCompacting || Boolean(snapshot.sessionActions?.active) || this.promptAdmissions.has(runtime.runtimeId)
+  }
+
   private isIdle(runtime: RpcRuntime): boolean {
     if (this.activeCommands.has(runtime.runtimeId)) return false
     if (this.startingRuntimes.has(runtime.runtimeId)) return false
     if (this.retiringRuntimes.has(runtime.runtimeId)) return false
-    const snapshot = runtime.snapshot()
-    const actions = snapshot.sessionActions
-    return !snapshot.isStreaming && !snapshot.isCompacting && !actions?.active
-      && (actions?.queuedCount ?? 0) === 0
+    return !this.isBusy(runtime) && (runtime.snapshot().sessionActions?.queuedCount ?? 0) === 0
   }
 
   private requireOpen(): void {

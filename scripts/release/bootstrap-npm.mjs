@@ -144,7 +144,7 @@ export function bootstrapNpm(options = {}) {
   const layout = resolveNpmGlobalLayout(prefix, root, platform)
 
   console.log(`Installing verified repository npm ${toolchain.npm} at ${layout.prefix} (invoked ${current})...`)
-  run('npm', ['install', '--global', '--prefix', layout.prefix, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', artifact.path], {
+  run('npm', ['install', '--global', '--prefix', layout.prefix, '--offline', '--no-update-notifier', '--ignore-scripts', '--no-audit', '--no-fund', artifact.path], {
     env,
     platform,
     shell: false,

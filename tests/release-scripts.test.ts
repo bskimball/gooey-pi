@@ -430,7 +430,7 @@ describe('release preflight', () => {
       expect(runs).toEqual([
         {
           command: 'npm',
-          args: ['install', '--global', '--prefix', '/runner/npm-global', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', fixture.artifactPath],
+          args: ['install', '--global', '--prefix', '/runner/npm-global', '--offline', '--no-update-notifier', '--ignore-scripts', '--no-audit', '--no-fund', fixture.artifactPath],
           shell: false,
         },
       ])
@@ -455,7 +455,7 @@ describe('release preflight', () => {
     const layout = resolveNpmGlobalLayout(prefix, root)
     const staleCli = join(directory, 'stale npm-cli.mjs')
     const githubPath = join(directory, 'github-path')
-    const expectedInstallArgs = ['install', '--global', '--prefix', prefix, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', fixture.artifactPath]
+    const expectedInstallArgs = ['install', '--global', '--prefix', prefix, '--offline', '--no-update-notifier', '--ignore-scripts', '--no-audit', '--no-fund', fixture.artifactPath]
     mkdirSync(dirname(staleCli), { recursive: true })
     writeFileSync(githubPath, '')
     writeFileSync(
@@ -494,9 +494,14 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
       const prefix = join(directory, 'fresh global prefix')
       const githubPath = join(directory, 'github-path')
       const cache = join(directory, 'npm cache')
+      const userconfig = join(directory, 'empty.npmrc')
       writeFileSync(githubPath, '')
+      writeFileSync(userconfig, '')
       try {
-        const env = fixtureEnvironment({ GITHUB_PATH: githubPath, npm_config_cache: cache, npm_config_prefix: prefix })
+        const env = fixtureEnvironment({ GITHUB_PATH: githubPath, npm_config_cache: cache, npm_config_prefix: prefix, npm_config_userconfig: userconfig, npm_config_update_notifier: 'false' })
+        for (const name of Object.keys(env)) {
+          if (name.toUpperCase() === 'NODE_V8_COVERAGE' || name.toUpperCase().startsWith('VITEST')) delete env[name]
+        }
         const root = process.platform === 'win32' ? join(prefix, 'node_modules') : join(prefix, 'lib', 'node_modules')
         expect(readNpmOutput(['prefix', '--global'], { env })).toBe(prefix)
         expect(readNpmOutput(['root', '--global'], { env })).toBe(root)
@@ -507,7 +512,13 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
             expect(args.slice(0, 4)).toEqual(['install', '--global', '--prefix', prefix])
             expect(resolveNpmGlobalLayout(prefix, root).prefix).toBe(prefix)
             const invocation = resolveCommandInvocation(command, args, options.platform, options.env)
-            const installed = spawnSync(invocation.file, invocation.args, { env: options.env, shell: invocation.shell, stdio: 'inherit' })
+            const installed = spawnSync(invocation.file, invocation.args, {
+              env: options.env,
+              shell: invocation.shell,
+              stdio: 'inherit',
+              timeout: process.platform === 'win32' ? 110_000 : 25_000,
+              windowsHide: true,
+            })
             if (installed.error) throw installed.error
             expect(installed.status).toBe(0)
           },

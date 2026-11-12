@@ -528,7 +528,7 @@ describe('Composer submission lifecycle', () => {
 
   it('keeps the textarea editable while a submission is starting', () => {
     act(() => root.render(<Composer
-      busy={false} submitting model="provider/vision" effort="medium" modelsByProvider={modelsByProvider} providers={providers}
+      busy={false} admitting model="provider/vision" effort="medium" modelsByProvider={modelsByProvider} providers={providers}
       reasoningLevels={['medium']} fast={false} fastSupported={false} fastAvailable imageInputSupported
       messageEnterAction="queue" skills={[]}
       onModelChange={vi.fn()} onEffortChange={vi.fn()} onFastChange={vi.fn()} onSend={vi.fn()} onStop={vi.fn()}

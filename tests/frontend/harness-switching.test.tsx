@@ -11,7 +11,7 @@ import { useExtensionUi } from '../../apps/desktop/src/hooks/useExtensionUi'
 import { groupModelsByProvider, useProviderCatalog } from '../../apps/desktop/src/hooks/useProviderCatalog'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
-import { createSingleFlightAdmission } from '../../apps/desktop/src/lib/workspace'
+import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { AgentSettings } from '../../apps/desktop/src/pages/settings/AgentSettings'
 import { ProviderSettings } from '../../apps/desktop/src/pages/settings/ProviderSettings'
 import { SettingsPage } from '../../apps/desktop/src/pages/SettingsPage'
@@ -305,7 +305,7 @@ describe('Pi Fusion pair reporting', () => {
     const bridge = { agent: { command, stop: vi.fn(async () => undefined) } } as unknown as PrimeWorkApi
     let show!: (runtimeId: string, event: Record<string, unknown>) => void
     function PairProbe({ activeRuntimeId, activeSessionMode }: { activeRuntimeId?: string; activeSessionMode?: string }) {
-      const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime, reportError: vi.fn() })
+      const extension = useExtensionUi({ bridge, activeRuntimeId, activeSessionMode, runtimeSessionsRef: { current: new Map() }, setSessions: vi.fn(), setRuntime, reportError: vi.fn(), agentTurn: createAgentTurnHandle() })
       show = extension.showExtensionUi
       return <PiModeControl disabled={false} modelsByProvider={pairModels} providers={pairCatalog.providers} onCommand={onCommand} />
     }
@@ -1169,7 +1169,7 @@ describe('Pi provider catalog authority', () => {
       layout: {} as WorkspaceActionsDeps['layout'],
       provider,
       pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
-      submissionAdmissionRef: { current: createSingleFlightAdmission() },
+      agentTurn: createAgentTurnHandle(),
       gitRequestRef: { current: 0 },
       demoTimerRef: { current: [] },
       setProjects: () => undefined,

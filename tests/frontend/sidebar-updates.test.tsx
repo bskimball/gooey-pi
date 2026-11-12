@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from '../../apps/desktop/src/components/Sidebar'
+import { TitleToolbar } from '../../apps/desktop/src/components/TitleToolbar'
 import type { ProjectRecord, SessionRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -34,25 +35,30 @@ afterEach(async () => {
 
 const noop = () => undefined
 
-describe('sidebar footer', () => {
-  it('offers settings only, without a commands row or release download control', async () => {
-    const onNavigate = vi.fn()
-    const onOpenPalette = vi.fn()
+describe('sidebar chrome', () => {
+  it('leaves settings and the sidebar toggle to the toolbar, without a release download control', async () => {
+    const onOpenSettings = vi.fn()
+    const onToggleSidebar = vi.fn()
     await act(async () => {
-      root.render(
+      root.render(<>
         <Sidebar
           projects={[project]} sessions={[session]} activeView="session"
-          onSelectProject={noop} onSelectSession={noop} onNavigate={onNavigate} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={onOpenPalette} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
-        />,
-      )
+          onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
+          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+        />
+        <TitleToolbar view="session" sidebarOpen inspectorOpen={false} terminalOpen={false} platform="linux" onToggleSidebar={onToggleSidebar} onToggleInspector={noop} onToggleTerminal={noop} onOpenBrowser={noop} onOpenSettings={onOpenSettings} />
+      </>)
     })
 
-    const buttons = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')]
-    expect(buttons.map((button) => button.title)).toEqual(['Settings'])
+    const sidebar = container.querySelector('.sidebar')!
+    expect(sidebar.querySelector('.sidebar__footer')).toBeNull()
+    expect(sidebar.querySelector('.sidebar__toggle')).toBeNull()
     expect(container.querySelector('.sidebar-update')).toBeNull()
-    await act(async () => buttons[0].click())
-    expect(onNavigate).toHaveBeenCalledWith('settings')
+    const toolbar = container.querySelector('.title-toolbar')!
+    await act(async () => toolbar.querySelector<HTMLButtonElement>('[aria-label="Settings (Ctrl+,)"]')!.click())
+    await act(async () => toolbar.querySelector<HTMLButtonElement>('[aria-label="Hide sidebar (Ctrl+B)"]')!.click())
+    expect(onOpenSettings).toHaveBeenCalledOnce()
+    expect(onToggleSidebar).toHaveBeenCalledOnce()
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
   })
 })

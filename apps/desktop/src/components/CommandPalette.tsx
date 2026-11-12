@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { createPortal } from 'react-dom'
 import type { HarnessId, InspectorTab, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
+import { isSessionRunning, isSessionWaiting } from '@/app/session-attention'
+import type { SessionLiveMap } from '@/app/session-live'
+import type { SessionLive } from '@/app/sessionLiveMachine'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { useProjectFileIndex } from '@/hooks/useProjectFileIndex'
 import { BrowserGlobe, useAppShellOverlay, useFocusTrap } from './ui'
@@ -18,6 +21,8 @@ export interface CommandPaletteProps {
   sessions: readonly SessionRecord[]
   activeProject?: ProjectRecord
   activeSessionId?: string
+  /** Live phase and pending questions keyed by session file path; running means live or stored status. */
+  liveBySession?: SessionLiveMap
   onClose(): void
   onNavigate(view: WorkspaceView): void
   onNewSession(): void
@@ -33,6 +38,7 @@ export interface CommandPaletteProps {
 }
 
 const RECENT_SESSION_LIMIT = 5
+const NO_LIVE: SessionLiveMap = {}
 const SESSION_MATCH_LIMIT = 8
 const PROJECT_MATCH_LIMIT = 5
 const FILE_MATCH_LIMIT = 8
@@ -44,9 +50,9 @@ function matchesTerms(text: string, terms: readonly string[]): boolean {
   return terms.every((term) => haystack.includes(term))
 }
 
-function sessionState(session: SessionRecord): string {
-  if (session.status === 'running') return 'Working'
-  if (session.status === 'waiting') return 'Needs input'
+function sessionState(session: SessionRecord, live?: SessionLive): string {
+  if (isSessionRunning(session, live)) return 'Working'
+  if (isSessionWaiting(session)) return 'Needs input'
   if (session.status === 'failed') return 'Failed'
   return formatRelative(session.lastUserMessageAt ?? session.updatedAt)
 }
@@ -56,7 +62,7 @@ function fileName(path: string): string {
 }
 
 /** Command palette over commands, sessions, projects, and the active project's files. */
-export function CommandPalette({ open, platform = 'darwin', harness, projects, sessions, activeProject, activeSessionId, onClose, onNavigate, onNewSession, onPreviousSession, onToggleSidebar, onToggleTerminal, onOpenBrowser, onOpenInspectorTab, onSelectSession, onSelectProject, onOpenFile }: CommandPaletteProps) {
+export function CommandPalette({ open, platform = 'darwin', harness, projects, sessions, activeProject, activeSessionId, liveBySession = NO_LIVE, onClose, onNavigate, onNewSession, onPreviousSession, onToggleSidebar, onToggleTerminal, onOpenBrowser, onOpenInspectorTab, onSelectSession, onSelectProject, onOpenFile }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -90,7 +96,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
       key: `session:${session.id}`,
       group,
       label: session.title,
-      detail: [projectName(session), sessionState(session)].filter(Boolean).join(' · '),
+      detail: [projectName(session), sessionState(session, liveBySession[session.filePath])].filter(Boolean).join(' · '),
       icon: <ChatCircleText size={14} />,
       run: () => onSelectSession(session),
     })
@@ -125,7 +131,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
         run: () => onOpenFile(`${fileRoot}${separator}${entry.path.split('/').join(separator)}`),
       })) : []
     return [...matchedSessions, ...matchedProjects, ...matchedCommands, ...matchedFiles]
-  }, [activeSessionId, fileRoot, files, onNavigate, onNewSession, onOpenBrowser, onOpenFile, onOpenInspectorTab, onPreviousSession, onSelectProject, onSelectSession, onToggleSidebar, onToggleTerminal, platform, projects, sessions, terms])
+  }, [activeSessionId, fileRoot, files, liveBySession, onNavigate, onNewSession, onOpenBrowser, onOpenFile, onOpenInspectorTab, onPreviousSession, onSelectProject, onSelectSession, onToggleSidebar, onToggleTerminal, platform, projects, sessions, terms])
 
   useEffect(() => { if (open) { setQuery(''); setActive(0); requestAnimationFrame(() => inputRef.current?.focus()) } }, [open])
   useEffect(() => setActive(0), [query])

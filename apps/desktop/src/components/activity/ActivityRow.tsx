@@ -9,7 +9,7 @@ import {
   isSessionQuiet,
   type ActivityRowItem,
 } from '@/app/session-live'
-import { activityNotificationSignature } from '@/app/session-attention'
+import { activityNotificationSignature, isSessionRunning } from '@/app/session-attention'
 import { formatRelative } from '@/lib/data'
 import { formatSessionCost, PRICING_UNAVAILABLE } from '@/lib/format-cost'
 import type { SessionRecord } from '@/types/api'
@@ -67,7 +67,7 @@ export function ActivityRow({
   const cancelStopRef = useRef<HTMLButtonElement>(null)
   const confirmBoxRef = useRef<HTMLDivElement>(null)
 
-  const isRunning = section === 'running'
+  const isRunning = isSessionRunning(session, live)
   const isQuestion = attention?.kind === 'question'
   const isFailed = attention?.kind === 'failed' || (!isRunning && !isQuestion && session.status === 'failed')
   const isReview = section === 'review'

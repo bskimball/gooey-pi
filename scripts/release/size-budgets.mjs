@@ -13,8 +13,9 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 588985 bytes with visual element capture/reveal and workspace-scoped image loading.
-  mainBytes: 576 * KIB,
+  // Measured 601456 bytes with the explicit XState lifecycles for the agent runtime, terminal,
+  // shutdown, project removal and browser tab lifecycles (runtimeActivityMachine and friends).
+  mainBytes: 592 * KIB,
   preloadBytes: 16 * KIB,
   initialRendererBytes: 1280 * KIB,
   largestRendererChunkBytes: 600 * KIB,

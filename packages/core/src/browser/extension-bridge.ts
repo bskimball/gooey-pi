@@ -3,6 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { callMethod, probeBroker } from './extension-bridge-client'
 import { applySharedTabEvent, sanitizeBrowserElement } from './element-selection'
 
+/** Matches desktop-link.ts: a lost command may already have run in Chrome, so callers must not blindly retry. */
+const UNKNOWN_OUTCOME = 'command outcome unknown. Do not retry automatically.'
+
 export interface ExtensionCommand {
   id: string
   method: string
@@ -245,7 +248,7 @@ export class ExtensionBrowserBridge {
     this.heartbeat = null
     for (const request of this.pending.values()) {
       clearTimeout(request.timer)
-      request.reject(new Error('Browser extension disconnected. Reconnect it and try again.'))
+      request.reject(new Error(`Browser extension disconnected. Reconnect it and try again. ${UNKNOWN_OUTCOME}`))
     }
     this.pending.clear()
     this.changed()
@@ -282,6 +285,7 @@ export class ExtensionBrowserBridge {
       if (this.isConnected()) await this.sendCommand('sync_tab_state', { tabs: this.snapshot() })
       return true
     }
+    let pausedRollback: (() => void) | null = null
     if (method === 'sync_tab_state') {
       if ('activeSessionKey' in params) {
         this.latestSession = typeof params.activeSessionKey === 'string' ? params.activeSessionKey : null
@@ -295,10 +299,23 @@ export class ExtensionBrowserBridge {
       // Explicit user intent may change pause state; stale snapshots may not.
       if (!Array.isArray(params.tabs) && typeof params.chromeTabId === 'number' && typeof params.paused === 'boolean') {
         const tab = this.tabState.get(params.chromeTabId)
-        if (tab) tab.paused = params.paused
+        if (tab) {
+          const previous = tab.paused
+          tab.paused = params.paused
+          // A failed or unknown sync leaves Chrome's pause state unchanged, so the mirror must match.
+          pausedRollback = () => {
+            if (this.tabState.get(params.chromeTabId as number) === tab) tab.paused = previous
+          }
+        }
       }
     }
-    const result = await this.sendCommand(method, params)
+    let result: unknown
+    try {
+      result = await this.sendCommand(method, params)
+    } catch (error) {
+      pausedRollback?.()
+      throw error
+    }
     if (method === 'create_tab' && typeof result === 'number') {
       if (remote) this.remoteTabs.add(result)
       this.tabState.set(result, { chromeTabId: result, sessionKey: sessionKey ?? this.context().activeSessionKey, url: params.url, paused: false })
@@ -316,7 +333,7 @@ export class ExtensionBrowserBridge {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`Browser extension command timed out: ${method}`))
+        reject(new Error(`Browser extension command timed out: ${method}. ${UNKNOWN_OUTCOME}`))
       }, this.options.commandTimeoutMs ?? 20_000)
       timer.unref?.()
       this.pending.set(id, { resolve, reject, timer })

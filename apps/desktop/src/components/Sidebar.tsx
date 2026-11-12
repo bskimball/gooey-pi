@@ -11,7 +11,6 @@ import {
   Folder,
   FolderPlus,
   FunnelSimple,
-  Gear,
   MagnifyingGlass,
   NotePencil,
   Package,
@@ -26,7 +25,9 @@ import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
-import { sessionAttentionSignature, signatureCleared } from '@/app/session-attention'
+import { isSessionRunning, isSessionWaiting, sessionAttentionSignature, signatureCleared } from '@/app/session-attention'
+import type { SessionLiveMap } from '@/app/session-live'
+import type { SessionLive } from '@/app/sessionLiveMachine'
 import { IconButton, Modal, PiMark, useFocusTrap } from './ui'
 import { StatusMark } from './activity/StatusMark'
 import { SessionStatusGlyph, SidebarAttentionGroups } from './SidebarAttention'
@@ -42,6 +43,8 @@ export interface SidebarProps {
   activeView: WorkspaceView
   activeHarness?: HarnessId
   clearedAttention?: Record<string, string>
+  /** Live phase and pending questions keyed by session file path; running means live or stored status. */
+  liveBySession?: SessionLiveMap
   onSelectProject(project: ProjectRecord): void
   onSelectSession(session: SessionRecord): void
   onNavigate(view: WorkspaceView): void
@@ -66,9 +69,11 @@ const statusLabel: Record<SessionRecord['status'], string> = {
   idle: 'Idle', running: 'Running', waiting: 'Waiting for input', complete: 'Finished', failed: 'Failed', unknown: 'Unknown',
 }
 
+const NO_LIVE: SessionLiveMap = {}
+
 /** Concise meta text for a session row: live owner when idle/complete, otherwise narrow recency. */
-function sessionRowMeta(session: SessionRecord, owner?: RuntimeOwnerView): string {
-  if (owner && session.status !== 'running' && session.status !== 'waiting') {
+function sessionRowMeta(session: SessionRecord, owner?: RuntimeOwnerView, live?: SessionLive): string {
+  if (owner && !isSessionRunning(session, live) && !isSessionWaiting(session)) {
     return owner.app === 'vscode' ? 'In VS Code' : 'In Apex'
   }
   return formatRelative(session.updatedAt, 'narrow')
@@ -154,7 +159,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -184,14 +189,15 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const [archiveTarget, setArchiveTarget] = useState<SessionRecord | null>(null)
   const [removeTarget, setRemoveTarget] = useState<ProjectRecord | null>(null)
   const { activeSessions, sessionsByProject } = useMemo(() => indexSidebarSessions(projects, sessions), [projects, sessions])
+  const isRunning = (session: SessionRecord) => isSessionRunning(session, liveBySession[session.filePath])
   const needsAttention = (session: SessionRecord) => sessionNeedsAttention(session, clearedAttention)
   const attentionSessions = useMemo(
-    () => activeSessions.filter((session) => session.status !== 'running' && (session.status === 'waiting' || sessionNeedsAttention(session, clearedAttention))),
-    [activeSessions, clearedAttention],
+    () => activeSessions.filter((session) => !isRunning(session) && (isSessionWaiting(session) || sessionNeedsAttention(session, clearedAttention))),
+    [activeSessions, clearedAttention, liveBySession],
   )
   const runningSessions = useMemo(
-    () => activeSessions.filter((session) => session.status === 'running'),
-    [activeSessions],
+    () => activeSessions.filter((session) => isRunning(session)),
+    [activeSessions, liveBySession],
   )
   const openSession = (session: SessionRecord, projectId?: string) => {
     setSessionMenu(null)
@@ -202,7 +208,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const unreadCount = activeSessions.reduce((count, session) => count + Number(needsAttention(session)), 0)
   const newSessionShortcut = shortcutLabel(platform, ['Primary', 'N'])
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
-  const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
   useEffect(() => {
     if (!projectMenu) return
     const dismiss = (event: PointerEvent) => { if (!(event.target instanceof Element) || !event.target.closest('.project-group')) setProjectMenu(null) }
@@ -266,8 +271,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
     <aside ref={sidebarRef} className="sidebar" aria-label="Project and session navigation" tabIndex={overlay ? -1 : undefined}>
       <div className="sidebar__titlebar drag-region">
         <div className="traffic-light-clearance" aria-hidden="true" />
-        {/* Same screen position as the toolbar's Show sidebar button, so one spot toggles both ways. */}
-        <IconButton className="sidebar__toggle no-drag" label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton>
+        {/* The toolbar owns the toggle; an overlay sidebar covers the toolbar, so it carries its own. */}
+        {overlay ? <IconButton className="sidebar__toggle no-drag" label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton> : null}
         <div className="sidebar__brand no-drag" aria-label={HARNESS_PRODUCT_NAMES.pi}>
           <PiMark size={24} />
         </div>
@@ -295,6 +300,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
           <SidebarAttentionGroups
             attention={attentionSessions}
             running={runningSessions}
+            liveBySession={liveBySession}
             projects={projects}
             activeSessionId={activeSessionId}
             activeView={activeView}
@@ -314,10 +320,10 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
               const limit = (normalized ? searchLimits : sessionLimits)[project.id] ?? SIDEBAR_SESSION_LIMIT
               const visibleSessions = normalized ? projectSessions.slice(0, limit) : boundedSidebarSessions(projectSessions, {
                 limit,
-                include: (session) => session.id === activeSessionId || session.status === 'running' || needsAttention(session),
+                include: (session) => session.id === activeSessionId || isRunning(session) || needsAttention(session),
               })
               const remaining = projectSessions.length - visibleSessions.length
-              const running = allSessions.some((session) => session.status === 'running')
+              const running = allSessions.some((session) => isRunning(session))
               const attentionCount = allSessions.filter(needsAttention).length
               const rowId = `${section.id}:${project.id}`
               return (
@@ -347,8 +353,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                           <div key={session.id} className={`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`}>
                             <button type="button" title={session.title} aria-current={isSelected ? 'page' : undefined} className="session-row" onClick={() => openSession(session, project.id)} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
                               <span className="sr-only">{statusLabel[session.status]}: </span>
-                              <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath))}</span></span>
-                              <SessionStatusGlyph session={session} attention={hasAttn} />
+                              <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
+                              <SessionStatusGlyph session={session} attention={hasAttn} live={liveBySession[session.filePath]} />
                             </button>
                             <IconButton
                               size="small"
@@ -368,8 +374,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                               <button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button>
                               {onContinueInVsCode && !runtimeOwners?.has(session.filePath) ? <button
                                 type="button"
-                                disabled={session.status === 'running' || session.status === 'waiting'}
-                                title={session.status === 'running' || session.status === 'waiting' ? 'Stop the current run before continuing in VS Code.' : 'Move this session to VS Code. You can close Desktop afterward.'}
+                                disabled={isRunning(session) || isSessionWaiting(session)}
+                                title={isRunning(session) || isSessionWaiting(session) ? 'Stop the current run before continuing in VS Code.' : 'Move this session to VS Code. You can close Desktop afterward.'}
                                 onClick={() => { setSessionMenu(null); onContinueInVsCode(session) }}
                               ><Code size={12}/> Continue in VS Code</button> : null}
                             </div> : null}
@@ -387,9 +393,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         ))}
       </div>
 
-      <div className="sidebar__footer">
-        <button type="button" title={t('nav.settings')} className={activeView === 'settings' ? 'is-active' : ''} onClick={() => onNavigate('settings')}><Gear size={15} /><span>{t('nav.settings')}</span><kbd>{settingsShortcut}</kbd></button>
-      </div>
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</button></>}><label className="field"><span>Session name</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}
       {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><button type="button" className="button" onClick={() => setRemoveTarget(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</button></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
     </aside>
@@ -404,6 +407,7 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.activeView === next.activeView
     && previous.activeHarness === next.activeHarness
     && previous.clearedAttention === next.clearedAttention
+    && previous.liveBySession === next.liveBySession
     && previous.onSelectProject === next.onSelectProject
     && previous.onSelectSession === next.onSelectSession
     && previous.onNavigate === next.onNavigate

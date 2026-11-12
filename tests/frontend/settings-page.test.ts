@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
-import { confirmedPanelSettings } from '../../apps/desktop/src/lib/settings-state'
 import { SETTINGS_FIELD_SECTIONS } from '../../apps/desktop/src/pages/settings/contracts'
 import {
   browserHomeValidation,
@@ -96,28 +94,6 @@ describe('settings draft synchronization', () => {
   })
 })
 
-
-describe('queued settings reconciliation', () => {
-  it('restores every pending panel field without replacing unrelated transient panel state', () => {
-    const optimisticPanels = { sidebarOpen: false, inspectorOpen: true, terminalOpen: false }
-    const savedAfterQueue = {
-      ...DEFAULT_SETTINGS,
-      sidebarOpen: true,
-      inspectorOpen: false,
-      terminalOpen: true,
-    }
-    const reconciledPanels = {
-      ...optimisticPanels,
-      ...confirmedPanelSettings(savedAfterQueue, ['sidebarOpen', 'terminalOpen']),
-    }
-
-    expect(reconciledPanels).toEqual({
-      sidebarOpen: true,
-      inspectorOpen: true,
-      terminalOpen: true,
-    })
-  })
-})
 
 describe('free-text settings validation', () => {
   it('accepts and canonicalizes safe web homes', () => {

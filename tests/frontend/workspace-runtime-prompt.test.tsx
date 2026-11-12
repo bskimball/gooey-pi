@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkspaceRuntime } from '../../apps/desktop/src/hooks/useWorkspaceRuntime'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { DEFAULT_SETTINGS } from '../../apps/desktop/src/lib/data'
-import { createSingleFlightAdmission } from '../../apps/desktop/src/lib/workspace'
+import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import type { HarnessId, PrimeWorkApi, ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const project: ProjectRecord = {
@@ -274,7 +274,6 @@ describe('prompt admission versus background transcript reads', () => {
     })
     await flush()
 
-    const admission = createSingleFlightAdmission()
     const actions = createWorkspaceActions(() => ({
       bridge,
       initialized: true,
@@ -286,7 +285,7 @@ describe('prompt admission versus background transcript reads', () => {
       layout: {} as WorkspaceActionsDeps['layout'],
       provider: { model: 'fixture/test-model', effort: 'medium', fast: false, selectedModel: { input: ['text'] } } as unknown as WorkspaceActionsDeps['provider'],
       pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
-      submissionAdmissionRef: { current: admission },
+      agentTurn: createAgentTurnHandle(),
       gitRequestRef: { current: 0 },
       demoTimerRef: { current: [] },
       setProjects: () => undefined,

@@ -131,6 +131,11 @@ function boundedMessages(transcript: TranscriptMessage[]): {
   }
 }
 
+/** Identity of a peer runtime slot; shared by wake dedupe and delivery serialization. */
+function targetKey(target: CollaborationTarget): string {
+  return `${target.session.harness}:${resolve(target.session.filePath)}`
+}
+
 function cursorFor(session: SessionRecord, messages: CollaborationMessage[], live: boolean): string {
   const tail = messages.at(-1)
   return createHash('sha256').update(JSON.stringify([
@@ -396,7 +401,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   }
 
   private async wake(target: CollaborationTarget): Promise<RuntimeInfo> {
-    const key = `${target.session.harness}:${resolve(target.session.filePath)}`
+    const key = targetKey(target)
     const existing = this.waking.get(key)
     if (existing) return existing
     const pending = target.manager.start({ cwd: target.session.projectPath, sessionPath: target.session.filePath })
@@ -406,7 +411,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   }
 
   private async withDeliveryLock<T>(target: CollaborationTarget, action: () => Promise<T>): Promise<T> {
-    const key = `${target.session.harness}:${resolve(target.session.filePath)}`
+    const key = targetKey(target)
     const previous = this.deliveries.get(key) ?? Promise.resolve()
     let release!: () => void
     const current = new Promise<void>((resolveCurrent) => { release = resolveCurrent })

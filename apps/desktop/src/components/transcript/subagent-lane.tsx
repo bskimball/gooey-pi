@@ -1,6 +1,6 @@
 import { createContext, memo, useContext, useId, useState } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
-import { specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
+import { isLiveSpecialist, specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
 import { CaretRight, Check, Robot } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import type { MessagePart } from '@/types/api'
@@ -31,6 +31,12 @@ const VERBS: Record<string, string> = { task_wait: 'Waiting on', task_chain: 'Ch
 
 export interface SubagentFollowUp { call: ToolCall; result?: ToolResult }
 export interface SubagentPairs { followUps: Map<ToolCall, SubagentFollowUp[]>; absorbed: Set<MessagePart> }
+
+/** A chain reads as its most urgent step. */
+function chainStatus(steps: PiSpecialistSummary[]): SpecialistStatus {
+  for (const status of ['error', 'waiting', 'running', 'stopped', 'closed'] as const) if (steps.some((step) => step.status === status)) return status
+  return 'done'
+}
 
 function startedTaskId(result?: ToolResult): string | undefined {
   return text(workerDetails(result?.details)?.id) ?? /\b(task_\d+)\b/.exec(result?.text ?? '')?.[1]
@@ -97,11 +103,11 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const background = !pending && latest.call.name === 'task_start'
   let outcome: SpecialistStatus = pending || background ? 'running' : latest.result?.isError ? 'error' : 'done'
   for (const followUp of followUps) outcome = specialistOutcome({ previous: outcome, tool: followUp.call.name, result: followUp.result, startsGeneration: record(followUp.call.args)?.mode === 'prompt' })
-  const state = specialist?.status ?? outcome
+  const state = specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : outcome)
   const stateLabel = specialistStatusLabel[state]
   const report = text(record(latest.result?.details)?.finalReport) ?? settledReport(latestOutput) ?? (pending || background ? undefined : text(latestOutput))
   const highlights = report ? reportHighlights(report) : []
-  const rail = highlights.length ? highlights : state === 'running' ? [specialist?.activity ? `Last observed: ${specialist.activity}` : 'Awaiting a recorded update…'] : []
+  const rail = highlights.length ? highlights : isLiveSpecialist(state) ? [specialist?.activity ? `Last observed: ${specialist.activity}` : 'Awaiting a recorded update…'] : []
   const verb = VERBS[part.name]
   const singleTarget = onOpen && targets.length === 1 ? targets[0] : undefined
 
@@ -110,7 +116,7 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
       className={`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`}
       onClick={onOpen && singleTarget ? () => onOpen(singleTarget.id) : undefined}
     >
-      <span className="subagent-lane__status" aria-hidden="true">{state === 'running' ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
+      <span className="subagent-lane__status" aria-hidden="true">{isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
       {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
       {roles.length
         ? roles.map((role, index) => <span key={`${role}-${index}`} className="subagent-lane__role">{role}</span>)

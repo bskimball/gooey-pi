@@ -1,46 +1,33 @@
 import { contextUsageFromEvent, eventType, sessionUsageFromEvent } from './agent-events'
-import { activityNotificationSignature, signatureCleared } from './session-attention'
+import { activityNotificationSignature, isSessionRunning, signatureCleared } from './session-attention'
 import { ASK_USER_TIMEOUT_MS, parseExtensionUiRequest } from '@/lib/extension-ui'
 import type { PendingExtensionUi } from '@/hooks/useExtensionUi'
 import { boundText } from '@/lib/render-bounds'
 import { parseSessionActionSnapshot } from '@/lib/session-actions'
 import type { PrimeContextUsage, RuntimeInfo, SessionRecord, SessionUsage } from '@/types/api'
 
-export type SessionLivePhase = 'thinking' | 'tool' | 'compacting' | 'retrying' | 'idle'
+import {
+  applySessionLiveEvent,
+  type SessionLive,
+  type SessionLiveEvent,
+  type SessionLivePhase,
+  type SessionLiveQuestion,
+  type SessionLiveToolInfo,
+} from './sessionLiveMachine'
 
-export interface SessionLiveTool {
-  id?: string
-  name: string
-  summary?: string
-  startedAt: number
-}
-
-export interface SessionLiveQuestion {
-  id: string
-  title: string
-  method: string
-  options?: string[]
-  deadline?: number
-  runtimeId: string
-}
-
-export interface SessionLive {
-  runtimeId: string
-  phase: SessionLivePhase
-  currentTool?: SessionLiveTool
-  runStartedAt?: number
-  lastEventAt: number
-  contextUsage?: PrimeContextUsage
-  sessionUsage?: SessionUsage
-  queuedCount?: number
-  lastError?: string
-  pendingQuestion?: SessionLiveQuestion
-}
+export type {
+  SessionLive,
+  SessionLiveContext,
+  SessionLiveEvent,
+  SessionLivePhase,
+  SessionLiveQuestion,
+  SessionLiveTool,
+} from './sessionLiveMachine'
 
 export type SessionLiveMap = Readonly<Record<string, SessionLive>>
 
 export type Attention =
-  | { kind: 'question'; title: string; method: string; deadline?: number; runtimeId: string }
+  | { kind: 'question'; title: string; method: string; deadline?: number; runtimeId?: string }
   | { kind: 'failed'; error?: string }
   | { kind: 'review' }
 
@@ -165,10 +152,12 @@ export function seedSessionLiveFromRuntimes(
     const previous = (next ?? state)[sessionFile]
     const isCompacting = Boolean(runtime.isCompacting)
     const isStreaming = Boolean(runtime.isStreaming)
+    // The runtime only reports run-level flags; tool and retry phases come from events, so a streaming
+    // runtime keeps an in-flight tool and otherwise resumes as thinking.
     const phase: SessionLivePhase = isCompacting
       ? 'compacting'
       : isStreaming
-        ? (previous && previous.phase !== 'idle' ? previous.phase : 'thinking')
+        ? (previous?.phase === 'tool' ? 'tool' : 'thinking')
         : 'idle'
     const runStartedAt = isStreaming || isCompacting ? (previous?.runStartedAt ?? now) : undefined
     const contextUsage = runtime.contextUsage ?? previous?.contextUsage
@@ -183,6 +172,9 @@ export function seedSessionLiveFromRuntimes(
       ...(contextUsage ? { contextUsage } : {}),
       ...(sessionUsage ? { sessionUsage } : {}),
       ...(queuedCount !== undefined ? { queuedCount } : {}),
+      ...(phase === 'compacting'
+        ? { compactionResume: previous?.compactionResume ?? (isStreaming ? 'thinking' : 'idle') }
+        : {}),
       ...(previous?.lastError ? { lastError: previous.lastError } : {}),
       ...(previous?.pendingQuestion ? { pendingQuestion: previous.pendingQuestion } : {}),
     }
@@ -227,8 +219,7 @@ export function syncSessionLivePendingQuestions(
     next ??= { ...state }
     next[sessionFile] = {
       runtimeId: question.runtimeId,
-      phase: 'thinking',
-      runStartedAt: now,
+      phase: 'idle',
       lastEventAt: now,
       pendingQuestion: question,
     }
@@ -242,6 +233,14 @@ function putSessionLive(
   entry: SessionLive,
 ): SessionLiveMap {
   return { ...state, [sessionFile]: entry }
+}
+
+function toolInfo(name: unknown, id: unknown, summary: string | undefined): SessionLiveToolInfo {
+  return {
+    id: typeof id === 'string' ? id : undefined,
+    name: typeof name === 'string' && name.trim() ? name.trim() : 'Tool',
+    ...(summary ? { summary } : {}),
+  }
 }
 
 export function reduceSessionLive(
@@ -270,18 +269,10 @@ export function reduceSessionLive(
   const base: SessionLive = previous
     ? { ...previous, runtimeId }
     : { runtimeId, phase: 'idle', lastEventAt: now }
+  const apply = (next: SessionLiveEvent) => putSessionLive(state, sessionFile, applySessionLiveEvent(base, next))
 
   if (type === 'agent_start' || type === 'turn_start') {
-    const runStartedAt = type === 'agent_start' && base.phase === 'idle'
-      ? now
-      : base.runStartedAt ?? now
-    const { currentTool: _tool, lastError: _err, pendingQuestion: _q, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'thinking',
-      runStartedAt,
-      lastEventAt: now,
-    })
+    return apply({ type: 'RUN_STARTED', now, resetClock: type === 'agent_start' && base.phase === 'idle' })
   }
 
   if (type === 'message_update') {
@@ -289,16 +280,7 @@ export function reduceSessionLive(
     const deltaType = typeof delta?.type === 'string' ? delta.type : ''
     if (deltaType === 'toolcall_end') {
       const tool = asRecord(delta?.toolCall)
-      const name = typeof tool?.name === 'string' && tool.name.trim() ? tool.name.trim() : 'Tool'
-      const id = typeof tool?.id === 'string' ? tool.id : undefined
-      const summary = summarizeToolArgs(tool?.arguments ?? tool?.args)
-      return putSessionLive(state, sessionFile, {
-        ...base,
-        phase: 'tool',
-        currentTool: { id, name, ...(summary ? { summary } : {}), startedAt: now },
-        runStartedAt: base.runStartedAt ?? now,
-        lastEventAt: now,
-      })
+      return apply({ type: 'TOOL_STARTED', now, tool: toolInfo(tool?.name, tool?.id, summarizeToolArgs(tool?.arguments ?? tool?.args)) })
     }
     const targetPhase: SessionLivePhase = base.phase === 'compacting' ? 'compacting' : 'thinking'
     if (previous
@@ -309,26 +291,11 @@ export function reduceSessionLive(
       && now - previous.lastEventAt < SESSION_LIVE_HEARTBEAT_THROTTLE_MS) {
       return state
     }
-    const { currentTool: _tool, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: targetPhase,
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
+    return apply({ type: 'TEXT_DELTA', now })
   }
 
   if (type === 'tool_execution_start') {
-    const name = typeof event.toolName === 'string' && event.toolName.trim() ? event.toolName.trim() : 'Tool'
-    const id = typeof event.toolCallId === 'string' ? event.toolCallId : undefined
-    const summary = summarizeToolArgs(event.args)
-    return putSessionLive(state, sessionFile, {
-      ...base,
-      phase: 'tool',
-      currentTool: { id, name, ...(summary ? { summary } : {}), startedAt: now },
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
+    return apply({ type: 'TOOL_STARTED', now, tool: toolInfo(event.toolName, event.toolCallId, summarizeToolArgs(event.args)) })
   }
 
   if (type === 'tool_execution_update') {
@@ -337,7 +304,6 @@ export function reduceSessionLive(
       : base.currentTool?.name ?? 'Tool'
     const id = typeof event.toolCallId === 'string' ? event.toolCallId : base.currentTool?.id
     const summary = summarizeToolArgs(event.args) ?? base.currentTool?.summary
-    const startedAt = base.currentTool?.startedAt ?? now
     if (previous
       && previous.runtimeId === runtimeId
       && previous.phase === 'tool'
@@ -347,108 +313,40 @@ export function reduceSessionLive(
       && now - previous.lastEventAt < SESSION_LIVE_HEARTBEAT_THROTTLE_MS) {
       return state
     }
-    return putSessionLive(state, sessionFile, {
-      ...base,
-      phase: 'tool',
-      currentTool: { id, name, ...(summary ? { summary } : {}), startedAt },
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
+    return apply({ type: 'TOOL_UPDATED', now, tool: { id, name, ...(summary ? { summary } : {}) } })
   }
 
-  if (type === 'tool_execution_end') {
-    const { currentTool: _tool, pendingQuestion: _q, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'thinking',
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
-  }
+  if (type === 'tool_execution_end') return apply({ type: 'TOOL_ENDED', now })
 
-  if (type === 'compaction_start') {
-    const { currentTool: _tool, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'compacting',
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
-  }
+  if (type === 'compaction_start') return apply({ type: 'COMPACTION_STARTED', now })
 
   if (type === 'compaction_end') {
-    const willRetry = event.willRetry === true
-    const { currentTool: _tool, runStartedAt: prevStart, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: willRetry ? 'thinking' : 'idle',
-      ...(willRetry ? { runStartedAt: prevStart ?? now } : {}),
-      lastEventAt: now,
-    })
+    return apply({ type: 'COMPACTION_ENDED', now, willRetry: event.willRetry === true })
   }
 
-  if (type === 'auto_retry_start') {
-    const { currentTool: _tool, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'retrying',
-      runStartedAt: base.runStartedAt ?? now,
-      lastEventAt: now,
-    })
-  }
+  if (type === 'auto_retry_start') return apply({ type: 'RETRY_STARTED', now })
 
   if (type === 'auto_retry_end') {
-    if (event.success === true) {
-      return putSessionLive(state, sessionFile, {
-        ...base,
-        phase: 'thinking',
-        runStartedAt: base.runStartedAt ?? now,
-        lastEventAt: now,
-      })
-    }
+    if (event.success === true) return apply({ type: 'RETRY_SUCCEEDED', now })
     const finalError = typeof event.finalError === 'string' ? cleanLine(event.finalError, 240) : undefined
-    const { currentTool: _tool, runStartedAt: _start, pendingQuestion: _q, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'idle',
-      ...(finalError ?? rest.lastError ? { lastError: finalError ?? rest.lastError } : {}),
-      lastEventAt: now,
-    })
+    return apply({ type: 'RETRY_FAILED', now, error: finalError })
   }
 
   if (type === 'message_end') {
     const message = asRecord(event.message)
     if (message?.role === 'assistant' && message.stopReason === 'error') {
       const errorText = typeof message.errorMessage === 'string' ? cleanLine(message.errorMessage, 240) : undefined
-      return putSessionLive(state, sessionFile, {
-        ...base,
-        ...(errorText ? { lastError: errorText } : {}),
-        lastEventAt: now,
-      })
+      return apply({ type: 'MESSAGE_ERRORED', now, error: errorText })
     }
     return state
   }
 
   if (type === 'error' || type === 'extension_error' || type === 'transport_error') {
     const rawError = typeof event.error === 'string' ? event.error : typeof event.message === 'string' ? event.message : undefined
-    const errorText = rawError ? cleanLine(rawError, 240) : undefined
-    const { currentTool: _tool, runStartedAt: _start, pendingQuestion: _q, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'idle',
-      ...(errorText ?? rest.lastError ? { lastError: errorText ?? rest.lastError } : {}),
-      lastEventAt: now,
-    })
+    return apply({ type: 'RUN_FAILED', now, error: rawError ? cleanLine(rawError, 240) : undefined })
   }
 
-  if (type === 'agent_end') {
-    const { currentTool: _tool, runStartedAt: _start, pendingQuestion: _q, ...rest } = base
-    return putSessionLive(state, sessionFile, {
-      ...rest,
-      phase: 'idle',
-      lastEventAt: now,
-    })
-  }
+  if (type === 'agent_end') return apply({ type: 'RUN_ENDED', now })
 
   if (type === 'context_usage') {
     const contextUsage = contextUsageFromEvent(event)
@@ -483,9 +381,10 @@ export function reduceSessionLive(
       const title = parsed.questionnaire.total > 1
         ? `${firstTitle} · ${parsed.questionnaire.total} questions`
         : firstTitle
-      return putSessionLive(state, sessionFile, {
-        ...base,
-        pendingQuestion: {
+      return apply({
+        type: 'QUESTION_OPENED',
+        now,
+        question: {
           id: parsed.questionnaire.groupId,
           title,
           method: 'questionnaire',
@@ -493,14 +392,14 @@ export function reduceSessionLive(
           ...(deadline !== undefined ? { deadline } : {}),
           runtimeId,
         },
-        lastEventAt: now,
       })
     }
     const timeout = 'timeout' in parsed ? parsed.timeout : undefined
     const deadline = timeout !== undefined && timeout > 0 ? now + timeout : undefined
-    return putSessionLive(state, sessionFile, {
-      ...base,
-      pendingQuestion: {
+    return apply({
+      type: 'QUESTION_OPENED',
+      now,
+      question: {
         id: parsed.id,
         title: parsed.title,
         method: parsed.method,
@@ -508,7 +407,6 @@ export function reduceSessionLive(
         ...(deadline !== undefined ? { deadline } : {}),
         runtimeId,
       },
-      lastEventAt: now,
     })
   }
 
@@ -538,7 +436,7 @@ export function deriveAttention(
       kind: 'question',
       title: session.preview || 'Waiting for your input',
       method: 'wait',
-      runtimeId: live?.runtimeId ?? '',
+      ...(live ? { runtimeId: live.runtimeId } : {}),
     }
   }
   if (session.status === 'running' || (live !== undefined && live.phase !== 'idle')) {
@@ -601,7 +499,7 @@ export function buildActivitySections(
     const live = liveBySession[session.filePath]
     const clearedSig = clearedActivity[session.id]
     const attention = deriveAttention(session, live, clearedSig)
-    const isRunning = !attention && (session.status === 'running' || (live !== undefined && live.phase !== 'idle'))
+    const isRunning = isSessionRunning(session, live)
 
     if (!attention && !isRunning) {
       const signature = activityNotificationSignature(session)

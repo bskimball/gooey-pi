@@ -10,6 +10,7 @@ import { listGitWorktrees } from './git'
 import { HARNESSES } from './harness'
 import { mapLimit } from 'apex-core/lib/async'
 import { isPiProject, type FolderIdentity, type JsonStateStore, type PersistedProject, type StoredProject } from './store'
+import { markRootRemoval, releaseRootRemoval, type RootRemovals } from './projectRootRemovalMachine'
 import { isPathWithin, rejectUnknownKeys, requireBoolean, requireExistingDirectory, requireExistingPath, requireId, requireInteger, requireRecord, requireString } from 'apex-core/validation'
 
 const MAX_CONCURRENT_BRANCH_LOOKUPS = 4
@@ -144,7 +145,7 @@ export class ProjectService {
   private authorizedRoots = new Map<string, FolderIdentity>()
   private readOnlyRoots = new Map<string, FolderIdentity>()
   private quarantinedBroadRoots = new Set<string>()
-  private readonly removalRoots = new Set<string>()
+  private readonly rootRemovals: RootRemovals = new Map()
   private readonly pendingRemovalIds = new Set<string>()
   private authorizationRevision = 0
   private authorizationRefresh: { revision: number; promise: Promise<AuthorizationContext> } | undefined
@@ -576,9 +577,12 @@ export class ProjectService {
    */
   private async grantProjectFolder(path: string, identity: FolderIdentity, knownSessions?: readonly SessionRecord[]): Promise<ProjectRecord> {
     if (await this.isBroadRoot(path)) throw new TypeError('Broad filesystem roots cannot be added as projects')
-    this.removalRoots.delete(path)
+    this.assertNotRemoving(path)
     const now = new Date().toISOString()
+    const sessions = knownSessions ?? await this.sessionProvider()
+    const gitBranch = await this.branchProvider(path)
     const project = await this.store.update((state): PersistedProject => {
+      this.assertNotRemoving(path)
       state.dismissedProjectPaths = state.dismissedProjectPaths.filter((item) => resolve(item) !== path)
       const existing = this.ownProjects(state.projects).find((item) => resolve(item.path) === path || item.folders.some((folder) => resolve(folder) === path))
       if (existing) {
@@ -601,15 +605,18 @@ export class ProjectService {
       state.projects.push(created)
       return created
     })
+    this.assertNotRemoving(path)
+    if (!this.store.snapshot().projects.some((item) => item.id === project.id && item.folders.includes(path))) {
+      throw new TypeError('project was removed while granting access')
+    }
     this.authorizationRevision += 1
     this.authorizedRoots.set(path, identity)
-    const sessions = knownSessions ?? await this.sessionProvider()
-    return { ...project, sessionCount: sessions.filter((session) => resolve(session.projectPath) === path).length, gitBranch: await this.branchProvider(path) }
+    return { ...project, sessionCount: sessions.filter((session) => resolve(session.projectPath) === path).length, gitBranch }
   }
 
   private async persistWorktree(parentCwd: string, path: string, identity: FolderIdentity): Promise<ProjectRecord> {
     if (await this.isBroadRoot(path)) throw new TypeError('Broad filesystem roots cannot be added as projects')
-    this.removalRoots.delete(path)
+    this.assertNotRemoving(path)
     const now = new Date().toISOString()
     let parentId: string | undefined
     for (const item of this.ownProjects(this.store.snapshot().projects)) {
@@ -624,7 +631,10 @@ export class ProjectService {
       if (parentId) break
     }
     if (!parentId) throw new TypeError('worktree parent project is not an authorized grant')
+    const sessions = await this.sessionProvider()
+    const gitBranch = await this.branchProvider(path)
     const project = await this.store.update((state): PersistedProject => {
+      this.assertNotRemoving(path)
       state.dismissedProjectPaths = state.dismissedProjectPaths.filter((item) => resolve(item) !== path)
       const own = this.ownProjects(state.projects)
       const parent = own.find((item) => item.id === parentId)
@@ -643,20 +653,19 @@ export class ProjectService {
       parent.lastOpenedAt = now
       parent.folderIdentities = identities
       if (absorbed.length) {
-        const absorbedIds = new Set(absorbed.map((item) => item.id))
-        state.projects = state.projects.filter((item) => !absorbedIds.has(item.id))
+        const absorbedSet = new Set(absorbed.map((item) => item.id))
+        state.projects = state.projects.filter((item) => !absorbedSet.has(item.id))
       }
       return parent
     })
+    this.assertNotRemoving(path)
+    if (!this.store.snapshot().projects.some((item) => item.id === project.id && item.folders.includes(path))) {
+      throw new TypeError('project was removed while granting access')
+    }
     this.authorizationRevision += 1
     this.authorizedRoots.set(path, identity)
-    const sessions = await this.sessionProvider()
     const granted = new Set(project.folders.map((folder) => resolve(folder)))
-    return {
-      ...project,
-      sessionCount: sessions.filter((session) => granted.has(resolve(session.projectPath))).length,
-      gitBranch: await this.branchProvider(project.primaryFolder),
-    }
+    return { ...project, sessionCount: sessions.filter((session) => granted.has(resolve(session.projectPath))).length, gitBranch }
   }
 
   async add(): Promise<ProjectRecord | null> {
@@ -672,7 +681,6 @@ export class ProjectService {
   async grantInferred(pathValue: unknown): Promise<ProjectRecord> {
     const { path, identity } = await this.captureFolderIdentity(String(pathValue))
     if (await this.isBroadRoot(path)) throw new TypeError('Broad filesystem roots cannot be inferred as projects')
-    this.removalRoots.delete(path)
     const sessions = await this.sessionProvider()
     let discovered = false
     for (const session of sessions) {
@@ -685,9 +693,16 @@ export class ProjectService {
   }
 
   async remove(idValue: unknown): Promise<boolean> {
-    const authorizationRevision = ++this.authorizationRevision
+    this.authorizationRevision += 1
     const id = requireId(idValue, 'project id')
+    const removalId = randomUUID()
     const roots: string[] = []
+    const marked: string[] = []
+    const mark = (root: string): void => {
+      if (marked.includes(root)) return
+      marked.push(root)
+      markRootRemoval(this.rootRemovals, root, removalId)
+    }
     try {
       this.pendingRemovalIds.add(id)
 
@@ -697,14 +712,14 @@ export class ProjectService {
         for (const folder of persisted.folders) {
           const configured = resolve(folder)
           persistedPaths.push(configured)
-          this.removalRoots.add(configured)
+          mark(configured)
           this.authorizedRoots.delete(configured)
           this.readOnlyRoots.delete(configured)
           try {
             const canonical = await requireExistingDirectory(configured, 'project folder')
             if (canonical !== configured) {
               persistedPaths.push(canonical)
-              this.removalRoots.add(canonical)
+              mark(canonical)
               this.authorizedRoots.delete(canonical)
               this.readOnlyRoots.delete(canonical)
             }
@@ -718,7 +733,7 @@ export class ProjectService {
         for (const root of [...this.readOnlyRoots.keys(), ...this.authorizedRoots.keys()]) {
           if (inferredId(root) === id) {
             inferredPath = root
-            this.removalRoots.add(root)
+            mark(root)
             this.readOnlyRoots.delete(root)
             this.authorizedRoots.delete(root)
             break
@@ -732,7 +747,7 @@ export class ProjectService {
               const path = await requireExistingDirectory(pathValue, 'session project path')
               if (inferredId(path) === id && !(await this.isBroadRoot(path))) {
                 inferredPath = path
-                this.removalRoots.add(path)
+                mark(path)
                 this.readOnlyRoots.delete(path)
                 this.authorizedRoots.delete(path)
                 break
@@ -744,14 +759,27 @@ export class ProjectService {
 
       roots.push(...(persisted ? persistedPaths : inferredPath ? [inferredPath] : []))
       if (roots.length) {
-        for (const root of roots) this.removalRoots.add(root)
         await this.stopProjectProcesses([...new Set(roots)])
       }
       return await this.store.update((state) => {
         const index = state.projects.findIndex((project) => project.id === id && project.harness === this.harness)
-        const paths = index >= 0 ? persistedPaths : inferredPath ? [inferredPath] : []
+        const paths = [...new Set([...persistedPaths, ...marked, ...(inferredPath ? [inferredPath] : [])])]
         if (!paths.length) return false
         if (index >= 0) state.projects.splice(index, 1)
+        const removed = new Set(paths)
+        state.projects = state.projects.filter((project) => {
+          if (project.harness !== this.harness) return true
+          project.folders = project.folders.filter((folder) => !removed.has(resolve(folder)))
+          if (!project.folders.length) return false
+          if (removed.has(resolve(project.primaryFolder))) project.primaryFolder = project.folders[0]
+          if (removed.has(resolve(project.path))) project.path = project.primaryFolder
+          if (project.folderIdentities) {
+            for (const folder of Object.keys(project.folderIdentities)) {
+              if (removed.has(resolve(folder))) delete project.folderIdentities[folder]
+            }
+          }
+          return true
+        })
         const dismissed = new Set(state.dismissedProjectPaths.map((path) => resolve(path)))
         for (const path of paths) dismissed.add(path)
         state.dismissedProjectPaths = [...dismissed]
@@ -759,18 +787,22 @@ export class ProjectService {
       })
     } finally {
       try {
-        if (authorizationRevision === this.authorizationRevision) await this.rebuildAuthorizedRoots(authorizationRevision)
+        // Fail closed: a rebuild superseded by a concurrent grant must not leave removed roots authorized.
+        for (const root of marked) {
+          this.authorizedRoots.delete(root)
+          this.readOnlyRoots.delete(root)
+        }
+        await this.refreshAuthorization(true)
       } finally {
-        for (const root of roots) this.removalRoots.delete(root)
+        for (const root of marked) releaseRootRemoval(this.rootRemovals, root, removalId)
         this.pendingRemovalIds.delete(id)
       }
     }
   }
 
-  /** Rebuilds authorization into fresh maps and swaps them in one step. */
-  private async rebuildAuthorizedRoots(authorizationRevision: number): Promise<void> {
-    if (authorizationRevision !== this.authorizationRevision) return
-    await this.refreshAuthorization(true)
+  /** Grants cannot re-authorize a root while a removal owns its mark. */
+  private assertNotRemoving(path: string): void {
+    if (this.rootRemovals.has(path)) throw new TypeError('project is being removed; add it again after the removal finishes')
   }
 
   async touch(idValue: unknown): Promise<boolean> {
@@ -891,7 +923,7 @@ export class ProjectService {
 
   private async authorizedRootFor(path: string, options: { readOnly?: boolean } = {}): Promise<string> {
     const isReadOnly = options.readOnly === true
-    const isPendingRemoval = this.pendingRemovalIds.has(inferredId(path)) || [...this.removalRoots].some((root) => isPathWithin(root, path))
+    const isPendingRemoval = this.pendingRemovalIds.has(inferredId(path)) || [...this.rootRemovals.keys()].some((root) => isPathWithin(root, path))
     let refreshedAuthorization = false
     if (!isPendingRemoval && !this.authorizedRoots.size && (!isReadOnly || !this.readOnlyRoots.size)) {
       await this.refreshAuthorization()
@@ -905,7 +937,7 @@ export class ProjectService {
     const checkRoots = async (map: Map<string, FolderIdentity>, isReadOnlyMap: boolean): Promise<string | undefined> => {
       const roots: string[] = []
       for (const [configured, expected] of map) {
-        if (this.removalRoots.has(configured) || this.pendingRemovalIds.has(inferredId(configured))) continue
+        if (this.rootRemovals.has(configured) || this.pendingRemovalIds.has(inferredId(configured))) continue
         if (isReadOnlyMap && dismissed.has(configured) && !ownPersistedFolders.has(configured)) {
           map.delete(configured)
           continue
@@ -929,7 +961,7 @@ export class ProjectService {
           // Read-only roots are re-captured by the next discovery pass; refreshing in place would only hide drift.
           if (!isReadOnlyMap) map.set(configured, verified.identity)
         }
-        if (this.removalRoots.has(verified.path) || this.pendingRemovalIds.has(inferredId(verified.path))) continue
+        if (this.rootRemovals.has(verified.path) || this.pendingRemovalIds.has(inferredId(verified.path))) continue
         roots.push(verified.path)
       }
       return roots.filter((root) => isPathWithin(root, path)).sort((a, b) => b.length - a.length)[0]
@@ -957,7 +989,7 @@ export class ProjectService {
 
     if (!authorizedRoot) {
       const productName = HARNESSES[this.harness].productName
-      if ([...this.removalRoots].some((root) => isPathWithin(root, path)) || this.pendingRemovalIds.has(inferredId(path))) {
+      if ([...this.rootRemovals.keys()].some((root) => isPathWithin(root, path)) || this.pendingRemovalIds.has(inferredId(path))) {
         throw new TypeError(`path is not inside an added ${productName} project because its project is being removed`)
       }
       if ([...this.quarantinedBroadRoots].some((root) => isPathWithin(root, path))) {

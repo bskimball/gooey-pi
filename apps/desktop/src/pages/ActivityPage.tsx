@@ -5,7 +5,7 @@ import { ActivityQuestionCard } from '@/components/activity/ActivityQuestionCard
 import { ActivityReplyBox } from '@/components/activity/ActivityReplyBox'
 import { ActivityRow, type ActivitySectionKind } from '@/components/activity/ActivityRow'
 import { buildActivitySections, type ActivityRowItem, type SessionLiveMap } from '@/app/session-live'
-import { activityNotificationSignature, signatureCleared } from '@/app/session-attention'
+import { activityNotificationSignature, isSessionRunning, signatureCleared } from '@/app/session-attention'
 import { EmptyState } from '@/components/ui'
 import type { ActivityControls } from '@/hooks/useActivityControls'
 import type { ProjectRecord, SessionRecord } from '@/types/api'
@@ -97,7 +97,7 @@ export function ActivityPage({
   const clearable = useMemo(() => sessions.filter((session) => {
     if (session.archived) return false
     const live = liveBySession[session.filePath]
-    if (live && live.phase !== 'idle' && !live.pendingQuestion) return false
+    if (isSessionRunning(session, live)) return false
     const signature = activityNotificationSignature(session)
     return Boolean(signature && !signatureCleared(signature, clearedActivity[session.id], session.unread))
   }), [clearedActivity, liveBySession, sessions])
@@ -235,7 +235,7 @@ export function ActivityPage({
       if (event.key === 'e') {
         if (!selectedEntry) return
         const { session, attention } = selectedEntry.item
-        const isRunning = selectedEntry.section === 'running'
+        const isRunning = isSessionRunning(session, selectedEntry.item.live)
         const isQuestion = attention?.kind === 'question'
         if (!isRunning && !isQuestion && activityNotificationSignature(session)) {
           event.preventDefault()
@@ -378,11 +378,7 @@ export function ActivityPage({
                 <ActivityReplyBox
                   session={selectedEntry.item.session}
                   runtimeId={selectedEntry.item.live?.runtimeId}
-                  isRunning={Boolean(
-                    selectedEntry.section === 'running'
-                    || (selectedEntry.item.live && selectedEntry.item.live.phase !== 'idle' && !selectedEntry.item.live.pendingQuestion)
-                    || (!selectedEntry.item.attention && selectedEntry.item.session.status === 'running'),
-                  )}
+                  isRunning={isSessionRunning(selectedEntry.item.session, selectedEntry.item.live)}
                   canFollowUp={Boolean(controls?.canFollowUpSession?.(selectedEntry.item.session))}
                   textareaRef={replyTextareaRef}
                   onSend={controls?.onSendReply}

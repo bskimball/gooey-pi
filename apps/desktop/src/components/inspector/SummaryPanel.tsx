@@ -6,7 +6,7 @@ import { formatRelative } from '@/lib/data'
 import { RunConfigSection } from "./RunConfigSection"
 import type { Check as ReadinessCheck, Readiness, Review } from './readiness'
 import type { SessionSummary } from './session-summary'
-import { specialistStatusLabel } from '@/lib/specialist-status'
+import { isLiveSpecialist, specialistMarkState, specialistStatusLabel } from '@/lib/specialist-status'
 
 export { extractPiSessionWidgets, summarizeTranscript } from './session-summary'
 export type { PiSpecialistSummary, PiTodoItemSummary, TranscriptSummary } from './session-summary'
@@ -27,8 +27,7 @@ function reviewState({ verdict, changesSince }: Review): string {
 }
 
 const checkMark = (outcome: ReadinessCheck['outcome']): StatusMarkState => outcome === 'passed' ? 'done' : outcome === 'failed' ? 'failed' : outcome === 'running' ? 'running' : 'stale'
-const todoMark = (status: string): StatusMarkState => status === 'completed' ? 'done' : status === 'in_progress' ? 'running' : 'pending'
-const specialistMark = (status: string): StatusMarkState => status === 'running' ? 'running' : status === 'done' ? 'done' : status === 'error' ? 'failed' : 'pending'
+const todoMark = (status: string): StatusMarkState => status === 'completed' ? 'done' : status === 'in_progress' ? 'running' : status === 'blocked' || status === 'cancelled' ? 'stale' : 'pending'
 
 function deliveryLine(git: GitStatus): string {
   if (!git.isRepo) return 'Git repository not detected'
@@ -61,15 +60,16 @@ interface SummaryPanelProps {
 export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, runtime, behaviorMode, cwd, sessionKey, git, automations, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
   const { toolCount, todos } = summary
   const specialists = summary.specialists.slice(-8)
+  const liveSpecialists = summary.specialists.filter((s) => isLiveSpecialist(s.status)).length
   return (
     <div className="summary-panel">
       <RunConfigSection runtime={runtime} behaviorMode={behaviorMode} cwd={cwd} sessionKey={sessionKey} />
       {todos.length > 0 ? (
         <section className="summary-section">
-          <h3>Plan ({todos.filter((t) => t.status === 'completed').length}/{todos.length})</h3>
+          <h3>Plan ({todos.filter((t) => t.status === 'completed').length}/{todos.filter((t) => t.status !== 'cancelled').length})</h3>
           <div className="progress-list">
             {todos.map((todo) => (
-              <div key={todo.id} className={todo.status === 'in_progress' ? 'is-current' : ''}>
+              <div key={todo.id} className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'blocked' || todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
                 <StatusMark state={todoMark(todo.status)} size={14} />
                 <span>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
               </div>
@@ -79,11 +79,11 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
       ) : null}
       {specialists.length > 0 ? (
         <section className="summary-section">
-          <h3>Agents ({specialists.filter((s) => s.status === 'running').length} reported running)</h3>
+          <h3>Agents ({liveSpecialists} reported running)</h3>
           <div className="summary-agent-list">
             {specialists.map((specialist) => (
               <button type="button" key={specialist.id} className={`is-${specialist.status}`} title={specialistStatusLabel[specialist.status]} onClick={() => onOpenSpecialist(specialist.id)}>
-                <StatusMark state={specialistMark(specialist.status)} size={14} />
+                <StatusMark state={specialistMarkState(specialist.status)} size={14} />
                 <strong>{specialist.agent}</strong>
                 <span>{specialist.activity || specialist.mission}</span>
                 <CaretRight size={11} aria-hidden="true" />

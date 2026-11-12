@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { useMachine } from '@xstate/react'
 import { extensionUiMachine } from './extensionUiMachine'
+import type { AgentTurnHandle } from '@/app/agentTurnMachine'
+import { applySessionStatusEvent } from '@/app/session-attention'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { ASK_USER_TIMEOUT_MS, blockingExtensionUiRequestId, parseExtensionUiRequest, type ExtensionUiRequest } from '@/lib/extension-ui'
 import { PI_FUSION_PAIR_STATUS_KEY, PI_HYDRA_STATUS_KEY, type ActivePiHydraTier, type PiBehaviorMode, type PiFusionPair, parsePiFusionPairStatus, parsePiHydraStatus, piModeFromStatusText, piModeWithHydra, piSessionMode, publishActivePiBehaviorMode, publishActivePiFusionPair, publishActivePiHydraTier, readDefaultPiBehaviorMode, readDefaultPiHydraTier, savePiBehaviorMode, savePiHydraTier } from '@/lib/harness'
@@ -13,6 +15,7 @@ interface UseExtensionUiOptions {
   runtimeSessionsRef: React.RefObject<Map<string, string>>
   setSessions: React.Dispatch<React.SetStateAction<SessionRecord[]>>
   setRuntime: React.Dispatch<React.SetStateAction<RuntimeInfo | null>>
+  agentTurn: AgentTurnHandle
   reportError(error: unknown): void
 }
 
@@ -46,6 +49,7 @@ export function useExtensionUi({
   runtimeSessionsRef,
   setSessions,
   setRuntime,
+  agentTurn,
   reportError,
 }: UseExtensionUiOptions) {
   const cancelPending = useCallback((pending: PendingExtensionUi) => {
@@ -117,35 +121,35 @@ export function useExtensionUi({
       if (!bridge) return
       if (pending.request.method !== 'questionnaire') {
         if (pendingSession) {
-          setSessions((items) => items.map((session) => session.filePath === pendingSession && session.status === 'waiting'
-            ? { ...session, status: 'running', unread: false }
+          setSessions((items) => items.map((session) => session.filePath === pendingSession
+            ? applySessionStatusEvent(session, { type: 'QUESTION_RESOLVED' })
             : session))
         }
         cancelPending(pending)
         return
       }
       try {
+        if (activeRuntimeIdRef.current === pending.runtimeId) agentTurn.send({ type: 'STOP' })
         await bridge.agent.stop(pending.runtimeId)
+        if (activeRuntimeIdRef.current === pending.runtimeId) agentTurn.send({ type: 'STOP_SETTLED' })
         setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
       } catch (error) {
         // If stopping the runtime fails, still resolve the extension request so
         // it cannot remain blocked behind a dialog that is no longer visible.
         cancelPending(pending)
+        if (activeRuntimeIdRef.current === pending.runtimeId) agentTurn.send({ type: 'STOP_SETTLED' })
         setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
         if (shouldReportError) reportError(error)
       }
       return
     }
     if (pending.request.method === 'questionnaire') {
+      if (activeRuntimeIdRef.current === pending.runtimeId) agentTurn.send({ type: 'RUNTIME_STREAMING' })
       setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: true } : current)
-      if (pendingSession) {
-        setSessions((items) => items.map((session) => session.filePath === pendingSession
-          ? { ...session, status: 'running', unread: false }
-          : session))
-      }
-    } else if (pendingSession) {
-      setSessions((items) => items.map((session) => session.filePath === pendingSession && session.status === 'waiting'
-        ? { ...session, status: 'running', unread: false }
+    }
+    if (pendingSession) {
+      setSessions((items) => items.map((session) => session.filePath === pendingSession
+        ? applySessionStatusEvent(session, { type: 'QUESTION_RESOLVED' })
         : session))
     }
     if (!bridge) return
@@ -176,10 +180,11 @@ export function useExtensionUi({
         ...response,
       })
     } catch (error) {
+      if (activeRuntimeIdRef.current === pending.runtimeId) agentTurn.send({ type: 'RUNTIME_IDLE' })
       setRuntime((current) => current?.runtimeId === pending.runtimeId ? { ...current, isStreaming: false } : current)
       if (shouldReportError) reportError(error)
     }
-  }, [actor, bridge, cancelPending, reportError, runtimeSessionsRef, send, setRuntime, setSessions])
+  }, [actor, agentTurn, bridge, cancelPending, reportError, runtimeSessionsRef, send, setRuntime, setSessions])
 
   const respondForRuntime = useCallback(
     (runtimeId: string, response: ExtensionUiResponse) => respondToExtensionUi(response, runtimeId),

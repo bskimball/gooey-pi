@@ -648,8 +648,8 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every((window) => !window.isVisible()))).toBe(true)
     await expect(page.locator('.sidebar__brand')).toHaveAttribute('aria-label', 'Pi Work')
     await expect(page.locator('.sidebar__brand .pi-mark')).toBeVisible()
-    await expect(page.locator('.sidebar__footer .sidebar-update')).toHaveCount(0)
-    await expect(page.locator('.sidebar__footer button[title="Settings"]')).toBeVisible()
+    await expect(page.locator('.sidebar-update')).toHaveCount(0)
+    await expect(page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ })).toBeVisible()
     await page.locator('.session-row-wrap', { hasText: 'Hermetic desktop fixture' }).click()
     await expect.poll(async () => (await page.evaluate(() => window.prime.agent.list()))
       .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
@@ -657,23 +657,24 @@ test.describe('Prime Work desktop smoke', () => {
     await page.screenshot({ path: test.info().outputPath('sidebar-ready.png') })
   })
 
-  test('left aligns the sidebar toggle with the toolbar for Linux and Windows chrome', async () => {
+  test('keeps the docked sidebar toggle on the toolbar for Linux and Windows chrome', async () => {
     const shell = page.locator('.app-shell')
     const sidebar = page.locator('.sidebar')
     const clearance = page.locator('.sidebar__titlebar .traffic-light-clearance')
-    const trigger = page.locator('.sidebar__toggle')
+    const trigger = page.locator('.title-toolbar').getByRole('button', { name: /Hide sidebar/ })
     for (const platform of ['linux', 'win32']) {
       await shell.evaluate((node, value) => { node.setAttribute('data-platform', value) }, platform)
       await expect(clearance).toHaveCSS('display', 'none')
-      const offset = await trigger.evaluate((node) => node.getBoundingClientRect().left - node.closest('.sidebar')!.getBoundingClientRect().left)
-      // Matches .title-toolbar's 14px left padding, where Show sidebar sits.
+      const offset = await trigger.evaluate((node) => node.getBoundingClientRect().left - node.closest('.title-toolbar')!.getBoundingClientRect().left)
+      // The toolbar's 14px left padding, where Show sidebar also sits.
       expect(offset).toBeCloseTo(14, 1)
     }
     await expect(sidebar).toBeVisible()
+    await expect(sidebar.locator('.sidebar__toggle')).toHaveCount(0)
   })
 
   test('opens General settings when the main process requests Settings', async () => {
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Appearance', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible()
 
@@ -686,7 +687,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('uses the branch checkout picker after changing the global checkout style', async () => {
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('combobox', { name: 'Git checkout style' }).selectOption('branch')
     await page.getByRole('button', { name: 'Back to session' }).click()
 
@@ -698,7 +699,7 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('returns from settings with its back button, New session, Escape, and Ctrl+W', async () => {
     const openSettings = async () => {
-      await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+      await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
       await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
     }
 
@@ -774,7 +775,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.voice-orb')).toHaveCount(0)
     await page.getByRole('complementary', { name: 'Realtime voice session' }).getByRole('button', { name: 'Close realtime voice' }).click()
 
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Pets', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Pets', exact: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: /^Orb Built/ })).toBeChecked()
@@ -845,7 +846,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('persists a desktop-only Pi provider toggle and removes its models from the picker', async () => {
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     const voiceModelsBefore = await page.evaluate(async () => JSON.parse((await window.prime.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModelsBefore.models.map((model) => model.name).sort()).toEqual(['Claude Fixture', 'GPT Fixture'])
@@ -865,7 +866,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('persists a Pi model toggle and removes only that model from every picker', async () => {
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await page.getByRole('tab', { name: /Models/ }).click()
 
@@ -898,7 +899,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(modelPicker.getByRole('option', { name: /GPT Fixture/ })).toHaveCount(0)
     await expect(modelPicker.getByRole('option', { name: /Claude Fixture/ })).toHaveCount(1)
 
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await page.getByRole('tab', { name: /Models/ }).click()
     const hiddenToggle = page.getByRole('checkbox', { name: 'Show GPT Fixture model' })
@@ -912,7 +913,7 @@ test.describe('Prime Work desktop smoke', () => {
 
 
   test('refreshes harness discovery through the live settings and preload path', async () => {
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Harness', exact: true }).click()
 
     const refresh = page.getByRole('button', { name: 'Refresh harnesses' })
@@ -1556,7 +1557,7 @@ test.describe('Prime Work desktop smoke', () => {
         await addDialog.getByRole('button', { name: 'Close' }).click()
       }
     }
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
+    await page.locator('.title-toolbar').getByRole('button', { name: /^Settings/ }).click()
     await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await expect(page.getByLabel('Search providers')).toBeVisible()

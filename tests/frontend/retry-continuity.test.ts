@@ -37,14 +37,14 @@ describe('provider auto-retry session lifecycle', () => {
   })
 
   it('marks the session failed only when retries are exhausted', () => {
-    expect(sessionLifecycleChange({ type: 'auto_retry_end', success: false, attempt: 3 })).toMatchObject({ status: 'failed' })
+    expect(sessionLifecycleChange({ type: 'auto_retry_end', success: false, attempt: 3 })).toEqual({ type: 'TURN_FAILED' })
     expect(sessionLifecycleChange({ type: 'auto_retry_end', success: true, attempt: 1 })).toBeUndefined()
   })
 
   it('ignores non-blocking extension_ui_request status/widget notifications while keeping dialogs waiting', () => {
     expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'setStatus', statusKey: 'mode', statusText: 'Apex' })).toBeUndefined()
     expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'notify', message: 'Saved' })).toBeUndefined()
-    expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'select', id: 'q1', title: 'Choose', options: ['a'] })).toMatchObject({ status: 'waiting', markUnread: true })
+    expect(sessionLifecycleChange({ type: 'extension_ui_request', method: 'select', id: 'q1', title: 'Choose', options: ['a'] })).toEqual({ type: 'ATTENTION_REQUIRED' })
   })
 })
 

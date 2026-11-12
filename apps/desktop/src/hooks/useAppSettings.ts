@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS } from '@/lib/data'
-import {
-  confirmedPanelSettings,
-  PANEL_SETTING_KEYS,
-  type PanelSettingKey,
-} from '@/lib/settings-state'
+import { PANEL_SETTING_KEYS, type PanelSettingKey } from '@/lib/settings-state'
 import type { AppSettings, InspectorTab, PrimeWorkApi } from '@/types/api'
 
 interface UseAppSettingsOptions {
@@ -15,68 +11,61 @@ interface UseAppSettingsOptions {
 export function useAppSettings({ bridge, reportError }: UseAppSettingsOptions) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [initialized, setInitialized] = useState(!bridge)
-  const [sidebarOpen, setSidebarOpenState] = useState(true)
-  const [inspectorOpen, setInspectorOpenState] = useState(false)
-  const [terminalOpen, setTerminalOpenState] = useState(false)
+  // A panel is either showing its persisted setting or a local-only value (e.g. a compact-layout close)
+  // that no save overwrites until that panel itself is persisted or settings are reconciled externally.
+  const [panelOverrides, setPanelOverrides] = useState<Partial<Record<PanelSettingKey, boolean>>>({})
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('summary')
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const confirmedSettingsRef = useRef(settings)
   const settingsMutationRef = useRef(0)
   const settingsQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const transientPanelKeysRef = useRef<Set<PanelSettingKey>>(new Set())
   const inspectorTabTouchedRef = useRef(false)
 
-  const setSidebarOpen = useCallback((value: boolean) => {
-    transientPanelKeysRef.current.add('sidebarOpen')
-    setSidebarOpenState(value)
+  const overridePanel = useCallback((key: PanelSettingKey, value: boolean) => {
+    setPanelOverrides((current) => current[key] === value ? current : { ...current, [key]: value })
   }, [])
-  const setInspectorOpen = useCallback((value: boolean) => {
-    transientPanelKeysRef.current.add('inspectorOpen')
-    setInspectorOpenState(value)
-  }, [])
-  const setTerminalOpen = useCallback((value: boolean) => {
-    transientPanelKeysRef.current.add('terminalOpen')
-    setTerminalOpenState(value)
+  const setSidebarOpen = useCallback((value: boolean) => overridePanel('sidebarOpen', value), [overridePanel])
+  const setInspectorOpen = useCallback((value: boolean) => overridePanel('inspectorOpen', value), [overridePanel])
+  const setTerminalOpen = useCallback((value: boolean) => overridePanel('terminalOpen', value), [overridePanel])
+
+  /** Persisting a panel (or reconciling everything) returns it to its persisted value. */
+  const dropOverrides = useCallback((keys: readonly PanelSettingKey[]) => {
+    setPanelOverrides((current) => {
+      if (!keys.some((key) => key in current)) return current
+      const next = { ...current }
+      for (const key of keys) delete next[key]
+      return next
+    })
   }, [])
 
-  const applySettings = useCallback((next: AppSettings, panelPatch: Partial<AppSettings>) => {
+  const applySettings = useCallback((next: AppSettings) => {
     settingsRef.current = next
     setSettings(next)
-    if ('sidebarOpen' in panelPatch) setSidebarOpenState(next.sidebarOpen)
-    if ('inspectorOpen' in panelPatch) setInspectorOpenState(next.inspectorOpen)
-    if ('terminalOpen' in panelPatch) setTerminalOpenState(next.terminalOpen)
-  }, [])
-
-  const takeConfirmedPanelPatch = useCallback((next: AppSettings) => {
-    const keys = PANEL_SETTING_KEYS.filter((key) => !transientPanelKeysRef.current.has(key))
-    transientPanelKeysRef.current.clear()
-    return confirmedPanelSettings(next, keys)
   }, [])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
     const mutation = ++settingsMutationRef.current
     const previous = settingsRef.current
-    for (const key of PANEL_SETTING_KEYS) if (key in patch) transientPanelKeysRef.current.delete(key)
-    applySettings({ ...previous, ...patch }, patch)
+    dropOverrides(PANEL_SETTING_KEYS.filter((key) => key in patch))
+    applySettings({ ...previous, ...patch })
     if (!bridge) {
       confirmedSettingsRef.current = settingsRef.current
-      transientPanelKeysRef.current.clear()
       return
     }
     const operation = settingsQueueRef.current.catch(() => undefined).then(async () => {
       const saved = await bridge.settings.update(patch)
       confirmedSettingsRef.current = saved
-      if (settingsMutationRef.current === mutation) applySettings(saved, takeConfirmedPanelPatch(saved))
+      if (settingsMutationRef.current === mutation) applySettings(saved)
     })
     settingsQueueRef.current = operation.catch(() => undefined)
     try {
       await operation
     } catch (error) {
-      if (settingsMutationRef.current === mutation) applySettings(confirmedSettingsRef.current, takeConfirmedPanelPatch(confirmedSettingsRef.current))
+      if (settingsMutationRef.current === mutation) applySettings(confirmedSettingsRef.current)
       reportError(error)
     }
-  }, [applySettings, bridge, reportError, takeConfirmedPanelPatch])
+  }, [applySettings, bridge, dropOverrides, reportError])
 
   const reconcileExternalSettings = useCallback(async <T extends { settings: AppSettings }>(
     operation: () => Promise<T | null>,
@@ -91,11 +80,11 @@ export function useAppSettings({ bridge, reportError }: UseAppSettingsOptions) {
     // A new optimistic mutation started while the external operation ran.
     // Keep it visible; its queued result will become the next authority.
     if (settingsMutationRef.current === revision) {
-      transientPanelKeysRef.current.clear()
-      applySettings(result.settings, result.settings)
+      dropOverrides(PANEL_SETTING_KEYS)
+      applySettings(result.settings)
     }
     return result
-  }, [applySettings])
+  }, [applySettings, dropOverrides])
 
   useEffect(() => {
     if (!bridge) {
@@ -108,13 +97,14 @@ export function useAppSettings({ bridge, reportError }: UseAppSettingsOptions) {
     void bridge.settings.get().then((value) => {
       if (cancelled || settingsMutationRef.current !== startupRevision) return
       confirmedSettingsRef.current = value
-      applySettings(value, value)
+      dropOverrides(PANEL_SETTING_KEYS)
+      applySettings(value)
       if (!inspectorTabTouchedRef.current) setInspectorTab(value.defaultInspectorTab)
     }).catch((error) => { if (!cancelled) reportError(error) }).finally(() => {
       if (!cancelled) setInitialized(true)
     })
     return () => { cancelled = true }
-  }, [applySettings, bridge, reportError])
+  }, [applySettings, bridge, dropOverrides, reportError])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -135,6 +125,10 @@ export function useAppSettings({ bridge, reportError }: UseAppSettingsOptions) {
     inspectorTabTouchedRef.current = true
     setInspectorTab(tab)
   }, [])
+
+  const sidebarOpen = panelOverrides.sidebarOpen ?? settings.sidebarOpen
+  const inspectorOpen = panelOverrides.inspectorOpen ?? settings.inspectorOpen
+  const terminalOpen = panelOverrides.terminalOpen ?? settings.terminalOpen
 
   return {
     settings,

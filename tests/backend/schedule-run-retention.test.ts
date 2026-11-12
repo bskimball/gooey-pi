@@ -211,4 +211,37 @@ describe('scheduled run history retention', () => {
     releaseRun()
     await service.stop()
   })
+
+  it('settles queued runs dropped by stop() instead of leaving them queued in the store', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gooeypi-run-retention-stop-'))
+    dirs.push(dir)
+    const store = new JsonStateStore(join(dir, 'state.json'))
+    const releases: Array<() => void> = []
+    const execute = vi.fn(() => new Promise<Record<string, never>>((resolve) => { releases.push(() => resolve({})) }))
+    const service = new AutomationService(store, {
+      validateTarget: async () => undefined,
+      validateExecution: async () => undefined,
+      run: execute,
+      now: () => new Date('2035-01-01T00:00:00.000Z'),
+    })
+    await service.start()
+    const task = await service.create({
+      prompt: 'Stop with a queued run',
+      target: { kind: 'project', projectId: 'project-one' },
+      timing: { kind: 'once', at: '2040-01-01T00:00:00.000Z' },
+      execution,
+    })
+    await service.runNow(task.id)
+    await service.runNow(task.id)
+    const queued = await service.runNow(task.id)
+    await eventually(() => expect(execute).toHaveBeenCalledTimes(2))
+
+    const stopped = service.stop()
+    releases.forEach((release) => release())
+    await stopped
+
+    const runs = allRuns(store)
+    expect(runs.find(({ id }) => id === queued.id)).toMatchObject({ status: 'interrupted', error: 'Apex quit before this run could start.' })
+    expect(runs.filter(({ status }) => status === 'queued')).toHaveLength(0)
+  })
 })

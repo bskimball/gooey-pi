@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createAgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import type { PrimeWorkApi, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
@@ -51,14 +52,17 @@ function stopRuntimeFixture(command: ReturnType<typeof deferred<unknown>>) {
       currentMessages = typeof update === 'function' ? update(currentMessages) : update
     },
   }
+  const agentTurn = createAgentTurnHandle()
   const actions = createWorkspaceActions(() => ({
     bridge: { agent: { command: agentCommand } } as unknown as PrimeWorkApi,
     workspace,
     reportError,
+    agentTurn,
   } as unknown as WorkspaceActionsDeps))
 
   return {
     actions,
+    agentTurn,
     agentCommand,
     reportError,
     runtime: () => currentRuntime,
@@ -170,12 +174,15 @@ describe('workspace runtime abort ownership', () => {
     const replacement = runtime('runtime-b')
     const replacementMessages = [transcript('message-b')]
     fixture.replaceWorkspace(replacement, replacementMessages, 2)
+    fixture.agentTurn.send({ type: 'RUNTIME_CHANGED' })
+    fixture.agentTurn.send({ type: 'ADMITTED' })
     const failure = new Error('abort failed')
     command.reject(failure)
     await stopping
 
     expect(fixture.reportError).toHaveBeenCalledOnce()
     expect(fixture.reportError).toHaveBeenCalledWith(failure)
+    expect(fixture.agentTurn.current().matches({ turn: 'optimistic' })).toBe(true)
     expect(fixture.runtime()).toBe(replacement)
     expect(fixture.messages()).toBe(replacementMessages)
     expect(fixture.runtime()).toMatchObject({ runtimeId: 'runtime-b', isStreaming: true })
@@ -279,7 +286,7 @@ describe('idle prompt streaming behavior', () => {
       workspace,
       settingsState: { settings: { activeHarness: 'pi' } },
       provider: { model: 'auto', effort: 'medium', fast: false },
-      submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
+      agentTurn: createAgentTurnHandle(),
       initialized: true,
       layout: {},
       pluginSkills: {},
@@ -323,7 +330,11 @@ describe('idle prompt streaming behavior', () => {
       runtimeIdRef: { current: null as string | null },
       runtimeOwnerRef: { current: null as { runtimeId: string; generation: number } | null },
       prepareForPrompt: () => true,
-      attachRuntime: (next: RuntimeInfo | undefined) => { currentRuntime = next ?? null },
+      attachRuntime: (next: RuntimeInfo | undefined) => {
+        currentRuntime = next ?? null
+        workspace.runtimeIdRef.current = next?.runtimeId ?? null
+        workspace.runtimeOwnerRef.current = next ? { runtimeId: next.runtimeId, generation: 1 } : null
+      },
       setRuntime: (next: RuntimeInfo | ((current: RuntimeInfo | null) => RuntimeInfo | null)) => {
         currentRuntime = typeof next === 'function' ? next(currentRuntime) : next
       },
@@ -350,7 +361,7 @@ describe('idle prompt streaming behavior', () => {
       workspace,
       settingsState: { settings: { activeHarness: 'pi' } },
       provider: { model: 'auto', effort: 'medium', fast: false },
-      submissionAdmissionRef: { current: { active: false, run: async (task: () => Promise<void>) => { await task(); return true } } },
+      agentTurn: createAgentTurnHandle(),
       initialized: true,
       layout: {},
       pluginSkills: {},
@@ -371,6 +382,7 @@ describe('idle prompt streaming behavior', () => {
 
     await expect(actions.sendPrompt('flush this', [], 'queue', 'queued-flush')).rejects.toThrow('admission failed')
     expect(flushFailed).toBe(true)
+    expect(currentRuntime).toMatchObject({ runtimeId: 'flush-runtime', isStreaming: false })
     expect(messages.filter((message) => message.role === 'user')).toHaveLength(0)
     expect(messages.filter((message) => message.role === 'system')).toHaveLength(1)
 

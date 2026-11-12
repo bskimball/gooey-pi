@@ -437,6 +437,7 @@ describe('sidebar project context menu', () => {
       root.render(
         <Sidebar
           platform="linux"
+          overlay
           projects={[project]}
           sessions={[session]}
           activeView="session"
