@@ -189,7 +189,7 @@ export class RpcRuntime {
     const activity = this.activity.getSnapshot()
     return Object.freeze({ ...this.info, isStreaming: streamingActivity(activity), isCompacting: compactingActivity(activity) })
   }
-
+  childPid(): number | undefined { return this.child.pid }
   async handshake(): Promise<RuntimeInfo> {
     // Harnesses with a versioned protocol must agree on the version before any
     // other request; unsolicited frames (ready, available_commands_update) may

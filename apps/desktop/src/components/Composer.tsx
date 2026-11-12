@@ -1,4 +1,5 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
+import { cleanRequestErrorDetail } from "@/app/workspace";
 import type { ExtensionTabControls } from "@/hooks/useAgentBrowserTabs";
 import { useComposerImages } from "@/hooks/useComposerImages";
 import { useSharedBrowserSelection } from "@/hooks/useSharedBrowserSelection";
@@ -642,29 +643,24 @@ export const Composer = memo(function Composer({
 			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (sentAnnotations.length > 0) onClearAnnotations();
-		} catch {
+		} catch (error) {
 			if (!mountedRef.current && draftKeyRef.current) {
 				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
 			}
 			if (mountedRef.current) {
 				setValue((current) => current.trim() ? `${submittedValue}\n\n${current}` : submittedValue);
-				const restoration = imageAttachments.restoreWithinLimits(
-					submittedComposerImages,
-				);
+				const restoration = imageAttachments.restoreWithinLimits(submittedComposerImages);
+				const detail = cleanRequestErrorDetail(error);
+				const prefix = detail ? `Message was not sent (${detail.replace(/[.]+$/, "")}).` : "Message was not sent.";
 				if (restoration.omitted > 0) {
-					const restoredImages =
-						restoration.restored > 0
-							? ` along with ${restoration.restored} submitted image${restoration.restored === 1 ? "" : "s"}`
-							: "";
-					setAttachmentError(
-						`Message was not sent. Your draft was restored${restoredImages}, but ${restoration.omitted} submitted image${restoration.omitted === 1 ? "" : "s"} could not be restored because the attachment limits are full.`,
-					);
+					const restoredImages = restoration.restored > 0
+						? ` along with ${restoration.restored} submitted image${restoration.restored === 1 ? "" : "s"}`
+						: "";
+					setAttachmentError(`${prefix} Your draft was restored${restoredImages}, but ${restoration.omitted} submitted image${restoration.omitted === 1 ? "" : "s"} could not be restored because the attachment limits are full.`);
 				} else if (submittedComposerImages.length > 0) {
-					setAttachmentError(
-						"Message was not sent. Your draft and images were restored.",
-					);
+					setAttachmentError(`${prefix} Your draft and images were restored.`);
 				} else {
-					setAttachmentError("Message was not sent. Your draft was restored.");
+					setAttachmentError(`${prefix} Your draft was restored.`);
 				}
 			}
 		} finally {

@@ -126,3 +126,11 @@
 @keyframes sidebar-menu-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } }
 .project-working { width: 14px; height: 14px; display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--prime); }
 .project-attention { flex: 0 0 auto; min-width: 16px; height: 16px; display: inline-grid; place-items: center; padding: 0 4px; border-radius: 999px; color: var(--canvas); background: var(--warning); font-size: 10px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sidebar__footer { flex: 0 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 8px 10px 10px; border-top: 1px solid var(--border); }
+.sidebar .sidebar__footer > .icon-button { width: 100%; height: 32px; border-radius: var(--radius-sm); color: var(--text-tertiary); }
+.sidebar .sidebar__footer > .icon-button:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+.sidebar .sidebar__footer > .icon-button.is-active { color: var(--text); background: var(--surface-selected); }
+.sidebar .sidebar__footer > .icon-button > svg { transition: transform 120ms ease-out; }
+.sidebar .sidebar__footer > .icon-button:active:not(:disabled) > svg { transform: scale(.92); }
+@media (prefers-reduced-motion: reduce) { .sidebar .sidebar__footer > .icon-button > svg { transition: none; } }
+.reduce-motion .sidebar .sidebar__footer > .icon-button > svg { transition: none; }

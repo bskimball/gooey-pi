@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { initialTransition, setup, transition, type SnapshotFrom } from 'xstate'
+import { assign, initialTransition, setup, transition, type SnapshotFrom } from 'xstate'
 
 // Renderer-side view of one runtime's agent turn. The main process's
 // RuntimeInfo.isStreaming stays the source of truth; these events mirror it
@@ -8,8 +8,9 @@ import { initialTransition, setup, transition, type SnapshotFrom } from 'xstate'
 // stop requests, and the queue flush gate that decides when a queued prompt may
 // be sent while idle.
 export type AgentTurnEvent =
-  | { type: 'SUBMIT' }
-  | { type: 'ADMISSION_ENDED' }
+  | { type: 'SUBMIT'; submissionId?: number }
+  | { type: 'ADMISSION_ENDED'; submissionId?: number }
+  | { type: 'WORKSPACE_CHANGED' }
   | { type: 'ADMITTED' }
   | { type: 'PROMPT_SETTLED' }
   | { type: 'MIRRORED_IDLE' }
@@ -23,23 +24,44 @@ export type AgentTurnEvent =
   | { type: 'FLUSH_FAILED' }
   | { type: 'FLUSH_RETRY' }
 
+interface AgentTurnContext {
+  submissionId: number
+}
+
 export const agentTurnMachine = setup({
-  types: { events: {} as AgentTurnEvent },
+  types: {
+    context: {} as AgentTurnContext,
+    events: {} as AgentTurnEvent,
+  },
 }).createMachine({
   id: 'agentTurn',
   type: 'parallel',
+  context: { submissionId: 0 },
   states: {
     // Single-flight gate for a submission's async admission. Ends with the
-    // submission whether or not a turn started, so it never outlives the send.
+    // submission whether or not a turn started, and clears when the active
+    // workspace switches so an older background start never blocks the new view.
     admission: {
       initial: 'idle',
-      on: { RUNTIME_CHANGED: '.idle' },
+      on: { RUNTIME_CHANGED: '.idle', WORKSPACE_CHANGED: '.idle' },
       states: {
         idle: {
-          on: { SUBMIT: { target: 'admitting' } },
+          on: {
+            SUBMIT: {
+              target: 'admitting',
+              actions: assign({
+                submissionId: ({ context, event }) => event.submissionId ?? context.submissionId + 1,
+              }),
+            },
+          },
         },
         admitting: {
-          on: { ADMISSION_ENDED: { target: 'idle' } },
+          on: {
+            ADMISSION_ENDED: {
+              guard: ({ context, event }) => event.submissionId === undefined || event.submissionId === context.submissionId,
+              target: 'idle',
+            },
+          },
         },
       },
     },
@@ -51,9 +73,10 @@ export const agentTurnMachine = setup({
         ADMITTED: { target: '.optimistic' },
         MIRRORED_IDLE: { target: '.idle' },
         RUNTIME_STREAMING: { target: '.streaming' },
-        // A different runtime starts with no turn of its own; the mirror
-        // effect then reports its isStreaming.
+        // A different runtime or workspace starts with no turn of its own; the
+        // mirror effect then reports its isStreaming.
         RUNTIME_CHANGED: { target: '.idle' },
+        WORKSPACE_CHANGED: { target: '.idle' },
       },
       states: {
         optimistic: {
@@ -152,7 +175,7 @@ export function createAgentTurnHandle(): AgentTurnHandle {
 // Renderer state for one runtime's turn. The ref is advanced synchronously in
 // send(), so handle.current() reflects the latest event even within one tick.
 /** RuntimeInfo is main-process truth; its identity and isStreaming are mirrored into the turn. */
-export function useAgentTurn(runtimeId: string | undefined, runtimeStreaming: boolean) {
+export function useAgentTurn(runtimeId: string | undefined, runtimeStreaming: boolean, workspaceGeneration?: number) {
   const [snapshot, setSnapshot] = useState(initialAgentTurn)
   const ref = useRef(snapshot)
   const send = useCallback((event: AgentTurnEvent) => {
@@ -160,14 +183,19 @@ export function useAgentTurn(runtimeId: string | undefined, runtimeStreaming: bo
     setSnapshot(ref.current)
   }, [])
   const mirroredRuntimeIdRef = useRef(runtimeId)
+  const mirroredGenerationRef = useRef(workspaceGeneration)
   useEffect(() => {
+    const generationChanged = workspaceGeneration !== undefined && mirroredGenerationRef.current !== workspaceGeneration
+    mirroredGenerationRef.current = workspaceGeneration
     if (mirroredRuntimeIdRef.current !== runtimeId) {
-      const firstRuntime = mirroredRuntimeIdRef.current === undefined && runtimeId !== undefined
+      const firstRuntime = mirroredRuntimeIdRef.current === undefined && runtimeId !== undefined && !generationChanged
       mirroredRuntimeIdRef.current = runtimeId
       if (!firstRuntime || !ref.current.matches({ turn: 'optimistic' })) send({ type: 'RUNTIME_CHANGED' })
+    } else if (generationChanged) {
+      send({ type: 'WORKSPACE_CHANGED' })
     }
     send({ type: runtimeStreaming ? 'RUNTIME_STREAMING' : 'MIRRORED_IDLE' })
-  }, [send, runtimeId, runtimeStreaming])
+  }, [send, runtimeId, runtimeStreaming, workspaceGeneration])
   const handle = useMemo<AgentTurnHandle>(() => ({ current: () => ref.current, send }), [send])
   return [snapshot, send, handle] as const
 }

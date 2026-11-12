@@ -1,12 +1,8 @@
 import {
-  Code,
   DotsThree,
-  Gear,
   GitBranch,
   SidebarLeft,
   SidebarRight,
-  Terminal,
-  Waveform,
 } from './icons'
 import type { ApplicationMenuName, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import type { SessionLiveMap } from '@/app/session-live'
@@ -85,14 +81,9 @@ interface TitleToolbarProps {
   productName?: string
   sidebarOpen: boolean
   inspectorOpen: boolean
-  terminalOpen: boolean
   onToggleSidebar(): void
   onToggleInspector(): void
-  onToggleTerminal(): void
   onOpenBrowser(): void
-  onOpenInVsCode?(path: string): void
-  voiceOpen?: boolean
-  onToggleVoice?(): void
   activeProjectScriptKind?: ProjectScriptKind
   projectSetupError?: string
   onRunProjectScript?(kind: ProjectScriptKind): Promise<void> | void
@@ -102,15 +93,12 @@ interface TitleToolbarProps {
   liveBySession?: SessionLiveMap
   clearedActivity?: Readonly<Record<string, string>>
   onOpenActivity?(): void
-  onOpenSettings?(): void
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, terminalOpen, voiceOpen = false, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onOpenSettings, onToggleSidebar, onToggleInspector, onToggleTerminal, onOpenBrowser, onOpenInVsCode, onToggleVoice, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
-  const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
-  const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
   return (
     <header className="title-toolbar drag-region">
@@ -128,11 +116,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Wo
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
           ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} setupError={projectSetupError} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}
-        {view === 'session' && onToggleVoice ? <IconButton className={`title-toolbar__optional ${voiceOpen ? 'is-active voice-toggle--active' : ''}`} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><Waveform size={17} /></IconButton> : null}
-        {view === 'session' && project && onOpenInVsCode ? <IconButton className="title-toolbar__optional" label={`Open ${project.name} in VS Code`} onClick={() => onOpenInVsCode(project.path)}><Code size={17} /></IconButton> : null}
-        {view === 'session' ? <IconButton className={terminalOpen ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className="title-toolbar__optional" label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
-        {onOpenSettings ? <IconButton className={view === 'settings' ? 'is-active' : ''} label={`${t('nav.settings')} (${settingsShortcut})`} onClick={onOpenSettings}><Gear size={17} /></IconButton> : null}
         {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>
     </header>

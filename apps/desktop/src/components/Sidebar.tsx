@@ -11,12 +11,15 @@ import {
   Folder,
   FolderPlus,
   FunnelSimple,
+  Gear,
   MagnifyingGlass,
   NotePencil,
   Package,
   PushPin,
   SidebarLeft,
+  Terminal,
   Trash,
+  Waveform,
 } from './icons'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type WorkspaceView } from '@/types/api'
@@ -61,6 +64,11 @@ export interface SidebarProps {
   /** Sessions held by another live Apex app, keyed by session file path. */
   runtimeOwners?: ReadonlyMap<string, RuntimeOwnerView>
   onContinueInVsCode?(session: SessionRecord): void
+  terminalOpen?: boolean
+  voiceOpen?: boolean
+  onToggleTerminal?(): void
+  onToggleVoice?(): void
+  onOpenInVsCode?(path: string): void
   overlay?: boolean
   platform?: NodeJS.Platform
 }
@@ -159,7 +167,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, terminalOpen = false, voiceOpen = false, onToggleTerminal, onToggleVoice, onOpenInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
@@ -206,8 +214,11 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
     onSelectSession(session)
   }
   const unreadCount = activeSessions.reduce((count, session) => count + Number(needsAttention(session)), 0)
+  const activeProject = useMemo(() => projects.find((project) => project.id === activeProjectId), [projects, activeProjectId])
   const newSessionShortcut = shortcutLabel(platform, ['Primary', 'N'])
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
+  const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
+  const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
   useEffect(() => {
     if (!projectMenu) return
     const dismiss = (event: PointerEvent) => { if (!(event.target instanceof Element) || !event.target.closest('.project-group')) setProjectMenu(null) }
@@ -393,6 +404,13 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         ))}
       </div>
 
+      <div className="sidebar__footer" role="toolbar" aria-label="Workspace tools">
+        <IconButton className={activeView === 'settings' ? 'is-active' : ''} label={`${t('nav.settings')} (${settingsShortcut})`} onClick={() => onNavigate('settings')}><Gear size={16} /></IconButton>
+        {onToggleVoice ? <IconButton className={voiceOpen ? 'is-active voice-toggle--active' : ''} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><Waveform size={16} /></IconButton> : null}
+        {onToggleTerminal ? <IconButton className={terminalOpen && activeView === 'session' ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={16} /></IconButton> : null}
+        {onOpenInVsCode ? <IconButton label={activeProject ? `Open ${activeProject.name} in VS Code` : 'Open in VS Code'} disabled={!activeProject} onClick={() => { if (activeProject) onOpenInVsCode(activeProject.path) }}><Code size={16} /></IconButton> : null}
+      </div>
+
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</button></>}><label className="field"><span>Session name</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}
       {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><button type="button" className="button" onClick={() => setRemoveTarget(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</button></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
     </aside>
@@ -423,6 +441,11 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onArchiveSession === next.onArchiveSession
     && previous.runtimeOwners === next.runtimeOwners
     && previous.onContinueInVsCode === next.onContinueInVsCode
+    && previous.terminalOpen === next.terminalOpen
+    && previous.voiceOpen === next.voiceOpen
+    && previous.onToggleTerminal === next.onToggleTerminal
+    && previous.onToggleVoice === next.onToggleVoice
+    && previous.onOpenInVsCode === next.onOpenInVsCode
     && previous.overlay === next.overlay
     && previous.platform === next.platform
 }

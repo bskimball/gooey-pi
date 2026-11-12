@@ -9,8 +9,13 @@ export interface WorkspaceSnapshot {
   sessionFile?: string
 }
 
+export const cleanRequestErrorDetail = (error: unknown): string =>
+  (error instanceof Error || typeof error === 'string' ? errorMessage(error) : '')
+    .replace(/^Error invoking remote method '[^']+':\s*(?:(?:TypeError|Error):\s*)?/i, '')
+    .trim()
+    .slice(0, 1_000)
+
 export const requestFailureMessage = (error: unknown) => {
-  const raw = errorMessage(error)
-  const detail = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '').trim()
-  return detail ? `Request failed: ${detail.slice(0, 1_000)}` : 'Prime could not process the request.'
+  const detail = cleanRequestErrorDetail(error)
+  return detail ? `Request failed: ${detail}` : 'Prime could not process the request.'
 }

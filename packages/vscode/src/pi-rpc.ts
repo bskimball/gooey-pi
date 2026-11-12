@@ -18,6 +18,8 @@ export class PiRpc {
   private stopping = false
   private closed = false
 
+  get pid(): number | undefined { return this.child.pid }
+
   constructor(
     invocation: PiInvocation,
     args: string[],

@@ -57,6 +57,7 @@ export interface WorkspaceActionsDeps {
  */
 export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
   let pendingCreation: { generation: number; promise: Promise<SessionRecord> } | undefined
+  let submissionSequence = 0
   const createdSessionFiles = new Set<string>()
   const grantProject = async (project: ProjectRecord): Promise<ProjectRecord> => {
     const { bridge, workspace, setProjects, gitRequestRef, setGitSnapshot } = getDeps()
@@ -326,16 +327,13 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       reportError(error)
       throw error
     }
-    agentTurn.send({ type: 'SUBMIT' })
-    let admissionGeneration = workspace.workspaceRef.current.generation
+    if (!workspace.workspaceRef.current.project && activeProject) workspace.activateWorkspace(activeProject, workspace.workspaceRef.current.session)
+    const submissionId = ++submissionSequence
+    agentTurn.send({ type: 'SUBMIT', submissionId })
     await (async () => {
       setSubmitting(true)
-      if (!workspace.workspaceRef.current.project && activeProject) {
-        workspace.activateWorkspace(activeProject, workspace.workspaceRef.current.session)
-      }
       let admitted = workspace.workspaceRef.current
       const generation = admitted.generation
-      admissionGeneration = generation
       let submittedRuntimeId: string | undefined
       let startedPrompt = false
       let queuedPromptId: string | undefined
@@ -579,8 +577,8 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           return finalized.at(-1)?.role === 'system' ? finalized : [...finalized, { id: `error-${Date.now()}`, role: 'system', timestamp: Date.now(), parts: [{ type: 'text', text: failure }] }]
         })
         throw error
-      } finally { if (workspace.workspaceRef.current.generation === generation) setSubmitting(false) }
-    })().finally(() => { if (workspace.workspaceRef.current.generation === admissionGeneration) agentTurn.send({ type: 'ADMISSION_ENDED' }) })
+      } finally { if (submissionSequence === submissionId) setSubmitting(false) }
+    })().finally(() => { agentTurn.send({ type: 'ADMISSION_ENDED', submissionId }) })
   }
   const stopRuntime = async (requestedRuntimeId?: string, sessionFile?: string) => {
     const { bridge, workspace, setSessions, reportError, agentTurn } = getDeps()

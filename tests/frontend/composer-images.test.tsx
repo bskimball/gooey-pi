@@ -254,7 +254,7 @@ describe('Composer image ingestion', () => {
     expect(onSend).toHaveBeenCalledOnce()
     expect(textarea.value).toBe('Keep this draft')
     expect(container.querySelector('.composer-attachment')).not.toBeNull()
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('restored')
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Message was not sent (rejected). Your draft and images were restored.')
   })
 
   it('merges submitted images with images attached while a failed send is pending', async () => {

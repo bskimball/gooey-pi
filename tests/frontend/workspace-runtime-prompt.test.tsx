@@ -311,4 +311,95 @@ describe('prompt admission versus background transcript reads', () => {
     expect(latest.messages.map((message) => message.id)).toEqual(['other-existing'])
     expect(latest.messages.some((message) => message.streaming)).toBe(false)
   })
+
+  it('clears submission admission across a workspace switch so the next session can send immediately', async () => {
+    const otherSession: SessionRecord = { ...session, id: 'other', filePath: '/sessions/other.jsonl', status: 'idle' }
+    let resolveFirstStart!: (value: { runtimeId: string; harness: 'pi'; cwd: string; sessionFile?: string; isStreaming: boolean }) => void
+    const firstStartPromise = new Promise<{ runtimeId: string; harness: 'pi'; cwd: string; sessionFile?: string; isStreaming: boolean }>((resolve) => {
+      resolveFirstStart = resolve
+    })
+    const start = vi.fn((options: { sessionPath?: string }) => (
+      options.sessionPath === session.filePath
+        ? firstStartPromise
+        : Promise.resolve({
+            runtimeId: `started-${options.sessionPath ?? 'new'}`,
+            harness: 'pi' as const,
+            cwd: '/project',
+            sessionFile: options.sessionPath,
+            isStreaming: false,
+          })
+    ))
+    const command = vi.fn(async () => ({}))
+    const bridge = {
+      sessions: {
+        read: vi.fn(async () => []),
+        followUp: vi.fn(async () => false),
+        list: vi.fn(async () => [session, otherSession]),
+      },
+      agent: { list: vi.fn(async () => []), start, stop: vi.fn(async () => true), command },
+      projects: { grantInferred: vi.fn(async () => project) },
+    } as unknown as PrimeWorkApi
+
+    await act(async () => {
+      root.render(createElement(Probe, { bridge, initialSession: session, sessions: [session, otherSession] }))
+    })
+    await flush()
+
+    const agentTurn = createAgentTurnHandle()
+    let submitting = false
+    const actions = createWorkspaceActions(() => ({
+      bridge,
+      initialized: true,
+      projects: [project],
+      sessions: [session, otherSession],
+      activeProject: project,
+      workspace: latest,
+      settingsState: { settings: DEFAULT_SETTINGS } as WorkspaceActionsDeps['settingsState'],
+      layout: {} as WorkspaceActionsDeps['layout'],
+      provider: { model: 'fixture/test-model', effort: 'medium', fast: false, selectedModel: { input: ['text'] } } as unknown as WorkspaceActionsDeps['provider'],
+      pluginSkills: {} as WorkspaceActionsDeps['pluginSkills'],
+      agentTurn,
+      gitRequestRef: { current: 0 },
+      demoTimerRef: { current: [] },
+      setProjects: () => undefined,
+      setSessions: () => undefined,
+      setGitSnapshot: () => undefined,
+      setView: () => undefined,
+      setPaletteOpen: () => undefined,
+      setToast: () => undefined,
+      setSubmitting: (next) => { submitting = typeof next === 'function' ? next(submitting) : next },
+      refreshSchedules: async () => undefined,
+      resetBrowserView: () => undefined,
+      clearSessionAttention: () => undefined,
+      reportError: () => undefined,
+    }))
+
+    let firstSend!: Promise<void>
+    await act(async () => {
+      firstSend = actions.sendPrompt('first session message')
+    })
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: session.filePath }))
+    await act(async () => {
+      latest.activateWorkspace(project, otherSession)
+      agentTurn.send({ type: 'WORKSPACE_CHANGED' })
+    })
+
+    await act(async () => {
+      await actions.sendPrompt('second session message')
+    })
+    expect(command).toHaveBeenCalledWith(`started-${otherSession.filePath}`, expect.objectContaining({ type: 'prompt', message: 'second session message' }))
+
+    await act(async () => {
+      resolveFirstStart({
+        runtimeId: `started-${session.filePath}`,
+        harness: 'pi',
+        cwd: '/project',
+        sessionFile: session.filePath,
+        isStreaming: false,
+      })
+      await firstSend
+    })
+    expect(submitting).toBe(false)
+    expect(agentTurn.current().matches({ admission: 'idle' })).toBe(true)
+  })
 })

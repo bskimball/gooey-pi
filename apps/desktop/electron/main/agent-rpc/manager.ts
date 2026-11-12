@@ -3,7 +3,7 @@ import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import { resolveExecutable, type ExecutableSource } from '../process-utils'
 import { canonicalSessionPath } from 'apex-core/session-paths'
-import { RuntimeSessionClaims } from 'apex-core/sessions/runtime-owners'
+import { RuntimeSessionClaims, type RuntimeSessionRelease } from 'apex-core/sessions/runtime-owners'
 import { isPathWithin, isRecord, rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
 import { isThinkingLevel, validateRpcCommand } from './command-schema'
 import { PI_RPC_ADAPTER, type HarnessRpcAdapter } from './harness-adapter'
@@ -34,7 +34,7 @@ export class AgentRpcManager {
   private readonly attachmentPins = new Map<string, number>()
   private readonly sessionClaims = new Map<string, RuntimeSessionClaims>()
   private readonly sessionTransitions = new Set<string>()
-  private acquireSession: (path: string) => () => void = () => () => undefined
+  private acquireSession: (path: string) => RuntimeSessionRelease = () => () => undefined
   private readonly startingRuntimes = new Set<string>()
   private readonly retiringRuntimes = new Set<string>()
   private readonly runtimeEnvironmentRevisions = new Map<string, number>()
@@ -136,7 +136,7 @@ export class AgentRpcManager {
   /** Checked before a runtime attaches to an existing session file; throws to refuse the attach. */
   setSessionAttachGuard(guard: (sessionPath: string) => Promise<void>): void { this.sessionAttachGuard = guard }
 
-  setSessionClaimProvider(acquire: (path: string) => () => void): void { this.acquireSession = acquire }
+  setSessionClaimProvider(acquire: (path: string) => RuntimeSessionRelease): void { this.acquireSession = acquire }
 
   beginShutdown(): void { this.closed = true; clearInterval(this.idleSweep) }
 
@@ -242,6 +242,7 @@ export class AgentRpcManager {
           this.adapter,
         )
         this.projections.set(created.runtimeId, new DesktopSessionProjection(baseline))
+        claims.setChildPid(created.childPid())
         this.sessionClaims.set(created.runtimeId, claims)
         created.setSessionFileListener((path) => {
           try { claims.confirm(path) } catch (error) {

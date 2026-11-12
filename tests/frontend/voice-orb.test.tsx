@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Sidebar } from '../../apps/desktop/src/components/Sidebar'
 import { TitleToolbar } from '../../apps/desktop/src/components/TitleToolbar'
 import { VoiceOrb } from '../../apps/desktop/src/components/VoiceOrb'
 import type { PetDefinition, PrimeWorkApi, ProjectRecord } from '../../apps/desktop/src/types/api'
@@ -49,17 +50,21 @@ describe('realtime voice surface', () => {
     localStorage.clear()
   })
 
-  it('places the waveform toggle immediately before the terminal button', () => {
-    act(() => root.render(<TitleToolbar view="session" sidebarOpen inspectorOpen terminalOpen={false} voiceOpen onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onToggleTerminal={vi.fn()} onOpenBrowser={vi.fn()} onToggleVoice={vi.fn()} />))
-    const labels = [...container.querySelectorAll<HTMLButtonElement>('.title-toolbar__actions button')].map((button) => button.getAttribute('aria-label'))
-    expect(labels.slice(0, 2)).toEqual(['Close realtime voice', 'Toggle terminal (⌘J)'])
+  it('places the waveform toggle immediately before the terminal button in the sidebar footer', () => {
+    act(() => root.render(<Sidebar projects={[]} sessions={[]} activeView="session" voiceOpen terminalOpen={false} onSelectProject={vi.fn()} onSelectSession={vi.fn()} onNavigate={vi.fn()} onNewSession={vi.fn()} onAddProject={vi.fn()} onRemoveProject={vi.fn()} onClose={vi.fn()} onOpenPalette={vi.fn()} onRenameSession={async () => undefined} onArchiveSession={async () => undefined} onToggleVoice={vi.fn()} onToggleTerminal={vi.fn()} />))
+    const labels = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')].map((button) => button.getAttribute('aria-label'))
+    expect(labels).toEqual(['Settings (⌘,)', 'Close realtime voice', 'Toggle terminal (⌘J)'])
   })
 
   it('uses Linux shortcut labels on Linux', () => {
-    act(() => root.render(<TitleToolbar platform="linux" view="session" sidebarOpen inspectorOpen terminalOpen={false} onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onToggleTerminal={vi.fn()} onOpenBrowser={vi.fn()} />))
-    const labels = [...container.querySelectorAll<HTMLButtonElement>('.title-toolbar__actions button')].map((button) => button.getAttribute('aria-label'))
-    expect(labels).toContain('Toggle terminal (Ctrl+J)')
-    expect(labels).toContain('Open browser (Ctrl+Shift+B)')
+    act(() => root.render(<>
+      <Sidebar platform="linux" projects={[]} sessions={[]} activeView="session" terminalOpen={false} onSelectProject={vi.fn()} onSelectSession={vi.fn()} onNavigate={vi.fn()} onNewSession={vi.fn()} onAddProject={vi.fn()} onRemoveProject={vi.fn()} onClose={vi.fn()} onOpenPalette={vi.fn()} onRenameSession={async () => undefined} onArchiveSession={async () => undefined} onToggleTerminal={vi.fn()} />
+      <TitleToolbar platform="linux" view="session" sidebarOpen inspectorOpen onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onOpenBrowser={vi.fn()} />
+    </>))
+    const footerLabels = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')].map((button) => button.getAttribute('aria-label'))
+    const toolbarLabels = [...container.querySelectorAll<HTMLButtonElement>('.title-toolbar__actions button')].map((button) => button.getAttribute('aria-label'))
+    expect(footerLabels).toContain('Toggle terminal (Ctrl+J)')
+    expect(toolbarLabels).toContain('Open browser (Ctrl+Shift+B)')
   })
 
   it('prefers the live git branch for the session toolbar pill', () => {
@@ -78,7 +83,7 @@ describe('realtime voice surface', () => {
       readOnly: true,
       gitBranch: 'record-branch',
     }
-    act(() => root.render(<TitleToolbar project={project} gitBranch="live-branch" view="session" sidebarOpen inspectorOpen terminalOpen={false} onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onToggleTerminal={vi.fn()} onOpenBrowser={vi.fn()} />))
+    act(() => root.render(<TitleToolbar project={project} gitBranch="live-branch" view="session" sidebarOpen inspectorOpen onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onOpenBrowser={vi.fn()} />))
     expect(container.querySelector('.branch-pill')?.textContent).toContain('live-branch')
     expect(container.querySelector('.branch-pill')?.textContent).not.toContain('record-branch')
   })

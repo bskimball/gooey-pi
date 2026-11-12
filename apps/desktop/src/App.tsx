@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { TitleToolbar } from '@/components/TitleToolbar'
 import type { ProjectScriptKind } from '@/components/ProjectRunControl'
@@ -104,7 +104,7 @@ export default function App() {
   const [voiceOrbOpen, setVoiceOrbOpen] = useState(false)
   const [focusPetVoiceControl, setFocusPetVoiceControl] = useState(false)
   const [restorePetVoiceFocus, setRestorePetVoiceFocus] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [submittingGeneration, setSubmittingGeneration] = useState<number | null>(null)
   const { toast, setToast } = useToast()
   const queuedFlushRef = useRef(false)
   const gitRequestRef = useRef(0)
@@ -174,7 +174,12 @@ export default function App() {
     bridge, harness: activeHarness, initialProject, initialSession, sessions,
     initialMessages: bridge ? [] : SAMPLE_TRANSCRIPT, reportError,
   })
-  const [agentTurn, sendAgentTurn, agentTurnHandle] = useAgentTurn(workspace.runtime?.runtimeId, Boolean(workspace.runtime?.isStreaming))
+  const submitting = submittingGeneration === workspace.workspaceGeneration
+  const setSubmitting = useCallback<Dispatch<SetStateAction<boolean>>>((next) => setSubmittingGeneration((current) => {
+    const generation = workspace.workspaceRef.current.generation
+    return (typeof next === 'function' ? next(current === generation) : next) ? generation : null
+  }), [workspace.workspaceRef])
+  const [agentTurn, sendAgentTurn, agentTurnHandle] = useAgentTurn(workspace.runtime?.runtimeId, Boolean(workspace.runtime?.isStreaming), workspace.workspaceGeneration)
   const syncProviderRuntime = useCallback(async (runtimeId: string) => {
     if (!bridge) return
     const generation = workspace.workspaceRef.current.generation
@@ -627,20 +632,26 @@ export default function App() {
       if (!(error instanceof ProjectScriptBusyError)) reportError(error)
     })
   }, [activeProject?.id, activeProject?.scripts, activeProjectScriptRun, reportError, startProjectScript])
+  const toggleVoice = useCallback(() => {
+    const nextOpen = !voiceOrbOpen
+    setFocusPetVoiceControl(nextOpen)
+    setRestorePetVoiceFocus(false)
+    setVoiceOrbOpen(nextOpen)
+  }, [voiceOrbOpen])
   const sidebarActions = useSidebarActions({
-    onSelectProject: selectProject,
-    onSelectSession: selectSession,
-    onNavigate: navigate,
-    onNewSession: newSession,
-    onAddProject: () => { void addProject() },
-    onRemoveProject: (project) => { void removeProject(project) },
-    onSetProjectSortMode: setProjectSortMode,
-    onTogglePinProject: (project) => { void togglePinProject(project) },
-    onClose: toggleSidebar,
-    onOpenPalette: () => setPaletteOpen(true),
-    onRenameSession: renameSession,
-    onArchiveSession: (session) => setSessionArchived(session, true),
+    onSelectProject: selectProject, onSelectSession: selectSession, onNavigate: navigate, onNewSession: newSession,
+    onAddProject: () => { void addProject() }, onRemoveProject: (project) => { void removeProject(project) },
+    onSetProjectSortMode: setProjectSortMode, onTogglePinProject: (project) => { void togglePinProject(project) },
+    onClose: toggleSidebar, onOpenPalette: () => setPaletteOpen(true),
+    onRenameSession: renameSession, onArchiveSession: (session) => setSessionArchived(session, true),
     onContinueInVsCode: (session) => { if (bridge) void bridge.sessions.continueInVsCode(session.filePath).then(() => setToast(`Opening “${session.title}” in VS Code…`), reportError) },
+    onToggleTerminal: () => {
+      if (view !== 'session') { navigate('session'); if (!terminalOpen) void toggleTerminal(); return }
+      if (layout.compactLayout && sidebarVisible && !terminalOpen) toggleSidebar()
+      void toggleTerminal()
+    },
+    onToggleVoice: () => { if (layout.compactLayout && sidebarVisible && !voiceOrbOpen) toggleSidebar(); toggleVoice() },
+    onOpenInVsCode: openPathInVsCode,
   })
 
   const selectPreviousSession = usePreviousSession(workspace.activeSessionId, sessions, (session) => void selectSession(session), () => setToast('There is no previous session to return to yet.'))
@@ -668,12 +679,6 @@ export default function App() {
     () => workspace.pendingQueuedPrompts.filter((pending) => pending.intent === 'queue'),
     [workspace.pendingQueuedPrompts],
   )
-  const toggleVoice = useCallback(() => {
-    const nextOpen = !voiceOrbOpen
-    setFocusPetVoiceControl(nextOpen)
-    setRestorePetVoiceFocus(false)
-    setVoiceOrbOpen(nextOpen)
-  }, [voiceOrbOpen])
   useEffect(() => {
     if (!bridge || busy || workspace.runtime?.isStreaming || externalSessionRunning || submitting || queuedFlushRef.current || queuedMessages.length === 0) return
     const next = queuedMessages[0]
@@ -698,10 +703,10 @@ export default function App() {
       }} onOpenDocs={() => openExternal(HARNESS_PROVIDER_DOCS[activeHarness])} /> : null
 
   return <I18nProvider preference={settingsState.settings.locale}><div className="app-shell" aria-busy={!initialized} data-platform={platform} data-ready={initialized ? 'true' : 'false'}>
-    {sidebarVisible ? <Sidebar projects={projects} sessions={sessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} overlay={layout.compactLayout} platform={platform} /> : null}
+    {sidebarVisible ? <Sidebar projects={projects} sessions={sessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} onOpenInVsCode={bridge ? sidebarActions.onOpenInVsCode : undefined} terminalOpen={terminalOpen} voiceOpen={voiceOrbOpen} overlay={layout.compactLayout} platform={platform} /> : null}
     {sidebarVisible ? <button type="button" className="panel-scrim panel-scrim--sidebar" aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
     <div className="workbench" inert={layout.compactLayout && sidebarVisible ? true : undefined}>
-      <TitleToolbar project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} sidebarOpen={sidebarVisible} inspectorOpen={inspectorVisible} terminalOpen={terminalOpen} voiceOpen={voiceOrbOpen} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} projectSetupError={projectScript.context.setupFailure?.projectId === activeProject?.id ? projectScript.context.setupFailure?.error : undefined} sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} onOpenActivity={() => navigate('activity')} onOpenSettings={() => navigate('settings')} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} onToggleSidebar={toggleSidebar} onToggleInspector={toggleInspector} onToggleTerminal={toggleTerminal} onToggleVoice={toggleVoice} onOpenBrowser={openBrowser} onOpenInVsCode={bridge ? openPathInVsCode : undefined} platform={platform} />
+      <TitleToolbar project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} sidebarOpen={sidebarVisible} inspectorOpen={inspectorVisible} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} projectSetupError={projectScript.context.setupFailure?.projectId === activeProject?.id ? projectScript.context.setupFailure?.error : undefined} sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} onOpenActivity={() => navigate('activity')} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} onToggleSidebar={toggleSidebar} onToggleInspector={toggleInspector} onOpenBrowser={openBrowser} platform={platform} />
       <div className="workbench__content">{view === 'session' ? <div ref={layout.workspaceRowRef} className="session-workspace" style={{ '--inspector-width': `${layout.inspectorWidth}px`, '--terminal-height': `${layout.terminalHeight}px` } as CSSProperties}>
         <div ref={layout.sessionWorkspaceRef} className="conversation-column">
           <main className="conversation-pane">

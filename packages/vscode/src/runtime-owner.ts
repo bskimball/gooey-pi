@@ -15,24 +15,26 @@ const SELF: RuntimeOwnerIdentity = { app: 'vscode', pid: process.pid }
 /** Publishes the session this window's Pi runtime holds, so Apex desktop does not attach a second runtime to it. */
 export class VsCodeRuntimeOwner {
   private sessionPath: string | null = null
-  private readonly claims = new RuntimeSessionClaims((path) => acquireRuntimeSession(path, { ...SELF, label: `VS Code · ${basename(this.cwd())}` }))
+  private readonly claims = new RuntimeSessionClaims((path) => acquireRuntimeSession(path, { ...SELF, label: `VS Code · ${basename(this.cwd())}`, childPid: this.childPid?.() }))
   private readonly timer: NodeJS.Timeout
   // Writes run one at a time so an older snapshot can never land after a newer one.
   private publishing: Promise<void> = Promise.resolve()
   private disposed = false
 
-  constructor(private readonly cwd: () => string) {
+  constructor(private readonly cwd: () => string, private readonly childPid?: () => number | undefined) {
     this.timer = setInterval(() => { void this.publish() }, RUNTIME_OWNER_HEARTBEAT_MS)
     this.timer.unref?.()
   }
 
   reserve(sessionPath: string): () => void {
     if (this.disposed) throw new Error('Runtime ownership has ended')
+    this.claims.setChildPid(this.childPid?.())
     return this.claims.reserve(sessionPath)
   }
 
   set(sessionPath: string | null): void {
     if (this.disposed) return
+    this.claims.setChildPid(this.childPid?.())
     this.claims.confirm(sessionPath)
     if (sessionPath === this.sessionPath) return
     this.sessionPath = sessionPath

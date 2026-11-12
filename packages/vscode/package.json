@@ -2,7 +2,7 @@
   "name": "apex-vscode",
   "displayName": "Apex",
   "description": "The Apex workspace for Pi, inside VS Code.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "bdkinc",
   "license": "MIT",
   "private": true,

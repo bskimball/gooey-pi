@@ -668,4 +668,48 @@ describe('runtime owner registry', () => {
     expect(owners.map((owner) => owner.label)).toEqual(['VS Code · repo'])
     expect(() => statSync(join(dir, `desktop-${exitedPid}.json`))).toThrow()
   })
+
+  it('reclaims abandoned session claims only after both host and child processes have exited', async () => {
+    const { dir, session } = registry()
+    const exitedPid = 2_147_483_000
+    const claimHash = (await import('node:crypto')).createHash('sha256').update(session).digest('hex')
+    const claimFile = join(dir, `${claimHash}.claim.json`)
+
+    // An orphaned live child (simulated by process.pid) still excludes writers even when the host PID exited.
+    writeFileSync(claimFile, JSON.stringify({
+      app: 'desktop',
+      label: 'Apex desktop',
+      pid: exitedPid,
+      childPid: process.pid,
+      updatedAt: new Date().toISOString(),
+      sessions: [session],
+    }))
+    expect(() => acquireRuntimeSession(session, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, dir)).toThrow('This session is open')
+    expect(await readRuntimeOwners({ app: 'vscode', pid: process.pid }, dir)).toHaveLength(1)
+
+    // Once both host PID and child PID (or legacy claim without childPid) have exited, acquisition reclaims cleanly.
+    writeFileSync(claimFile, JSON.stringify({
+      app: 'desktop',
+      label: 'Apex desktop',
+      pid: exitedPid,
+      childPid: exitedPid + 1,
+      updatedAt: new Date().toISOString(),
+      sessions: [session],
+    }))
+    const release = acquireRuntimeSession(session, { app: 'desktop', pid: process.pid, label: 'Apex desktop' }, dir)
+    release.setChildPid?.(process.pid)
+    const persisted = JSON.parse(readFileSync(claimFile, 'utf8')) as { pid: number; childPid?: number }
+    expect(persisted).toMatchObject({ pid: process.pid, childPid: process.pid })
+    release()
+
+    writeFileSync(claimFile, JSON.stringify({
+      app: 'desktop',
+      label: 'Apex desktop',
+      pid: exitedPid,
+      updatedAt: new Date().toISOString(),
+      sessions: [session],
+    }))
+    expect(await readRuntimeOwners({ app: 'desktop', pid: process.pid }, dir)).toEqual([])
+    expect(() => statSync(claimFile)).toThrow()
+  })
 })

@@ -73,7 +73,7 @@ export class ApexSession implements vscode.Disposable {
   private startup: Promise<void> = Promise.resolve()
   private seq = 0
   private currentPath: string | null = null
-  private readonly owner = new VsCodeRuntimeOwner(() => this.cwd)
+  private readonly owner = new VsCodeRuntimeOwner(() => this.cwd, () => this.rpc?.pid)
   private state: HostState = {
     status: 'starting',
     homeDir: homedir(),
