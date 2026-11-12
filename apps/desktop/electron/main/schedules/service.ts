@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { waitFor } from 'xstate'
 import { APEX_THINKING_LEVELS } from '../../../src/types/api'
 import type {
   ApexThinkingLevel,
@@ -21,6 +22,7 @@ import {
   previewScheduleOccurrences,
   validateScheduleTiming,
 } from './recurrence'
+import { createScheduleServiceLifecycle } from './scheduleServiceMachine'
 
 const MAX_TASKS = 500
 const MAX_CONCURRENT_RUNS = 2
@@ -116,9 +118,7 @@ export class AutomationService {
   private readonly listeners = new Set<(event: ScheduleChangeEvent) => void>()
   private readonly now: () => Date
   private timer: NodeJS.Timeout | null = null
-  private closed = false
-  private activeRuns = 0
-  private readonly stopWaiters = new Set<() => void>()
+  private readonly lifecycle = createScheduleServiceLifecycle()
   private readonly pending: Array<{ task: AutomationScheduleRecord; runId: string }> = []
 
   constructor(private readonly store: JsonStateStore, private readonly options: AutomationServiceOptions) {
@@ -126,7 +126,7 @@ export class AutomationService {
   }
 
   async start(): Promise<void> {
-    this.closed = false
+    this.lifecycle.send({ type: 'START' })
     await this.reconcileInterruptedRuns()
     await this.blockInvalidActivePrompts()
     await this.recoverMissed()
@@ -171,7 +171,7 @@ export class AutomationService {
   }
 
   async stop(): Promise<void> {
-    this.closed = true
+    this.lifecycle.send({ type: 'STOP' })
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     const dropped = this.pending.splice(0)
@@ -187,8 +187,8 @@ export class AutomationService {
         }
       })
     }
-    if (this.activeRuns === 0) return
-    await new Promise<void>((resolveStop) => this.stopWaiters.add(resolveStop))
+    if (this.lifecycle.getSnapshot().matches('closed')) return
+    await waitFor(this.lifecycle, (snapshot) => snapshot.matches('closed'))
   }
 
   onDidChange(listener: (event: ScheduleChangeEvent) => void): () => void {
@@ -371,7 +371,7 @@ export class AutomationService {
   }
 
   private armTimer(): void {
-    if (this.closed) return
+    if (!this.lifecycle.getSnapshot().matches('running')) return
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     const next = this.store.snapshot().schedules.filter(isPiSchedule)
@@ -400,7 +400,7 @@ export class AutomationService {
   }
 
   private async processDue(): Promise<void> {
-    if (this.closed) return
+    if (!this.lifecycle.getSnapshot().matches('running')) return
     const now = this.now()
     const due = this.store.snapshot().schedules.filter(isPiSchedule)
       .filter((task) => task.status === 'active' && task.nextRunAt && Date.parse(task.nextRunAt) <= now.getTime())
@@ -466,17 +466,13 @@ export class AutomationService {
   }
 
   private drain(): void {
-    if (this.closed) return
-    while (this.activeRuns < MAX_CONCURRENT_RUNS) {
+    if (!this.lifecycle.getSnapshot().matches('running')) return
+    while (this.lifecycle.getSnapshot().context.activeRuns < MAX_CONCURRENT_RUNS) {
       const item = this.pending.shift()
       if (!item) return
-      this.activeRuns += 1
+      this.lifecycle.send({ type: 'RUN_STARTED' })
       void this.dispatch(item.task, item.runId).catch((error) => console.error('Scheduled run bookkeeping failed:', error)).finally(() => {
-        this.activeRuns -= 1
-        if (this.closed && this.activeRuns === 0) {
-          for (const resolveStop of this.stopWaiters) resolveStop()
-          this.stopWaiters.clear()
-        }
+        this.lifecycle.send({ type: 'RUN_FINISHED' })
         this.drain()
       })
     }

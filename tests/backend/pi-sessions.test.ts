@@ -546,6 +546,37 @@ describe('pi file-level rename fallback', () => {
     const appended = JSON.parse(readFileSync(file, 'utf8').slice(before.length).trim()) as { parentId: string }
     expect(appended.parentId).toBe('deadbeef')
   })
+
+  it('finds the last valid leaf across >64KiB chunks with multi-byte UTF-8 boundaries and malformed trailing lines', () => {
+    const { root, project } = setup()
+    mkdirSync(join(root, BUCKET))
+    const file = join(root, BUCKET, NAME_C)
+    // Place a valid entry whose text has multi-byte UTF-8 characters (4-byte emoji) spanning chunk boundaries,
+    // followed by >64KiB of malformed trailing lines so reverse reading must cross multiple 64KiB chunks.
+    const utf8Text = 'a'.repeat(65_530) + '🚀'.repeat(20) + 'b'.repeat(65_530)
+    const malformedTail = '{"truncated": ' + '🚀'.repeat(25_000)
+    writePiSession(file, {
+      cwd: project,
+      entries: [
+        piEntry('message', 'leaf1234', null, { message: { role: 'assistant', content: utf8Text } }),
+        malformedTail,
+        '{not json at all',
+        '   ',
+      ],
+    })
+    const before = readFileSync(file, 'utf8')
+    expect(appendPiSessionInfo(file, 'Renamed after malformed tail')).toBe(true)
+    const appended = JSON.parse(readFileSync(file, 'utf8').slice(before.length).trim()) as { parentId: string | null }
+    expect(appended.parentId).toBe('leaf1234')
+
+    // Session-only header falls back to parentId: null.
+    const headerOnly = join(root, BUCKET, NAME_A)
+    writePiSession(headerOnly, { cwd: project, entries: [] })
+    const headerBefore = readFileSync(headerOnly, 'utf8')
+    expect(appendPiSessionInfo(headerOnly, 'Header only rename')).toBe(true)
+    const headerAppended = JSON.parse(readFileSync(headerOnly, 'utf8').slice(headerBefore.length).trim()) as { parentId: string | null }
+    expect(headerAppended.parentId).toBeNull()
+  })
 })
 
 describe('runtime owner registry', () => {

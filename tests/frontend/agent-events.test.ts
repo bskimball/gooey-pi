@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_EVENT_QUEUE_LIMIT, admitAgentEvent, contextUsageFromEvent, sessionUsageFromEvent, type PendingAgentEvent } from '../../apps/desktop/src/app/agent-events'
 import { replayApexEvents } from '../../apps/desktop/src/lib/events'
-import { contextDialLabel, formatSessionCost, formatSessionTokens } from '../../apps/desktop/src/lib/format-cost'
+import { contextDialLabel, formatSessionCost } from '../../apps/desktop/src/lib/format-cost'
 
 describe('context usage events', () => {
   it('accepts bounded authoritative usage and preserves post-compaction unknowns', () => {
@@ -48,8 +48,6 @@ describe('session usage events', () => {
     expect(formatSessionCost({ cost: 0, tokens: { ...tokens, total: 0 } })).toBeNull()
     expect(formatSessionCost({ cost: null })).toBeNull()
     expect(formatSessionCost(undefined)).toBeNull()
-    expect(formatSessionTokens({ cost: 1, tokens })).toBe('10,000 in / 2,000 out / 600 cached')
-    expect(formatSessionTokens({ cost: 1 })).toBeNull()
   })
 
   it('appends the session cost to the context dial label only when known', () => {

@@ -23,4 +23,3 @@
 .terminal-surface[hidden] { display: none; }
 .terminal-surface .xterm { height: 100%; background: var(--terminal-bg); }
 .terminal-surface .xterm .xterm-viewport { background-color: var(--terminal-bg); scrollbar-width: thin; }
-.terminal-surface .xterm .composition-view { background: var(--terminal-bg); color: var(--terminal-text); }

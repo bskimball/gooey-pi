@@ -3,7 +3,7 @@ export const palettes = {
     canvas: '#080c15', sidebar: '#080c15', surface: '#0e1320', hover: '#131a29', selected: '#1a2234', raised: '#101624',
     text: '#edf1f8', text2: '#b1bccf', text3: '#8390a8',
     border: '#172033', borderSubtle: '#111827', borderStrong: '#232e46',
-    focus: '#f0b45e', apex: '#f0b45e', apexSoft: '#261d10',
+    focus: '#93bde3', apex: '#7eb0dc', apexSoft: '#16212c',
     success: '#4ade80', warning: '#fbbf24', danger: '#f87171',
     diffAdd: '#0f2d27', diffAddLine: '#34d399', diffRemove: '#331c20', diffRemoveLine: '#f87171',
     termBg: '#060912', termText: '#e2e8f0', termSelection: '#38bdf838',

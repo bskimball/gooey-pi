@@ -23,7 +23,8 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, type FormEvent } from 'react'
+import { useMachine } from '@xstate/react'
 import type {
   AutomationScheduleRecord,
   HarnessId,
@@ -44,29 +45,12 @@ import { formatRelative } from '@/lib/data'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { errorMessage } from '@/lib/errors'
 import { ApexButton, EmptyState, Modal, Segmented, SelectControl } from '@/components/ui'
-
-type ScheduleFilter = 'active' | 'paused' | 'attention' | 'all'
-type Frequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'advanced'
-type EditorMode = 'create' | 'edit'
-
-type ScheduleForm = {
-  title: string
-  prompt: string
-  targetKind: 'project' | 'session'
-  projectId: string
-  sessionId: string
-  timingKind: 'once' | 'recurring'
-  date: string
-  time: string
-  timeZone: string
-  frequency: Frequency
-  interval: string
-  weekdays: string[]
-  advancedRrule: string
-  model: string
-  thinking: 'auto' | ApexThinkingLevel
-  fast: boolean
-}
+import {
+  scheduledPageMachine,
+  type Frequency,
+  type ScheduleFilter,
+  type ScheduleForm,
+} from './scheduledPageMachine'
 
 interface ScheduledPageProps {
   harness: HarnessId
@@ -306,29 +290,26 @@ export function ScheduledPage({
   harness, schedules, projects, sessions, models, lastSelectedModel, error, initialProjectId, initialSessionId, selectedScheduleId,
   onCreate, onUpdate, onPause, onResume, onDelete, onRunNow, onPreview, onOpenSession,
 }: ScheduledPageProps) {
-  const [filter, setFilter] = useState<ScheduleFilter>('active')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editor, setEditor] = useState<{ mode: EditorMode; scheduleId?: string } | null>(null)
-  const [form, setForm] = useState<ScheduleForm>(() => defaultForm(projects, sessions, models, lastSelectedModel, initialProjectId, initialSessionId))
-  const [baseline, setBaseline] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [preview, setPreview] = useState<SchedulePreview | null>(null)
-  const [previewError, setPreviewError] = useState('')
-  const [previewing, setPreviewing] = useState(false)
-  const [action, setAction] = useState<string | null>(null)
-  const [actionError, setActionError] = useState('')
-  const [actionNotice, setActionNotice] = useState('')
-  const previewRequest = useRef(0)
+  const [snapshot, send, actor] = useMachine(scheduledPageMachine)
+  const {
+    filter, selectedId, editorMode, scheduleId, form, baseline, formError,
+    preview, previewError, action, actionError, actionNotice,
+  } = snapshot.context
+  const editorOpen = snapshot.matches({ editor: 'editing' })
+  const saving = snapshot.matches({ editor: { editing: 'saving' } })
+  const previewing = snapshot.matches({ preview: 'loading' })
+  const rowRunning = snapshot.matches({ rowAction: 'running' })
 
   const authorizedProjects = useMemo(() => projects.filter(isAuthorized), [projects])
   const projectMap = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
   const sessionMap = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions])
   const selected = schedules.find((item) => item.id === selectedId) ?? null
   useEffect(() => {
-    if (selectedScheduleId && schedules.some((item) => item.id === selectedScheduleId)) setSelectedId(selectedScheduleId)
-  }, [schedules, selectedScheduleId])
-  const editingSchedule = editor?.mode === 'edit' ? schedules.find((item) => item.id === editor.scheduleId) : undefined
+    if (selectedScheduleId && schedules.some((item) => item.id === selectedScheduleId)) {
+      send({ type: 'SYNC_SELECTED_SCHEDULE', id: selectedScheduleId })
+    }
+  }, [schedules, selectedScheduleId, send])
+  const editingSchedule = editorOpen && editorMode === 'edit' ? schedules.find((item) => item.id === scheduleId) : undefined
   const selectedProject = projectMap.get(form.projectId)
   const eligibleSessions = useMemo(() => {
     const project = projects.find((item) => item.id === form.projectId)
@@ -350,53 +331,51 @@ export function ScheduledPage({
   }, { active: 0, paused: 0, attention: 0 })
 
   useEffect(() => {
-    if (!editor || !currentTiming) {
-      setPreview(null); setPreviewError(''); setPreviewing(false)
+    if (!editorOpen || !currentTiming) {
+      send({ type: 'PREVIEW_CLEAR' })
       return
     }
-    const request = ++previewRequest.current
-    setPreviewing(true); setPreviewError('')
+    send({ type: 'PREVIEW_START' })
+    const requestId = actor.getSnapshot().context.previewRequestId
     const timer = window.setTimeout(() => {
       void onPreview(currentTiming).then((result) => {
-        if (previewRequest.current === request) { setPreview(result); setPreviewing(false) }
+        send({ type: 'PREVIEW_SUCCESS', requestId, preview: result })
       }).catch((reason) => {
-        if (previewRequest.current === request) { setPreview(null); setPreviewError(errorMessage(reason)); setPreviewing(false) }
+        send({ type: 'PREVIEW_ERROR', requestId, error: errorMessage(reason) })
       })
     }, 350)
     return () => {
       // Invalidate any in-flight preview so it cannot repopulate state after
       // the editor resets, the timing changes, or the page unmounts.
-      previewRequest.current += 1
+      send({ type: 'PREVIEW_CANCEL' })
       window.clearTimeout(timer)
     }
-  }, [currentTiming, editor, onPreview])
+  }, [actor, currentTiming, editorOpen, onPreview, send])
 
+  const updateForm = (patch: Partial<ScheduleForm>) => send({ type: 'UPDATE_FORM', patch })
   const openCreate = () => {
-    const next = defaultForm(projects, sessions, models, lastSelectedModel, initialProjectId, initialSessionId)
-    setForm(next); setBaseline(JSON.stringify(next)); setFormError(''); setPreview(null); setEditor({ mode: 'create' })
+    send({ type: 'OPEN_CREATE', form: defaultForm(projects, sessions, models, lastSelectedModel, initialProjectId, initialSessionId) })
   }
   const openEdit = (item: AutomationScheduleRecord) => {
-    const next = formFromSchedule(item, models, lastSelectedModel)
-    setForm(next); setBaseline(JSON.stringify(next)); setFormError(''); setPreview(null); setEditor({ mode: 'edit', scheduleId: item.id })
+    send({ type: 'OPEN_EDIT', scheduleId: item.id, form: formFromSchedule(item, models, lastSelectedModel) })
   }
   const closeEditor = () => {
     if (saving) return
     if (JSON.stringify(form) !== baseline && !window.confirm('Discard your unsaved schedule changes?')) return
-    setEditor(null); setFormError('')
+    send({ type: 'CLOSE_EDITOR' })
   }
   const setProject = (projectId: string) => {
     const project = projectMap.get(projectId)
     const firstSession = project ? sessions.find((session) => session.projectPath === project.path && !session.archived) : undefined
-    setForm((current) => ({ ...current, projectId, sessionId: firstSession?.id ?? '' }))
+    updateForm({ projectId, sessionId: firstSession?.id ?? '' })
   }
   const selectModel = (modelKey: string) => {
     const model = models.find((item) => item.key === modelKey)
-    setForm((current) => ({
-      ...current,
+    updateForm({
       model: modelKey,
-      thinking: model && current.thinking !== 'auto' && !model.availableThinkingLevels.includes(current.thinking) ? 'auto' : current.thinking,
-      fast: model && !model.fastModeSupported ? false : current.fast,
-    }))
+      thinking: model && form.thinking !== 'auto' && !model.availableThinkingLevels.includes(form.thinking) ? 'auto' : form.thinking,
+      fast: model && !model.fastModeSupported ? false : form.fast,
+    })
   }
   const validate = () => {
     if (!form.title.trim()) return 'Give this schedule a title.'
@@ -415,38 +394,45 @@ export function ScheduledPage({
     event.preventDefault()
     if (saving) return
     const validationError = validate()
-    if (validationError || !currentTiming) { setFormError(validationError); return }
-    setSaving(true); setFormError('')
+    if (validationError || !currentTiming) {
+      send({ type: 'VALIDATION_ERROR', error: validationError })
+      return
+    }
+    send({ type: 'SUBMIT' })
     const values = {
       title: form.title.trim(), prompt: form.prompt.trim(), target: targetFromForm(form),
       timing: currentTiming, execution: executionFromForm(form),
     }
     try {
-      if (editor?.mode === 'edit' && editingSchedule) await onUpdate(editingSchedule.id, { revision: editingSchedule.revision, ...values })
+      if (editorMode === 'edit' && editingSchedule) await onUpdate(editingSchedule.id, { revision: editingSchedule.revision, ...values })
       else await onCreate(values)
-      setEditor(null)
-    } catch (reason) { setFormError(errorMessage(reason)) }
-    finally { setSaving(false) }
+      send({ type: 'SAVE_SUCCESS' })
+    } catch (reason) {
+      send({ type: 'SAVE_ERROR', error: errorMessage(reason) })
+    }
   }
-  const perform = async (key: string, work: () => Promise<void>, success: string, after?: () => void) => {
-    if (action) return
-    setAction(key); setActionError(''); setActionNotice('')
-    try { await work(); setActionNotice(success); after?.() }
-    catch (reason) { setActionError(errorMessage(reason)) }
-    finally { setAction(null) }
+  const perform = async (key: string, work: () => Promise<void>, success: string, clearSelection = false) => {
+    if (rowRunning) return
+    send({ type: 'ROW_ACTION_START', action: key })
+    try {
+      await work()
+      send({ type: 'ROW_ACTION_SUCCESS', notice: success, clearSelection })
+    } catch (reason) {
+      send({ type: 'ROW_ACTION_ERROR', error: errorMessage(reason) })
+    }
   }
   const deleteSchedule = (item: AutomationScheduleRecord) => {
     if (!window.confirm(`Delete “${item.title}”? Run history for this schedule will no longer be available here.`)) return
-    void perform(`delete:${item.id}`, () => onDelete(item.id), 'Schedule deleted.', () => setSelectedId(null))
+    void perform(`delete:${item.id}`, () => onDelete(item.id), 'Schedule deleted.', true)
   }
 
-  const editorModal = editor ? (
-    <Modal title={editor.mode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
+  const editorModal = editorOpen ? (
+    <Modal title={editorMode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
       <>
         <span className="schedule-editor__save-status" aria-live="polite">{saving ? 'Saving without closing your draft…' : ''}</span>
         <ApexButton disabled={saving} onClick={closeEditor}>Cancel</ApexButton>
         <ApexButton variant="primary" type="submit" form="schedule-editor-form" disabled={saving}>
-          {saving ? 'Saving…' : editor.mode === 'create' ? 'Create schedule' : 'Save changes'}
+          {saving ? 'Saving…' : editorMode === 'create' ? 'Create schedule' : 'Save changes'}
         </ApexButton>
       </>
     )}>
@@ -456,40 +442,40 @@ export function ScheduledPage({
           <p>{HARNESS_SHORT_NAMES[harness]} runs this prompt unattended. You can always pause it or open the session produced by a run.</p>
         </div>
         <div className="schedule-editor__copy">
-          <TextInput label="Title" hasAutoFocus isRequired isDisabled={saving} value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} placeholder="Morning issue triage" containerClassName="field" />
-          <TextArea label="Prompt" isRequired isDisabled={saving} value={form.prompt} onChange={(value) => setForm((current) => ({ ...current, prompt: value }))} rows={4} placeholder="Review new high-priority issues, identify blockers, and propose owners…" containerClassName="field" />
+          <TextInput label="Title" hasAutoFocus isRequired isDisabled={saving} value={form.title} onChange={(value) => updateForm({ title: value })} placeholder="Morning issue triage" containerClassName="field" />
+          <TextArea label="Prompt" isRequired isDisabled={saving} value={form.prompt} onChange={(value) => updateForm({ prompt: value })} rows={4} placeholder="Review new high-priority issues, identify blockers, and propose owners…" containerClassName="field" />
         </div>
         <div className="schedule-editor__grid">
           <fieldset className="schedule-fieldset">
             <legend><Kanban size={14} /> Destination</legend>
             <div className="schedule-radio-grid">
-              <label className={form.targetKind === 'project' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'project'} onChange={() => setForm((current) => ({ ...current, targetKind: 'project' }))} /><span><strong>New session</strong><small>Start fresh in a project</small></span></label>
-              <label className={form.targetKind === 'session' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'session'} onChange={() => setForm((current) => ({ ...current, targetKind: 'session' }))} /><span><strong>Existing session</strong><small>Continue a thread</small></span></label>
+              <label className={form.targetKind === 'project' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'project'} onChange={() => updateForm({ targetKind: 'project' })} /><span><strong>New session</strong><small>Start fresh in a project</small></span></label>
+              <label className={form.targetKind === 'session' ? 'is-selected' : ''}><input type="radio" name="target" checked={form.targetKind === 'session'} onChange={() => updateForm({ targetKind: 'session' })} /><span><strong>Existing session</strong><small>Continue a thread</small></span></label>
             </div>
             <div className="field"><span>Authorized project</span><SelectControl label="Authorized project" value={form.projectId} disabled={saving || !authorizedProjects.length} onChange={(event) => setProject(event.target.value)}><option value="">Choose a project</option>{authorizedProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</SelectControl></div>
-            {form.targetKind === 'session' ? <div className="field"><span>Session</span><SelectControl label="Session" value={form.sessionId} disabled={saving || !eligibleSessions.length} onChange={(event) => setForm((current) => ({ ...current, sessionId: event.target.value }))}><option value="">Choose a session</option>{eligibleSessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}</SelectControl></div> : null}
+            {form.targetKind === 'session' ? <div className="field"><span>Session</span><SelectControl label="Session" value={form.sessionId} disabled={saving || !eligibleSessions.length} onChange={(event) => updateForm({ sessionId: event.target.value })}><option value="">Choose a session</option>{eligibleSessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}</SelectControl></div> : null}
             {!authorizedProjects.length ? <p className="schedule-field-note schedule-field-note--warning"><Warning size={13} /> Add or authorize a project before scheduling work.</p> : <p className="schedule-field-note">{selectedProject?.primaryFolder}</p>}
           </fieldset>
 
           <fieldset className="schedule-fieldset">
             <legend><CalendarDots size={14} /> Timing</legend>
             <div className="schedule-radio-grid schedule-radio-grid--timing">
-              <label className={form.timingKind === 'once' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'once'} onChange={() => setForm((current) => ({ ...current, timingKind: 'once' }))} /><span><strong>Once</strong><small>One future run</small></span></label>
-              <label className={form.timingKind === 'recurring' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'recurring'} onChange={() => setForm((current) => ({ ...current, timingKind: 'recurring' }))} /><span><strong>Recurring</strong><small>Repeat on a cadence</small></span></label>
+              <label className={form.timingKind === 'once' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'once'} onChange={() => updateForm({ timingKind: 'once' })} /><span><strong>Once</strong><small>One future run</small></span></label>
+              <label className={form.timingKind === 'recurring' ? 'is-selected' : ''}><input type="radio" name="timing" checked={form.timingKind === 'recurring'} onChange={() => updateForm({ timingKind: 'recurring' })} /><span><strong>Recurring</strong><small>Repeat on a cadence</small></span></label>
             </div>
             {form.timingKind === 'recurring' ? <>
-              <div className="schedule-frequency" role="group" aria-label="Recurrence frequency">{FREQUENCIES.map((option) => <button key={option.value} type="button" className={form.frequency === option.value ? 'is-active' : ''} aria-pressed={form.frequency === option.value} onClick={() => setForm((current) => ({ ...current, frequency: option.value }))}>{option.label}</button>)}</div>
+              <div className="schedule-frequency" role="group" aria-label="Recurrence frequency">{FREQUENCIES.map((option) => <button key={option.value} type="button" className={form.frequency === option.value ? 'is-active' : ''} aria-pressed={form.frequency === option.value} onClick={() => updateForm({ frequency: option.value })}>{option.label}</button>)}</div>
               {form.frequency !== 'advanced' ? <div className="schedule-inline-fields">
-                <label className="field"><span>Every</span><input type="number" min="1" max="999" value={form.interval} onChange={(event) => setForm((current) => ({ ...current, interval: event.target.value }))} /></label>
+                <label className="field"><span>Every</span><input type="number" min="1" max="999" value={form.interval} onChange={(event) => updateForm({ interval: event.target.value })} /></label>
                 <span>{form.frequency === 'hourly' ? 'hour(s)' : form.frequency === 'daily' ? 'day(s)' : form.frequency === 'weekly' ? 'week(s)' : 'month(s)'}</span>
-              </div> : <label className="field"><span>RRULE</span><textarea className="schedule-rrule" rows={3} spellCheck={false} value={form.advancedRrule} placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" onChange={(event) => setForm((current) => ({ ...current, advancedRrule: event.target.value }))} /></label>}
-              {form.frequency === 'weekly' ? <fieldset className="weekday-fieldset"><legend>On days</legend><div className="weekday-chips">{WEEKDAYS.map((day) => { const active = form.weekdays.includes(day.value); return <label key={day.value} className={active ? 'is-active' : ''} title={day.long}><input type="checkbox" checked={active} onChange={() => setForm((current) => ({ ...current, weekdays: active ? current.weekdays.filter((value) => value !== day.value) : [...current.weekdays, day.value] }))} /><span>{day.label}</span></label> })}</div></fieldset> : null}
+              </div> : <label className="field"><span>RRULE</span><textarea className="schedule-rrule" rows={3} spellCheck={false} value={form.advancedRrule} placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" onChange={(event) => updateForm({ advancedRrule: event.target.value })} /></label>}
+              {form.frequency === 'weekly' ? <fieldset className="weekday-fieldset"><legend>On days</legend><div className="weekday-chips">{WEEKDAYS.map((day) => { const active = form.weekdays.includes(day.value); return <label key={day.value} className={active ? 'is-active' : ''} title={day.long}><input type="checkbox" checked={active} onChange={() => updateForm({ weekdays: active ? form.weekdays.filter((value) => value !== day.value) : [...form.weekdays, day.value] })} /><span>{day.label}</span></label> })}</div></fieldset> : null}
             </> : null}
             <div className="schedule-date-fields">
-              <label className="field"><span>{form.timingKind === 'once' ? 'Date' : 'Starts'}</span><input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label>
-              <label className="field"><span>Local time</span><input type="time" value={form.time} onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))} /></label>
+              <label className="field"><span>{form.timingKind === 'once' ? 'Date' : 'Starts'}</span><input type="date" value={form.date} onChange={(event) => updateForm({ date: event.target.value })} /></label>
+              <label className="field"><span>Local time</span><input type="time" value={form.time} onChange={(event) => updateForm({ time: event.target.value })} /></label>
             </div>
-            {form.timingKind === 'recurring' ? <label className="field"><span>IANA timezone</span><input list="schedule-time-zones" value={form.timeZone} spellCheck={false} onChange={(event) => setForm((current) => ({ ...current, timeZone: event.target.value }))} /><datalist id="schedule-time-zones"><option value={DEVICE_TIME_ZONE} /><option value="UTC" /><option value="America/Los_Angeles" /><option value="America/New_York" /><option value="Europe/London" /><option value="Asia/Tokyo" /></datalist></label> : <p className="schedule-field-note">Uses this device’s timezone: {DEVICE_TIME_ZONE}</p>}
+            {form.timingKind === 'recurring' ? <label className="field"><span>IANA timezone</span><input list="schedule-time-zones" value={form.timeZone} spellCheck={false} onChange={(event) => updateForm({ timeZone: event.target.value })} /><datalist id="schedule-time-zones"><option value={DEVICE_TIME_ZONE} /><option value="UTC" /><option value="America/Los_Angeles" /><option value="America/New_York" /><option value="Europe/London" /><option value="Asia/Tokyo" /></datalist></label> : <p className="schedule-field-note">Uses this device’s timezone: {DEVICE_TIME_ZONE}</p>}
           </fieldset>
         </div>
 
@@ -497,12 +483,12 @@ export function ScheduledPage({
           <legend><Gauge size={14} /> Execution</legend>
           <div className="schedule-execution-grid">
             <label className="field"><span>Model</span><select value={form.model} onChange={(event) => selectModel(event.target.value)}>{!form.model ? <option value="" disabled>No model available</option> : null}{form.model && !models.some((model) => model.key === form.model && model.enabled !== false && model.available) ? <option value={form.model}>{form.model} (unavailable)</option> : null}{availableModels.map((model) => <option key={model.key} value={model.key}>{model.name} · {model.provider}</option>)}</select></label>
-            <label className="field"><span>Reasoning</span><select value={form.thinking} onChange={(event) => setForm((current) => ({ ...current, thinking: event.target.value as ScheduleForm['thinking'] }))}><option value="auto">Auto</option>{THINKING_LEVELS.filter((level) => !selectedModel || selectedModel.availableThinkingLevels.includes(level) || level === form.thinking).map((level) => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1)}</option>)}</select></label>
+            <label className="field"><span>Reasoning</span><select value={form.thinking} onChange={(event) => updateForm({ thinking: event.target.value as ScheduleForm['thinking'] })}><option value="auto">Auto</option>{THINKING_LEVELS.filter((level) => !selectedModel || selectedModel.availableThinkingLevels.includes(level) || level === form.thinking).map((level) => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1)}</option>)}</select></label>
             <CheckboxInput
               className={`schedule-fast-toggle ${selectedModel && !selectedModel.fastModeSupported ? 'is-disabled' : ''}`}
               value={form.fast}
               isDisabled={Boolean(selectedModel && !selectedModel.fastModeSupported)}
-              onChange={(checked) => setForm((current) => ({ ...current, fast: checked }))}
+              onChange={(checked) => updateForm({ fast: checked })}
               label="Fast"
               description={selectedModel && !selectedModel.fastModeSupported ? 'Unavailable for model' : 'Prioritize latency'}
             />
@@ -522,10 +508,10 @@ export function ScheduledPage({
     const project = projectMap.get(selected.target.projectId)
     const targetSession = selected.target.kind === 'session' ? sessionMap.get(selected.target.sessionId) : undefined
     const recentRuns = [...selected.runs].sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)).slice(0, 8)
-    const busy = Boolean(action)
+    const busy = rowRunning
     return (
       <div className="page scroll-area"><div className="page-container schedule-page schedule-page--detail">
-        <ApexButton variant="quiet" className="schedule-back" icon={<ArrowLeft size={15} />} onClick={() => { setSelectedId(null); setActionError(''); setActionNotice('') }}>All schedules</ApexButton>
+        <ApexButton variant="quiet" className="schedule-back" icon={<ArrowLeft size={15} />} onClick={() => send({ type: 'SELECT_SCHEDULE', id: null })}>All schedules</ApexButton>
         <header className="schedule-detail__header">
           <div className={`schedule-detail__mark schedule-detail__mark--${needsAttention(selected) ? 'attention' : selected.status}`}>{statusIcon(selected, 18)}</div>
           <div><span className={`schedule-state schedule-state--${needsAttention(selected) ? 'attention' : selected.status}`}>{statusLabel(selected)}</span><h1>{selected.title}</h1><p>Revision {selected.revision} · Updated {formatRelative(selected.updatedAt)}</p></div>
@@ -573,13 +559,13 @@ export function ScheduledPage({
         <span><i className="is-paused" /> <strong>{counts.paused}</strong> paused</span>
         <span><i className="is-attention" /> <strong>{counts.attention}</strong> need attention</span>
       </div>
-      <div className="page-tools schedule-tools"><Segmented value={filter} label="Schedule filter" onChange={(value) => setFilter(value as ScheduleFilter)} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'attention', label: 'Needs attention' }, { value: 'all', label: 'All' }]} /><span>{visible.length} {visible.length === 1 ? 'schedule' : 'schedules'}</span></div>
+      <div className="page-tools schedule-tools"><Segmented value={filter} label="Schedule filter" onChange={(value) => send({ type: 'SET_FILTER', filter: value as ScheduleFilter })} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'attention', label: 'Needs attention' }, { value: 'all', label: 'All' }]} /><span>{visible.length} {visible.length === 1 ? 'schedule' : 'schedules'}</span></div>
       {error ? <Banner status="error" role="alert" className="page-inline-error" title={`Schedule catalog unavailable: ${error}`} /> : null}
       {actionError ? <Banner status="error" role="alert" className="page-inline-error" title={actionError} /> : null}
       {visible.length ? <div className="schedule-ledger">{visible.map((item) => {
         const project = projectMap.get(item.target.projectId)
         const targetSession = item.target.kind === 'session' ? sessionMap.get(item.target.sessionId) : undefined
-        return <button type="button" key={item.id} className="schedule-row" onClick={() => { setSelectedId(item.id); setActionError(''); setActionNotice('') }} aria-label={`Open ${item.title}`}>
+        return <button type="button" key={item.id} className="schedule-row" onClick={() => send({ type: 'SELECT_SCHEDULE', id: item.id })} aria-label={`Open ${item.title}`}>
           <span className={`schedule-row__status schedule-row__status--${needsAttention(item) ? 'attention' : item.status}`}>{statusIcon(item)}</span>
           <span className="schedule-row__main"><span><strong>{item.title}</strong><i className={`schedule-state schedule-state--${needsAttention(item) ? 'attention' : item.status}`}>{statusLabel(item)}</i></span><small>{item.prompt}</small><span className="schedule-row__tags"><span><Kanban size={11} />{targetSession?.title ?? project?.name ?? 'Unavailable target'}</span><span><Repeat size={11} />{timingLabel(item.timing)}</span><span><Gauge size={11} />{models.find((model) => model.key === item.execution.model)?.name ?? item.execution.model}</span></span></span>
           <span className="schedule-row__next"><small>Next</small><strong>{item.nextRunAt ? formatDateTime(item.nextRunAt) : '—'}</strong><span>{item.nextRunAt ? formatRelative(item.nextRunAt) : 'No future run'}</span></span>

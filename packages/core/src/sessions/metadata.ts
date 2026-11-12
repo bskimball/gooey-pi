@@ -36,30 +36,6 @@ export function statusFrom(taskState: string | undefined, lifecycle: string | un
   return 'unknown'
 }
 
-export function applyLiveMetadata(metadata: SessionMetadata, live: JsonRecord): void {
-  const active = live.isSessionActive !== false
-  if (live.workerState === 'failed') metadata.status = 'failed'
-  else if (active && (live.isStreaming === true || live.activity === 'working' || live.isCompacting === true)) metadata.status = 'running'
-  else if (live.lifecycle === 'archived') metadata.status = 'complete'
-  else if (live.taskState === 'completed') metadata.status = 'complete'
-  else if (live.taskState === 'needs_input') metadata.status = 'waiting'
-  else metadata.status = 'idle'
-  if (typeof live.sessionName === 'string' && live.sessionName.trim()) metadata.title = compactText(live.sessionName, 100)
-  if (typeof live.thinkingLevel === 'string') metadata.thinkingLevel = live.thinkingLevel
-  if (typeof live.rlmDepth === 'number' && Number.isInteger(live.rlmDepth) && live.rlmDepth >= 0) metadata.depth = live.rlmDepth
-  if (typeof live.modified === 'string') {
-    const liveModified = Date.parse(live.modified)
-    const jsonlModified = Date.parse(metadata.updatedAt)
-    if (Number.isFinite(liveModified) && (!Number.isFinite(jsonlModified) || liveModified > jsonlModified)) {
-      metadata.updatedAt = new Date(liveModified).toISOString()
-    }
-  }
-  if (isRecord(live.model)) {
-    if (typeof live.model.id === 'string') metadata.model = live.model.id
-    if (typeof live.model.provider === 'string') metadata.provider = live.model.provider
-  }
-}
-
 interface MetadataAccumulator {
   id: string
   projectPath: string

@@ -323,59 +323,6 @@
 	font-size: var(--fs-meta);
 	line-height: 1.35;
 }
-.composer-attachment--annotations {
-	width: auto;
-	max-width: none;
-	height: 26px;
-	align-self: center;
-	gap: 0;
-	padding: 0 1px 0 0;
-	border-color: color-mix(in srgb, var(--annotation) 35%, var(--border));
-	border-radius: 13px;
-	background: color-mix(in srgb, var(--annotation) 8%, var(--surface-subtle));
-}
-/* Beats the generic `.composer-attachment > button` sizing rule, which would
-   otherwise force this button into a 23px grid and stack its contents. */
-.composer-attachment--annotations .composer-attachment__expand {
-	width: auto;
-	height: 22px;
-	display: inline-flex;
-	align-items: center;
-	flex: 0 0 auto;
-	gap: 4px;
-	padding: 0 3px 0 9px;
-	border-radius: var(--radius-lg);
-	color: var(--annotation);
-	background: transparent;
-	font-size: var(--fs-meta);
-	font-weight: 600;
-	line-height: 1;
-	white-space: nowrap;
-	font-variant-numeric: tabular-nums;
-}
-.composer-attachment--annotations .composer-attachment__expand:hover {
-	background: color-mix(in srgb, var(--annotation) 10%, transparent);
-}
-.composer-attachment--annotations .composer-attachment__expand svg {
-	flex: 0 0 auto;
-}
-.composer-attachment--annotations .composer-attachment__expand svg.is-open {
-	transform: rotate(180deg);
-}
-.composer-attachment--annotations .composer-attachment__clear {
-	width: 20px;
-	height: 20px;
-	display: grid;
-	place-items: center;
-	flex: 0 0 auto;
-	border-radius: var(--radius-lg);
-	color: var(--text-tertiary);
-	background: transparent;
-}
-.composer-attachment--annotations .composer-attachment__clear:hover {
-	color: var(--text);
-	background: var(--surface-hover);
-}
 .composer-attachment--terminal {
 	width: auto;
 	max-width: 230px;
@@ -475,80 +422,6 @@
 	line-height: 1.45;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-}
-.composer-annotations {
-	position: absolute;
-	z-index: 50;
-	left: 0;
-	right: 0;
-	bottom: calc(100% + 6px);
-	max-height: 260px;
-	padding: 6px;
-	overflow: auto;
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	background: var(--surface-raised);
-	box-shadow: var(--shadow-popover);
-}
-.composer-annotation {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	padding: 6px 7px;
-	border-radius: var(--radius-sm);
-}
-.composer-annotation:hover {
-	background: var(--surface-hover);
-}
-.composer-annotation__badge {
-	width: 18px;
-	height: 18px;
-	display: grid;
-	place-items: center;
-	flex: 0 0 auto;
-	margin-top: 1px;
-	border-radius: 50%;
-	color: white;
-	background: var(--annotation);
-	font-size: var(--fs-micro);
-	font-weight: 700;
-}
-.composer-annotation__body {
-	min-width: 0;
-	flex: 1;
-	display: grid;
-	gap: 2px;
-}
-.composer-annotation__body p {
-	margin: 0;
-	color: var(--text);
-	font-size: var(--fs-ui);
-	line-height: 1.4;
-	overflow-wrap: anywhere;
-}
-.composer-annotation__body small {
-	overflow: hidden;
-	color: var(--text-tertiary);
-	font-size: var(--fs-micro);
-	white-space: nowrap;
-	text-overflow: ellipsis;
-}
-.composer-annotation__body small:first-of-type {
-	font-family: "SFMono-Regular", Menlo, monospace;
-}
-.composer-annotation > button {
-	width: 22px;
-	height: 22px;
-	display: grid;
-	place-items: center;
-	flex: 0 0 auto;
-	border-radius: var(--radius-sm);
-	color: var(--text-tertiary);
-	background: transparent;
-}
-.composer-annotation > button:hover {
-	color: var(--text);
-	background: var(--surface-hover);
 }
 .composer__footer {
 	position: relative;
@@ -1300,10 +1173,6 @@
 	flex-wrap: wrap;
 	align-items: baseline;
 	column-gap: 5px;
-}
-.pi-fusion-pair__model {
-	max-width: 100%;
-	overflow-wrap: anywhere;
 }
 .pi-mode-status:empty {
 	position: absolute;

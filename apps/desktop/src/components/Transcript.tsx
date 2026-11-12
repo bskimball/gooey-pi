@@ -87,6 +87,14 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
     }
     return undefined
   }, [activeAssistantId, groupedMessages])
+  let lastUserMessageIndex = -1
+  for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+    const candidate = visibleMessages[index]
+    if (candidate.role === 'user' && candidate.kind !== 'steer-read-marker') {
+      lastUserMessageIndex = index
+      break
+    }
+  }
   const transcriptClasses = [
     'transcript',
     'scroll-area',
@@ -125,7 +133,7 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
               if (candidate.role === 'user' && candidate.kind !== 'steer-read-marker') break
               if (candidate.role === 'assistant') segments.push(candidate)
             }
-            const isLastPrompt = !visibleMessages.slice(messageIndex + 1).some((candidate) => candidate.role === 'user' && candidate.kind !== 'steer-read-marker')
+            const isLastPrompt = messageIndex === lastUserMessageIndex
             // An active session's last turn is still running even between segments (e.g. mid-compaction).
             turnRunning = segments.some((segment) => segment.streaming || segment.id === activeAssistantId) || (active && isLastPrompt)
             turnFailed = !turnRunning && segments.some((segment) => Boolean(segment.errorMessage))

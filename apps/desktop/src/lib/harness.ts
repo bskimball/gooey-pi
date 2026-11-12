@@ -1,7 +1,5 @@
 import { APEX_THINKING_LEVELS, type HarnessId, type ApexThinkingLevel } from '@/types/api'
 
-export const HARNESS_SELECTOR_ORDER: readonly HarnessId[] = ['pi']
-
 /** Product name shown in window chrome and the brand switcher. */
 export const HARNESS_PRODUCT_NAMES: Record<HarnessId, string> = { pi: 'Pi Work' }
 

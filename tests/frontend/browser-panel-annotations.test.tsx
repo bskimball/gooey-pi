@@ -465,4 +465,22 @@ describe('BrowserPanel annotation mode', () => {
     })
     expect(openInVsCode).not.toHaveBeenCalled()
   })
+
+  it('arms direct element selection and disarms cleanly on Escape', async () => {
+    await act(async () => root.render(<Harness />))
+    await makeDomReady()
+
+    const selectButton = () => container.querySelector('button[aria-label="Select element"], button[aria-label="Stop selecting"]') as HTMLButtonElement
+    await act(async () => { selectButton().click() })
+    expect(selectButton().getAttribute('aria-pressed')).toBe('true')
+    expect(container.querySelector('.annotation-hint')?.textContent).toContain('Click an element to attach it to chat')
+
+    takeResult = JSON.stringify([{ cancelled: true }])
+    await act(async () => { await vi.advanceTimersByTimeAsync(120) })
+    takeResult = null
+
+    expect(selectButton().getAttribute('aria-pressed')).toBe('false')
+    expect(container.querySelector('.annotation-hint')).toBeNull()
+    expect(container.querySelector('.annotation-popover')).toBeNull()
+  })
 })

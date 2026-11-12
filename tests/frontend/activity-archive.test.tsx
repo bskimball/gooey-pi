@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activityNotificationSignature, sessionShowsCompanionNotification } from '../../apps/desktop/src/app/session-attention'
+import { activityNotificationSignature } from '../../apps/desktop/src/app/session-attention'
 import { type SessionLiveMap } from '../../apps/desktop/src/app/session-live'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { ActivityStatusPill } from '../../apps/desktop/src/components/activity/ActivityStatusPill'
@@ -110,10 +110,6 @@ describe('archived activity cleanup', () => {
       root.render(<ActivityPage sessions={[{ ...activeSession, eventRevision: 1 }]} projects={[project]} clearedActivity={{ [activeSession.id]: signature }} onOpen={vi.fn()} onClear={vi.fn()} />)
     })
     expect(container.textContent).toContain('Active chat')
-  })
-
-  it('suppresses notifications from sessions that are already archived', () => {
-    expect(sessionShowsCompanionNotification(archivedSession)).toBe(false)
   })
 
   it('acknowledges and clears unread state when archiving succeeds', async () => {

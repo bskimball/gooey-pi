@@ -5,6 +5,16 @@ import { isRecord } from 'apex-core/validation'
 import type { HostMessage, HostState, ModelDescriptor, WebviewMessage } from './protocol'
 import { editorPromptContext, scopedEditorRequest } from './editor'
 import { apexSessionTurnMachine, isRunActive, type ApexTurnEvent } from './apexSessionMachine'
+import {
+  attachedSessionMachine,
+  canAttachedPublish,
+  canAttachedReceiveEvents,
+  isAttachedConnected,
+  isAttachedConnecting,
+  isAttachedDisposed,
+  type AttachedSessionEvent,
+  type AttachedSessionSnapshot,
+} from './attachedSessionMachine'
 import { initialTransition, transition, type SnapshotFrom } from 'xstate'
 
 type Json = Record<string, unknown>
@@ -15,14 +25,16 @@ export class AttachedSession {
   private client: DesktopSessionClient | undefined
   private dialogs: Json[] = []
   private ops: Extract<HostMessage, { type: 'reset' }>['ops'] = []
-  private disposed = false
-  private disconnected = false
-  private publishing = false
   private pendingOps: Extract<HostMessage, { type: 'ops' }>['ops'] = []
   private flushTimer: NodeJS.Timeout | undefined
-  private refreshPending: Promise<void> | undefined
+  private refreshPromise: Promise<void> | undefined
   private state: HostState
+  private lifecycle: AttachedSessionSnapshot = initialTransition(attachedSessionMachine)[0]
   private turn: SnapshotFrom<typeof apexSessionTurnMachine> = initialTransition(apexSessionTurnMachine)[0]
+
+  private send(event: AttachedSessionEvent) {
+    this.lifecycle = transition(attachedSessionMachine, this.lifecycle, event)[0]
+  }
 
   constructor(readonly path: string, private readonly cwd: string, private readonly publish: (message: HostMessage) => void, private readonly onDisconnected: (error: string) => void) {
     this.state = { status: 'starting', connection: 'desktop', homeDir: homedir(), cwd, isStreaming: false, thinkingLevel: 'off', thinkingLevels: ['off'], models: [], providers: [], commands: [], statuses: {}, queued: [], messageEnterAction: vscode.workspace.getConfiguration('apex').get('messageEnterAction', 'queue') }
@@ -33,12 +45,12 @@ export class AttachedSession {
       sessionPath: this.path, cwd: this.cwd,
       onEvent: (event) => this.onEvent(event),
       onDisconnect: (reason) => {
-        if (this.disposed || this.disconnected) return
+        if (!canAttachedReceiveEvents(this.lifecycle)) return
         const error = `${reason} Reconnect to read the current state. Sent commands are not retried.`
         this.dialogs = []
         this.post({ type: 'extensionUi', request: null })
         this.update({ status: 'exited', isStreaming: false, error })
-        this.disconnected = true
+        this.send({ type: 'DISCONNECT' })
         clearTimeout(this.flushTimer)
         this.pendingOps = []
         this.onDisconnected(error)
@@ -46,8 +58,9 @@ export class AttachedSession {
       editorRequest: (method, params) => scopedEditorRequest(this.cwd, method, params),
     })
     if (!client) return false
-    if (this.disposed || this.disconnected) { await client.close(); return false }
+    if (!isAttachedConnecting(this.lifecycle)) { await client.close(); return false }
     this.client = client
+    this.send({ type: 'CONNECTED' })
     const { runtime, messages, dialogs, statuses } = client.snapshot
     this.ops = messages.map((message) => ({ kind: 'saved', message }))
     this.dialogs = dialogs
@@ -57,10 +70,10 @@ export class AttachedSession {
     return true
   }
 
-  get isConnected(): boolean { return this.state.status === 'ready' && !this.disposed && !this.disconnected }
+  get isConnected(): boolean { return isAttachedConnected(this.lifecycle) }
 
   private post(message: HostMessage) {
-    if (this.publishing && !this.disposed && !this.disconnected) this.publish(message)
+    if (canAttachedPublish(this.lifecycle)) this.publish(message)
   }
 
   /** Folds a Desktop event through the same turn machine ApexSession uses, so isStreaming means the same thing in both views. */
@@ -71,7 +84,7 @@ export class AttachedSession {
 
   replay() {
     if (!this.isConnected) return
-    this.publishing = true
+    this.send({ type: 'REPLAY' })
     this.flush()
     this.post({ type: 'state', state: this.state })
     this.post({ type: 'reset', ops: this.ops })
@@ -79,7 +92,13 @@ export class AttachedSession {
     this.post({ type: 'extensionUi', request: this.dialogs[0] ?? null })
   }
 
-  async dispose() { if (this.disposed) return; this.disposed = true; clearTimeout(this.flushTimer); this.pendingOps = []; await this.client?.close() }
+  async dispose() {
+    if (isAttachedDisposed(this.lifecycle)) return
+    this.send({ type: 'DISPOSE' })
+    clearTimeout(this.flushTimer)
+    this.pendingOps = []
+    await this.client?.close()
+  }
 
   private async command(command: Json): Promise<Json> {
     if (!this.client || !this.isConnected) throw new Error('Desktop is disconnected. Reconnect before sending commands.')
@@ -142,7 +161,7 @@ export class AttachedSession {
   }
 
   private onEvent(event: Json) {
-    if (this.disposed || this.disconnected) return
+    if (!canAttachedReceiveEvents(this.lifecycle)) return
     if (event.type === 'desktop_user_message' && isRecord(event.message) && typeof event.message.id === 'string' && Array.isArray(event.message.parts)) {
       const message = event.message as unknown as import('apex-core/types/api').TranscriptMessage
       this.addOps([{ kind: 'saved', message }])
@@ -195,7 +214,7 @@ export class AttachedSession {
   private flush() {
     clearTimeout(this.flushTimer)
     this.flushTimer = undefined
-    if (!this.pendingOps.length || this.disposed || this.disconnected) return
+    if (!this.pendingOps.length || !canAttachedReceiveEvents(this.lifecycle)) return
     const ops = this.pendingOps
     this.pendingOps = []
     this.ops.push(...ops)
@@ -203,8 +222,19 @@ export class AttachedSession {
   }
 
   private refresh(): Promise<void> {
-    this.refreshPending ??= this.refreshState().finally(() => { this.refreshPending = undefined })
-    return this.refreshPending
+    if (!isAttachedConnected(this.lifecycle)) return Promise.resolve()
+    this.send({ type: 'REFRESH_REQUESTED' })
+    this.refreshPromise ??= this.runRefreshLoop().finally(() => { this.refreshPromise = undefined })
+    return this.refreshPromise
+  }
+
+  private async runRefreshLoop(): Promise<void> {
+    while (isAttachedConnected(this.lifecycle)) {
+      await this.refreshState()
+      const shouldContinue = this.lifecycle.context.refreshPending && isAttachedConnected(this.lifecycle)
+      this.send({ type: 'REFRESH_FINISHED' })
+      if (!shouldContinue) break
+    }
   }
 
   private async refreshState() {
@@ -212,7 +242,7 @@ export class AttachedSession {
       this.command({ type: 'get_state' }), this.command({ type: 'get_available_models' }), this.command({ type: 'get_commands' }),
       this.command({ type: 'get_available_thinking_levels' }), this.command({ type: 'get_session_stats' }),
     ])
-    if (this.disposed || this.state.status !== 'ready') return
+    if (!isAttachedConnected(this.lifecycle)) return
     const models: ModelDescriptor[] = (Array.isArray(available.models) ? available.models : []).filter(isRecord).flatMap((model) => {
       if (typeof model.provider !== 'string' || typeof model.id !== 'string') return []
       return [{ key: `${model.provider}/${model.id}`, provider: model.provider, id: model.id, name: typeof model.name === 'string' ? model.name : model.id, reasoning: model.reasoning === true, input: Array.isArray(model.input) && model.input.includes('image') ? ['text', 'image'] : ['text'], contextWindow: Number(model.contextWindow) || 0, maxTokens: Number(model.maxTokens) || 0, availableThinkingLevels: model.reasoning === true ? levels : ['off'], fastModeSupported: false, available: true }]
@@ -235,7 +265,7 @@ export class AttachedSession {
   }
 
   private notice(error: unknown) {
-    if (!this.disposed && !this.disconnected) this.addOps([{ kind: 'notice', id: `desktop-notice-${Date.now()}`, timestamp: Date.now(), text: error instanceof Error ? error.message : String(error) }])
+    if (canAttachedReceiveEvents(this.lifecycle)) this.addOps([{ kind: 'notice', id: `desktop-notice-${Date.now()}`, timestamp: Date.now(), text: error instanceof Error ? error.message : String(error) }])
   }
   private update(patch: Partial<HostState>) { this.state = { ...this.state, ...patch }; this.post({ type: 'state', state: this.state }) }
 }

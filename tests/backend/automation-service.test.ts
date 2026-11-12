@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { assertNoMcpAuthenticationCommand, NETWORK_MCP_AUTH_UNAVAILABLE } from '../../apps/desktop/src/lib/mcp-policy'
 import type { ScheduleExecution, ScheduleTarget } from '../../apps/desktop/src/types/api'
 import { AutomationService } from '../../apps/desktop/electron/main/schedules/service'
+import { createScheduleServiceLifecycle } from '../../apps/desktop/electron/main/schedules/scheduleServiceMachine'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 
 const dirs: string[] = []
@@ -375,5 +376,30 @@ describe('AutomationService', () => {
       process.off('unhandledRejection', onRejection)
       consoleError.mockRestore()
     }
+  })
+
+  it('tracks running, stopping, and closed lifecycle transitions across concurrent runs and restarts', () => {
+    const lifecycle = createScheduleServiceLifecycle()
+    expect(lifecycle.getSnapshot().matches({ running: 'idle' })).toBe(true)
+
+    lifecycle.send({ type: 'RUN_STARTED' })
+    lifecycle.send({ type: 'RUN_STARTED' })
+    expect(lifecycle.getSnapshot().matches({ running: 'executing' })).toBe(true)
+    expect(lifecycle.getSnapshot().context.activeRuns).toBe(2)
+
+    lifecycle.send({ type: 'RUN_FINISHED' })
+    expect(lifecycle.getSnapshot().matches({ running: 'executing' })).toBe(true)
+    expect(lifecycle.getSnapshot().context.activeRuns).toBe(1)
+
+    lifecycle.send({ type: 'STOP' })
+    expect(lifecycle.getSnapshot().matches('stopping')).toBe(true)
+
+    lifecycle.send({ type: 'RUN_FINISHED' })
+    expect(lifecycle.getSnapshot().matches('closed')).toBe(true)
+    expect(lifecycle.getSnapshot().context.activeRuns).toBe(0)
+
+    lifecycle.send({ type: 'START' })
+    expect(lifecycle.getSnapshot().matches({ running: 'idle' })).toBe(true)
+    lifecycle.stop()
   })
 })

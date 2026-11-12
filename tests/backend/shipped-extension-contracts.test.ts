@@ -205,7 +205,7 @@ describe('describeEffectiveRunConfig', () => {
       writeFileSync(join(agentDir, 'SYSTEM.md'), 'sys')
       writeFileSync(join(agentDir, 'auth.json'), '{"secret":true}')
       writeFileSync(join(assets, 'apex-ask-user.ts'), '')
-      const result = describeEffectiveRunConfig({ cwd: project, harness: 'pi', home: join(root, 'home'), agentDir, extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
+      const result = await describeEffectiveRunConfig({ cwd: project, harness: 'pi', home: join(root, 'home'), agentDir, extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
       expect(result.instructionSources.map(({ scope, kind, bytes }) => [scope, kind, bytes])).toEqual([['user', 'AGENTS.md', 6], ['project', 'AGENTS.md', 7], ['parent', 'AGENTS.override.md', 8], ['user', 'SYSTEM.md', 3]])
       const linked = join(root, 'linked')
       mkdirSync(linked)
@@ -214,7 +214,7 @@ describe('describeEffectiveRunConfig', () => {
       } catch {
         return // symlinks need privileges on Windows
       }
-      const viaSymlink = describeEffectiveRunConfig({ cwd: linked, harness: 'pi', home: join(root, 'home'), agentDir: join(root, 'none'), extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
+      const viaSymlink = await describeEffectiveRunConfig({ cwd: linked, harness: 'pi', home: join(root, 'home'), agentDir: join(root, 'none'), extensionContext: { isPackaged: true, appPath: root, resourcesPath: join(root, 'resources') } })
       expect(viaSymlink.instructionSources.map(({ kind, bytes }) => [kind, bytes]).slice(0, 1)).toEqual([['CLAUDE.md', 7]])
       expect(result.skillDirs).toEqual([{ path: join(project, '.agents', 'skills'), count: 1 }])
       expect(result.injectedCapabilities.find(({ capability }) => capability === 'askUser')?.present).toBe(true)

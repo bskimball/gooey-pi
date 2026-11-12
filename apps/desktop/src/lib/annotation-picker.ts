@@ -275,8 +275,3 @@ export function annotationMarkersScript(markers: AnnotationMarker[]): string {
   }))
   return `${ENSURE_SCRIPT}\nwindow.${NAMESPACE}.setMarkers(${embedJson(safe)});`
 }
-
-/** Removes every listener, overlay, and the namespace itself from the page. */
-export function annotationTeardownScript(): string {
-  return `window.${NAMESPACE} ? (window.${NAMESPACE}.destroy(), true) : false`
-}

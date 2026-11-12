@@ -1,7 +1,9 @@
+import { useMachine } from '@xstate/react'
 import { CaretDown, Check, FolderSimpleStar } from './icons'
 import { ApexButton } from './ui'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import type { CheckoutAction, CheckoutCatalog } from '@/types/api'
+import { checkoutPickerMachine } from './checkoutPickerMachine'
 
 interface CheckoutPickerProps {
   catalog?: CheckoutCatalog
@@ -20,10 +22,12 @@ function checkoutLabel(catalog: CheckoutCatalog | undefined, fallback: string | 
 }
 
 export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabled = false, onExecute }: CheckoutPickerProps) {
-  const [open, setOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [branch, setBranch] = useState('')
-  const [error, setError] = useState('')
+  const [snapshot, send, actor] = useMachine(checkoutPickerMachine)
+  const open = snapshot.matches('open')
+  const busy = snapshot.matches({ open: 'busy' })
+  const creating = busy && snapshot.context.busyKind === 'create'
+  const branch = snapshot.context.branch
+  const error = snapshot.matches({ open: 'error' }) ? snapshot.context.error : ''
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const strategy = catalog?.strategy ?? 'worktree'
@@ -31,10 +35,10 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) setOpen(false)
+      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) send({ type: 'CLOSE' })
     }
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') send({ type: 'CLOSE' })
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', onEscape)
@@ -42,29 +46,23 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', onEscape)
     }
-  }, [open])
+  }, [open, send])
 
-  const execute = async (action: CheckoutAction): Promise<void> => {
-    if (!onExecute) return
-    setError('')
+  const runAction = async (action: CheckoutAction, eventType: 'SWITCH' | 'CREATE'): Promise<void> => {
+    if (!onExecute || actor.getSnapshot().matches({ open: 'busy' })) return
+    send({ type: eventType })
     try {
       await onExecute(action)
-      setOpen(false)
+      send({ type: 'SUCCEED' })
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not change checkout')
+      send({ type: 'FAIL', message: cause instanceof Error ? cause.message : 'Could not change checkout' })
     }
   }
 
-  const create = async (): Promise<void> => {
-    const name = branch.trim()
-    if (!name || creating || !onExecute) return
-    setCreating(true)
-    try {
-      await execute({ strategy, operation: 'create', branch: name })
-      setBranch('')
-    } finally {
-      setCreating(false)
-    }
+  const create = (): void => {
+    const name = snapshot.context.branch.trim()
+    if (!name || !onExecute || actor.getSnapshot().matches({ open: 'busy' })) return
+    void runAction({ strategy, operation: 'create', branch: name }, 'CREATE')
   }
 
   const enabled = Boolean(!disabled && onExecute && catalog && (catalog.checkouts.length > 0 || strategy === 'branch'))
@@ -79,7 +77,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         disabled={!enabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => send({ type: 'TOGGLE' })}
       >
         <FolderSimpleStar size={12} />
         <span className="worktree-picker__label">{label}</span>
@@ -93,24 +91,24 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
               ? catalog.checkouts.map((worktree) => {
                   const selected = worktree.path === catalog.activePath
                   return (
-                    <button type="button" role="menuitemradio" aria-checked={selected} className={`worktree-picker__option ${selected ? 'is-active' : ''}`} key={worktree.path} onClick={() => { if (selected) setOpen(false); else void execute({ strategy: 'worktree', operation: 'open', path: worktree.path }) }}>
+                    <button type="button" role="menuitemradio" aria-checked={selected} className={`worktree-picker__option ${selected ? 'is-active' : ''}`} key={worktree.path} onClick={() => { if (selected) send({ type: 'CLOSE' }); else void runAction({ strategy: 'worktree', operation: 'open', path: worktree.path }, 'SWITCH') }}>
                       <span className="worktree-picker__check">{selected ? <Check size={13} /> : null}</span>
                       <span className="worktree-picker__option-copy"><strong>{worktree.branch ?? worktree.name}</strong><span title={worktree.path}>{worktree.path}</span></span>
                     </button>
                   )
                 })
               : catalog.checkouts.map((localBranch) => (
-                  <button type="button" role="menuitemradio" aria-checked={localBranch.current} className={`worktree-picker__option ${localBranch.current ? 'is-active' : ''}`} key={localBranch.name} onClick={() => { if (localBranch.current) setOpen(false); else void execute({ strategy: 'branch', operation: 'switch', branch: localBranch.name }) }}>
+                  <button type="button" role="menuitemradio" aria-checked={localBranch.current} className={`worktree-picker__option ${localBranch.current ? 'is-active' : ''}`} key={localBranch.name} onClick={() => { if (localBranch.current) send({ type: 'CLOSE' }); else void runAction({ strategy: 'branch', operation: 'switch', branch: localBranch.name }, 'SWITCH') }}>
                     <span className="worktree-picker__check">{localBranch.current ? <Check size={13} /> : null}</span>
                     <span className="worktree-picker__option-copy"><strong>{localBranch.name}</strong><span>{localBranch.current ? 'Current branch' : 'Local branch'}</span></span>
                   </button>
                 ))}
           </div>
-          <form className="worktree-picker__create" onSubmit={(event) => { event.preventDefault(); void create() }}>
+          <form className="worktree-picker__create" onSubmit={(event) => { event.preventDefault(); create() }}>
             <label htmlFor={`${menuId}-branch`}>Create {strategy}</label>
             <div>
-              <input id={`${menuId}-branch`} value={branch} placeholder="New branch name" onChange={(event) => { setBranch(event.target.value); setError('') }} />
-              <ApexButton type="submit" variant="primary" compact disabled={!branch.trim() || creating}>{creating ? 'Creating…' : 'Create'}</ApexButton>
+              <input id={`${menuId}-branch`} value={branch} placeholder="New branch name" onChange={(event) => send({ type: 'SET_BRANCH', branch: event.target.value })} />
+              <ApexButton type="submit" variant="primary" compact disabled={!branch.trim() || busy}>{creating ? 'Creating…' : 'Create'}</ApexButton>
             </div>
             {error ? <span role="alert">{error}</span> : null}
           </form>

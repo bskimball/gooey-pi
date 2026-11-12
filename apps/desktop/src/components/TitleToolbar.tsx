@@ -1,20 +1,20 @@
 import { Badge } from '@astryxdesign/core/Badge'
-import { DropdownMenu } from '@astryxdesign/core/DropdownMenu'
 import * as stylex from '@stylexjs/stylex'
 import {
-  DotsThree,
   GitBranch,
   SidebarLeft,
   SidebarRight,
 } from './icons'
-import type { ApplicationMenuName, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
+import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import type { SessionLiveMap } from '@/app/session-live'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, IconButton } from './ui'
 import { ActivityStatusPill } from './activity/ActivityStatusPill'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
-import { useRef, useState } from 'react'
+import { lazy, Suspense } from 'react'
+
+const WindowsAppMenu = lazy(() => import('./WindowsAppMenu'))
 
 const styles = stylex.create({
   branchBadge: {
@@ -33,51 +33,6 @@ const styles = stylex.create({
 
 const viewTitles: Record<Exclude<WorkspaceView, 'session'>, MessageKey> = {
   projects: 'nav.projects', activity: 'nav.activity', scheduled: 'nav.scheduled', plugins: 'nav.capabilities', settings: 'nav.settings',
-}
-
-const windowsMenus: ReadonlyArray<{ name: ApplicationMenuName; label: string }> = [
-  { name: 'file', label: 'File' },
-  { name: 'edit', label: 'Edit' },
-  { name: 'view', label: 'View' },
-  { name: 'window', label: 'Window' },
-  { name: 'help', label: 'Help' },
-]
-
-/** Windows keeps File/Edit/View behind one quiet button instead of a permanent menu row. */
-function WindowsAppMenu() {
-  const [open, setOpen] = useState(false)
-  const triggerWrapRef = useRef<HTMLDivElement>(null)
-
-  const openApplicationMenu = (menu: ApplicationMenuName) => {
-    const rect = triggerWrapRef.current?.getBoundingClientRect()
-    void window.apex?.app.popupMenu?.(menu, (rect?.right ?? 0) + 4, rect?.top ?? 0).catch(() => undefined)
-  }
-
-  return (
-    <div ref={triggerWrapRef} className="windows-app-menu no-drag">
-      <DropdownMenu
-        presentation="popover"
-        placement="below"
-        alignment="start"
-        isMenuOpen={open}
-        onOpenChange={setOpen}
-        items={windowsMenus.map(({ name, label }) => ({
-          id: name,
-          label,
-          onClick: () => openApplicationMenu(name),
-        }))}
-        renderTrigger={(triggerProps) => (
-          <IconButton
-            {...triggerProps}
-            className={open ? 'is-active' : ''}
-            label="Application menu"
-          >
-            <DotsThree size={18} />
-          </IconButton>
-        )}
-      />
-    </div>
-  )
 }
 
 interface TitleToolbarProps {
@@ -113,7 +68,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', s
       {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
       <div className="title-toolbar__nav no-drag">
         <IconButton className={sidebarOpen ? 'is-active' : ''} label={`${sidebarOpen ? 'Hide' : 'Show'} sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton>
-        {platform === 'win32' ? <WindowsAppMenu /> : null}
+        {platform === 'win32' ? <Suspense fallback={null}><WindowsAppMenu /></Suspense> : null}
       </div>
       <div className="title-toolbar__identity">
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>

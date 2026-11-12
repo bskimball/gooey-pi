@@ -20,11 +20,6 @@ export interface WorkspaceSelection {
   cwd?: string
 }
 
-export interface SingleFlightAdmission {
-  readonly active: boolean
-  run(task: () => Promise<void> | void): Promise<boolean>
-}
-
 export function projectContainsPath(project: ProjectRecord, path?: string): boolean {
   return Boolean(path && (project.path === path || project.folders.includes(path)))
 }
@@ -78,21 +73,4 @@ export function selectStartupWorkspace(
   const cwd = workspaceCwd(project, session)
   const runtime = findRuntimeForWorkspace(runtimes, cwd, session?.filePath)
   return { project, session, runtime, cwd }
-}
-
-export function createSingleFlightAdmission(): SingleFlightAdmission {
-  let active = false
-  return {
-    get active() { return active },
-    async run(task) {
-      if (active) return false
-      active = true
-      try {
-        await task()
-        return true
-      } finally {
-        active = false
-      }
-    },
-  }
 }

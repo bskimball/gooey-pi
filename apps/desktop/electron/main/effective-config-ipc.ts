@@ -23,11 +23,12 @@ export function createEffectiveConfigIpc(services: {
           try: () => services.projects.authorizeReadOnlyCwd(requested),
           catch: (error) => error,
         })
-        return yield* Effect.try({
-          try: () => describeEffectiveRunConfig({
+        return yield* Effect.tryPromise({
+          try: (signal) => describeEffectiveRunConfig({
             cwd: authorized,
             harness: 'pi',
             extensionContext: services.extensionPathContext,
+            signal,
           }),
           catch: (error) => error,
         })

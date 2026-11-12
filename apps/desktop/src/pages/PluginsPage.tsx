@@ -80,12 +80,14 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
   const addOpen = !addSnapshot.matches('closed')
   const adding = addSnapshot.matches('submitting')
   const busy = operation.busyId !== null
-  const [computerUseAlert, setComputerUseAlert] = useState('')
-  const [mcpSupportAlert, setMcpSupportAlert] = useState('')
-  const [mcpSupportNotice, setMcpSupportNotice] = useState('')
-  const [confirmDisable, setConfirmDisable] = useState<SkillRecord | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState<SkillRecord | null>(null)
-  const [capabilityAlert, setCapabilityAlert] = useState('')
+  const {
+    confirmDisable,
+    confirmRemove,
+    computerUseAlert,
+    mcpSupportAlert,
+    mcpSupportNotice,
+    capabilityAlert,
+  } = operation
   const piMcpAdapterInstalled = skills.some((skill) => skill.id === 'gooeypi-pi-mcp' && skill.enabled)
   const canConfigureMcp = piMcpAdapterInstalled
 
@@ -148,35 +150,31 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
   const setComputerUse = async (skill: SkillRecord, enabled: boolean) => {
     if (busy) return
     if (enabled && skill.availability?.available === false) {
-      setComputerUseAlert(skill.availability.detail)
+      operation.setComputerUseAlert(skill.availability.detail)
       if (skill.availability.actionUrl) onOpenExternal(skill.availability.actionUrl)
       return
     }
-    setComputerUseAlert('')
     await runOperation(skill.id, async () => {
       await onSetComputerUseEnabled(enabled)
       await onRefresh()
     })
   }
   const setMcpSupport = (skill: SkillRecord, enabling: boolean) => runOperation(skill.id, async () => {
-    setMcpSupportAlert('')
-    setMcpSupportNotice(enabling ? 'Installing Pi MCP Adapter…' : 'Disabling Pi MCP Adapter…')
+    operation.setMcpSupportNotice(enabling ? 'Installing Pi MCP Adapter…' : 'Disabling Pi MCP Adapter…')
     const response = await onSetMcpSupport(enabling)
     if (!response.ok) {
       const busyOutput = /lock file is already being held|settings are busy/i.test(response.output)
-      setMcpSupportAlert(busyOutput ? 'Pi settings are busy. Close any other Pi package operation and try again.' : response.output)
-      setMcpSupportNotice('')
+      operation.setMcpSupportAlert(busyOutput ? 'Pi settings are busy. Close any other Pi package operation and try again.' : response.output)
     } else {
-      setMcpSupportNotice(enabling ? 'Pi MCP Adapter installed.' : 'Pi MCP Adapter disabled.')
+      operation.setMcpSupportNotice(enabling ? 'Pi MCP Adapter installed.' : 'Pi MCP Adapter disabled.')
     }
   })
   const setMcp = (skill: SkillRecord, enabled: boolean) => runOperation(skill.id, async () => {
-    setCapabilityAlert('')
     const response = await onSetMcpEnabled({ name: skill.name, scope: skill.location === 'project' ? 'project' : 'user', projectPath: skill.location === 'project' ? activeProjectPath : undefined, enabled })
-    if (!response.ok) setCapabilityAlert(response.output)
+    if (!response.ok) operation.setCapabilityAlert(response.output)
   })
   const disableCapability = async (skill: SkillRecord) => {
-    setConfirmDisable(null)
+    operation.confirm()
     if (skill.id === 'gooeypi-ask-user') await setAskUser(skill, false)
     else if (skill.id === 'apex-browser') await setBrowser(skill, false)
     else if (skill.id === 'gooeypi-computer-use') await setComputerUse(skill, false)
@@ -185,7 +183,6 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     else if (skill.kind === 'package') await mutate(skill, 'disable')
   }
   const mutate = (skill: SkillRecord, action: CapabilityMutationInput['action']) => runOperation(skill.id, async () => {
-    setCapabilityAlert('')
     const response = await onMutateCapability({
       kind: skill.kind === 'mcp' ? 'mcp' : 'package',
       action,
@@ -195,10 +192,10 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       scope: skill.location === 'project' ? 'project' : 'user',
       projectPath: skill.location === 'project' ? activeProjectPath : undefined,
     })
-    if (!response.ok) setCapabilityAlert(response.output)
+    if (!response.ok) operation.setCapabilityAlert(response.output)
   })
   const removeCapability = async (skill: SkillRecord) => {
-    setConfirmRemove(null)
+    operation.confirm()
     await mutate(skill, 'remove')
   }
   const mcpStatusDetail = (skill: SkillRecord): string | undefined => {
@@ -228,7 +225,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       if (skill.kind === 'package') return mutate(skill, 'enable')
       return setMcp(skill, true)
     }
-    return <ApexButton variant="quiet" aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} onClick={() => { if (skill.enabled) setConfirmDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</ApexButton>
+    return <ApexButton variant="quiet" aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} onClick={() => { if (skill.enabled) operation.requestDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</ApexButton>
   }
 
   return (
@@ -266,15 +263,15 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
               <span className={`directory-icon directory-icon--${skill.kind}`}><SkillIcon skill={skill}/></span>
               <div><div><h3>{skill.name}</h3><span>{skill.location}</span></div><p id={statusDetail ? capabilityDetailId(skill) : undefined}>{skill.description}{statusDetail ? ` ${statusDetail}` : ''}</p></div>
               <div className="capability-actions">
-                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <button type="button" className="plugin-remove" aria-label={`Remove ${skill.name}`} disabled={busy} onClick={() => setConfirmRemove(skill)}><Trash size={13}/></button> : null}
+                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <button type="button" className="plugin-remove" aria-label={`Remove ${skill.name}`} disabled={busy} onClick={() => operation.requestRemove(skill)}><Trash size={13}/></button> : null}
                 {capabilityControl(skill)}
               </div>
             </article>
           })}</div>
         ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
 
-        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => setConfirmDisable(null)} footer={<><ApexButton onClick={() => setConfirmDisable(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
-        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => setConfirmRemove(null)} footer={<><ApexButton onClick={() => setConfirmRemove(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
+        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
+        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
 
         {addOpen ? (
           <Modal

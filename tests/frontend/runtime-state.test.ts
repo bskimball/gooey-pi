@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createSingleFlightAdmission,
   EMPTY_GIT_STATUS,
   findRuntimeForWorkspace,
   gitStatusForWorkspace,
@@ -90,32 +89,5 @@ describe('workspace and runtime ownership', () => {
 
     expect(findRuntimeForWorkspace(runtimes, '/project-b', '/sessions/b.jsonl')?.runtimeId).toBe('owned')
     expect(findRuntimeForWorkspace(runtimes, '/project-b', '/sessions/missing.jsonl')).toBeUndefined()
-  })
-})
-
-describe('single-flight prompt admission', () => {
-  it('synchronously rejects a second submission while runtime startup is pending', async () => {
-    let releaseStart!: () => void
-    const startGate = new Promise<void>((resolve) => { releaseStart = resolve })
-    const admission = createSingleFlightAdmission()
-    let userMessages = 0
-    let runtimeStarts = 0
-
-    const submit = () => admission.run(async () => {
-      userMessages += 1
-      runtimeStarts += 1
-      await startGate
-    })
-
-    const first = submit()
-    const second = submit()
-    expect(admission.active).toBe(true)
-    await expect(second).resolves.toBe(false)
-    expect(userMessages).toBe(1)
-    expect(runtimeStarts).toBe(1)
-
-    releaseStart()
-    await expect(first).resolves.toBe(true)
-    expect(admission.active).toBe(false)
   })
 })

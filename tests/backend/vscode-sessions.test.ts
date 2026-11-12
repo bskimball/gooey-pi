@@ -12,8 +12,23 @@ import { assertSessionFree, VsCodeRuntimeOwner } from '../../packages/vscode/src
 import * as runtimeOwners from 'apex-core/sessions/runtime-owners'
 import { listSessions, readSessionTranscript, sessionBucket, sessionTranscriptOps, workspacePath } from '../../packages/vscode/src/session-catalog'
 import { applyOps } from '../../packages/vscode/webview/transcript'
-import { createActor } from 'xstate'
+import { createActor, initialTransition, transition } from 'xstate'
 import { apexSessionConnectionMachine, canAct, hostConnection, type ApexConnectionEvent } from '../../packages/vscode/src/apexSessionConnectionMachine'
+import {
+  attachedSessionMachine,
+  canAttachedPublish,
+  canAttachedReceiveEvents,
+  isAttachedConnected,
+  isAttachedConnecting,
+  isAttachedDisposed,
+} from '../../packages/vscode/src/attachedSessionMachine'
+import {
+  hasPiRpcFrameFailed,
+  isPiRpcExited,
+  isPiRpcRunning,
+  isPiRpcStopping,
+  piRpcMachine,
+} from '../../packages/vscode/src/piRpcMachine'
 import type { AttachedSession } from '../../packages/vscode/src/attached-session'
 
 vi.mock('vscode', () => ({
@@ -1068,5 +1083,65 @@ describe('VS Code editor integration', () => {
     expect(refreshState).toHaveBeenCalled()
     expect(command).toHaveBeenLastCalledWith('prompt', { message: 'After extension compact\nEXT_CTX' })
     expect(session.state.queued).toEqual([])
+  })
+
+  it('transitions piRpcMachine through running, stopping, exited, and frameFailed', () => {
+    let snap = initialTransition(piRpcMachine)[0]
+    expect(isPiRpcRunning(snap)).toBe(true)
+    expect(hasPiRpcFrameFailed(snap)).toBe(false)
+
+    snap = transition(piRpcMachine, snap, { type: 'FRAME_ERROR' })[0]
+    expect(isPiRpcRunning(snap)).toBe(true)
+    expect(hasPiRpcFrameFailed(snap)).toBe(true)
+
+    snap = transition(piRpcMachine, snap, { type: 'DISPOSE' })[0]
+    expect(isPiRpcStopping(snap)).toBe(true)
+
+    snap = transition(piRpcMachine, snap, { type: 'CLOSE' })[0]
+    expect(isPiRpcExited(snap)).toBe(true)
+    expect(isPiRpcRunning(snap)).toBe(false)
+
+    // DISPOSE after CLOSE does not re-enter stopping
+    snap = transition(piRpcMachine, snap, { type: 'DISPOSE' })[0]
+    expect(isPiRpcExited(snap)).toBe(true)
+  })
+
+  it('transitions attachedSessionMachine and queues overlapping refreshes without publishing after disconnect/dispose', () => {
+    let snap = initialTransition(attachedSessionMachine)[0]
+    expect(isAttachedConnecting(snap)).toBe(true)
+    expect(canAttachedPublish(snap)).toBe(false)
+    expect(canAttachedReceiveEvents(snap)).toBe(true)
+
+    snap = transition(attachedSessionMachine, snap, { type: 'CONNECTED' })[0]
+    expect(isAttachedConnected(snap)).toBe(true)
+    expect(canAttachedPublish(snap)).toBe(false)
+
+    snap = transition(attachedSessionMachine, snap, { type: 'REPLAY' })[0]
+    expect(canAttachedPublish(snap)).toBe(true)
+
+    // Overlapping refreshes queue in context and drain cleanly
+    snap = transition(attachedSessionMachine, snap, { type: 'REFRESH_REQUESTED' })[0]
+    expect(snap.context).toEqual({ refreshInFlight: true, refreshPending: false })
+    snap = transition(attachedSessionMachine, snap, { type: 'REFRESH_REQUESTED' })[0]
+    expect(snap.context).toEqual({ refreshInFlight: true, refreshPending: true })
+    snap = transition(attachedSessionMachine, snap, { type: 'REFRESH_FINISHED' })[0]
+    expect(snap.context).toEqual({ refreshInFlight: true, refreshPending: false })
+    snap = transition(attachedSessionMachine, snap, { type: 'REFRESH_FINISHED' })[0]
+    expect(snap.context).toEqual({ refreshInFlight: false, refreshPending: false })
+
+    // Disconnecting blocks publishing and clears refresh flags
+    snap = transition(attachedSessionMachine, snap, { type: 'REFRESH_REQUESTED' })[0]
+    snap = transition(attachedSessionMachine, snap, { type: 'DISCONNECT' })[0]
+    expect(isAttachedConnected(snap)).toBe(false)
+    expect(canAttachedPublish(snap)).toBe(false)
+    expect(canAttachedReceiveEvents(snap)).toBe(false)
+    expect(snap.context).toEqual({ refreshInFlight: false, refreshPending: false })
+
+    // REPLAY after DISCONNECT is a no-op
+    snap = transition(attachedSessionMachine, snap, { type: 'REPLAY' })[0]
+    expect(canAttachedPublish(snap)).toBe(false)
+
+    snap = transition(attachedSessionMachine, snap, { type: 'DISPOSE' })[0]
+    expect(isAttachedDisposed(snap)).toBe(true)
   })
 })

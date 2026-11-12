@@ -4,7 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_MCP_STATE_UNAVAILABLE_DETAIL } from '../../apps/desktop/src/lib/mcp-policy'
 import { PluginsPage } from '../../apps/desktop/src/pages/PluginsPage'
+import { pluginOperationMachine } from '../../apps/desktop/src/pages/pluginOperationMachine'
 import type { SkillRecord } from '../../apps/desktop/src/types/api'
+import { initialTransition, transition } from 'xstate'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -417,5 +419,33 @@ describe('PluginsPage bundled capability controls', () => {
     expect(container.querySelector('button[aria-label="Remove oversized local MCP"]')).toBeNull()
     expect(setMcpEnabled).not.toHaveBeenCalled()
     expect(mutateCapability).not.toHaveBeenCalled()
+  })
+
+  it('prevents simultaneous confirm modals and clears stale alerts on a new operation', () => {
+    const [s0] = initialTransition(pluginOperationMachine)
+    const [s1] = transition(pluginOperationMachine, s0, { type: 'SET_COMPUTER_USE_ALERT', alert: 'Driver missing' })
+    expect(s1.context.computerUseAlert).toBe('Driver missing')
+
+    const [s2] = transition(pluginOperationMachine, s1, { type: 'REQUEST_DISABLE', skill: askUser })
+    expect(s2.matches('confirmingDisable')).toBe(true)
+    expect(s2.context.pendingSkill?.id).toBe(askUser.id)
+
+    // Simultaneous remove request is ignored while disable confirmation is active.
+    const [s3] = transition(pluginOperationMachine, s2, { type: 'REQUEST_REMOVE', skill: computerUse })
+    expect(s3.matches('confirmingDisable')).toBe(true)
+    expect(s3.matches('confirmingRemove')).toBe(false)
+    expect(s3.context.pendingSkill?.id).toBe(askUser.id)
+
+    // Cancelling returns to idle, and starting a new operation clears stale alerts.
+    const [s4] = transition(pluginOperationMachine, s3, { type: 'CANCEL_CONFIRM' })
+    expect(s4.matches('idle')).toBe(true)
+    expect(s4.context.pendingSkill).toBeNull()
+
+    const [s5] = transition(pluginOperationMachine, s4, { type: 'START', skillId: askUser.id })
+    expect(s5.matches('busy')).toBe(true)
+    expect(s5.context.computerUseAlert).toBe('')
+    expect(s5.context.capabilityAlert).toBe('')
+    expect(s5.context.mcpSupportAlert).toBe('')
+    expect(s5.context.mcpSupportNotice).toBe('')
   })
 })

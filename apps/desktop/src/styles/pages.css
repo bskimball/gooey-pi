@@ -1,7 +1,6 @@
 /* Shared pages */
 .page { width: 100%; height: 100%; overflow: auto; background: radial-gradient(96% 42% at 50% 0%, color-mix(in srgb, var(--apex-soft) 28%, transparent), transparent 72%), var(--canvas); }
 .page-container { width: min(100%, 1030px); margin: 0 auto; padding: 38px 34px 70px; }
-.page-container--narrow { width: min(100%, 860px); }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
 .page-header h1 { margin: 0 0 5px; font-size: 24px; line-height: 1.2; font-weight: 550; letter-spacing: -.02em; text-wrap: balance; }
 .page-header p { margin: 0; color: var(--text-secondary); font-size: var(--fs-body); }
@@ -29,20 +28,9 @@
 .project-item__meta > span { display: flex; align-items: center; gap: 4px; }
 .project-item__actions { display: flex; opacity: 0; }
 .project-item:hover .project-item__actions, .project-item:focus-within .project-item__actions { opacity: 1; }
-.schedule-list { display: flex; flex-direction: column; }
-.schedule-list article { min-height: 100px; display: flex; align-items: flex-start; gap: 13px; padding: 15px 8px; border-bottom: 1px solid var(--border); }
-.schedule-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: var(--radius-md); color: var(--apex); background: var(--apex-soft); }
 .schedule-icon--paused { color: var(--text-tertiary); background: var(--surface-hover); }
-.schedule-main { min-width: 0; flex: 1; }
-.schedule-main > div:first-child { display: flex; align-items: center; gap: 7px; }
-.schedule-main h2 { margin: 0; font-size: var(--fs-body); font-weight: 550; }
 .schedule-state { padding: 1px 5px; border-radius: var(--radius-xs); color: var(--success); background: var(--success-soft); font-size: var(--fs-micro); text-transform: capitalize; }
 .schedule-state--paused { color: var(--text-tertiary); background: var(--surface-hover); }
-.schedule-main p { margin: 4px 0 8px; color: var(--text-secondary); font-size: var(--fs-ui); }
-.schedule-main > div:last-child { display: flex; flex-wrap: wrap; gap: 13px; color: var(--text-tertiary); font-size: var(--fs-micro); }
-.schedule-main > div:last-child span { display: flex; align-items: center; gap: 4px; }
-.schedule-actions { display: flex; opacity: 0; }
-.schedule-list article:hover .schedule-actions, .schedule-list article:focus-within .schedule-actions { opacity: 1; }
 
 
 

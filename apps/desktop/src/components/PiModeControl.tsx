@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, type ReactNode } from 'react'
+import { useMachine } from '@xstate/react'
 import { Command, Gauge } from './icons'
 import { SelectControl } from './ui'
 import { ModelPicker } from './ModelPicker'
+import { piModeControlMachine } from './piModeControlMachine'
 import type { ApexModelDescriptor, ApexProviderDescriptor, ApexThinkingLevel } from '@/types/api'
 import {
-  type PiHydraTier,
   fusionModelIdentity,
   isPiHydraTier,
   isPiBehaviorMode,
@@ -13,11 +14,7 @@ import {
   PI_FUSION_PAIR_EVENT,
   PI_HYDRA_TIER_EVENT,
   PI_HYDRA_TIER_OPTIONS,
-  type PiBehaviorMode,
-  type PiFusionPair,
   readActivePiFusionPair,
-  readSavedPiBehaviorMode,
-  readSavedPiHydraTier,
   readDefaultPiHydraTier,
 } from '@/lib/harness'
 
@@ -37,61 +34,44 @@ const thinkingLabels: Record<ApexThinkingLevel, string> = {
 
 /** Pi mode followed by either ordinary controls or the runtime-reported Fusion pair. */
 export function PiModeControl({ disabled, modelsByProvider, providers, children, onCommand }: PiModeControlProps) {
-  const [mode, setMode] = useState<PiBehaviorMode>(readSavedPiBehaviorMode)
-  const [hydraTier, setHydraTier] = useState<PiHydraTier>(readSavedPiHydraTier)
-  const [pair, setPair] = useState<PiFusionPair | null>(readActivePiFusionPair)
-  const [pending, setPending] = useState<string | null>(null)
-  const pendingRef = useRef<symbol | null>(null)
+  const [snapshot, send, actor] = useMachine(piModeControlMachine)
+  const { mode, hydraTier, pair, pendingCommand: pending } = snapshot.context
 
   useEffect(() => {
-    const resetPending = () => {
-      pendingRef.current = null
-      setPending(null)
-    }
     const onModeChange = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail
-      if (isPiBehaviorMode(detail)) {
-        setMode(detail)
-        resetPending()
-      }
+      if (isPiBehaviorMode(detail)) send({ type: 'SYNC_MODE', mode: detail })
     }
     const onHydraTierChange = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail
-      if (isPiHydraTier(detail)) {
-        setHydraTier(detail)
-        resetPending()
-      }
+      if (isPiHydraTier(detail)) send({ type: 'SYNC_HYDRA_TIER', hydraTier: detail })
     }
     const onPairChange = () => {
-      setPair(readActivePiFusionPair())
-      resetPending()
+      send({ type: 'SYNC_PAIR', pair: readActivePiFusionPair() })
     }
     window.addEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
     window.addEventListener(PI_HYDRA_TIER_EVENT, onHydraTierChange)
     window.addEventListener(PI_FUSION_PAIR_EVENT, onPairChange)
     return () => {
-      pendingRef.current = null
+      send({ type: 'RESET_PENDING' })
       window.removeEventListener(PI_BEHAVIOR_MODE_EVENT, onModeChange)
       window.removeEventListener(PI_HYDRA_TIER_EVENT, onHydraTierChange)
       window.removeEventListener(PI_FUSION_PAIR_EVENT, onPairChange)
     }
-  }, [])
+  }, [send])
 
   const sendCommand = (command: string) => {
-    if (disabled || pendingRef.current) return
-    const request = Symbol()
-    pendingRef.current = request
-    setPending(command)
+    if (disabled || actor.getSnapshot().matches('pending')) return
+    const token = Symbol()
+    send({ type: 'SEND_COMMAND', command, token })
     void Promise.resolve()
       .then(() => onCommand(command))
       .catch(() => undefined) // The normal prompt path reports errors.
       .finally(() => {
-        if (pendingRef.current !== request) return
-        pendingRef.current = null
-        setPending(null)
+        send({ type: 'SETTLE_COMMAND', token })
       })
   }
-  const controlsDisabled = disabled || pending !== null
+  const controlsDisabled = disabled || snapshot.matches('pending')
 
   const handleModeSelect = (nextValue: string) => {
     if (nextValue === 'hydra') {

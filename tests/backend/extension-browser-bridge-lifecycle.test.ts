@@ -1,6 +1,14 @@
 import { connect } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
+import { initialTransition, transition } from 'xstate'
 import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
+import {
+  extensionBridgeMachine,
+  isBridgeConnected,
+  isBridgeListening,
+  isBridgeRemote,
+  isBridgeStopped,
+} from '../../packages/core/src/browser/extensionBridgeMachine'
 
 const bridges: ExtensionBrowserBridge[] = []
 afterEach(async () => {
@@ -35,5 +43,59 @@ describe('ExtensionBrowserBridge token lifecycle', () => {
       socket.once('error', (error: NodeJS.ErrnoException) => resolve(error.code))
     })
     expect(code).toBe('ECONNREFUSED')
+  })
+
+  it('tracks remote polling and restart via startOrConnect', async () => {
+    const broker = new ExtensionBrowserBridge({ port: 0, bridgeKind: 'vscode' })
+    const client = new ExtensionBrowserBridge({ port: 0, bridgeKind: 'desktop' })
+    bridges.push(broker, client)
+    await broker.start()
+    const base = `http://127.0.0.1:${broker.port}`
+    await client.startOrConnect('vscode', base)
+    expect(client.port).toBe(broker.port)
+    expect(client.isConnected()).toBe(false)
+    await client.stop()
+    expect(client.port).toBeNull()
+    await client.startOrConnect('vscode', base)
+    expect(client.port).toBe(broker.port)
+  })
+})
+
+describe('extensionBridgeMachine', () => {
+  it('transitions through local listening, remote polling, and stopped states', () => {
+    let snap = initialTransition(extensionBridgeMachine)[0]
+    expect(snap.value).toBe('idle')
+    expect(isBridgeConnected(snap)).toBe(false)
+
+    snap = transition(extensionBridgeMachine, snap, { type: 'START' })[0]
+    expect(snap.value).toBe('starting')
+    snap = transition(extensionBridgeMachine, snap, { type: 'START_FAILED' })[0]
+    expect(snap.value).toBe('idle')
+
+    snap = transition(extensionBridgeMachine, snap, { type: 'START' })[0]
+    snap = transition(extensionBridgeMachine, snap, { type: 'LISTENED', port: 29301 })[0]
+    expect(isBridgeListening(snap)).toBe(true)
+    expect(snap.context.port).toBe(29301)
+
+    snap = transition(extensionBridgeMachine, snap, { type: 'STREAM_CONNECTED' })[0]
+    expect(isBridgeConnected(snap)).toBe(true)
+    snap = transition(extensionBridgeMachine, snap, { type: 'STREAM_DISCONNECTED' })[0]
+    expect(isBridgeConnected(snap)).toBe(false)
+
+    snap = transition(extensionBridgeMachine, snap, { type: 'STOP' })[0]
+    expect(isBridgeStopped(snap)).toBe(true)
+    expect(snap.context.port).toBeNull()
+
+    snap = transition(extensionBridgeMachine, snap, { type: 'CONNECT_REMOTE', base: 'http://127.0.0.1:29301', port: 29301 })[0]
+    expect(isBridgeRemote(snap)).toBe(true)
+    expect(isBridgeConnected(snap)).toBe(false)
+    snap = transition(extensionBridgeMachine, snap, { type: 'REMOTE_CONNECTED' })[0]
+    expect(isBridgeConnected(snap)).toBe(true)
+    snap = transition(extensionBridgeMachine, snap, { type: 'REMOTE_DISCONNECTED' })[0]
+    expect(isBridgeConnected(snap)).toBe(false)
+    snap = transition(extensionBridgeMachine, snap, { type: 'START' })[0]
+    expect(snap.value).toBe('starting')
+    snap = transition(extensionBridgeMachine, snap, { type: 'STOP' })[0]
+    expect(isBridgeStopped(snap)).toBe(true)
   })
 })

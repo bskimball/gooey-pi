@@ -1,5 +1,6 @@
 import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
+import { useMachine } from '@xstate/react'
 import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
 import { useEffect, useState } from 'react'
 import { ApexButton, IconButton, Modal } from '@/components/ui'
@@ -16,8 +17,9 @@ import {
   optionsWithCurrent,
   type VoiceOption,
 } from '@/lib/voice-options'
-import type { AppSettings, ApexApi, VoiceCredentialProvider, VoiceCredentialStatus, VoiceTranscriptionProvider } from '@/types/api'
+import type { AppSettings, ApexApi, VoiceCredentialProvider, VoiceTranscriptionProvider } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
+import { voiceSettingsMachine } from './voiceSettingsMachine'
 
 const CREDENTIALS: Array<{ id: VoiceCredentialProvider; name: string; monogram: string; detail: string }> = [
   { id: 'openai', name: 'OpenAI', monogram: 'OA', detail: 'Required for live dictation and the realtime orb.' },
@@ -32,9 +34,6 @@ interface VoiceSettingsProps extends SettingsSectionProps {
   voice: ApexApi['voice'] | null
   platform?: NodeJS.Platform
 }
-
-type VoiceServiceState = 'checking' | 'ready' | 'restart-required' | 'error'
-type SelfHostedTestState = 'idle' | 'testing' | 'connected' | 'error'
 
 function needsDesktopRestart(error: unknown): boolean {
   return /No handler registered for ['"]voice:/i.test(errorMessage(error))
@@ -68,66 +67,95 @@ function PathInput({ label, description, placeholder, value, onCommit }: { label
 }
 
 export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }: VoiceSettingsProps) {
-  const [status, setStatus] = useState<VoiceCredentialStatus | null>(null)
-  const [serviceState, setServiceState] = useState<VoiceServiceState>(voice ? 'checking' : 'restart-required')
-  const [credential, setCredential] = useState<VoiceCredentialProvider | null>(null)
-  const [apiKey, setApiKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState('')
-  const [selfHostedUrl, setSelfHostedUrl] = useState(settings.voiceSelfHostedUrl)
-  const [selfHostedModel, setSelfHostedModel] = useState(settings.voiceSelfHostedModel)
-  const [selfHostedTestState, setSelfHostedTestState] = useState<SelfHostedTestState>('idle')
-  const [selfHostedMessage, setSelfHostedMessage] = useState('')
+  const [snapshot, send] = useMachine(voiceSettingsMachine, {
+    input: {
+      voiceAvailable: Boolean(voice),
+      selfHostedUrl: settings.voiceSelfHostedUrl,
+      selfHostedModel: settings.voiceSelfHostedModel,
+    },
+  })
 
-  useEffect(() => setSelfHostedUrl(settings.voiceSelfHostedUrl), [settings.voiceSelfHostedUrl])
-  useEffect(() => setSelfHostedModel(settings.voiceSelfHostedModel), [settings.voiceSelfHostedModel])
+  const {
+    status,
+    credential,
+    apiKey,
+    failure,
+    selfHostedUrl,
+    selfHostedModel,
+    selfHostedMessage,
+  } = snapshot.context
+
+  const serviceState = snapshot.matches({ service: 'checking' })
+    ? 'checking'
+    : snapshot.matches({ service: 'ready' })
+      ? 'ready'
+      : snapshot.matches({ service: 'restartRequired' })
+        ? 'restart-required'
+        : 'error'
+  const busy = snapshot.matches({ service: { ready: { modalOpen: 'saving' } } }) || snapshot.matches({ service: { ready: 'deleting' } })
+  const selfHostedTestState = snapshot.matches({ selfHostedTest: 'testing' })
+    ? 'testing'
+    : snapshot.matches({ selfHostedTest: 'connected' })
+      ? 'connected'
+      : snapshot.matches({ selfHostedTest: 'error' })
+        ? 'error'
+        : 'idle'
+
+  useEffect(() => {
+    send({ type: 'SYNC_SELF_HOSTED', url: settings.voiceSelfHostedUrl, model: settings.voiceSelfHostedModel })
+  }, [settings.voiceSelfHostedUrl, settings.voiceSelfHostedModel, send])
 
   useEffect(() => {
     let active = true
-    if (!voice) { setServiceState('restart-required'); return }
-    setServiceState('checking')
+    if (!voice) {
+      send({ type: 'VOICE_UNAVAILABLE' })
+      return
+    }
+    send({ type: 'CHECK_STATUS' })
     void voice.credentialStatus().then((next) => {
-      if (active) { setStatus(next); setServiceState('ready') }
+      if (active) send({ type: 'STATUS_LOADED', status: next })
     }).catch((error) => {
       if (!active) return
-      setStatus(null)
-      if (needsDesktopRestart(error)) { setCredential(null); setFailure(''); setServiceState('restart-required') }
-      else { setFailure(errorMessage(error)); setServiceState('error') }
+      if (needsDesktopRestart(error)) send({ type: 'RESTART_REQUIRED' })
+      else send({ type: 'STATUS_FAILED', error: errorMessage(error) })
     })
     return () => { active = false }
-  }, [voice])
+  }, [voice, send])
 
   const saveCredential = async () => {
     if (!voice || !credential || !apiKey.trim()) return
-    setBusy(true); setFailure('')
+    send({ type: 'SAVE_CREDENTIAL' })
     try {
-      setStatus(await voice.saveApiKey(credential, apiKey))
-      setApiKey(''); setCredential(null)
-    } catch (error) { setFailure(errorMessage(error)) } finally { setBusy(false) }
+      send({ type: 'SAVE_SUCCEEDED', status: await voice.saveApiKey(credential, apiKey) })
+    } catch (error) {
+      send({ type: 'SAVE_FAILED', error: errorMessage(error) })
+    }
   }
 
   const removeCredential = async (provider: VoiceCredentialProvider) => {
     if (!voice) return
-    setBusy(true); setFailure('')
-    try { setStatus(await voice.deleteApiKey(provider)) } catch (error) { setFailure(errorMessage(error)) } finally { setBusy(false) }
+    send({ type: 'DELETE_CREDENTIAL' })
+    try {
+      send({ type: 'DELETE_SUCCEEDED', status: await voice.deleteApiKey(provider) })
+    } catch (error) {
+      send({ type: 'DELETE_FAILED', error: errorMessage(error) })
+    }
   }
 
-  const closeCredential = () => { if (!busy) { setCredential(null); setApiKey(''); setFailure('') } }
-  const openCredential = (provider: VoiceCredentialProvider) => { setFailure(''); setCredential(provider) }
+  const closeCredential = () => { if (!busy) send({ type: 'CLOSE_CREDENTIAL' }) }
+  const openCredential = (provider: VoiceCredentialProvider) => { send({ type: 'OPEN_CREDENTIAL', provider }) }
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => { void onUpdate({ [key]: value } as Pick<AppSettings, K>) }
   const testSelfHosted = async () => {
     if (!voice || !selfHostedUrl.trim()) return
-    setSelfHostedTestState('testing'); setSelfHostedMessage('')
+    send({ type: 'TEST_SELF_HOSTED' })
     const url = selfHostedUrl.trim()
     const model = selfHostedModel.trim()
     try {
       await voice.testSelfHosted({ url, model })
       await onUpdate({ voiceSelfHostedUrl: url, voiceSelfHostedModel: model })
-      setSelfHostedTestState('connected')
-      setSelfHostedMessage('Connected. Apex successfully transcribed a test audio clip.')
+      send({ type: 'TEST_SUCCEEDED' })
     } catch (error) {
-      setSelfHostedTestState('error')
-      setSelfHostedMessage(errorMessage(error))
+      send({ type: 'TEST_FAILED', error: errorMessage(error) })
     }
   }
   const provider = VOICE_PROVIDER_OPTIONS.find((option) => option.value === settings.voiceTranscriptionProvider) ?? VOICE_PROVIDER_OPTIONS[0]
@@ -205,11 +233,11 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
               <span className="voice-local-setup__intro"><HardDrives size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
               <label className="voice-path-field">
                 <span><strong>Server URL</strong><small>Enter the server base URL or its full /v1/audio/transcriptions endpoint.</small></span>
-                <input aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" spellCheck={false} onChange={(event) => { setSelfHostedUrl(event.target.value); setSelfHostedTestState('idle'); setSelfHostedMessage('') }} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
+                <input aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_URL', value: event.target.value })} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
               </label>
               <label className="voice-path-field">
                 <span><strong>Model ID</strong><small>Optional. Leave blank to ask the server for its default English model.</small></span>
-                <input aria-label="Self-hosted model ID" value={selfHostedModel} placeholder="nvidia/parakeet-tdt-0.6b-v3" spellCheck={false} onChange={(event) => { setSelfHostedModel(event.target.value); setSelfHostedTestState('idle'); setSelfHostedMessage('') }} onBlur={() => { const value = selfHostedModel.trim(); if (value !== settings.voiceSelfHostedModel) update('voiceSelfHostedModel', value) }} />
+                <input aria-label="Self-hosted model ID" value={selfHostedModel} placeholder="nvidia/parakeet-tdt-0.6b-v3" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_MODEL', value: event.target.value })} onBlur={() => { const value = selfHostedModel.trim(); if (value !== settings.voiceSelfHostedModel) update('voiceSelfHostedModel', value) }} />
               </label>
               <div className="voice-self-hosted-auth">
                 <span><strong>Access token</strong><small>Optional. Stored with the same OS-backed protection as your other voice keys.</small></span>
@@ -276,7 +304,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           hasSpellCheck={false}
           placeholder={credential === 'self-hosted' ? 'Paste access token' : 'Paste API key'}
           containerClassName="field"
-          onChange={(nextValue) => setApiKey(nextValue)}
+          onChange={(nextValue) => send({ type: 'SET_API_KEY', value: nextValue })}
         />
       </Modal> : null}
     </>

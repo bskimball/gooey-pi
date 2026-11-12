@@ -14,6 +14,7 @@ import { PI_RPC_ADAPTER, parseContextUsage, parseSessionUsage, type HarnessRpcAd
 import { LiveContextUsageTracker, withLiveContextUsage } from './context-usage'
 import { FramedRpcTransport, type QueuedRpcWrite } from './transport'
 import { activityEventFromFrame, compactingActivity, createRuntimeActivityActor, streamingActivity, syntheticCompactionOpen, watchdogArmed } from './runtimeActivityMachine'
+import { createRpcRuntimeLifecycle } from './rpcRuntimeLifecycleMachine'
 import type { RpcObject } from './types'
 
 interface PendingRequest {
@@ -81,13 +82,10 @@ export class RpcRuntime {
   // a pending prompt's deadline holds while one awaits the user (id -> expiry).
   private readonly blockingUiRequests = new Map<string, number>()
   private pendingBytes = 0
-  private transportFailed = false
-  private receivedFrame = false
+  private readonly lifecycle = createRpcRuntimeLifecycle()
   private readonly child: ChildProcessWithoutNullStreams
   private readonly transport: FramedRpcTransport
-  private stopPromise: Promise<boolean> | null = null
   private readonly eventForwarder: AgentEventForwarder
-  private stopped = false
   private firstPromptNeedsPersistence = false
 
   persistFirstPrompt(): void {
@@ -138,7 +136,6 @@ export class RpcRuntime {
   // bounded by the shared read frame limit and small concurrency caps.
   private readonly chunkAssemblies = new Map<string, ChunkAssembly>()
   private chunkAssemblySweepTimer: RpcChunkAssemblyTimer | null = null
-  private acceptingChunkFrames = true
 
   constructor(
     executable: string,
@@ -169,16 +166,18 @@ export class RpcRuntime {
       this.child,
       (line) => this.handleLine(line),
       (error) => this.failTransport(error),
-      () => !this.stopped,
+      () => !this.lifecycle.getSnapshot().context.inputClosed,
     )
     this.child.stdin.on('error', (error) => this.fail(error))
     this.child.once('error', (error) => this.fail(error))
     this.child.once('close', (code, signal) => {
+      const { inputClosed, receivedFrame } = this.lifecycle.getSnapshot().context
+      this.lifecycle.send({ type: 'PROCESS_EXITED' })
       this.disposeCompactionWatchdog()
       this.disposeContextUsage()
-      const detail = code !== 0 && code !== null && !this.stopped && !this.receivedFrame ? redactedStderrTail(this.transport.stderrTail()) : ''
+      const detail = code !== 0 && code !== null && !inputClosed && !receivedFrame ? redactedStderrTail(this.transport.stderrTail()) : ''
       this.fail(new Error(`${this.adapter.agentName} RPC exited (${code ?? signal ?? 'unknown'})${detail ? `: ${detail}` : ''}`))
-      this.emit({ type: 'runtime_exit', code, signal, expected: this.stopped })
+      this.emit({ type: 'runtime_exit', code, signal, expected: inputClosed })
       this.onExit(this)
     })
     this.scheduleCompactionPoll()
@@ -284,16 +283,17 @@ export class RpcRuntime {
   }
 
   stop(): Promise<boolean> {
-    if (!this.stopPromise) {
-      // Stop accepting partial frames before the abort round-trip: the child
-      // may keep writing while that request is in flight.
-      this.acceptingChunkFrames = false
-      this.disposeChunkAssemblies()
-      const { isStreaming, isCompacting } = this.snapshot()
-      this.activity.send({ type: 'CANCEL' })
-      this.stopPromise = this.performStop(Boolean(isStreaming || isCompacting))
-    }
-    return this.stopPromise
+    const snap = this.lifecycle.getSnapshot()
+    if (snap.context.stopPromise) return snap.context.stopPromise
+    if (snap.matches('exited')) return Promise.resolve(true)
+    const { isStreaming, isCompacting } = this.snapshot()
+    this.activity.send({ type: 'CANCEL' })
+    let resolveStop!: (value: boolean) => void
+    const promise = new Promise<boolean>((resolve) => { resolveStop = resolve })
+    this.lifecycle.send({ type: 'STOP_REQUESTED', stopPromise: promise })
+    this.disposeChunkAssemblies()
+    void this.performStop(Boolean(isStreaming || isCompacting)).then(resolveStop)
+    return promise
   }
 
   private async performStop(shouldAbort: boolean): Promise<boolean> {
@@ -303,7 +303,7 @@ export class RpcRuntime {
     if (shouldAbort) {
       try { await this.request({ type: 'abort' }, 5_000) } catch { /* close stdin and escalate below */ }
     }
-    this.stopped = true
+    this.lifecycle.send({ type: 'CLOSE_SETTLED' })
     this.transport.endInput()
     if (await this.waitForExit(750)) return true
     return this.killTree()
@@ -324,18 +324,18 @@ export class RpcRuntime {
   }
 
   private failTransport(reason: unknown): void {
-    if (this.transportFailed) return
-    this.transportFailed = true
+    const { transportFailed, stopPromise } = this.lifecycle.getSnapshot().context
+    if (transportFailed) return
     const error = reason instanceof Error ? reason : new Error(errorMessage(reason))
     this.emit({ type: 'transport_error', error: errorMessage(error) })
     this.transport.pauseOutput()
     this.fail(error)
-    this.stopPromise ??= this.performTransportStop()
+    const promise = stopPromise ?? this.performTransportStop()
+    this.lifecycle.send({ type: 'TRANSPORT_FAILED', stopPromise: promise })
   }
 
   private performTransportStop(): Promise<boolean> {
     this.disposeCompactionWatchdog()
-    this.stopped = true
     this.transport.destroyInput()
     return this.killTree()
   }
@@ -449,7 +449,7 @@ export class RpcRuntime {
 
   private handleFrame(raw: unknown): void {
     if (!isRecord(raw) || typeof raw.type !== 'string') return
-    this.receivedFrame = true
+    this.lifecycle.send({ type: 'FRAME_RECEIVED' })
     if (raw.type !== 'response') this.lastActivityAt = Date.now()
     if (raw.type === 'response' && typeof raw.id === 'string') {
       const pending = this.pending.get(raw.id)
@@ -478,7 +478,7 @@ export class RpcRuntime {
       return
     }
     if (this.adapter.chunkedFrames && raw.type === 'rpc_chunk') {
-      if (!this.acceptingChunkFrames) return
+      if (!this.lifecycle.getSnapshot().context.acceptingChunkFrames) return
       this.handleChunkFrame(raw)
       return
     }
@@ -604,7 +604,8 @@ export class RpcRuntime {
   private rescheduleChunkAssemblySweep(): void {
     if (this.chunkAssemblySweepTimer) this.chunkAssemblyTiming.cancel(this.chunkAssemblySweepTimer)
     this.chunkAssemblySweepTimer = null
-    if (this.chunkAssemblies.size === 0 || this.stopped || this.transportFailed) return
+    const { inputClosed, transportFailed } = this.lifecycle.getSnapshot().context
+    if (this.chunkAssemblies.size === 0 || inputClosed || transportFailed) return
     const deadline = Math.min(...[...this.chunkAssemblies.values()].map((assembly) => assembly.expiresAt))
     const timer = this.chunkAssemblyTiming.schedule(() => {
       if (this.chunkAssemblySweepTimer !== timer) return
@@ -641,7 +642,7 @@ export class RpcRuntime {
   }
 
   private refreshContextUsage(activityTokens?: number): Promise<void> {
-    if (this.stopped) return Promise.resolve()
+    if (this.lifecycle.getSnapshot().context.inputClosed) return Promise.resolve()
     const request: ContextUsageRefreshRequest = {
       generation: this.contextUsageGeneration,
       sessionId: this.info.sessionId,
@@ -659,7 +660,7 @@ export class RpcRuntime {
 
   private async drainContextUsageRefreshes(): Promise<void> {
     try {
-      while (!this.stopped && this.contextUsageRefreshRequest) {
+      while (!this.lifecycle.getSnapshot().context.inputClosed && this.contextUsageRefreshRequest) {
         const request = this.contextUsageRefreshRequest
         this.contextUsageRefreshRequest = null
         await this.performContextUsageRefresh(request)
@@ -678,7 +679,7 @@ export class RpcRuntime {
       const usage = isRecord(response.data) ? parseContextUsage(response.data.contextUsage) : null
       const sessionUsage = parseSessionUsage(response.data)
       if (request.generation !== this.contextUsageGeneration || request.sessionId !== this.info.sessionId) return
-      if (sessionUsage && !this.stopped) {
+      if (sessionUsage && !this.lifecycle.getSnapshot().context.inputClosed) {
         this.info.sessionUsage = sessionUsage
         this.emit({ type: 'session_usage', sessionUsage })
       }
@@ -746,7 +747,7 @@ export class RpcRuntime {
       this.contextUsageEmitTimer = null
     }
     const usage = this.info.contextUsage
-    if (!usage || this.stopped) return
+    if (!usage || this.lifecycle.getSnapshot().context.inputClosed) return
     this.lastContextUsageEmitAt = Date.now()
     this.emit({ type: 'context_usage', contextUsage: usage })
   }
@@ -817,7 +818,6 @@ export class RpcRuntime {
   }
 
   private fail(error: Error): void {
-    this.acceptingChunkFrames = false
     this.disposeChunkAssemblies()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
     this.pending.clear()

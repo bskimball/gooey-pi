@@ -1,5 +1,5 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
-import { useMachine } from "@xstate/react";
+import { useActorRef, useMachine, useSelector } from "@xstate/react";
 import type {
 	ExtensionTabControls,
 	StampedPointerEvent,
@@ -45,47 +45,12 @@ import { Banner } from "@astryxdesign/core/Banner";
 import { IconButton } from "../ui";
 import { BrowserAnnotationPopover } from "./BrowserAnnotationPopover";
 import { browserAnnotationMachine } from "./browserAnnotationMachine";
-
-type WebviewElement = HTMLElement & {
-	loadURL(url: string): Promise<void>;
-	getURL(): string;
-	getTitle(): string;
-	getWebContentsId(): number;
-	goBack(): void;
-	goForward(): void;
-	canGoBack(): boolean;
-	canGoForward(): boolean;
-	reload(): void;
-	stop(): void;
-	executeJavaScript(code: string): Promise<unknown>;
-	addEventListener(type: string, listener: EventListener): void;
-	removeEventListener(type: string, listener: EventListener): void;
-};
-
-/**
- * Electron's webview.executeJavaScript throws synchronously (not a rejected
- * promise) until the guest emits dom-ready, so a bare call from a mount
- * effect crashes the renderer. Route every call through this guard.
- */
-function runInPage(view: WebviewElement, code: string): Promise<unknown> {
-	try {
-		return view.executeJavaScript(code).catch(() => undefined);
-	} catch {
-		return Promise.resolve(undefined);
-	}
-}
-
-function normalizeUrl(value: string) {
-	const trimmed = value.trim();
-	if (!trimmed) return "about:blank";
-	if (/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) || trimmed.startsWith("about:"))
-		return trimmed;
-	if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(trimmed))
-		return `http://${trimmed}`;
-	if (trimmed.includes(".") && !trimmed.includes(" "))
-		return `https://${trimmed}`;
-	return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
-}
+import {
+	browserPreviewMachine,
+	normalizeUrl,
+	runInPage,
+	type WebviewElement,
+} from "./browserPreviewMachine";
 
 interface BrowserPanelProps {
 	cwd?: string;
@@ -161,19 +126,17 @@ export function BrowserPanel({
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
-	const [address, setAddress] = useState(home);
-	const [currentUrl, setCurrentUrl] = useState(home);
-	const [loading, setLoading] = useState(false);
-	const [canBack, setCanBack] = useState(false);
-	const [canForward, setCanForward] = useState(false);
-	const [domReady, setDomReady] = useState(false);
+	const previewActorRef = useActorRef(browserPreviewMachine, { input: { home } });
+	const previewSnapshot = useSelector(previewActorRef, (snapshot) => snapshot);
+	const { address, currentUrl, canBack, canForward, history, previewWebContentsId } = previewSnapshot.context;
+	const loading = previewSnapshot.matches({ network: "loading" });
+	const domReady = previewSnapshot.matches({ dom: "ready" });
+	const historyOpen = previewSnapshot.matches({ historyPanel: "open" });
+	const isDirectArmed = previewSnapshot.matches({ selectionCapture: "armed" });
+	const capturingSelection = previewSnapshot.matches({ selectionCapture: "capturingSelection" });
 	const [annotationSnapshot, sendAnnotation] = useMachine(browserAnnotationMachine);
 	const picking = annotationSnapshot.matches({ mode: "picking" });
 	const { pendingElement, annotationText, notice } = annotationSnapshot.context;
-	const [historyOpen, setHistoryOpen] = useState(false);
-	const [history, setHistory] = useState<string[]>(() => [home]);
-	const directCaptureRef = useRef(false);
-	const [capturingSelection, setCapturingSelection] = useState(false);
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
 	const lastMarkersRef = useRef("");
@@ -193,9 +156,6 @@ export function BrowserPanel({
 	const lastAgentSlotRectRef = useRef<AgentSlotRect | null | undefined>(
 		undefined,
 	);
-	const [previewWebContentsId, setPreviewWebContentsId] = useState<
-		number | null
-	>(null);
 	const onPreviewContextRef = useRef(onPreviewContext);
 	onPreviewContextRef.current = onPreviewContext;
 	const [agentAddress, setAgentAddress] = useState("");
@@ -273,29 +233,24 @@ export function BrowserPanel({
 	useEffect(() => {
 		const view = webviewRef.current;
 		if (!view) return;
-		const sync = () => {
+		const readNavigation = () => {
 			try {
-				const url = view.getURL() || home;
-				setCurrentUrl(url);
-				setAddress(url);
-				setCanBack(view.canGoBack());
-				setCanForward(view.canGoForward());
-				setHistory((items) =>
-					items.at(-1) === url ? items : [...items.slice(-19), url],
-				);
+				return {
+					url: view.getURL() || home,
+					canBack: view.canGoBack(),
+					canForward: view.canGoForward(),
+				};
 			} catch {
-				/* webview not ready */
+				return {};
 			}
 		};
-		const didStart = () => setLoading(true);
-		const didStop = () => {
-			setLoading(false);
-			sync();
-		};
+		const didStart = () => previewActorRef.send({ type: "DID_START_LOADING" });
+		const didStop = () =>
+			previewActorRef.send({ type: "DID_STOP_LOADING", ...readNavigation() });
 		// A full navigation replaces the document: the injected picker and markers
 		// are gone, and annotations captured on other pages become stale.
 		const didNavigate = () => {
-			sync();
+			previewActorRef.send({ type: "DID_NAVIGATE", ...readNavigation() });
 			lastMarkersRef.current = "";
 			sendAnnotation({ type: "NAVIGATED" });
 			try {
@@ -307,13 +262,14 @@ export function BrowserPanel({
 		// dom-ready is the earliest point at which executeJavaScript is legal;
 		// it fires again for every subsequent document, so markers re-apply.
 		const onDomReady = () => {
-			setDomReady(true);
 			lastMarkersRef.current = "";
+			let webContentsId: number | null = null;
 			try {
-				setPreviewWebContentsId(view.getWebContentsId());
+				webContentsId = view.getWebContentsId();
 			} catch {
 				/* guest not attached yet */
 			}
+			previewActorRef.send({ type: "DOM_READY", webContentsId });
 		};
 		view.addEventListener("dom-ready", onDomReady);
 		view.addEventListener("did-start-loading", didStart);
@@ -327,7 +283,7 @@ export function BrowserPanel({
 			view.removeEventListener("did-navigate", didNavigate);
 			view.removeEventListener("did-navigate-in-page", didNavigate);
 		};
-	}, [home, sendAnnotation]);
+	}, [home, previewActorRef, sendAnnotation]);
 
 	// While annotation mode is on, the picker runs inside the page; poll it for
 	// the element the user clicked. Stopping cleans up the page-side listeners.
@@ -351,21 +307,29 @@ export function BrowserPanel({
 						return;
 					}
 					const first = Array.isArray(parsed) ? parsed[0] : null;
-					if (first && typeof first === "object" && "cancelled" in first && first.cancelled === true) { sendAnnotation({ type: "CANCEL" }); return; }
+					if (first && typeof first === "object" && "cancelled" in first && first.cancelled === true) {
+						previewActorRef.send({ type: "DISARM_SELECTION" });
+						sendAnnotation({ type: "CANCEL" });
+						return;
+					}
 					const element = Array.isArray(parsed)
 						? sanitizeCapturedElement(parsed[0])
 						: null;
 					if (!element) return;
-					if (directCaptureRef.current && agentSessionKey && window.apex) {
+					if (
+						previewActorRef.getSnapshot().matches({ selectionCapture: "armed" }) &&
+						agentSessionKey &&
+						window.apex
+					) {
 						const owner = annotationsRef.current;
 						const pageUrl = view.getURL();
-						setCapturingSelection(true);
+						previewActorRef.send({ type: "CAPTURE_SELECTION_START" });
 						sendAnnotation({ type: "CANCEL" });
 						void captureBrowserSelection({ bridge: window.apex, sessionKey: agentSessionKey, tabId: "preview", pageUrl, pageTitle: view.getTitle(), cwd, element }).then(({ input, warning }) => {
 							if (view.getURL() !== pageUrl || annotationsRef.current.add !== owner.add) return;
 							if (owner.add(input)) owner.focusComposer?.();
 							if (warning) sendAnnotation({ type: "CAPACITY_BLOCKED", notice: warning });
-						}).catch(() => sendAnnotation({ type: "CAPACITY_BLOCKED", notice: "The selected page is no longer available. Select the element again." })).finally(() => setCapturingSelection(false));
+						}).catch(() => sendAnnotation({ type: "CAPACITY_BLOCKED", notice: "The selected page is no longer available. Select the element again." })).finally(() => previewActorRef.send({ type: "CAPTURE_SELECTION_DONE" }));
 					} else sendAnnotation({ type: "ELEMENT_CAPTURED", element });
 				})
 				.catch(() => {
@@ -377,7 +341,7 @@ export function BrowserPanel({
 			window.clearInterval(interval);
 			void runInPage(view, annotationPickerScript("stop"));
 		};
-	}, [visible, picking, pollIntervalMs, domReady, sendAnnotation, agentSessionKey, cwd]);
+	}, [visible, picking, pollIntervalMs, domReady, previewActorRef, sendAnnotation, agentSessionKey, cwd]);
 
 	// Persistent numbered markers for every live annotation on the current page.
 	const markers = annotations.annotations.flatMap((annotation, index) =>
@@ -401,13 +365,12 @@ export function BrowserPanel({
 
 	const navigate = useCallback((value: string) => {
 		const url = normalizeUrl(value);
-		setAddress(url);
-		setCurrentUrl(url);
+		previewActorRef.send({ type: "NAVIGATE", url });
 		void webviewRef.current?.loadURL(url).catch((error: unknown) => {
 			if (!String(error).includes("ERR_ABORTED"))
 				console.error("Browser navigation failed", error);
 		});
-	}, []);
+	}, [previewActorRef]);
 	useEffect(() => {
 		if (!navigationRequest || !domReady) return;
 		navigate(navigationRequest.url);
@@ -417,10 +380,24 @@ export function BrowserPanel({
 	const capacityNotice = `Apex keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`;
 
 	const toggleAnnotation = () => {
-		directCaptureRef.current = false;
+		previewActorRef.send({ type: "DISARM_SELECTION" });
 		sendAnnotation({
 			type: "TOGGLE",
 			atCapacity: annotationsRef.current.atCapacity,
+			capacityNotice,
+		});
+	};
+
+	const toggleDirectSelection = () => {
+		const atCapacity = annotationsRef.current.atCapacity;
+		if (isDirectArmed) {
+			previewActorRef.send({ type: "DISARM_SELECTION" });
+		} else if (!atCapacity) {
+			previewActorRef.send({ type: "ARM_SELECTION" });
+		}
+		sendAnnotation({
+			type: "TOGGLE",
+			atCapacity,
 			capacityNotice,
 		});
 	};
@@ -561,19 +538,31 @@ export function BrowserPanel({
 						<ShieldCheck size={12} />
 						<input
 							value={address}
-							onChange={(event) => setAddress(event.target.value)}
+							onChange={(event) =>
+								previewActorRef.send({
+									type: "SET_ADDRESS",
+									address: event.target.value,
+								})
+							}
 							aria-label="Browser address"
 							spellCheck={false}
 						/>
 						<button
 							type="button"
 							aria-label="Browser history"
-							onClick={() => setHistoryOpen((value) => !value)}
+							onClick={() => previewActorRef.send({ type: "TOGGLE_HISTORY" })}
 						>
 							<ClockCounterClockwise size={13} />
 						</button>
 					</form>
-					<IconButton label={picking && directCaptureRef.current ? "Stop selecting" : "Select element"} aria-pressed={picking && directCaptureRef.current} className={picking && directCaptureRef.current ? "is-active" : ""} onClick={() => { directCaptureRef.current = true; sendAnnotation({ type: "TOGGLE", atCapacity: annotationsRef.current.atCapacity, capacityNotice }); }}><Crosshair size={15} /></IconButton>
+					<IconButton
+						label={picking && isDirectArmed ? "Stop selecting" : "Select element"}
+						aria-pressed={picking && isDirectArmed}
+						className={picking && isDirectArmed ? "is-active" : ""}
+						onClick={toggleDirectSelection}
+					>
+						<Crosshair size={15} />
+					</IconButton>
 					<IconButton
 						className={
 							picking || pendingElement ? "is-active annotation-active" : ""
@@ -595,7 +584,10 @@ export function BrowserPanel({
 					<div className="browser-history">
 						<div>
 							<strong>Recent pages</strong>
-							<button type="button" onClick={() => setHistory([])}>
+							<button
+								type="button"
+								onClick={() => previewActorRef.send({ type: "CLEAR_HISTORY" })}
+							>
 								Clear
 							</button>
 						</div>
@@ -606,10 +598,7 @@ export function BrowserPanel({
 								<button
 									type="button"
 									key={`${url}-${index}`}
-									onClick={() => {
-										navigate(url);
-										setHistoryOpen(false);
-									}}
+									onClick={() => navigate(url)}
 								>
 									<ClockCounterClockwise size={12} />
 									<span>{url}</span>
@@ -621,7 +610,7 @@ export function BrowserPanel({
 					{webview}
 					{picking || capturingSelection ? (
 						<div className="annotation-hint" role="status">
-							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : directCaptureRef.current ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}
+							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : isDirectArmed ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}
 						</div>
 					) : null}
 					{pendingElement ? (

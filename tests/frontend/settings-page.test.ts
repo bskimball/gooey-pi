@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { SETTINGS_FIELD_SECTIONS } from '../../apps/desktop/src/pages/settings/contracts'
 import {
   browserHomeValidation,
   createDraftState,
+  draftSettingTransition,
+  initialDraftSetting,
   normalizeBrowserHome,
   reduceDraftState,
   terminalShellValidation,
@@ -116,52 +117,28 @@ describe('free-text settings validation', () => {
   })
 })
 
-describe('settings field ownership', () => {
-  it('assigns every AppSettings field to a focused section', () => {
-    expect(SETTINGS_FIELD_SECTIONS).toEqual({
-      theme: 'appearance',
-      locale: 'appearance',
-      interfaceFontScale: 'appearance',
-      projectSortMode: 'general',
-      sidebarOpen: 'general',
-      inspectorOpen: 'general',
-      showFileChangesPopup: 'general',
-      keepRunningInBackground: 'general',
-      launchAtLogin: 'general',
-      terminalOpen: 'terminal',
-      defaultInspectorTab: 'general',
-      browserHome: 'browser',
-      checkoutStrategy: 'general',
-      browserAskForDownloads: 'browser',
-      terminalShell: 'terminal',
-      reduceMotion: 'appearance',
-      showReasoningSummaries: 'agent',
-      showToolCalls: 'agent',
-      messageEnterAction: 'agent',
-      runtimePaths: 'agent',
-      enabledHarnesses: 'agent',
-      telemetry: 'privacy',
-      askUserEnabled: 'agent',
-      browserEnabled: 'agent',
-      computerUseEnabled: 'agent',
-      piDisabledProviders: 'providers',
-      piDisabledModels: 'providers',
-      lastSelectedModels: 'providers',
-      activeHarness: 'agent',
-      petEnabled: 'pets',
-      petId: 'pets',
-      petSize: 'pets',
-      voiceTranscriptionProvider: 'voice',
-      voiceOpenAiLiveTranscriptionModel: 'voice',
-      voiceOpenAiTranscriptionModel: 'voice',
-      voiceGroqTranscriptionModel: 'voice',
-      voiceDeepgramTranscriptionModel: 'voice',
-      voiceSelfHostedUrl: 'voice',
-      voiceSelfHostedModel: 'voice',
-      voiceLocalWhisperExecutable: 'voice',
-      voiceLocalWhisperModel: 'voice',
-      voiceRealtimeModel: 'voice',
-      voiceRealtimeVoice: 'voice',
-    })
+describe('draftSettingMachine explicit states', () => {
+  it('transitions through clean -> dirty -> committing -> settled and back to error on rollback', () => {
+    const clean = initialDraftSetting('/bin/zsh')
+    expect(clean.matches('clean')).toBe(true)
+
+    const invalid = draftSettingTransition(clean, { type: 'edit', value: 'bin/zsh', error: 'Enter an absolute shell path' })
+    expect(invalid.matches('error')).toBe(true)
+
+    const dirty = draftSettingTransition(invalid, { type: 'edit', value: '/bin/bash', error: '' })
+    expect(dirty.matches('dirty')).toBe(true)
+
+    const committing = draftSettingTransition(dirty, { type: 'commit', id: 1, value: '/bin/bash' })
+    expect(committing.matches('committing')).toBe(true)
+
+    const settled = draftSettingTransition(committing, { type: 'resolve', id: 1 })
+    expect(settled.matches('settled')).toBe(true)
+
+    const rolledBack = draftSettingTransition(settled, { type: 'sync', value: '/bin/zsh' })
+    expect(rolledBack.matches('error')).toBe(true)
+    expect(rolledBack.context.error).toContain('could not be saved')
+
+    const revertedToBaseline = draftSettingTransition(rolledBack, { type: 'edit', value: '/bin/zsh', error: '' })
+    expect(revertedToBaseline.matches('clean')).toBe(true)
   })
 })

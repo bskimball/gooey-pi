@@ -22,7 +22,7 @@ const VITEST_ENTRYPOINT = resolve(createRequire(import.meta.url).resolve('vitest
 
 const REQUIRED_SAFETY_MODULES = [
   'apps/desktop/electron/main/ipc.ts',
-  'apps/desktop/electron/main/lib/capability-bridge.ts',
+  'packages/core/src/lib/capability-bridge.ts',
   'apps/desktop/electron/main/browser/agent-bridge.ts',
   'apps/desktop/electron/main/browser/extension-bridge.ts',
   'apps/desktop/electron/main/browser/extension-tab-driver.ts',

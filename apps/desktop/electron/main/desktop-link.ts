@@ -7,6 +7,7 @@ import { canonicalSessionPath } from 'apex-core/session-paths'
 import { requireRecord, requireString } from 'apex-core/validation'
 import type { AgentRpcManager } from './agent-rpc'
 import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
+import { createDesktopLinkPeerLifecycle, type DesktopLinkPeerLifecycle } from './desktopLinkPeerMachine'
 
 class DesktopEditorBridge extends CapabilityBridge {
   protected readonly rateLimit = 240
@@ -41,7 +42,7 @@ export class DesktopLinkServer {
   readonly editor = new DesktopEditorBridge(this)
   private server: Server | undefined
   private readonly token = randomBytes(32).toString('hex')
-  private readonly peers = new Set<DesktopLinkPeer>()
+  private readonly peers = new Map<DesktopLinkPeer, DesktopLinkPeerLifecycle>()
   private readonly attachments = new Map<string, Attachment>()
   private unsubscribe: (() => void) | undefined
   private readonly record: string
@@ -57,50 +58,57 @@ export class DesktopLinkServer {
     const server = createServer((socket) => {
       if (this.peers.size >= 64) { socket.destroy(); return }
       const peer = new DesktopLinkPeer(socket)
-      this.peers.add(peer)
-      let attachment: Attachment | undefined
-      let attaching = false
-      const deadline = setTimeout(() => { if (!attachment) peer.close('Desktop attach timed out') }, 10_000)
-      deadline.unref()
+      const lifecycle = createDesktopLinkPeerLifecycle<Attachment>({
+        onTimeout: () => peer.close('Desktop attach timed out'),
+        onRelease: (attachment) => {
+          if (this.attachments.get(attachment.runtimeId) === attachment) {
+            this.attachments.delete(attachment.runtimeId)
+            attachment.release()
+          }
+        },
+      })
+      this.peers.set(peer, lifecycle)
       peer.onClose = () => {
-        clearTimeout(deadline)
         this.peers.delete(peer)
-        if (attachment && this.attachments.get(attachment.runtimeId) === attachment) {
-          this.attachments.delete(attachment.runtimeId)
-          attachment.release()
-        }
+        lifecycle.send({ type: 'DISCONNECT' })
       }
       peer.onRequest = async (method, params) => {
         if (method === 'attach') {
-          if (attachment || attaching) throw new Error('Desktop client is already attaching or attached')
-          attaching = true
+          if (!lifecycle.getSnapshot().matches('awaitingAuth')) throw new Error('Desktop client is already attaching or attached')
+          lifecycle.send({ type: 'ATTACH_START' })
           try {
             if (params.version !== 1) throw new Error('Unsupported Desktop protocol version')
             const token = requireString(params.token, 'token', { min: 64, max: 64 })
             if (!/^[a-f0-9]{64}$/.test(token) || !timingSafeEqual(Buffer.from(token), Buffer.from(this.token))) throw new Error('Desktop authentication failed')
             const path = requireString(params.sessionPath, 'sessionPath', { min: 1, max: 4096 })
             const runtime = this.manager.getForSession(path)
-            if (!runtime) return null
+            if (!runtime) {
+              lifecycle.send({ type: 'ATTACH_FAILED' })
+              return null
+            }
             const cwd = await desktopCanonicalPath(await this.authorizeCwd(requireString(params.cwd, 'cwd', { min: 1, max: 4096 })))
             const session = await desktopCanonicalPath(path)
             if (cwd !== await desktopCanonicalPath(runtime.cwd)) throw new Error('Desktop session workspace does not match')
             if (!runtime.sessionFile || session !== await desktopCanonicalPath(runtime.sessionFile)) throw new Error('Desktop session path does not match')
             // All awaits precede this synchronous snapshot/subscription boundary.
             const current = this.manager.getForSession(path)
-            if (!current || current.runtimeId !== runtime.runtimeId || this.stopped || !this.peers.has(peer)) throw new Error('Desktop session changed during attachment')
+            if (!current || current.runtimeId !== runtime.runtimeId || this.stopped || !lifecycle.getSnapshot().matches('attaching')) throw new Error('Desktop session changed during attachment')
             if (this.attachments.has(runtime.runtimeId)) throw new Error('This Desktop session already has a controlling editor client')
             const snapshot = this.manager.sessionSnapshot(runtime.runtimeId)
-            attachment = { peer, runtimeId: runtime.runtimeId, cwd, session, release: this.manager.pinAttachment(runtime.runtimeId) }
+            const attachment: Attachment = { peer, runtimeId: runtime.runtimeId, cwd, session, release: this.manager.pinAttachment(runtime.runtimeId) }
             this.attachments.set(runtime.runtimeId, attachment)
-            clearTimeout(deadline)
+            lifecycle.send({ type: 'ATTACH_SUCCEEDED', attachment })
+            if (!lifecycle.getSnapshot().matches('attached')) throw new Error('Desktop session changed during attachment')
             return snapshot
-          } finally { attaching = false }
+          } catch (error) {
+            if (lifecycle.getSnapshot().matches('attaching')) lifecycle.send({ type: 'ATTACH_FAILED' })
+            throw error
+          }
         }
+        const attachment = lifecycle.getSnapshot().context.attachment as Attachment | undefined
         if (!attachment) throw new Error('Desktop attachment required')
         if (method === 'detach') {
-          this.attachments.delete(attachment.runtimeId)
-          attachment.release()
-          attachment = undefined
+          lifecycle.send({ type: 'DETACH' })
           return {}
         }
         if (method !== 'command') throw new Error('Unsupported desktop method')
@@ -177,7 +185,10 @@ export class DesktopLinkServer {
     this.unsubscribe?.()
     this.unsubscribe = undefined
     await this.editor.stop()
-    for (const peer of this.peers) peer.close('Desktop is shutting down; command outcome unknown. Do not retry automatically.')
+    for (const [peer, lifecycle] of this.peers) {
+      lifecycle.send({ type: 'STOP' })
+      peer.close('Desktop is shutting down; command outcome unknown. Do not retry automatically.')
+    }
     const server = this.server
     this.server = undefined
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()))

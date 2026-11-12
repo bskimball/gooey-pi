@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { access, lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { EffectiveCapability, EffectiveInstructionSource, EffectiveRunConfig, EffectiveSkillDir, HarnessId } from '../../src/types/api'
@@ -17,6 +17,7 @@ export interface EffectiveRunConfigRequest {
   /** Overrides for tests. */
   home?: string
   agentDir?: string
+  signal?: AbortSignal
 }
 
 function piAgentDir(home: string): string {
@@ -24,37 +25,46 @@ function piAgentDir(home: string): string {
   return configured ? configured : join(home, '.pi', 'agent')
 }
 
-/** Size of a regular file, following a symlink as Pi does; undefined for anything else or a broken link. */
-function regularFileSize(path: string): number | undefined {
+async function pathExists(path: string): Promise<boolean> {
   try {
-    const stat = statSync(path)
-    return stat.isFile() ? stat.size : undefined
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Size of a regular file, following a symlink as Pi does; undefined for anything else or a broken link. */
+async function regularFileSize(path: string): Promise<number | undefined> {
+  try {
+    const info = await stat(path)
+    return info.isFile() ? info.size : undefined
   } catch {
     return undefined
   }
 }
 
 /** First instruction file Pi would load from `dir`. */
-function firstInstructionFile(dir: string): { kind: EffectiveInstructionSource['kind']; path: string; bytes: number } | undefined {
+async function firstInstructionFile(dir: string): Promise<{ kind: EffectiveInstructionSource['kind']; path: string; bytes: number } | undefined> {
   for (const kind of INSTRUCTION_FILES) {
     const path = join(dir, kind)
-    const bytes = regularFileSize(path)
+    const bytes = await regularFileSize(path)
     if (bytes !== undefined) return { kind, path, bytes }
   }
   return undefined
 }
 
-function canonical(path: string): string {
+async function canonical(path: string): Promise<string> {
   try {
-    return realpathSync(path)
+    return await realpath(path)
   } catch {
     return resolve(path)
   }
 }
 
-function isDirectory(path: string): boolean {
+async function isDirectory(path: string): Promise<boolean> {
   try {
-    return lstatSync(path).isDirectory()
+    return (await lstat(path)).isDirectory()
   } catch {
     return false
   }
@@ -65,37 +75,43 @@ function isDirectory(path: string): boolean {
  * instruction files Pi reads. Reports names, sizes, and counts only; it never
  * returns file contents and never touches the Pi credential or trust files.
  */
-export function describeEffectiveRunConfig({ cwd, harness, extensionContext, home = homedir(), agentDir }: EffectiveRunConfigRequest): EffectiveRunConfig {
-  const injectedCapabilities: EffectiveCapability[] = extensionInjections(harness).map(({ capability, filename }) => ({
-    capability,
-    filename,
-    present: existsSync(resolveExtensionPath(filename, extensionContext)),
-  }))
+export async function describeEffectiveRunConfig({ cwd, harness, extensionContext, home = homedir(), agentDir, signal }: EffectiveRunConfigRequest): Promise<EffectiveRunConfig> {
+  signal?.throwIfAborted()
+  const injectedCapabilities: EffectiveCapability[] = await Promise.all(
+    extensionInjections(harness).map(async ({ capability, filename }) => ({
+      capability,
+      filename,
+      present: await pathExists(resolveExtensionPath(filename, extensionContext)),
+    })),
+  )
 
   const instructionSources: EffectiveInstructionSource[] = []
   const start = resolve(cwd)
-  const homeDir = canonical(home)
+  const homeDir = await canonical(home)
   for (let dir = start; ; dir = dirname(dir)) {
+    signal?.throwIfAborted()
     if (dir === homeDir && dir !== start) break
-    const found = firstInstructionFile(dir)
+    const found = await firstInstructionFile(dir)
     if (found) instructionSources.push({ scope: dir === start ? 'project' : 'parent', ...found })
-    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) break
+    if (await pathExists(join(dir, '.git')) || dirname(dir) === dir) break
   }
 
+  signal?.throwIfAborted()
   const userDir = agentDir ?? piAgentDir(home)
-  const userInstructions = firstInstructionFile(userDir)
+  const userInstructions = await firstInstructionFile(userDir)
   if (userInstructions) instructionSources.unshift({ scope: 'user', ...userInstructions })
 
   const systemPath = join(userDir, 'SYSTEM.md')
-  const systemBytes = regularFileSize(systemPath)
+  const systemBytes = await regularFileSize(systemPath)
   if (systemBytes !== undefined) instructionSources.push({ scope: 'user', kind: 'SYSTEM.md', path: systemPath, bytes: systemBytes })
 
   const skillDirs: EffectiveSkillDir[] = []
   for (const relative of SKILL_DIRS) {
+    signal?.throwIfAborted()
     const path = join(start, relative)
-    if (!isDirectory(path)) continue
+    if (!await isDirectory(path)) continue
     try {
-      skillDirs.push({ path, count: readdirSync(path).length })
+      skillDirs.push({ path, count: (await readdir(path)).length })
     } catch { /* unreadable directory: omit */ }
   }
 

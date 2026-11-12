@@ -3,8 +3,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createActor } from 'xstate'
 import { ChangesCard } from '../../apps/desktop/src/components/ChangesCard'
 import { ChangesPanel } from '../../apps/desktop/src/components/inspector/ChangesPanel'
+import { changesPanelMachine } from '../../apps/desktop/src/components/inspector/changesPanelMachine'
 import { INSPECTOR_DEFAULT, INSPECTOR_MIN, usePanelLayout } from '../../apps/desktop/src/hooks/usePanelLayout'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -204,5 +206,31 @@ describe('ChangesPanel status states', () => {
     })
     expect(latestWidth).toBe(480)
     window.localStorage.removeItem('prime-work.inspector-width')
+  })
+
+  it('ignores stale diff responses and prevents opening commit and undo modals simultaneously', () => {
+    const actor = createActor(changesPanelMachine, { input: { initialSelectedPath: 'a.ts' } }).start()
+    actor.send({ type: 'DIFF_LOAD_START', requestId: 1 })
+    actor.send({ type: 'DIFF_LOAD_START', requestId: 2 })
+    actor.send({ type: 'DIFF_LOAD_SUCCESS', requestId: 1, diff: 'stale diff' })
+    expect(actor.getSnapshot().matches({ diffView: 'loading' })).toBe(true)
+    expect(actor.getSnapshot().context.diff).toBe('')
+
+    actor.send({ type: 'DIFF_LOAD_SUCCESS', requestId: 2, diff: 'fresh diff' })
+    expect(actor.getSnapshot().matches({ diffView: 'loaded' })).toBe(true)
+    expect(actor.getSnapshot().context.diff).toBe('fresh diff')
+
+    actor.send({ type: 'OPEN_COMMIT' })
+    expect(actor.getSnapshot().matches({ modal: 'commit' })).toBe(true)
+    actor.send({ type: 'OPEN_CONFIRM_UNDO', path: 'a.ts' })
+    expect(actor.getSnapshot().matches({ modal: 'commit' })).toBe(true)
+    expect(actor.getSnapshot().context.confirmUndoTarget).toBeNull()
+
+    actor.send({ type: 'CLOSE_MODAL' })
+    actor.send({ type: 'OPEN_CONFIRM_UNDO', path: 'a.ts' })
+    expect(actor.getSnapshot().matches({ modal: 'confirmUndo' })).toBe(true)
+    actor.send({ type: 'OPEN_COMMIT' })
+    expect(actor.getSnapshot().matches({ modal: 'confirmUndo' })).toBe(true)
+    actor.stop()
   })
 })

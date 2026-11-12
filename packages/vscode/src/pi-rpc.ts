@@ -1,8 +1,16 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { initialTransition, transition } from 'xstate'
 import { StrictJsonlDecoder } from 'apex-core/jsonl'
 import { RPC_READ_FRAME_LIMIT_BYTES } from 'apex-core/jsonl-limits'
 import type { PiInvocation } from 'apex-core/pi-harness'
 import { isRecord } from 'apex-core/validation'
+import {
+  hasPiRpcFrameFailed,
+  isPiRpcRunning,
+  piRpcMachine,
+  type PiRpcEvent,
+  type PiRpcSnapshot,
+} from './piRpcMachine'
 
 export { type PiInvocation, resolvePiExecutable as resolvePi } from 'apex-core/pi-harness'
 
@@ -15,10 +23,13 @@ export class PiRpc {
   private pending = new Map<string, { resolve(data: unknown): void; reject(error: Error): void }>()
   private stderrTail = ''
   private readonly exited: Promise<void>
-  private stopping = false
-  private closed = false
+  private lifecycle: PiRpcSnapshot = initialTransition(piRpcMachine)[0]
 
   get pid(): number | undefined { return this.child.pid }
+
+  private send(event: PiRpcEvent) {
+    this.lifecycle = transition(piRpcMachine, this.lifecycle, event)[0]
+  }
 
   constructor(
     invocation: PiInvocation,
@@ -33,17 +44,16 @@ export class PiRpc {
       for (const { reject } of this.pending.values()) reject(error)
       this.pending.clear()
     }
-    let frameFailed = false
     const decoder = new StrictJsonlDecoder((line) => this.read(line), RPC_READ_FRAME_LIMIT_BYTES)
     const frameError = (error: unknown) => {
-      frameFailed = true
+      this.send({ type: 'FRAME_ERROR' })
       const failure = error instanceof Error ? error : new Error(String(error))
       this.stderrTail = failure.message
       fail(failure)
       this.child.kill()
     }
     this.child.stdout.on('data', (chunk: Buffer) => {
-      if (frameFailed) return
+      if (hasPiRpcFrameFailed(this.lifecycle)) return
       try {
         decoder.push(chunk)
       } catch (error) {
@@ -51,7 +61,7 @@ export class PiRpc {
       }
     })
     this.child.stdout.on('end', () => {
-      if (frameFailed) return
+      if (hasPiRpcFrameFailed(this.lifecycle)) return
       try {
         decoder.end()
       } catch (error) {
@@ -70,7 +80,7 @@ export class PiRpc {
     // that the process and its stdio have finished, including spawn failures.
     this.exited = new Promise((resolve) => {
       this.child.once('close', (code) => {
-        this.closed = true
+        this.send({ type: 'CLOSE' })
         fail(new Error(`Pi exited (code ${code})`))
         try { onExit(code, this.stderrTail.trim()) } finally { resolve() }
       })
@@ -114,8 +124,8 @@ export class PiRpc {
 
   /** Closing stdin asks pi for an orderly shutdown. */
   dispose(): Promise<void> {
-    if (!this.stopping && !this.closed) {
-      this.stopping = true
+    if (isPiRpcRunning(this.lifecycle)) {
+      this.send({ type: 'DISPOSE' })
       this.child.stdin.end()
       const timer = setTimeout(() => this.child.kill(), 3000)
       void this.exited.then(() => clearTimeout(timer))

@@ -1,4 +1,4 @@
-export interface ThemeAnsiPalette {
+interface ThemeAnsiPalette {
   black: string
   red: string
   green: string
@@ -17,7 +17,7 @@ export interface ThemeAnsiPalette {
   brightWhite: string
 }
 
-export interface ThemePalette {
+interface ThemePalette {
   canvas: string
   sidebar: string
   surface: string

@@ -1,11 +1,12 @@
+import { useMachine } from '@xstate/react'
 import { Microphone, MicrophoneSlash, Waveform, X } from './icons'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { PetDefinition, ApexApi } from '@/types/api'
 import { PetAvatar, type PetActivity } from './PetAvatar'
+import { desktopPetMachine } from './desktopPetMachine'
 
 interface Position { x: number; y: number }
-interface DragState { pointerId: number; dx: number; dy: number; lastX: number; lastY: number; moved: boolean }
 
 const BUILT_INS: PetDefinition[] = [
   { id: 'orb', petId: 'orb', displayName: 'Orb', description: 'A fluid voice orb that shifts with Apex activity.', source: 'built-in', kind: 'orb' },
@@ -55,11 +56,11 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
   const [available, setAvailable] = useState<PetDefinition[]>(BUILT_INS)
   const [position, setPosition] = useState(() => constrained(initialPosition(), initialSurfaceHeight, surfaceWidth))
   const [surfaceHeight, setSurfaceHeight] = useState(initialSurfaceHeight)
-  const [dragging, setDragging] = useState(false)
-  const [direction, setDirection] = useState<'left' | 'right'>('right')
-  const [jumping, setJumping] = useState(false)
-  const [dismissArmed, setDismissArmed] = useState(false)
-  const dragRef = useRef<DragState | null>(null)
+  const [petSnapshot, sendPet, petActor] = useMachine(desktopPetMachine)
+  const dragging = petSnapshot.matches('dragging')
+  const dismissArmed = petSnapshot.matches({ dragging: 'dismissArmed' })
+  const jumping = petSnapshot.matches('jumping')
+  const direction = petSnapshot.context.direction
   const positionRef = useRef(position)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const voiceControlRef = useRef<HTMLButtonElement>(null)
@@ -110,9 +111,9 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
   }, [focusVoiceControl, onVoiceControlFocused, voiceActive])
   useEffect(() => {
     if (!jumping) return
-    const timer = window.setTimeout(() => setJumping(false), reduceMotion ? 80 : 700)
+    const timer = window.setTimeout(() => sendPet({ type: 'JUMP_END' }), reduceMotion ? 80 : 700)
     return () => window.clearTimeout(timer)
-  }, [jumping, reduceMotion])
+  }, [jumping, reduceMotion, sendPet])
 
   const pet = useMemo(() => available.find((item) => item.id === petId) ?? available.find((item) => item.id === 'orb') ?? BUILT_INS[0], [available, petId])
   const activity: PetActivity = dragging
@@ -124,9 +125,14 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    dragRef.current = { pointerId: event.pointerId, dx: event.clientX - position.x, dy: event.clientY - position.y, lastX: event.clientX, lastY: event.clientY, moved: false }
-    setDismissArmed(false)
-    setDragging(true)
+    sendPet({
+      type: 'POINTER_DOWN',
+      pointerId: event.pointerId,
+      dx: event.clientX - position.x,
+      dy: event.clientY - position.y,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    })
   }
   const isOverDismissTarget = (clientX: number, clientY: number) => {
     const bounds = dismissTargetRef.current?.getBoundingClientRect()
@@ -137,32 +143,36 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
     return dx * dx + dy * dy <= radius * radius
   }
   const moveDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - drag.lastX
-    const deltaY = event.clientY - drag.lastY
-    if (Math.abs(deltaX) > 1) setDirection(deltaX < 0 ? 'left' : 'right')
-    drag.lastX = event.clientX
-    drag.lastY = event.clientY
-    drag.moved ||= Math.abs(deltaX) + Math.abs(deltaY) > 2
-    setDismissArmed(isOverDismissTarget(event.clientX, event.clientY))
-    const next = constrained({ x: event.clientX - drag.dx, y: event.clientY - drag.dy }, surfaceHeight, surfaceWidth)
+    const current = petActor.getSnapshot()
+    if (!current.matches('dragging') || current.context.pointerId !== event.pointerId) return
+    const { dx, dy } = current.context
+    sendPet({
+      type: 'POINTER_MOVE',
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      overDismiss: isOverDismissTarget(event.clientX, event.clientY),
+    })
+    const next = constrained({ x: event.clientX - dx, y: event.clientY - dy }, surfaceHeight, surfaceWidth)
     positionRef.current = next
     setPosition(next)
   }
   const finishDrag = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
-    const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    dragRef.current = null
-    setDragging(false)
-    const shouldDismiss = !cancelled && onDismiss && isOverDismissTarget(event.clientX, event.clientY)
-    setDismissArmed(false)
-    if (shouldDismiss) {
-      onDismiss()
+    const current = petActor.getSnapshot()
+    if (!current.matches('dragging') || current.context.pointerId !== event.pointerId) return
+    if (cancelled) {
+      sendPet({ type: 'POINTER_CANCEL', pointerId: event.pointerId })
+      window.localStorage.setItem('gooeypi:pet-position', JSON.stringify(positionRef.current))
+      return
+    }
+    const overDismiss = isOverDismissTarget(event.clientX, event.clientY)
+    const canDismiss = Boolean(onDismiss)
+    sendPet({ type: 'POINTER_UP', pointerId: event.pointerId, overDismiss, canDismiss })
+    if (overDismiss && canDismiss) {
+      onDismiss?.()
       return
     }
     window.localStorage.setItem('gooeypi:pet-position', JSON.stringify(positionRef.current))
-    if (!drag.moved) setJumping(true)
   }
   const moveByKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const movement = event.shiftKey ? 24 : 8
@@ -172,7 +182,7 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
           : event.key === 'ArrowDown' ? { x: 0, y: movement } : null
     if (delta) {
       event.preventDefault()
-      setDirection(delta.x < 0 ? 'left' : delta.x > 0 ? 'right' : direction)
+      sendPet({ type: 'KEYBOARD_MOVE', dx: delta.x })
       setPosition((current) => {
         const next = constrained({ x: current.x + delta.x, y: current.y + delta.y }, surfaceHeight, surfaceWidth)
         positionRef.current = next
@@ -181,7 +191,7 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
       })
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      setJumping(true)
+      sendPet({ type: 'JUMP' })
     } else if (onDismiss && (event.key === 'Delete' || event.key === 'Backspace')) {
       event.preventDefault()
       onDismiss()

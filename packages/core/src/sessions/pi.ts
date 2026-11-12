@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, closeSync, fstatSync, openSync, readSync } from 'node:fs'
 import { mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
@@ -142,21 +142,54 @@ export function appendPiSessionInfo(filePath: string, title: string): boolean {
   }
 }
 
-function currentPiLeafId(filePath: string): string | null {
-  const lines = readFileSync(filePath, 'utf8').split('\n')
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]!.trim()
-    if (!line) continue
-    let value: unknown
-    try {
-      value = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (!isRecord(value) || value.type === 'session' || typeof value.id !== 'string' || !value.id) continue
-    return value.id
+const LEAF_READ_CHUNK_BYTES = 64 * 1024
+
+function parsePiLeafId(rawLine: string): string | null {
+  const line = rawLine.trim()
+  if (!line) return null
+  let value: unknown
+  try {
+    value = JSON.parse(line)
+  } catch {
+    return null
   }
-  return null
+  if (!isRecord(value) || value.type === 'session' || typeof value.id !== 'string' || !value.id.trim()) return null
+  return value.id
+}
+
+function currentPiLeafId(filePath: string): string | null {
+  const fd = openSync(filePath, 'r')
+  try {
+    let position = fstatSync(fd).size
+    if (position === 0) return null
+    let trailing: Buffer = Buffer.alloc(0)
+    while (position > 0) {
+      const readSize = Math.min(LEAF_READ_CHUNK_BYTES, position)
+      position -= readSize
+      const chunk = Buffer.allocUnsafe(readSize)
+      let bytesRead = 0
+      while (bytesRead < readSize) {
+        const count = readSync(fd, chunk, bytesRead, readSize - bytesRead, position + bytesRead)
+        if (count === 0) break
+        bytesRead += count
+      }
+      const slice = bytesRead === readSize ? chunk : chunk.subarray(0, bytesRead)
+      const combined = trailing.length > 0 ? Buffer.concat([slice, trailing]) : slice
+      let lineEnd = combined.length
+      while (lineEnd > 0) {
+        const nl = combined.lastIndexOf(0x0a, lineEnd - 1)
+        if (nl === -1) break
+        const id = parsePiLeafId(combined.subarray(nl + 1, lineEnd).toString('utf8'))
+        if (id !== null) return id
+        lineEnd = nl
+      }
+      trailing = lineEnd > 0 ? combined.subarray(0, lineEnd) : Buffer.alloc(0)
+    }
+    if (trailing.length > 0) return parsePiLeafId(trailing.toString('utf8'))
+    return null
+  } finally {
+    closeSync(fd)
+  }
 }
 export const readPiTranscript: TranscriptFileReader = createBranchSummaryTranscriptReader()
 

@@ -85,7 +85,6 @@ describe('legacy telemetry compatibility contract', () => {
       { file: 'apps/desktop/electron/main/store.ts', source: 'telemetry: false,' },
       { file: 'apps/desktop/electron/main/store.ts', source: "telemetry: typeof value.telemetry === 'boolean' ? value.telemetry : defaults.telemetry," },
       { file: 'apps/desktop/src/lib/data.ts', source: 'telemetry: false,' },
-      { file: 'apps/desktop/src/pages/settings/contracts.ts', source: "telemetry: 'privacy'," },
       { file: 'packages/core/src/types/api.ts', source: 'telemetry: boolean' },
     ])
   })

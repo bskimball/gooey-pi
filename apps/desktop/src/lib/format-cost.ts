@@ -30,10 +30,3 @@ export function contextDialLabel(contextUsage: ApexContextUsage | undefined, ses
   if (cost === null) return label
   return `${label} · ${cost === PRICING_UNAVAILABLE ? 'pricing unavailable' : `${cost} session cost`}`
 }
-
-export function formatSessionTokens(usage: SessionUsage | undefined): string | null {
-  const tokens = usage?.tokens
-  if (!tokens || tokens.total <= 0) return null
-  const count = (value: number) => value.toLocaleString('en-US')
-  return `${count(tokens.input)} in / ${count(tokens.output)} out / ${count(tokens.cacheRead + tokens.cacheWrite)} cached`
-}

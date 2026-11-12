@@ -267,7 +267,7 @@ export function IconButton({ label, size = 'regular', className = '', disabled, 
   )
 }
 
-export interface ApexButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ApexButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'secondary' | 'primary' | 'danger' | 'quiet'
   compact?: boolean
   icon?: ReactNode

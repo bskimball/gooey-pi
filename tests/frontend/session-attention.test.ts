@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activityNotificationSignature, applySessionLifecycleEvent, applySessionStatusEvent, isSessionRunning, isSessionWaiting, readClearedActivity, readClearedAttention, sessionAttentionSignature, sessionCompanionNotificationSignature, sessionShowsCompanionNotification, signatureCleared } from '../../apps/desktop/src/app/session-attention'
+import { activityNotificationSignature, applySessionLifecycleEvent, applySessionStatusEvent, isSessionRunning, isSessionWaiting, readClearedActivity, readClearedAttention, sessionAttentionSignature, signatureCleared } from '../../apps/desktop/src/app/session-attention'
 import {
   buildActivitySections,
   deriveAttention,
@@ -45,8 +45,6 @@ describe('session lifecycle attention', () => {
     expect(completed).toMatchObject({ status: 'complete', unread: false, eventRevision: 1, statusEventRevision: 1 })
     expect(completed.updatedAt).toBe('2025-01-01T00:00:01.000Z')
     expect(sessionAttentionSignature(completed)).toBeUndefined()
-    expect(sessionShowsCompanionNotification(completed)).toBe(true)
-    expect(sessionShowsCompanionNotification(completed, sessionCompanionNotificationSignature(completed))).toBe(false)
   })
 
   it('gives repeated background waits and completions distinct attention revisions', () => {
@@ -66,15 +64,6 @@ describe('session lifecycle attention', () => {
     const failed = applySessionLifecycleEvent(session(), { type: 'transport_error' }, false, 1)
     expect(failed).toMatchObject({ status: 'failed', eventRevision: 1 })
     expect(sessionAttentionSignature(failed)).toBe('failed:1')
-    expect(sessionShowsCompanionNotification(failed)).toBe(true)
-  })
-
-  it('shows the companion badge only for new terminal turns or attention states', () => {
-    expect(sessionShowsCompanionNotification(session())).toBe(false)
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'complete' })).toBe(false)
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'complete', unread: true })).toBe(true)
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'waiting' })).toBe(true)
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'waiting' }, `waiting:${session().updatedAt}`)).toBe(false)
   })
 
   it('keeps de-escalated notifications cleared without suppressing same-revision escalations', () => {
@@ -86,12 +75,6 @@ describe('session lifecycle attention', () => {
     expect(signatureCleared('waiting:7', 'failed:7')).toBe(false)
     expect(signatureCleared('failed:7', cleared)).toBe(false)
     expect(signatureCleared('waiting:8', cleared)).toBe(false)
-  })
-
-  it('resurfaces same-revision waiting and failed companion notifications', () => {
-    const cleared = 'idle:7'
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'waiting', eventRevision: 7 }, cleared)).toBe(true)
-    expect(sessionShowsCompanionNotification({ ...session(), status: 'failed', eventRevision: 7 }, cleared)).toBe(true)
   })
 
   it('makes settled activity dismissible until a new revision and keeps running work visible', () => {

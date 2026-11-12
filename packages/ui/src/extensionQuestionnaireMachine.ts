@@ -36,7 +36,7 @@ interface QuestionnaireContext {
   contexts: Record<string, string>
 }
 
-export type QuestionnaireEvent =
+type QuestionnaireEvent =
   | { type: 'REQUEST'; requestId: string; complete: boolean; questions: ExtensionUiQuestion[] }
   | { type: 'SELECT'; index: number }
   | { type: 'TYPE_CONTEXT'; text: string }
@@ -45,7 +45,7 @@ export type QuestionnaireEvent =
   | { type: 'SUBMIT' }
   | { type: 'RESPONDED' }
 
-export type QuestionnaireSnapshot = SnapshotFrom<typeof extensionQuestionnaireMachine>
+type QuestionnaireSnapshot = SnapshotFrom<typeof extensionQuestionnaireMachine>
 
 const emptyContext: QuestionnaireContext = {
   requestId: undefined,

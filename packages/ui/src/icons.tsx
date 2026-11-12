@@ -33,7 +33,6 @@ import { Copy as PhCopy } from '@phosphor-icons/react/dist/csr/Copy'
 import { Crosshair as PhCrosshair } from '@phosphor-icons/react/dist/csr/Crosshair'
 import { Cube as PhCube } from '@phosphor-icons/react/dist/csr/Cube'
 import { DotsThree as PhDotsThree } from '@phosphor-icons/react/dist/csr/DotsThree'
-import { DownloadSimple as PhDownloadSimple } from '@phosphor-icons/react/dist/csr/DownloadSimple'
 import { File as PhFile } from '@phosphor-icons/react/dist/csr/File'
 import { FileCode as PhFileCode } from '@phosphor-icons/react/dist/csr/FileCode'
 import { FileJs as PhFileJs } from '@phosphor-icons/react/dist/csr/FileJs'
@@ -51,7 +50,6 @@ import { GitFork as PhGitFork } from '@phosphor-icons/react/dist/csr/GitFork'
 import { Globe as PhGlobe } from '@phosphor-icons/react/dist/csr/Globe'
 import { GlobeSimple as PhGlobeSimple } from '@phosphor-icons/react/dist/csr/GlobeSimple'
 import { HardDrives as PhHardDrives } from '@phosphor-icons/react/dist/csr/HardDrives'
-import { Heartbeat as PhHeartbeat } from '@phosphor-icons/react/dist/csr/Heartbeat'
 import { Image as PhImage } from '@phosphor-icons/react/dist/csr/Image'
 import { Info as PhInfo } from '@phosphor-icons/react/dist/csr/Info'
 import { Kanban as PhKanban } from '@phosphor-icons/react/dist/csr/Kanban'
@@ -84,8 +82,6 @@ import { Robot as PhRobot } from '@phosphor-icons/react/dist/csr/Robot'
 import { ShieldCheck as PhShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck'
 import { ShieldWarning as PhShieldWarning } from '@phosphor-icons/react/dist/csr/ShieldWarning'
 import { SidebarSimple as PhSidebarSimple } from '@phosphor-icons/react/dist/csr/SidebarSimple'
-import { SignIn as PhSignIn } from '@phosphor-icons/react/dist/csr/SignIn'
-import { SignOut as PhSignOut } from '@phosphor-icons/react/dist/csr/SignOut'
 import { SlidersHorizontal as PhSlidersHorizontal } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { Sparkle as PhSparkle } from '@phosphor-icons/react/dist/csr/Sparkle'
 import { Square as PhSquare } from '@phosphor-icons/react/dist/csr/Square'
@@ -101,139 +97,135 @@ import { Waves as PhWaves } from '@phosphor-icons/react/dist/csr/Waves'
 import { Wrench as PhWrench } from '@phosphor-icons/react/dist/csr/Wrench'
 import { X as PhX } from '@phosphor-icons/react/dist/csr/X'
 import { IconContext } from '@phosphor-icons/react/dist/lib/context'
-import type { Icon as PhosphorIcon, IconProps, IconWeight } from '@phosphor-icons/react'
+import type { Icon as PhosphorIcon, IconProps } from '@phosphor-icons/react'
 import { forwardRef } from 'react'
 
-export { IconContext, type IconProps, type IconWeight }
+export { IconContext }
 
 function createPhosphorIcon(
   BaseIcon: PhosphorIcon,
   slug: string,
   defaults?: Pick<IconProps, 'mirrored' | 'weight'>,
 ) {
-  const Wrapped = forwardRef<SVGSVGElement, IconProps>(function PhosphorIconWrapper(
-    { className = '', weight = defaults?.weight ?? 'regular', mirrored = defaults?.mirrored, ...props },
-    ref,
-  ) {
-    const classes = `ph-icon ph-${slug}${className ? ` ${className}` : ''}`
-    const ariaHidden = props['aria-label'] || props.alt ? undefined : (props['aria-hidden'] ?? true)
-    return (
-      <BaseIcon
-        ref={ref}
-        weight={weight}
-        mirrored={mirrored}
-        className={classes}
-        aria-hidden={ariaHidden}
-        focusable="false"
-        {...props}
-      />
-    )
-  })
-  Wrapped.displayName = `Phosphor(${slug})`
-  return Wrapped
+  return Object.assign(
+    forwardRef<SVGSVGElement, IconProps>(function PhosphorIconWrapper(
+      { className = '', weight = defaults?.weight ?? 'regular', mirrored = defaults?.mirrored, ...props },
+      ref,
+    ) {
+      const classes = `ph-icon ph-${slug}${className ? ` ${className}` : ''}`
+      const ariaHidden = props['aria-label'] || props.alt ? undefined : (props['aria-hidden'] ?? true)
+      return (
+        <BaseIcon
+          ref={ref}
+          weight={weight}
+          mirrored={mirrored}
+          className={classes}
+          aria-hidden={ariaHidden}
+          focusable="false"
+          {...props}
+        />
+      )
+    }),
+    { displayName: `Phosphor(${slug})` },
+  )
 }
 
-export const Archive = createPhosphorIcon(PhArchive, 'archive')
-export const ArrowClockwise = createPhosphorIcon(PhArrowClockwise, 'arrow-clockwise')
-export const ArrowCounterClockwise = createPhosphorIcon(PhArrowCounterClockwise, 'arrow-counter-clockwise')
-export const ArrowLeft = createPhosphorIcon(PhArrowLeft, 'arrow-left')
-export const ArrowLineDown = createPhosphorIcon(PhArrowLineDown, 'arrow-line-down')
-export const ArrowRight = createPhosphorIcon(PhArrowRight, 'arrow-right')
-export const ArrowsClockwise = createPhosphorIcon(PhArrowsClockwise, 'arrows-clockwise')
-export const ArrowsInSimple = createPhosphorIcon(PhArrowsInSimple, 'arrows-in-simple')
-export const ArrowsOutSimple = createPhosphorIcon(PhArrowsOutSimple, 'arrows-out-simple')
-export const ArrowSquareOut = createPhosphorIcon(PhArrowSquareOut, 'arrow-square-out')
-export const ArrowUp = createPhosphorIcon(PhArrowUp, 'arrow-up')
-export const ArrowUpRight = createPhosphorIcon(PhArrowUpRight, 'arrow-up-right')
-export const ArrowUUpLeft = createPhosphorIcon(PhArrowUUpLeft, 'arrow-u-up-left')
-export const At = createPhosphorIcon(PhAt, 'at')
-export const Bell = createPhosphorIcon(PhBell, 'bell')
-export const BookOpen = createPhosphorIcon(PhBookOpen, 'book-open')
-export const Brain = createPhosphorIcon(PhBrain, 'brain')
-export const Broadcast = createPhosphorIcon(PhBroadcast, 'broadcast')
-export const CalendarDots = createPhosphorIcon(PhCalendarDots, 'calendar-dots')
-export const CaretDown = createPhosphorIcon(PhCaretDown, 'caret-down')
-export const CaretRight = createPhosphorIcon(PhCaretRight, 'caret-right')
-export const ChatCircle = createPhosphorIcon(PhChatCircle, 'chat-circle')
-export const ChatCircleDots = createPhosphorIcon(PhChatCircleDots, 'chat-circle-dots')
-export const ChatCircleText = createPhosphorIcon(PhChatCircleText, 'chat-circle-text')
-export const Check = createPhosphorIcon(PhCheck, 'check')
-export const CheckCircle = createPhosphorIcon(PhCheckCircle, 'check-circle')
-export const CircleNotch = createPhosphorIcon(PhCircleNotch, 'circle-notch')
-export const Clock = createPhosphorIcon(PhClock, 'clock')
-export const ClockCounterClockwise = createPhosphorIcon(PhClockCounterClockwise, 'clock-counter-clockwise')
-export const Code = createPhosphorIcon(PhCode, 'code')
-export const Command = createPhosphorIcon(PhCommand, 'command')
-export const Copy = createPhosphorIcon(PhCopy, 'copy')
-export const Crosshair = createPhosphorIcon(PhCrosshair, 'crosshair')
-export const Cube = createPhosphorIcon(PhCube, 'cube')
-export const DotsThree = createPhosphorIcon(PhDotsThree, 'dots-three')
-export const DownloadSimple = createPhosphorIcon(PhDownloadSimple, 'download-simple')
-export const File = createPhosphorIcon(PhFile, 'file')
-export const FileCode = createPhosphorIcon(PhFileCode, 'file-code')
-export const FileJs = createPhosphorIcon(PhFileJs, 'file-js')
-export const FileText = createPhosphorIcon(PhFileText, 'file-text')
-export const Folder = createPhosphorIcon(PhFolder, 'folder')
-export const FolderOpen = createPhosphorIcon(PhFolderOpen, 'folder-open')
-export const FolderPlus = createPhosphorIcon(PhFolderPlus, 'folder-plus')
-export const FolderSimpleStar = createPhosphorIcon(PhFolderSimpleStar, 'folder-simple-star')
-export const FunnelSimple = createPhosphorIcon(PhFunnelSimple, 'funnel-simple')
-export const Gauge = createPhosphorIcon(PhGauge, 'gauge')
-export const Gear = createPhosphorIcon(PhGear, 'gear')
-export const GitBranch = createPhosphorIcon(PhGitBranch, 'git-branch')
-export const GitDiff = createPhosphorIcon(PhGitDiff, 'git-diff')
-export const GitFork = createPhosphorIcon(PhGitFork, 'git-fork')
-export const Globe = createPhosphorIcon(PhGlobe, 'globe')
-export const GlobeSimple = createPhosphorIcon(PhGlobeSimple, 'globe-simple')
-export const HardDrives = createPhosphorIcon(PhHardDrives, 'hard-drives')
-export const Heartbeat = createPhosphorIcon(PhHeartbeat, 'heartbeat')
-export const Image = createPhosphorIcon(PhImage, 'image')
-export const Info = createPhosphorIcon(PhInfo, 'info')
-export const Kanban = createPhosphorIcon(PhKanban, 'kanban')
-export const Key = createPhosphorIcon(PhKey, 'key')
-export const Keyboard = createPhosphorIcon(PhKeyboard, 'keyboard')
-export const Laptop = createPhosphorIcon(PhLaptop, 'laptop')
-export const Lightning = createPhosphorIcon(PhLightning, 'lightning')
-export const LockKey = createPhosphorIcon(PhLockKey, 'lock-key')
-export const MagicWand = createPhosphorIcon(PhMagicWand, 'magic-wand')
-export const MagnifyingGlass = createPhosphorIcon(PhMagnifyingGlass, 'magnifying-glass')
-export const Microphone = createPhosphorIcon(PhMicrophone, 'microphone')
-export const MicrophoneSlash = createPhosphorIcon(PhMicrophoneSlash, 'microphone-slash')
-export const MicrophoneStage = createPhosphorIcon(PhMicrophoneStage, 'microphone-stage')
-export const Moon = createPhosphorIcon(PhMoon, 'moon')
-export const NotePencil = createPhosphorIcon(PhNotePencil, 'note-pencil')
-export const Package = createPhosphorIcon(PhPackage, 'package')
-export const Palette = createPhosphorIcon(PhPalette, 'palette')
-export const Paperclip = createPhosphorIcon(PhPaperclip, 'paperclip')
-export const Pause = createPhosphorIcon(PhPause, 'pause')
-export const PawPrint = createPhosphorIcon(PhPawPrint, 'paw-print')
-export const PencilSimple = createPhosphorIcon(PhPencilSimple, 'pencil-simple')
-export const PencilSimpleLine = createPhosphorIcon(PhPencilSimpleLine, 'pencil-simple-line')
-export const Play = createPhosphorIcon(PhPlay, 'play')
-export const Plus = createPhosphorIcon(PhPlus, 'plus')
-export const PushPin = createPhosphorIcon(PhPushPin, 'push-pin')
-export const Question = createPhosphorIcon(PhQuestion, 'question')
-export const Record = createPhosphorIcon(PhRecord, 'record')
-export const Repeat = createPhosphorIcon(PhRepeat, 'repeat')
-export const Robot = createPhosphorIcon(PhRobot, 'robot')
-export const ShieldCheck = createPhosphorIcon(PhShieldCheck, 'shield-check')
-export const ShieldWarning = createPhosphorIcon(PhShieldWarning, 'shield-warning')
-export const SidebarLeft = createPhosphorIcon(PhSidebarSimple, 'sidebar-left')
-export const SidebarRight = createPhosphorIcon(PhSidebarSimple, 'sidebar-right', { mirrored: true })
-export const SidebarSimple = createPhosphorIcon(PhSidebarSimple, 'sidebar-simple')
-export const SignIn = createPhosphorIcon(PhSignIn, 'sign-in')
-export const SignOut = createPhosphorIcon(PhSignOut, 'sign-out')
-export const SlidersHorizontal = createPhosphorIcon(PhSlidersHorizontal, 'sliders-horizontal')
-export const Sparkle = createPhosphorIcon(PhSparkle, 'sparkle')
-export const Square = createPhosphorIcon(PhSquare, 'square')
-export const Stack = createPhosphorIcon(PhStack, 'stack')
-export const Sun = createPhosphorIcon(PhSun, 'sun')
-export const Terminal = createPhosphorIcon(PhTerminal, 'terminal')
-export const TerminalWindow = createPhosphorIcon(PhTerminalWindow, 'terminal-window')
-export const Trash = createPhosphorIcon(PhTrash, 'trash')
-export const Warning = createPhosphorIcon(PhWarning, 'warning')
-export const WarningCircle = createPhosphorIcon(PhWarningCircle, 'warning-circle')
-export const Waveform = createPhosphorIcon(PhWaveform, 'waveform')
-export const Waves = createPhosphorIcon(PhWaves, 'waves')
-export const Wrench = createPhosphorIcon(PhWrench, 'wrench')
-export const X = createPhosphorIcon(PhX, 'x')
+export const Archive = /*#__PURE__*/ createPhosphorIcon(PhArchive, 'archive')
+export const ArrowClockwise = /*#__PURE__*/ createPhosphorIcon(PhArrowClockwise, 'arrow-clockwise')
+export const ArrowCounterClockwise = /*#__PURE__*/ createPhosphorIcon(PhArrowCounterClockwise, 'arrow-counter-clockwise')
+export const ArrowLeft = /*#__PURE__*/ createPhosphorIcon(PhArrowLeft, 'arrow-left')
+export const ArrowLineDown = /*#__PURE__*/ createPhosphorIcon(PhArrowLineDown, 'arrow-line-down')
+export const ArrowRight = /*#__PURE__*/ createPhosphorIcon(PhArrowRight, 'arrow-right')
+export const ArrowsClockwise = /*#__PURE__*/ createPhosphorIcon(PhArrowsClockwise, 'arrows-clockwise')
+export const ArrowsInSimple = /*#__PURE__*/ createPhosphorIcon(PhArrowsInSimple, 'arrows-in-simple')
+export const ArrowsOutSimple = /*#__PURE__*/ createPhosphorIcon(PhArrowsOutSimple, 'arrows-out-simple')
+export const ArrowSquareOut = /*#__PURE__*/ createPhosphorIcon(PhArrowSquareOut, 'arrow-square-out')
+export const ArrowUp = /*#__PURE__*/ createPhosphorIcon(PhArrowUp, 'arrow-up')
+export const ArrowUpRight = /*#__PURE__*/ createPhosphorIcon(PhArrowUpRight, 'arrow-up-right')
+export const ArrowUUpLeft = /*#__PURE__*/ createPhosphorIcon(PhArrowUUpLeft, 'arrow-u-up-left')
+export const At = /*#__PURE__*/ createPhosphorIcon(PhAt, 'at')
+export const Bell = /*#__PURE__*/ createPhosphorIcon(PhBell, 'bell')
+export const BookOpen = /*#__PURE__*/ createPhosphorIcon(PhBookOpen, 'book-open')
+export const Brain = /*#__PURE__*/ createPhosphorIcon(PhBrain, 'brain')
+export const Broadcast = /*#__PURE__*/ createPhosphorIcon(PhBroadcast, 'broadcast')
+export const CalendarDots = /*#__PURE__*/ createPhosphorIcon(PhCalendarDots, 'calendar-dots')
+export const CaretDown = /*#__PURE__*/ createPhosphorIcon(PhCaretDown, 'caret-down')
+export const CaretRight = /*#__PURE__*/ createPhosphorIcon(PhCaretRight, 'caret-right')
+export const ChatCircle = /*#__PURE__*/ createPhosphorIcon(PhChatCircle, 'chat-circle')
+export const ChatCircleDots = /*#__PURE__*/ createPhosphorIcon(PhChatCircleDots, 'chat-circle-dots')
+export const ChatCircleText = /*#__PURE__*/ createPhosphorIcon(PhChatCircleText, 'chat-circle-text')
+export const Check = /*#__PURE__*/ createPhosphorIcon(PhCheck, 'check')
+export const CheckCircle = /*#__PURE__*/ createPhosphorIcon(PhCheckCircle, 'check-circle')
+export const CircleNotch = /*#__PURE__*/ createPhosphorIcon(PhCircleNotch, 'circle-notch')
+export const Clock = /*#__PURE__*/ createPhosphorIcon(PhClock, 'clock')
+export const ClockCounterClockwise = /*#__PURE__*/ createPhosphorIcon(PhClockCounterClockwise, 'clock-counter-clockwise')
+export const Code = /*#__PURE__*/ createPhosphorIcon(PhCode, 'code')
+export const Command = /*#__PURE__*/ createPhosphorIcon(PhCommand, 'command')
+export const Copy = /*#__PURE__*/ createPhosphorIcon(PhCopy, 'copy')
+export const Crosshair = /*#__PURE__*/ createPhosphorIcon(PhCrosshair, 'crosshair')
+export const Cube = /*#__PURE__*/ createPhosphorIcon(PhCube, 'cube')
+export const DotsThree = /*#__PURE__*/ createPhosphorIcon(PhDotsThree, 'dots-three')
+export const File = /*#__PURE__*/ createPhosphorIcon(PhFile, 'file')
+export const FileCode = /*#__PURE__*/ createPhosphorIcon(PhFileCode, 'file-code')
+export const FileJs = /*#__PURE__*/ createPhosphorIcon(PhFileJs, 'file-js')
+export const FileText = /*#__PURE__*/ createPhosphorIcon(PhFileText, 'file-text')
+export const Folder = /*#__PURE__*/ createPhosphorIcon(PhFolder, 'folder')
+export const FolderOpen = /*#__PURE__*/ createPhosphorIcon(PhFolderOpen, 'folder-open')
+export const FolderPlus = /*#__PURE__*/ createPhosphorIcon(PhFolderPlus, 'folder-plus')
+export const FolderSimpleStar = /*#__PURE__*/ createPhosphorIcon(PhFolderSimpleStar, 'folder-simple-star')
+export const FunnelSimple = /*#__PURE__*/ createPhosphorIcon(PhFunnelSimple, 'funnel-simple')
+export const Gauge = /*#__PURE__*/ createPhosphorIcon(PhGauge, 'gauge')
+export const Gear = /*#__PURE__*/ createPhosphorIcon(PhGear, 'gear')
+export const GitBranch = /*#__PURE__*/ createPhosphorIcon(PhGitBranch, 'git-branch')
+export const GitDiff = /*#__PURE__*/ createPhosphorIcon(PhGitDiff, 'git-diff')
+export const GitFork = /*#__PURE__*/ createPhosphorIcon(PhGitFork, 'git-fork')
+export const Globe = /*#__PURE__*/ createPhosphorIcon(PhGlobe, 'globe')
+export const GlobeSimple = /*#__PURE__*/ createPhosphorIcon(PhGlobeSimple, 'globe-simple')
+export const HardDrives = /*#__PURE__*/ createPhosphorIcon(PhHardDrives, 'hard-drives')
+export const Image = /*#__PURE__*/ createPhosphorIcon(PhImage, 'image')
+export const Info = /*#__PURE__*/ createPhosphorIcon(PhInfo, 'info')
+export const Kanban = /*#__PURE__*/ createPhosphorIcon(PhKanban, 'kanban')
+export const Key = /*#__PURE__*/ createPhosphorIcon(PhKey, 'key')
+export const Keyboard = /*#__PURE__*/ createPhosphorIcon(PhKeyboard, 'keyboard')
+export const Laptop = /*#__PURE__*/ createPhosphorIcon(PhLaptop, 'laptop')
+export const Lightning = /*#__PURE__*/ createPhosphorIcon(PhLightning, 'lightning')
+export const LockKey = /*#__PURE__*/ createPhosphorIcon(PhLockKey, 'lock-key')
+export const MagicWand = /*#__PURE__*/ createPhosphorIcon(PhMagicWand, 'magic-wand')
+export const MagnifyingGlass = /*#__PURE__*/ createPhosphorIcon(PhMagnifyingGlass, 'magnifying-glass')
+export const Microphone = /*#__PURE__*/ createPhosphorIcon(PhMicrophone, 'microphone')
+export const MicrophoneSlash = /*#__PURE__*/ createPhosphorIcon(PhMicrophoneSlash, 'microphone-slash')
+export const MicrophoneStage = /*#__PURE__*/ createPhosphorIcon(PhMicrophoneStage, 'microphone-stage')
+export const Moon = /*#__PURE__*/ createPhosphorIcon(PhMoon, 'moon')
+export const NotePencil = /*#__PURE__*/ createPhosphorIcon(PhNotePencil, 'note-pencil')
+export const Package = /*#__PURE__*/ createPhosphorIcon(PhPackage, 'package')
+export const Palette = /*#__PURE__*/ createPhosphorIcon(PhPalette, 'palette')
+export const Paperclip = /*#__PURE__*/ createPhosphorIcon(PhPaperclip, 'paperclip')
+export const Pause = /*#__PURE__*/ createPhosphorIcon(PhPause, 'pause')
+export const PawPrint = /*#__PURE__*/ createPhosphorIcon(PhPawPrint, 'paw-print')
+export const PencilSimple = /*#__PURE__*/ createPhosphorIcon(PhPencilSimple, 'pencil-simple')
+export const PencilSimpleLine = /*#__PURE__*/ createPhosphorIcon(PhPencilSimpleLine, 'pencil-simple-line')
+export const Play = /*#__PURE__*/ createPhosphorIcon(PhPlay, 'play')
+export const Plus = /*#__PURE__*/ createPhosphorIcon(PhPlus, 'plus')
+export const PushPin = /*#__PURE__*/ createPhosphorIcon(PhPushPin, 'push-pin')
+export const Question = /*#__PURE__*/ createPhosphorIcon(PhQuestion, 'question')
+export const Record = /*#__PURE__*/ createPhosphorIcon(PhRecord, 'record')
+export const Repeat = /*#__PURE__*/ createPhosphorIcon(PhRepeat, 'repeat')
+export const Robot = /*#__PURE__*/ createPhosphorIcon(PhRobot, 'robot')
+export const ShieldCheck = /*#__PURE__*/ createPhosphorIcon(PhShieldCheck, 'shield-check')
+export const ShieldWarning = /*#__PURE__*/ createPhosphorIcon(PhShieldWarning, 'shield-warning')
+export const SidebarLeft = /*#__PURE__*/ createPhosphorIcon(PhSidebarSimple, 'sidebar-left')
+export const SidebarRight = /*#__PURE__*/ createPhosphorIcon(PhSidebarSimple, 'sidebar-right', { mirrored: true })
+export const SlidersHorizontal = /*#__PURE__*/ createPhosphorIcon(PhSlidersHorizontal, 'sliders-horizontal')
+export const Sparkle = /*#__PURE__*/ createPhosphorIcon(PhSparkle, 'sparkle')
+export const Square = /*#__PURE__*/ createPhosphorIcon(PhSquare, 'square')
+export const Stack = /*#__PURE__*/ createPhosphorIcon(PhStack, 'stack')
+export const Sun = /*#__PURE__*/ createPhosphorIcon(PhSun, 'sun')
+export const Terminal = /*#__PURE__*/ createPhosphorIcon(PhTerminal, 'terminal')
+export const TerminalWindow = /*#__PURE__*/ createPhosphorIcon(PhTerminalWindow, 'terminal-window')
+export const Trash = /*#__PURE__*/ createPhosphorIcon(PhTrash, 'trash')
+export const Warning = /*#__PURE__*/ createPhosphorIcon(PhWarning, 'warning')
+export const WarningCircle = /*#__PURE__*/ createPhosphorIcon(PhWarningCircle, 'warning-circle')
+export const Waveform = /*#__PURE__*/ createPhosphorIcon(PhWaveform, 'waveform')
+export const Waves = /*#__PURE__*/ createPhosphorIcon(PhWaves, 'waves')
+export const Wrench = /*#__PURE__*/ createPhosphorIcon(PhWrench, 'wrench')
+export const X = /*#__PURE__*/ createPhosphorIcon(PhX, 'x')

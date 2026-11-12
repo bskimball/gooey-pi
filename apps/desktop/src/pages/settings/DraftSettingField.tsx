@@ -2,11 +2,11 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ApexButton } from '@/components/ui'
 import {
-  createDraftState,
+  draftSettingTransition,
   errorMessage,
-  reduceDraftState,
+  initialDraftSetting,
   type DraftAction,
-  type DraftState,
+  type DraftSettingSnapshot,
 } from './draft-state'
 
 interface DraftSettingFieldProps {
@@ -30,15 +30,15 @@ export function DraftSettingField({
   onCommit,
   className,
 }: DraftSettingFieldProps) {
-  const [state, setState] = useState<DraftState>(() => createDraftState(committedValue))
-  const stateRef = useRef(state)
+  const [snapshot, setSnapshot] = useState<DraftSettingSnapshot>(() => initialDraftSetting(committedValue))
+  const snapshotRef = useRef(snapshot)
   const nextCommitId = useRef(0)
   const inFlight = useRef<Promise<void> | null>(null)
 
   const dispatch = useCallback((action: DraftAction) => {
-    const next = reduceDraftState(stateRef.current, action)
-    stateRef.current = next
-    setState(next)
+    const next = draftSettingTransition(snapshotRef.current, action)
+    snapshotRef.current = next
+    setSnapshot(next)
   }, [])
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function DraftSettingField({
 
   const commit = useCallback(() => {
     if (inFlight.current) return inFlight.current
-    const current = stateRef.current
+    const current = snapshotRef.current.context
     const validationError = validate(current.value)
     if (validationError) {
       dispatch({ type: 'edit', value: current.value, error: validationError })
@@ -76,6 +76,8 @@ export function DraftSettingField({
     event.preventDefault()
     void commit()
   }
+  const state = snapshot.context
+  const isCommitting = snapshot.matches('committing')
   const errorId = `${id}-error`
 
   return (
@@ -96,10 +98,10 @@ export function DraftSettingField({
       />
       {state.error ? <Banner id={errorId} status="error" role="alert" className="settings-error" title={state.error} /> : null}
       <ApexButton
-        disabled={!state.dirty || Boolean(state.error) || Boolean(state.pending)}
+        disabled={!state.dirty || Boolean(state.error) || isCommitting}
         onClick={() => { void commit() }}
       >
-        {state.pending ? 'Saving…' : 'Save'}
+        {isCommitting ? 'Saving…' : 'Save'}
       </ApexButton>
     </div>
   )

@@ -13,15 +13,15 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 678019 bytes with Effect Schema validation and shutdown-interruptible
-  // effective-config IPC alongside the existing XState lifecycle owners.
-  mainBytes: 664 * KIB,
+  // Measured 687933 bytes with Effect Schema validation, async effective-config IPC,
+  // and explicit XState lifecycle machines across runtime, schedules, desktop-link, and extension bridge.
+  mainBytes: 672 * KIB,
   preloadBytes: 16 * KIB,
-  // Measured 1455430 initialRendererBytes and 3077079 rendererJsCssBytes with @astryxdesign/core
-  // across packages/ui, Settings, Pages, Activity, CommandPalette, TitleToolbar, Sidebar, Composer, Inspector, and VS Code webview + @stylexjs/stylex.
-  initialRendererBytes: 1424 * KIB,
+  // Measured 1411830 initialRendererBytes (lazy WindowsAppMenu + strict react-vendor split + dead-code cleanup)
+  // and 3089297 rendererJsCssBytes with @astryxdesign/core, @stylexjs/stylex, and explicit XState UI machines.
+  initialRendererBytes: 1384 * KIB,
   largestRendererChunkBytes: 600 * KIB,
-  rendererJsCssBytes: 3008 * KIB,
+  rendererJsCssBytes: 3024 * KIB,
 })
 
 /**

@@ -10,6 +10,8 @@ import { validateRpcCommand } from '../../apps/desktop/electron/main/agent-rpc/c
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from '../../apps/desktop/electron/main/agent-rpc/limits'
 import { RpcRuntime } from '../../apps/desktop/electron/main/agent-rpc/runtime'
 import { createRuntimeActivityActor, streamingActivity } from '../../apps/desktop/electron/main/agent-rpc/runtimeActivityMachine'
+import { createRpcRuntimeLifecycle } from '../../apps/desktop/electron/main/agent-rpc/rpcRuntimeLifecycleMachine'
+import { createDesktopLinkPeerLifecycle } from '../../apps/desktop/electron/main/desktopLinkPeerMachine'
 import { FramedRpcTransport } from '../../apps/desktop/electron/main/agent-rpc/transport'
 import type { RpcObject } from '../../apps/desktop/electron/main/agent-rpc/types'
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
@@ -1746,5 +1748,71 @@ setInterval(() => {}, 1000)
     await waitUntil(() => events.includes('step-1'))
     void request({ type: 'exit' }, 60_000).catch(() => undefined)
     await expect(prompt).rejects.toThrow(/RPC exited \(3\)/)
+  })
+})
+
+describe('desktopLinkPeerMachine & rpcRuntimeLifecycleMachine', () => {
+  it('releases late attachments when a peer disconnects while attaching and handles auth timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const onTimeout = vi.fn()
+      const onRelease = vi.fn()
+      const peer = createDesktopLinkPeerLifecycle({ authTimeoutMs: 50, onTimeout, onRelease })
+      expect(peer.getSnapshot().matches('awaitingAuth')).toBe(true)
+
+      peer.send({ type: 'ATTACH_START' })
+      expect(peer.getSnapshot().matches('attaching')).toBe(true)
+      peer.send({ type: 'ATTACH_FAILED' })
+      expect(peer.getSnapshot().matches('awaitingAuth')).toBe(true)
+
+      peer.send({ type: 'ATTACH_START' })
+      const attachment = { runtimeId: 'rt-1', release: vi.fn() }
+      peer.send({ type: 'ATTACH_SUCCEEDED', attachment })
+      expect(peer.getSnapshot().matches('attached')).toBe(true)
+
+      peer.send({ type: 'DETACH' })
+      expect(peer.getSnapshot().matches('awaitingAuth')).toBe(true)
+      expect(onRelease).toHaveBeenCalledWith(attachment)
+
+      // Late attach completion after DISCONNECT must release immediately
+      peer.send({ type: 'ATTACH_START' })
+      peer.send({ type: 'DISCONNECT' })
+      expect(peer.getSnapshot().matches('detached')).toBe(true)
+      const late = { runtimeId: 'rt-2', release: vi.fn() }
+      peer.send({ type: 'ATTACH_SUCCEEDED', attachment: late })
+      expect(peer.getSnapshot().matches('detached')).toBe(true)
+      expect(onRelease).toHaveBeenCalledWith(late)
+
+      // Auth timeout transitions to detached and invokes onTimeout
+      const timedOutPeer = createDesktopLinkPeerLifecycle({ authTimeoutMs: 50, onTimeout, onRelease })
+      await vi.advanceTimersByTimeAsync(60)
+      expect(timedOutPeer.getSnapshot().matches('detached')).toBe(true)
+      expect(onTimeout).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('tracks rpcRuntimeLifecycleMachine transitions through running, stopping, and exited', () => {
+    const lc = createRpcRuntimeLifecycle()
+    expect(lc.getSnapshot().matches('running')).toBe(true)
+    expect(lc.getSnapshot().context).toMatchObject({ acceptingChunkFrames: true, inputClosed: false, receivedFrame: false, transportFailed: false })
+
+    lc.send({ type: 'FRAME_RECEIVED' })
+    expect(lc.getSnapshot().context.receivedFrame).toBe(true)
+
+    const stopPromise = Promise.resolve(true)
+    lc.send({ type: 'STOP_REQUESTED', stopPromise })
+    expect(lc.getSnapshot().matches('stopping')).toBe(true)
+    expect(lc.getSnapshot().context).toMatchObject({ acceptingChunkFrames: false, inputClosed: false, stopPromise })
+
+    lc.send({ type: 'CLOSE_SETTLED' })
+    expect(lc.getSnapshot().context.inputClosed).toBe(true)
+
+    lc.send({ type: 'TRANSPORT_FAILED' })
+    expect(lc.getSnapshot().context.transportFailed).toBe(true)
+
+    lc.send({ type: 'PROCESS_EXITED' })
+    expect(lc.getSnapshot().matches('exited')).toBe(true)
   })
 })

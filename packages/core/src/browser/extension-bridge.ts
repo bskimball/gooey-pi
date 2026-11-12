@@ -1,7 +1,17 @@
 import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { initialTransition, transition } from 'xstate'
 import { callMethod, probeBroker } from './extension-bridge-client'
 import { applySharedTabEvent, sanitizeBrowserElement } from './element-selection'
+import {
+  extensionBridgeMachine,
+  isBridgeConnected,
+  isBridgeListening,
+  isBridgeRemote,
+  isBridgeStopped,
+  type ExtensionBridgeEvent,
+  type ExtensionBridgeSnapshot,
+} from './extensionBridgeMachine'
 
 /** Matches desktop-link.ts: a lost command may already have run in Chrome, so callers must not blindly retry. */
 const UNKNOWN_OUTCOME = 'command outcome unknown. Do not retry automatically.'
@@ -37,20 +47,24 @@ export class ExtensionBrowserBridge {
   private readonly tabState = new Map<number, Record<string, unknown>>()
   private readonly remoteTabs = new Set<number>()
   private readonly releasedTabs = new Set<number>()
-  private remoteBase: string | null = null
-  private remoteConnected = false
   private polling: NodeJS.Timeout | null = null
   private refresh: Promise<void> | null = null
-  private disposed = false
+  private lifecycle: ExtensionBridgeSnapshot = initialTransition(extensionBridgeMachine)[0]
   private latestSession: string | null | undefined
   private latestSessionLabel: string | null = null
-  port: number | null = null
+
+  get port(): number | null {
+    return this.lifecycle.context.port
+  }
+
+  private send(event: ExtensionBridgeEvent): void {
+    this.lifecycle = transition(extensionBridgeMachine, this.lifecycle, event)[0]
+  }
 
   async startOrConnect(onlyKind?: 'vscode', base = 'http://127.0.0.1:29301'): Promise<void> {
     const broker = await probeBroker(base)
     if (broker.running && (!onlyKind || broker.kind === onlyKind)) {
-      this.remoteBase = base
-      this.port = Number(new URL(base).port)
+      this.send({ type: 'CONNECT_REMOTE', base, port: Number(new URL(base).port) })
       await this.refreshState()
     } else {
       await this.start()
@@ -62,9 +76,7 @@ export class ExtensionBrowserBridge {
         }
         if (winner.running && (!onlyKind || winner.kind === onlyKind)) {
           await this.stop()
-          this.disposed = false
-          this.remoteBase = base
-          this.port = Number(new URL(base).port)
+          this.send({ type: 'CONNECT_REMOTE', base, port: Number(new URL(base).port) })
           await this.refreshState()
         }
       }
@@ -72,7 +84,7 @@ export class ExtensionBrowserBridge {
   }
 
   async refreshState(): Promise<void> {
-    if (!this.remoteBase || this.disposed) return
+    if (!isBridgeRemote(this.lifecycle)) return
     if (this.refresh) return this.refresh
     this.refresh = this.readRemoteState().finally(() => {
       this.refresh = null
@@ -82,15 +94,16 @@ export class ExtensionBrowserBridge {
 
   private async readRemoteState(): Promise<void> {
     try {
-      const base = this.remoteBase
+      const base = this.lifecycle.context.remoteBase
+      if (!base) return
       const hello = await fetch(`${base}/v1/extension/hello`, { signal: AbortSignal.timeout(500) })
       const identity = (await hello.json()) as { token: string }
       this.token = identity.token
       const response = await fetch(`${base}/v1/extension/tab-state`, { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(500) })
       if (!response.ok) throw new Error('Broker state unavailable')
       const state = (await response.json()) as { connected: boolean; tabs: Record<string, unknown>[] }
-      if (this.disposed) return
-      this.remoteConnected = state.connected
+      if (!isBridgeRemote(this.lifecycle)) return
+      this.send({ type: state.connected ? 'REMOTE_CONNECTED' : 'REMOTE_DISCONNECTED' })
       const context = this.context()
       const ownTabs = Array.isArray(context.tabs) ? (context.tabs as Record<string, unknown>[]) : []
       const sessions = new Set(ownTabs.map((tab) => tab.sessionFile))
@@ -109,13 +122,13 @@ export class ExtensionBrowserBridge {
         if (typeof tab.chromeTabId === 'number' && !seen.has(tab.chromeTabId)) this.emitEvent({ ...tab, type: 'tab_closed' })
       }
     } catch {
-      this.remoteConnected = false
+      this.send({ type: 'REMOTE_DISCONNECTED' })
     }
-    if (!this.disposed) this.changed()
+    if (!isBridgeStopped(this.lifecycle)) this.changed()
   }
 
   async setActiveSession(sessionKey: string | null): Promise<void> {
-    if (!this.remoteBase) return
+    if (!isBridgeRemote(this.lifecycle)) return
     if (this.polling) clearInterval(this.polling)
     this.polling = null
     if (sessionKey !== null) {
@@ -210,14 +223,16 @@ export class ExtensionBrowserBridge {
     }
   }
   isConnected(): boolean {
-    return this.remoteBase ? this.remoteConnected : this.stream !== null && !this.stream.destroyed
+    if (isBridgeRemote(this.lifecycle)) return isBridgeConnected(this.lifecycle)
+    return isBridgeConnected(this.lifecycle) && this.stream !== null && !this.stream.destroyed
   }
   private changed(): void {
     for (const listener of this.changes) listener()
   }
 
   async start(): Promise<void> {
-    if (this.server) return
+    if (isBridgeListening(this.lifecycle)) return
+    this.send({ type: 'START' })
     const listen = (port: number) =>
       new Promise<void>((resolve, reject) => {
         const server = createServer((request, response) => {
@@ -228,15 +243,23 @@ export class ExtensionBrowserBridge {
           server.removeListener('error', reject)
           this.server = server
           const address = server.address()
-          this.port = typeof address === 'object' && address ? address.port : null
+          this.send({ type: 'LISTENED', port: typeof address === 'object' && address ? address.port : null })
           resolve()
         })
       })
     try {
       await listen(this.options.port ?? 29301)
     } catch (error) {
-      if (!(error instanceof Error) || !('code' in error) || error.code !== 'EADDRINUSE' || this.options.port === 0) throw error
-      await listen(0)
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'EADDRINUSE' || this.options.port === 0) {
+        this.send({ type: 'START_FAILED' })
+        throw error
+      }
+      try {
+        await listen(0)
+      } catch (fallbackError) {
+        this.send({ type: 'START_FAILED' })
+        throw fallbackError
+      }
     }
     this.changed()
   }
@@ -251,11 +274,12 @@ export class ExtensionBrowserBridge {
       request.reject(new Error(`Browser extension disconnected. Reconnect it and try again. ${UNKNOWN_OUTCOME}`))
     }
     this.pending.clear()
+    this.send({ type: 'STREAM_DISCONNECTED' })
     this.changed()
   }
 
   async stop(): Promise<void> {
-    this.disposed = true
+    this.send({ type: 'STOP' })
     if (this.polling) clearInterval(this.polling)
     this.polling = null
     await this.refresh
@@ -265,7 +289,6 @@ export class ExtensionBrowserBridge {
     this.remoteTabs.clear()
     const server = this.server
     this.server = null
-    this.port = null
     if (server)
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()))
@@ -274,9 +297,10 @@ export class ExtensionBrowserBridge {
   }
 
   async call(method: string, params: Record<string, unknown> = {}, sessionKey?: string, remote = false): Promise<unknown> {
-    if (this.remoteBase) {
+    const remoteBase = this.lifecycle.context.remoteBase
+    if (remoteBase) {
       const context = this.context()
-      return callMethod(method, params, this.token, this.remoteBase, sessionKey ?? (typeof context.activeSessionKey === 'string' ? context.activeSessionKey : undefined))
+      return callMethod(method, params, this.token, remoteBase, sessionKey ?? (typeof context.activeSessionKey === 'string' ? context.activeSessionKey : undefined))
     }
     if (method === 'release_tab' && typeof params.chromeTabId === 'number') {
       this.releasedTabs.add(params.chromeTabId)
@@ -401,6 +425,7 @@ export class ExtensionBrowserBridge {
       if (url.pathname === '/v1/extension/events' && request.method === 'GET') {
         this.disconnect()
         this.stream = response
+        this.send({ type: 'STREAM_CONNECTED' })
         response.writeHead(200, {
           'Content-Type': 'text/event-stream',
           Connection: 'keep-alive',
