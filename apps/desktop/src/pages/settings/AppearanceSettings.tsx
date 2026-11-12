@@ -1,5 +1,7 @@
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Check, Laptop, Moon, Sun } from '@/components/icons'
-import type { KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import type { InterfaceFontScale, LocalePreference, ThemeMode } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
@@ -23,7 +25,6 @@ const locales: Array<{ value: LocalePreference; label: MessageKey }> = [
   { value: 'zh-CN', label: 'appearance.language.chinese' },
 ]
 
-/** Arrow/Home/End movement inside a radio group selects as it moves. */
 function nextScaleIndex(key: string, current: number, count: number): number | null {
   if (key === 'ArrowRight' || key === 'ArrowDown') return (current + 1) % count
   if (key === 'ArrowLeft' || key === 'ArrowUp') return (current - 1 + count) % count
@@ -34,13 +35,16 @@ function nextScaleIndex(key: string, current: number, count: number): number | n
 
 export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps) {
   const { t } = useI18n()
+  const keyDrivenRef = useRef(false)
   const selectedScale = Math.max(0, fontScales.findIndex((option) => option.value === settings.interfaceFontScale))
   const onScaleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const next = nextScaleIndex(event.key, selectedScale, fontScales.length)
     if (next === null) return
     event.preventDefault()
     const target = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]
+    keyDrivenRef.current = true
     target?.focus()
+    keyDrivenRef.current = false
     void onUpdate({ interfaceFontScale: fontScales[next].value })
   }
   return (
@@ -51,10 +55,18 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
         <div className="theme-options">
           {themes.map((item) => {
             const Icon = item.icon
+            const active = settings.theme === item.id
             return (
-              <button type="button" key={item.id} className={settings.theme === item.id ? 'is-active' : ''} onClick={() => { void onUpdate({ theme: item.id }) }}>
-                <span><Icon size={17} /></span><strong>{t(item.label)}</strong>{settings.theme === item.id ? <Check size={13} /> : null}
-              </button>
+              <AstryxButton
+                key={item.id}
+                label={t(item.label)}
+                variant="ghost"
+                aria-pressed={active}
+                className={active ? 'is-active' : ''}
+                onClick={() => { void onUpdate({ theme: item.id }) }}
+              >
+                <span><Icon size={17} /></span><strong>{t(item.label)}</strong>{active ? <Check size={13} /> : null}
+              </AstryxButton>
             )
           })}
         </div>
@@ -72,21 +84,27 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
         <h2>{t('appearance.text.title')}</h2>
         <div className="settings-row settings-row--text-size">
           <span><strong>{t('appearance.text.label')}</strong><small>{t('appearance.text.description')}</small></span>
-          <div className="text-size-options" role="radiogroup" aria-label={t('appearance.text.aria')} onKeyDown={onScaleKeyDown}>
-            {fontScales.map((option, index) => (
-              <button
-                type="button"
+          <SegmentedControl
+            label={t('appearance.text.aria')}
+            size="sm"
+            value={String(settings.interfaceFontScale)}
+            onChange={(next) => {
+              if (keyDrivenRef.current) return
+              const parsed = Number(next) as InterfaceFontScale
+              if (fontScales.some((option) => option.value === parsed)) void onUpdate({ interfaceFontScale: parsed })
+            }}
+            onKeyDown={onScaleKeyDown}
+            className="text-size-options"
+          >
+            {fontScales.map((option) => (
+              <SegmentedControlItem
                 key={option.value}
-                role="radio"
-                aria-checked={settings.interfaceFontScale === option.value}
-                tabIndex={index === selectedScale ? 0 : -1}
+                value={String(option.value)}
+                label={t(option.label)}
                 className={settings.interfaceFontScale === option.value ? 'is-active' : ''}
-                onClick={() => { void onUpdate({ interfaceFontScale: option.value }) }}
-              >
-                {t(option.label)}
-              </button>
+              />
             ))}
-          </div>
+          </SegmentedControl>
         </div>
       </section>
       <section className="settings-group">

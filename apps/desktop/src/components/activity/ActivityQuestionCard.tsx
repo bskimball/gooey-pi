@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ChatCircleDots, Check, Clock, X } from '@/components/icons'
+import { ApexButton } from '@/components/ui'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import { formatDeadlineCountdown, type SessionLiveQuestion } from '@/app/session-live'
 import type { PendingExtensionUi } from '@/hooks/useExtensionUi'
@@ -87,24 +88,27 @@ export function ActivityQuestionCard({
       <div className="activity-question-card__controls">
         {question.method === 'confirm' ? (
           <div className="activity-question-card__actions">
-            <button
+            <ApexButton
               type="button"
-              className="button button--compact button--primary activity-question-card__yes"
+              compact
+              variant="primary"
+              className="activity-question-card__yes"
               disabled={submitting || !onRespond}
               onClick={() => void submitResponse({ confirmed: true })}
+              icon={<Check size={12} />}
             >
-              <Check size={12} />
-              <span>Yes</span>
-            </button>
-            <button
+              Yes
+            </ApexButton>
+            <ApexButton
               type="button"
-              className="button button--compact activity-question-card__no"
+              compact
+              className="activity-question-card__no"
               disabled={submitting || !onRespond}
               onClick={() => void submitResponse({ confirmed: false })}
+              icon={<X size={12} />}
             >
-              <X size={12} />
-              <span>No</span>
-            </button>
+              No
+            </ApexButton>
           </div>
         ) : question.method === 'select' ? (
           <div className="activity-question-card__select">
@@ -150,24 +154,28 @@ export function ActivityQuestionCard({
               aria-label={question.title}
               disabled={submitting || !onRespond}
             />
-            <button
+            <ApexButton
               type="submit"
-              className="button button--compact button--primary activity-question-card__submit"
+              compact
+              variant="primary"
+              className="activity-question-card__submit"
               disabled={submitting || !onRespond || !inputValue.trim()}
             >
               Submit
-            </button>
+            </ApexButton>
           </form>
         ) : (
           <div className="activity-question-card__actions">
-            <button
+            <ApexButton
               type="button"
-              className="button button--compact button--primary activity-question-card__answer-modal"
+              compact
+              variant="primary"
+              className="activity-question-card__answer-modal"
               disabled={!onOpenModal}
               onClick={() => onOpenModal?.(question.runtimeId)}
             >
               Answer…
-            </button>
+            </ApexButton>
           </div>
         )}
       </div>

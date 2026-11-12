@@ -1,4 +1,5 @@
 import { Brain, CaretDown, Check, MagnifyingGlass } from './icons'
+import { ApexButton } from './ui'
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { ApexModelDescriptor, ApexProviderDescriptor } from '@/types/api'
 
@@ -116,7 +117,9 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
   const resultCount = visibleModels.length
   return (
     <div className="model-picker" ref={rootRef}>
-      <button
+      <ApexButton
+        variant="quiet"
+        compact
         ref={triggerRef}
         type="button"
         className="permissions-chip model-picker__trigger"
@@ -137,7 +140,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
         <Brain size={14} />
         <span>{label === 'Model' ? '' : `${label}: `}{selected?.name ?? unavailableLabel}</span>
         <CaretDown size={11} aria-hidden="true" />
-      </button>
+      </ApexButton>
       {open && !disabled ? (
         <div
           className="model-picker__popover"
@@ -176,15 +179,16 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
             </span>
           </div>
           <div className="model-picker__providers" role="group" aria-label="Filter models by provider">
-            <button type="button" className={providerFilter === null ? 'is-active' : ''} aria-pressed={providerFilter === null} onClick={() => setProviderFilter(null)}>All</button>
+            <ApexButton variant="quiet" compact className={providerFilter === null ? 'is-active' : ''} aria-pressed={providerFilter === null} onClick={() => setProviderFilter(null)}>All</ApexButton>
             {groups.map(({ provider }) => (
-              <button
-                type="button"
+              <ApexButton
+                variant="quiet"
+                compact
                 key={provider.id}
                 className={providerFilter === provider.id ? 'is-active' : ''}
                 aria-pressed={providerFilter === provider.id}
                 onClick={() => setProviderFilter(provider.id)}
-              >{provider.name}</button>
+              >{provider.name}</ApexButton>
             ))}
           </div>
           <div className="model-picker__results" id={listId} role="listbox" aria-label="Models">

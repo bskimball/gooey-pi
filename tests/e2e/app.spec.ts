@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -374,12 +374,17 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     piExecutable = join(fixtureRoot, 'pi.cmd')
     writeFileSync(piExecutable, '@echo off\r\n"%_prog%" "%dp0%\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\cli.js" %*\r\n')
   }
-  const cuaExecutable = join(fixtureRoot, 'cua-driver-fixture.cjs')
-  writeFileSync(cuaExecutable, `#!/usr/bin/env node
+  // The driver is spawned without a shell, so Windows needs a real .exe; Node's own `--version` output satisfies the version probe.
+  const cuaExecutable = join(fixtureRoot, process.platform === 'win32' ? 'cua-driver.exe' : 'cua-driver-fixture.cjs')
+  if (process.platform === 'win32') {
+    try { linkSync(process.execPath, cuaExecutable) } catch { copyFileSync(process.execPath, cuaExecutable) }
+  } else {
+    writeFileSync(cuaExecutable, `#!/usr/bin/env node
 if (process.argv.includes('--version')) { process.stdout.write('cua-driver 0.19.0\\n'); process.exit(0) }
 process.exit(2)
 `)
-  chmodSync(cuaExecutable, 0o755)
+    chmodSync(cuaExecutable, 0o755)
+  }
   return { userData, home, project, piExecutable, cuaExecutable, sessionFile: realpathSync(sessionFile) }
 }
 
@@ -591,12 +596,12 @@ test.describe('Prime Work desktop smoke', () => {
     const model = page.locator('.model-picker')
     const modelTrigger = model.locator('.model-picker__trigger')
     const reasoning = page.locator('.select-control').filter({ has: page.getByRole('combobox', { name: 'Reasoning effort' }) })
-    await expect(modelTrigger.locator('span')).toHaveCSS('display', 'block')
+    await expect(modelTrigger.locator('span').last()).toHaveCSS('display', 'block')
     await expect(reasoning.locator('.select-control__chevron')).toHaveCSS('display', 'none')
     await expect(reasoning.getByRole('combobox')).toHaveCSS('opacity', '1')
 
     await page.locator('.conversation-column').evaluate((node) => { node.style.flex = '0 0 300px' })
-    await expect(modelTrigger.locator('span')).toHaveCSS('display', 'none')
+    await expect(modelTrigger.locator('span').last()).toHaveCSS('display', 'none')
     await expect(modelTrigger.locator('svg').first()).not.toHaveCSS('display', 'none')
     await expect(reasoning.getByRole('combobox')).toHaveCSS('opacity', '0')
     await expect(reasoning.locator('.select-control__icon')).not.toHaveCSS('display', 'none')
@@ -618,6 +623,30 @@ test.describe('Prime Work desktop smoke', () => {
     })
     expect(menuBounds.menuLeft).toBeGreaterThanOrEqual(menuBounds.footerLeft - 0.5)
     expect(menuBounds.menuRight).toBeLessThanOrEqual(menuBounds.footerRight + 0.5)
+    await page.keyboard.press('Escape')
+
+    await reasoning.getByRole('combobox', { name: 'Reasoning effort' }).click({ force: true })
+    const selectBounds = await page.getByRole('listbox', { name: 'Reasoning effort' }).evaluate(async (listbox) => {
+      const popup = listbox.closest<HTMLElement>('.astryx-selector-popup') ?? listbox
+      const layer = listbox.closest<HTMLElement>('[data-astryx-layer-root]') ?? popup
+      await Promise.all([...popup.getAnimations(), ...layer.getAnimations()].map((anim) => anim.finished.catch(() => undefined)))
+      const popupRect = popup.getBoundingClientRect()
+      const paneRect = document.querySelector<HTMLElement>('.conversation-pane')!.getBoundingClientRect()
+      const triggerRect = document.querySelector<HTMLElement>('.select-control[title="Reasoning effort"]')!.getBoundingClientRect()
+      return {
+        popupLeft: popupRect.left,
+        popupRight: popupRect.right,
+        popupWidth: popupRect.width,
+        popupBottom: popupRect.bottom,
+        triggerTop: triggerRect.top,
+        paneLeft: paneRect.left,
+        paneRight: paneRect.right,
+      }
+    })
+    expect(selectBounds.popupWidth).toBeLessThanOrEqual(320.5)
+    expect(selectBounds.popupBottom).toBeLessThanOrEqual(selectBounds.triggerTop + 0.5)
+    expect(selectBounds.popupLeft).toBeGreaterThanOrEqual(selectBounds.paneLeft - 0.5)
+    expect(selectBounds.popupRight).toBeLessThanOrEqual(selectBounds.paneRight + 0.5)
   })
 
   test('loads the sandboxed preload bridge and hermetic service data', async () => {
@@ -688,7 +717,9 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('uses the branch checkout picker after changing the global checkout style', async () => {
     await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
-    await page.getByRole('combobox', { name: 'Git checkout style' }).selectOption('branch')
+    const checkoutStyle = page.getByRole('combobox', { name: 'Git checkout style' })
+    await checkoutStyle.click()
+    await page.getByRole('option', { name: 'Branches', exact: true }).click()
     await page.getByRole('button', { name: 'Back to session' }).click()
 
     await page.getByRole('button', { name: /^Checkout:/ }).click()

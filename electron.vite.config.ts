@@ -1,3 +1,4 @@
+import stylex from '@stylexjs/unplugin'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
@@ -19,7 +20,18 @@ export default defineConfig({
   },
   renderer: {
     root: resolve('apps/desktop'),
-    plugins: [react()],
+    plugins: [
+      stylex.vite({
+        runtimeInjection: false,
+        unstable_moduleResolution: { type: 'commonJS', rootDir: fileURLToPath(new URL('.', import.meta.url)) },
+        useCSSLayers: {
+          before: ['reset', 'apex-base', 'astryx-base', 'astryx-theme', 'apex'],
+          after: ['apex-responsive'],
+          prefix: 'stylex',
+        },
+      }),
+      react(),
+    ],
     resolve: { alias: { '@': fileURLToPath(new URL('./apps/desktop/src', import.meta.url)) } },
     // Full minification, but function names survive so the React component
     // stacks ErrorBoundary logs stay readable; no sourcemap can restore those,
@@ -36,6 +48,12 @@ export default defineConfig({
             if (!id.includes('node_modules')) return undefined
             if (id.includes('/@xterm/')) return 'terminal-vendor'
             if (id.includes('/@phosphor-icons/')) return 'icons-vendor'
+            if (
+              id.includes('/@stylexjs/') ||
+              /\/@astryxdesign\/core\/dist\/(?:Layer|Popover|Selector|Button|Icon|Indicator|VisuallyHidden|utils|i18n|theme|privateAttributes|internal)(?:\/|\.js$)/.test(id)
+            ) {
+              return 'astryx-core'
+            }
             if (id.includes('/react-markdown/') || id.includes('/remark-') || id.includes('/unified/')) return 'markdown-vendor'
             if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor'
             return undefined

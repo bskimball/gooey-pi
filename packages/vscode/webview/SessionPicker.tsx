@@ -1,4 +1,5 @@
-import { CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
+import { Badge } from '@astryxdesign/core/Badge'
+import { ApexButton, CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
 import { useCallback, useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useMachine } from '@xstate/react'
 import type { HostState, SessionSummary } from '../src/protocol'
@@ -109,9 +110,10 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
 
   return (
     <div className="apex-session-picker" ref={rootRef} onKeyDown={handleKeyDown}>
-      <button
+      <ApexButton
         ref={triggerRef}
-        type="button"
+        variant="quiet"
+        compact
         className="permissions-chip apex-session-picker__trigger"
         aria-label={`Sessions: ${activeTitle}`}
         title={`Sessions: ${activeTitle}`}
@@ -123,7 +125,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
         <ClockCounterClockwise size={14} />
         <span className="apex-session-picker__trigger-label">{activeTitle}</span>
         <CaretDown size={11} className={open ? 'is-open' : ''} aria-hidden="true" />
-      </button>
+      </ApexButton>
       {open ? (
         <div
           className="apex-session-picker__popover"
@@ -134,7 +136,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
         >
           <div className="apex-session-picker__header">
             <span className="sidebar-menu__label">Sessions</span>
-            {items.length > 0 ? <span className="apex-session-picker__count">{items.length}</span> : null}
+            {items.length > 0 ? <Badge label={String(items.length)} className="apex-session-picker__count" /> : null}
           </div>
           <div
             ref={listRef}

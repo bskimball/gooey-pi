@@ -31,7 +31,9 @@ import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { isSessionRunning, isSessionWaiting, sessionAttentionSignature, signatureCleared } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
-import { IconButton, Modal, PiMark, useFocusTrap } from './ui'
+import { Badge } from '@astryxdesign/core/Badge'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { ApexButton, IconButton, Modal, PiMark, useFocusTrap } from './ui'
 import { StatusMark } from './activity/StatusMark'
 import { SessionStatusGlyph, SidebarAttentionGroups } from './SidebarAttention'
 
@@ -296,13 +298,13 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         <div className="sidebar-search">
           <MagnifyingGlass size={13} />
           <input id="session-search" value={query} onChange={(event) => { setQuery(event.target.value); setSearchLimits({}) }} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} placeholder="Search projects, chats" aria-label="Search projects and sessions" />
-          {query ? <button type="button" title="Clear search" aria-label="Clear search" onClick={() => setQuery('')}>×</button> : null}
+          {query ? <IconButton size="small" label="Clear search" onClick={() => setQuery('')}>×</IconButton> : null}
         </div>
         <div className="sidebar__destinations">
-          <button type="button" title={t('nav.projects')} className={activeView === 'projects' ? 'is-active' : ''} onClick={() => onNavigate('projects')}><Folder size={16} /><span className="sr-only">{t('nav.projects')}</span></button>
-          <button type="button" title={t('nav.activity')} className={activeView === 'activity' ? 'is-active' : ''} onClick={() => onNavigate('activity')}><Bell size={16} /><span className="sr-only">{t('nav.activity')}</span>{unreadCount ? <span className="nav-count">{unreadCount}</span> : null}</button>
-          <button type="button" title={t('nav.scheduled')} className={activeView === 'scheduled' ? 'is-active' : ''} onClick={() => onNavigate('scheduled')}><CalendarDots size={16} /><span className="sr-only">{t('nav.scheduled')}</span></button>
-          <button type="button" title={t('nav.capabilities')} className={activeView === 'plugins' ? 'is-active' : ''} onClick={() => onNavigate('plugins')}><Package size={16} /><span className="sr-only">{t('nav.capabilities')}</span></button>
+          <ApexButton variant="quiet" title={t('nav.projects')} className={activeView === 'projects' ? 'is-active' : ''} onClick={() => onNavigate('projects')}><Folder size={16} /><span className="sr-only">{t('nav.projects')}</span></ApexButton>
+          <ApexButton variant="quiet" title={t('nav.activity')} className={activeView === 'activity' ? 'is-active' : ''} onClick={() => onNavigate('activity')}><Bell size={16} /><span className="sr-only">{t('nav.activity')}</span>{unreadCount ? <Badge variant="orange" label={String(unreadCount)} className="nav-count" /> : null}</ApexButton>
+          <ApexButton variant="quiet" title={t('nav.scheduled')} className={activeView === 'scheduled' ? 'is-active' : ''} onClick={() => onNavigate('scheduled')}><CalendarDots size={16} /><span className="sr-only">{t('nav.scheduled')}</span></ApexButton>
+          <ApexButton variant="quiet" title={t('nav.capabilities')} className={activeView === 'plugins' ? 'is-active' : ''} onClick={() => onNavigate('plugins')}><Package size={16} /><span className="sr-only">{t('nav.capabilities')}</span></ApexButton>
         </div>
       </nav>
 
@@ -411,8 +413,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         {onOpenInVsCode ? <IconButton label={activeProject ? `Open ${activeProject.name} in VS Code` : 'Open in VS Code'} disabled={!activeProject} onClick={() => { if (activeProject) onOpenInVsCode(activeProject.path) }}><Code size={16} /></IconButton> : null}
       </div>
 
-      {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>Cancel</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</button></>}><label className="field"><span>Session name</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}
-      {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><button type="button" className="button" onClick={() => setRemoveTarget(null)}>Cancel</button><button type="button" className="button button--danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</button></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
+      {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
+      {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
     </aside>
   )
 }

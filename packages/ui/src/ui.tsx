@@ -1,17 +1,337 @@
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
+import { ButtonGroup } from '@astryxdesign/core/ButtonGroup'
+import { EmptyState as AstryxEmptyState } from '@astryxdesign/core/EmptyState'
+import { Selector, type SelectorOptionData } from '@astryxdesign/core/Selector'
+import { defineTheme, registerTheme } from '@astryxdesign/core/theme'
+import * as stylex from '@stylexjs/stylex'
 import { CaretDown, Check, GlobeSimple, X } from './icons'
-import { Children, isValidElement, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SelectHTMLAttributes } from 'react'
-import { createPortal } from 'react-dom'
+import {
+  Children,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ButtonHTMLAttributes,
+  type ChangeEvent,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+  type SelectHTMLAttributes,
+} from 'react'
+
+export { Modal } from './Modal'
+
+const apexAstryxTheme = defineTheme({
+  name: 'apex',
+  icons: {
+    chevronDown: <CaretDown className="select-control__chevron" size={11} aria-hidden="true" />,
+    check: <Check size={13} aria-hidden="true" />,
+    close: <X size={16} aria-hidden="true" />,
+  },
+})
+registerTheme(apexAstryxTheme)
+if (typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-astryx-theme', 'apex')
+}
+
+const styles = stylex.create({
+  iconButton: {
+    position: 'relative',
+    display: 'inline-grid',
+    placeItems: 'center',
+    flex: '0 0 auto',
+    width: 28,
+    height: 28,
+    minWidth: 0,
+    minHeight: 0,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text-secondary)',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+    cursor: 'pointer',
+    ':hover': {
+      color: 'var(--text)',
+      backgroundColor: 'var(--surface-hover)',
+    },
+  },
+  iconButtonSmall: {
+    width: 25,
+    height: 25,
+  },
+  button: {
+    minHeight: 30,
+    height: 'auto',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingBlock: 0,
+    paddingInline: 11,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border-strong)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text)',
+    backgroundColor: 'var(--surface-raised)',
+    backgroundImage: 'none',
+    boxShadow: '0 1px 2px rgba(2, 8, 18, 0.08)',
+    fontSize: 'var(--fs-body)',
+    fontWeight: 550,
+    cursor: 'pointer',
+    ':hover': {
+      backgroundColor: 'var(--surface-hover)',
+    },
+  },
+  buttonCompact: {
+    minHeight: 28,
+    borderRadius: 'var(--radius-sm)',
+    paddingInline: 9,
+  },
+  buttonPrimary: {
+    borderRadius: 999,
+    paddingInline: 14,
+    color: 'var(--primary-ink)',
+    backgroundColor: 'var(--primary-fill)',
+    borderColor: 'var(--primary-fill)',
+    ':hover': {
+      color: 'var(--primary-ink)',
+      backgroundColor: 'color-mix(in srgb, var(--primary-fill) 86%, var(--canvas))',
+      borderColor: 'transparent',
+    },
+  },
+  buttonDanger: {
+    color: '#ffffff',
+    backgroundColor: 'var(--danger)',
+    borderColor: 'var(--danger)',
+    ':hover': {
+      backgroundColor: 'var(--danger)',
+      filter: 'brightness(0.94)',
+    },
+  },
+  buttonQuiet: {
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    boxShadow: 'none',
+    color: 'var(--text-secondary)',
+    ':hover': {
+      color: 'var(--text)',
+      backgroundColor: 'var(--surface-hover)',
+    },
+  },
+  selectRoot: {
+    position: 'relative',
+    minWidth: 28,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    flex: '0 1 auto',
+    gap: 4,
+    paddingInline: 7,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text-secondary)',
+    backgroundColor: 'var(--surface-subtle)',
+    cursor: 'pointer',
+  },
+  selectRootCompact: {
+    height: 26,
+    borderRadius: 999,
+  },
+  selectorField: {
+    position: 'static',
+    display: 'inline-flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: '0 1 auto',
+    minWidth: 0,
+    height: '100%',
+  },
+  selectorControl: {
+    position: 'static',
+    minHeight: 0,
+    minWidth: 0,
+    height: '100%',
+    paddingInline: 0,
+    paddingBlock: 0,
+    gap: 4,
+    borderWidth: 0,
+    borderRadius: 0,
+    color: 'inherit',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+    outlineStyle: 'none',
+  },
+  segmentedGroup: {
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 0,
+    padding: 2,
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--surface-hover)',
+  },
+  segmentedItem: {
+    minHeight: 24,
+    height: 24,
+    paddingBlock: 0,
+    paddingInline: 8,
+    borderWidth: 0,
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text-secondary)',
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+    fontSize: 'var(--fs-meta)',
+    fontWeight: 500,
+    cursor: 'pointer',
+  },
+  segmentedItemActive: {
+    color: 'var(--text)',
+    backgroundColor: 'var(--surface-raised)',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+  },
+  emptyState: {
+    height: '100%',
+    minHeight: 280,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 0,
+    padding: 32,
+    textAlign: 'center',
+  },
+})
+
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
+  if (!ref) return
+  if (typeof ref === 'function') ref(value)
+  else (ref as { current: T | null }).current = value
+}
+
+function useSyncedAstryxButtonDom(disabled: boolean | undefined, title: string | undefined, externalRef?: Ref<HTMLButtonElement>) {
+  const innerRef = useRef<HTMLButtonElement | null>(null)
+  const attachRef = useCallback((node: HTMLButtonElement | null) => {
+    innerRef.current = node
+    assignRef(externalRef, node)
+  }, [externalRef])
+
+  useLayoutEffect(() => {
+    const button = innerRef.current
+    if (!button) return
+    button.disabled = Boolean(disabled)
+    if (title !== undefined) button.setAttribute('title', title)
+    // Astryx Button mounts an empty polite live region for async loading labels;
+    // remove the redundant role on non-loading buttons so screen readers and
+    // `[role="status"]` queries only see real application status regions.
+    const live = button.querySelector('[role="status"][aria-live="polite"]')
+    if (live && !live.textContent) live.removeAttribute('role')
+  }, [disabled, title])
+
+  return attachRef
+}
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string
   size?: 'small' | 'regular'
+  ref?: Ref<HTMLButtonElement>
 }
 
-export function IconButton({ label, size = 'regular', className = '', children, ...props }: IconButtonProps) {
+export function IconButton({ label, size = 'regular', className = '', disabled, title, type = 'button', children, ref, ...props }: IconButtonProps) {
+  const buttonRef = useSyncedAstryxButtonDom(disabled, title ?? label, ref)
+  // Extract HTML attributes Astryx BaseProps omits at the type level (`title`, `disabled`, etc.)
+  const { form: _form, name: _name, value: _value, autoFocus: _autoFocus, ...safeProps } = props
   return (
-    <button type="button" className={`icon-button icon-button--${size} ${className}`} aria-label={label} title={label} {...props}>
+    <AstryxButton
+      {...safeProps}
+      ref={buttonRef}
+      type={type}
+      label={label}
+      isIconOnly
+      variant="ghost"
+      size={size === 'small' ? 'sm' : 'md'}
+      isDisabled={disabled}
+      icon={children}
+      className={`icon-button icon-button--${size} ${className}`.trim()}
+      xstyle={[styles.iconButton, size === 'small' && styles.iconButtonSmall]}
+    />
+  )
+}
+
+export interface ApexButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'secondary' | 'primary' | 'danger' | 'quiet'
+  compact?: boolean
+  icon?: ReactNode
+  endIcon?: ReactNode
+  label?: string
+  ref?: Ref<HTMLButtonElement>
+}
+
+export function ApexButton({
+  variant = 'secondary',
+  compact = false,
+  icon,
+  endIcon,
+  label,
+  className = '',
+  disabled,
+  title,
+  type = 'button',
+  children,
+  ref,
+  ...props
+}: ApexButtonProps) {
+  const buttonRef = useSyncedAstryxButtonDom(disabled, title, ref)
+  const resolvedLabel = label ?? (typeof children === 'string' || typeof children === 'number' ? String(children) : props['aria-label'] ?? '')
+  const variantClass = variant === 'primary'
+    ? 'button--primary'
+    : variant === 'danger'
+      ? 'button--danger'
+      : variant === 'quiet'
+        ? 'button--quiet'
+        : ''
+  const astryxVariant = variant === 'primary'
+    ? 'primary'
+    : variant === 'danger'
+      ? 'destructive'
+      : variant === 'quiet'
+        ? 'ghost'
+        : 'secondary'
+  const { form, name: _name, value: _value, autoFocus: _autoFocus, ...safeProps } = props
+  const extraAttrs = form ? ({ form } as Record<string, unknown>) : undefined
+
+  return (
+    <AstryxButton
+      {...safeProps}
+      {...extraAttrs}
+      ref={buttonRef}
+      type={type}
+      label={resolvedLabel}
+      variant={astryxVariant}
+      size={compact ? 'sm' : 'md'}
+      isDisabled={disabled}
+      icon={icon}
+      endContent={endIcon}
+      className={`button ${compact ? 'button--compact' : ''} ${variantClass} ${className}`.trim()}
+      xstyle={[
+        styles.button,
+        compact && styles.buttonCompact,
+        variant === 'primary' && styles.buttonPrimary,
+        variant === 'danger' && styles.buttonDanger,
+        variant === 'quiet' && styles.buttonQuiet,
+      ]}
+    >
       {children}
-    </button>
+    </AstryxButton>
   )
 }
 
@@ -26,227 +346,139 @@ interface SelectControlProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export function SelectControl({ icon, compact, className = '', label, value, disabled, onChange, children }: SelectControlProps) {
-  const [open, setOpen] = useState(false)
-  const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-  const pendingFocusIndexRef = useRef<number | null>(null)
-  const options = Children.toArray(children).flatMap((child) => {
-    if (!isValidElement<{ value?: string | number; disabled?: boolean; title?: string; children?: ReactNode }>(child)) return []
-    const optionValue = String(child.props.value ?? '')
-    const optionLabel = typeof child.props.children === 'string' || typeof child.props.children === 'number'
-      ? String(child.props.children)
-      : optionValue
-    return [{ value: optionValue, label: optionLabel, detail: child.props.title, disabled: Boolean(child.props.disabled) }]
-  })
-  const selectedValue = String(value ?? options[0]?.value ?? '')
-  const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0]
-
-  const updateMenuBounds = () => {
-    const root = rootRef.current
-    const menu = menuRef.current
-    if (!root || !menu) return
-    const rootRect = root.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    if (!vw || !vh || (rootRect.width === 0 && rootRect.height === 0)) return
-    const paneRect = root.closest('.conversation-pane')?.getBoundingClientRect()
-    const hasPaneBounds = Boolean(paneRect && (paneRect.width > 0 || paneRect.height > 0))
-    const leftBound = hasPaneBounds ? Math.max(16, paneRect!.left + 12) : 16
-    const rightBound = hasPaneBounds ? Math.min(vw - 16, paneRect!.right - 12) : vw - 16
-    const topBound = hasPaneBounds ? Math.max(16, paneRect!.top + 12) : 16
-    const availableWidth = Math.max(180, Math.floor(rightBound - leftBound))
-    const menuWidth = Math.min(320, availableWidth)
-    let offsetLeft = 0
-    if (rootRect.left + menuWidth > rightBound) {
-      offsetLeft = Math.floor(rightBound - (rootRect.left + menuWidth))
-    }
-    if (rootRect.left + offsetLeft < leftBound) {
-      offsetLeft = Math.ceil(leftBound - rootRect.left)
-    }
-    const availableAbove = Math.max(0, Math.floor(rootRect.top - 7 - topBound))
-    menu.style.setProperty('--select-menu-width', `${menuWidth}px`)
-    menu.style.setProperty('--select-menu-left', `${offsetLeft}px`)
-    menu.style.setProperty('--select-menu-max-height', `${availableAbove}px`)
-  }
-
-  const close = (restoreFocus = false) => {
-    pendingFocusIndexRef.current = null
-    setOpen(false)
-    if (restoreFocus) triggerRef.current?.focus()
-  }
-
-  const selectOption = (nextValue: string) => {
-    close(true)
-    onChange?.({ target: { value: nextValue }, currentTarget: { value: nextValue } } as ChangeEvent<HTMLSelectElement>)
-  }
-
-  const applyFocusToOption = (targetIndex: number) => {
-    const items = rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')
-    if (!items?.length) return
-    const bounded = ((targetIndex % items.length) + items.length) % items.length
-    const target = items[bounded]
-    target?.focus()
-    target?.scrollIntoView?.({ block: 'nearest' })
-  }
-
   useEffect(() => {
-    if (disabled) setOpen(false)
+    document.documentElement.setAttribute('data-astryx-theme', 'apex')
+  }, [])
+  useLayoutEffect(() => {
+    if (triggerRef.current) triggerRef.current.disabled = Boolean(disabled)
   }, [disabled])
 
-  useEffect(() => {
-    if (!open) return
-    updateMenuBounds()
-    if (pendingFocusIndexRef.current !== null) {
-      const targetIndex = pendingFocusIndexRef.current
-      pendingFocusIndexRef.current = null
-      applyFocusToOption(targetIndex)
-    } else {
-      rootRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' })
-    }
-    const onPointerDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) setOpen(false)
-    }
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        close(true)
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onEscape)
-    window.addEventListener('resize', updateMenuBounds)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onEscape)
-      window.removeEventListener('resize', updateMenuBounds)
-    }
-  }, [open])
+  const clampPopupToPane = useCallback(() => {
+    const root = rootRef.current
+    const trigger = triggerRef.current
+    if (!root || !trigger || trigger.getAttribute('aria-expanded') !== 'true') return
+    const listboxId = trigger.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    const popup = listbox?.closest<HTMLElement>('.astryx-selector-popup')
+    const pane = root.closest<HTMLElement>('.conversation-pane')
+    if (!popup || !pane) return
+    const paneRect = pane.getBoundingClientRect()
+    if (paneRect.width <= 0 || paneRect.height <= 0) return
+    const maxWidth = Math.max(160, Math.min(320, Math.floor(paneRect.width - 24)))
+    popup.style.width = `${maxWidth}px`
+    popup.style.maxWidth = `${maxWidth}px`
+    const triggerRect = root.getBoundingClientRect()
+    const availableAbove = Math.max(100, Math.floor(triggerRect.top - paneRect.top - 16))
+    popup.style.maxHeight = `${Math.min(420, availableAbove)}px`
+    popup.style.translate = '0px 0px'
+    const popupRect = popup.getBoundingClientRect()
+    let shiftX = 0
+    const rightLimit = paneRect.right - 12
+    const leftLimit = paneRect.left + 12
+    if (popupRect.right > rightLimit) shiftX = rightLimit - popupRect.right
+    if (popupRect.left + shiftX < leftLimit) shiftX = leftLimit - popupRect.left
+    if (shiftX !== 0) popup.style.translate = `${Math.round(shiftX)}px 0px`
+  }, [])
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (disabled) return
-    if (event.key === 'Escape' && open) {
-      event.preventDefault()
-      event.stopPropagation()
-      close(true)
-      return
+  useEffect(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const syncClamp = () => {
+      if (trigger.getAttribute('aria-expanded') !== 'true') return
+      clampPopupToPane()
+      requestAnimationFrame(() => {
+        clampPopupToPane()
+        const listboxId = trigger.getAttribute('aria-controls')
+        const popup = listboxId ? document.getElementById(listboxId)?.closest<HTMLElement>('.astryx-selector-popup') : null
+        const layer = popup?.closest<HTMLElement>('[data-astryx-layer-root]')
+        const anims = [...(popup?.getAnimations?.() ?? []), ...(layer?.getAnimations?.() ?? [])]
+        for (const anim of anims) {
+          void anim.finished.then(clampPopupToPane, () => undefined)
+        }
+      })
     }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!open) {
-        setOpen(true)
-        return
-      }
-      const items = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])]
-      const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement)
-      const enabledOptions = options.filter((option) => !option.disabled)
-      if (activeIndex >= 0 && enabledOptions[activeIndex]) {
-        selectOption(enabledOptions[activeIndex].value)
-      } else {
-        close(true)
-      }
-      return
+    const observer = new MutationObserver(syncClamp)
+    observer.observe(trigger, { attributes: true, attributeFilter: ['aria-expanded'] })
+    window.addEventListener('resize', clampPopupToPane)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', clampPopupToPane)
     }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
-      event.preventDefault()
-      event.stopPropagation()
-      const enabledOptions = options.filter((option) => !option.disabled)
-      if (!enabledOptions.length) return
-      if (!open) {
-        const currentIndex = Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
-        const initialIndex = event.key === 'Home' ? 0 : event.key === 'End' ? enabledOptions.length - 1 : currentIndex
-        pendingFocusIndexRef.current = initialIndex
-        setOpen(true)
-        return
-      }
-      const items = [...(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [])]
-      const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement)
-      const currentIndex = activeIndex >= 0 ? activeIndex : Math.max(0, enabledOptions.findIndex((option) => option.value === selectedValue))
-      if (event.key === 'Home') applyFocusToOption(0)
-      else if (event.key === 'End') applyFocusToOption(items.length - 1)
-      else applyFocusToOption(currentIndex + (event.key === 'ArrowDown' ? 1 : -1))
-    }
-  }
+  }, [clampPopupToPane])
+  const options = useMemo<SelectorOptionData[]>(
+    () =>
+      Children.toArray(children).flatMap((child) => {
+        if (!isValidElement<{ value?: string | number; disabled?: boolean; title?: string; children?: ReactNode }>(child)) return []
+        const optionValue = String(child.props.value ?? '')
+        const optionLabel = typeof child.props.children === 'string' || typeof child.props.children === 'number'
+          ? String(child.props.children)
+          : optionValue
+        return [{
+          value: optionValue,
+          label: optionLabel,
+          description: child.props.title,
+          disabled: Boolean(child.props.disabled),
+        }]
+      }),
+    [children],
+  )
+  const selectedValue = String(value ?? options[0]?.value ?? '')
+  const rootStylex = stylex.props(styles.selectRoot, compact && styles.selectRootCompact)
 
   return (
     <div
       ref={rootRef}
-      className={`select-control ${compact ? 'select-control--compact' : ''} ${className}`}
+      className={`select-control ${compact ? 'select-control--compact' : ''} ${className} ${rootStylex.className ?? ''}`.trim()}
+      style={rootStylex.style}
       title={label}
-      onKeyDown={handleKeyDown}
-      onMouseDown={(event) => {
-        const target = event.target as HTMLElement | null
-        if (!target?.closest('.select-control__menu') && !target?.closest('.select-control__trigger')) {
-          event.preventDefault()
-        }
-      }}
-      onBlur={(event) => {
-        if (open && !event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
-      }}
-      onClick={(event) => {
-        if (disabled) return
-        const target = event.target as HTMLElement | null
-        if (target?.closest('.select-control__menu') || target?.closest('.select-control__trigger')) return
-        triggerRef.current?.focus()
-        setOpen((current) => !current)
-      }}
     >
-      {icon ? <span className="select-control__icon" aria-hidden="true">{icon}</span> : null}
-      <span className="sr-only">{label}</span>
-      <button
+      <Selector
         ref={triggerRef}
-        type="button"
-        role="combobox"
-        className="select-control__trigger"
+        label={label}
         aria-label={label}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? menuId : undefined}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {selectedOption?.label ?? selectedValue}
-      </button>
-      <CaretDown className="select-control__chevron" size={11} aria-hidden="true" />
-      {open && !disabled ? (
-        <div
-          ref={(node) => {
-            menuRef.current = node
-            if (node) updateMenuBounds()
-          }}
-          className="worktree-picker__menu select-control__menu"
-          id={menuId}
-          role="listbox"
-          aria-label={label}
-        >
-          <div className="worktree-picker__heading">{label}</div>
-          <div className="worktree-picker__options">
-            {options.map((option) => {
-              const selected = option.value === selectedValue
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  disabled={option.disabled}
-                  className={`worktree-picker__option ${selected ? 'is-active' : ''}`}
-                  key={option.value}
-                  onClick={() => selectOption(option.value)}
-                >
-                  <span className="worktree-picker__check">{selected ? <Check size={13} /> : null}</span>
-                  <span className="worktree-picker__option-copy">
-                    <strong>{option.label}</strong>
-                    {option.detail ? <span>{option.detail}</span> : null}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
+        isLabelHidden
+        variant="ghost"
+        size="sm"
+        placement="above"
+        presentation="popover"
+        isDisabled={disabled}
+        value={selectedValue}
+        options={options}
+        startIcon={icon ? <span className="select-control__icon" aria-hidden="true">{icon}</span> : undefined}
+        onChange={(nextValue) => {
+          onChange?.({ target: { value: nextValue }, currentTarget: { value: nextValue } } as ChangeEvent<HTMLSelectElement>)
+        }}
+        containerXstyle={styles.selectorField}
+        controlClassName="select-control__box"
+        controlXstyle={styles.selectorControl}
+      />
     </div>
+  )
+}
+
+function SegmentedOptionButton({
+  optionLabel,
+  active,
+  onSelect,
+}: {
+  optionLabel: string
+  active: boolean
+  onSelect(): void
+}) {
+  const buttonRef = useSyncedAstryxButtonDom(false, undefined)
+  return (
+    <AstryxButton
+      ref={buttonRef}
+      label={optionLabel}
+      variant="ghost"
+      size="sm"
+      aria-pressed={active}
+      onClick={onSelect}
+      className={active ? 'is-active' : ''}
+      xstyle={[styles.segmentedItem, active && styles.segmentedItemActive]}
+    />
   )
 }
 
@@ -257,34 +489,48 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   label: string
 }) {
   return (
-    <div className="segmented" role="group" aria-label={label}>
+    <ButtonGroup
+      label={label}
+      size="sm"
+      className="segmented"
+      xstyle={styles.segmentedGroup}
+    >
       {options.map((option) => (
-        <button
-          type="button"
+        <SegmentedOptionButton
           key={option.value}
-          className={value === option.value ? 'is-active' : ''}
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
+          optionLabel={option.label}
+          active={value === option.value}
+          onSelect={() => onChange(option.value)}
+        />
       ))}
-    </div>
+    </ButtonGroup>
   )
 }
 
 export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: string; children: ReactNode; action?: ReactNode }) {
+  const textDescription = typeof children === 'string' || typeof children === 'number' ? String(children) : undefined
+  const actionsSlot = textDescription !== undefined
+    ? (action ? <div className="empty-state__action">{action}</div> : undefined)
+    : (
+        <>
+          <div>{children}</div>
+          {action ? <div className="empty-state__action">{action}</div> : null}
+        </>
+      )
   return (
-    <div className="empty-state">
-      {icon ? <div className="empty-state__icon">{icon}</div> : null}
-      <h2>{title}</h2>
-      <p>{children}</p>
-      {action ? <div className="empty-state__action">{action}</div> : null}
-    </div>
+    <AstryxEmptyState
+      headingLevel={2}
+      title={title}
+      icon={icon ? <div className="empty-state__icon">{icon}</div> : undefined}
+      description={textDescription}
+      actions={actionsSlot}
+      className="empty-state"
+      xstyle={styles.emptyState}
+    />
   )
 }
 
-const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+export const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 export function useFocusTrap<T extends HTMLElement>(active: boolean, onEscape?: () => void): RefObject<T | null> {
   const containerRef = useRef<T>(null)
@@ -340,21 +586,6 @@ export function useAppShellOverlay(active: boolean): void {
   }, [active])
 }
 
-export function Modal({ title, children, onClose, footer }: { title: string; children: ReactNode; onClose(): void; footer?: ReactNode }) {
-  const titleId = useId()
-  const modalRef = useFocusTrap<HTMLElement>(true, onClose)
-  useAppShellOverlay(true)
-  return createPortal(
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-        <div className="modal__header"><h2 id={titleId}>{title}</h2><IconButton label="Close" onClick={onClose}><X size={16} /></IconButton></div>
-        <div className="modal__body">{children}</div>
-        {footer ? <div className="modal__footer">{footer}</div> : null}
-      </section>
-    </div>, document.body
-  )
-}
-
 export function PiMark({ size = 24 }: { size?: number }) {
   // Option 2 ("The Apex Fang"): a razor-edged shark-tooth "A" silhouette with
   // a rolling wave-trough crossbar and under-crest accent.
@@ -390,67 +621,54 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
         </defs>
         <circle cx="80" cy="80" r="74" fill="#0b1119" />
         <g clipPath={`url(#${clipId})`}>
-          {/* Distant moon / sun disc in upper-left sky */}
           <g className="pi-welcome-mark__moon">
             <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" />
             <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" />
           </g>
-
-          {/* Swept shark dorsal fin slicing through the center */}
           <g className="pi-welcome-mark__fin">
-          <path
-            d="M42 106 C45 68 63 38 99 20 C90 42 87 63 95 83 L86 87 L96 104 Z"
-            fill="currentColor"
-          />
-          {/* Woodblock inner bevel and gill-slit hatches on the dorsal fin */}
-          <path
-            d="M55 96 C58 68 71 44 93 26"
-            stroke="#0b1119"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-          />
-          <path
-            d="M66 78 L78 72 M63 86 L77 80 M60 94 L76 88"
-            stroke="#0b1119"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
+            <path
+              d="M42 106 C45 68 63 38 99 20 C90 42 87 63 95 83 L86 87 L96 104 Z"
+              fill="currentColor"
+            />
+            <path
+              d="M55 96 C58 68 71 44 93 26"
+              stroke="#0b1119"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M66 78 L78 72 M63 86 L77 80 M60 94 L76 88"
+              stroke="#0b1119"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
           </g>
-
-          {/* Left Seigaiha concentric wave mound */}
           <g className="pi-welcome-mark__wave pi-welcome-mark__wave--left">
-          <circle cx="34" cy="118" r="42" fill="#0b1119" />
-          <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
-          <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
-          <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
-          <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+            <circle cx="34" cy="118" r="42" fill="#0b1119" />
+            <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
+            <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
+            <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
+            <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
           </g>
-
-          {/* Right Seigaiha concentric wave mound */}
           <g className="pi-welcome-mark__wave pi-welcome-mark__wave--right">
-          <circle cx="126" cy="118" r="42" fill="#0b1119" />
-          <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
-          <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
-          <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
-          <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+            <circle cx="126" cy="118" r="42" fill="#0b1119" />
+            <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
+            <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
+            <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
+            <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
           </g>
-
-          {/* Foreground center Seigaiha wave crest */}
           <g className="pi-welcome-mark__wave pi-welcome-mark__wave--front">
-          <circle cx="80" cy="136" r="46" fill="#0b1119" />
-          <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" />
-          <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" />
-          <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" />
-          <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" />
-          <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" />
+            <circle cx="80" cy="136" r="46" fill="#0b1119" />
+            <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" />
+            <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" />
+            <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" />
+            <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" />
+            <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" />
           </g>
-
-          {/* Ukiyo-e spray droplets around the fin */}
           <circle className="pi-welcome-mark__spray" cx="105" cy="54" r="2.2" fill="currentColor" />
           <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--late" cx="111" cy="62" r="1.6" fill="#7dd3fc" />
           <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--later" cx="36" cy="70" r="1.8" fill="#7dd3fc" />
         </g>
-        {/* Kamon outer and inner crest rings */}
         <circle cx="80" cy="80" r="73" stroke="currentColor" strokeWidth="3.5" />
         <circle className="pi-welcome-mark__ring" cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
       </svg>

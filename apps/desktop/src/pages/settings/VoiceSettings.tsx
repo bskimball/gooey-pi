@@ -1,6 +1,8 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
 import { useEffect, useState } from 'react'
-import { Modal } from '@/components/ui'
+import { ApexButton, IconButton, Modal } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import {
@@ -169,13 +171,13 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
                   <span className="voice-connection-card__title"><strong>{item.name}</strong><i>{serviceState === 'checking' ? 'Checking…' : serviceState === 'restart-required' ? 'Restart required' : serviceState === 'error' ? 'Unavailable' : configured ? source === 'environment' ? 'Environment key' : source === 'session' ? 'Session only' : 'Connected' : source === 'saved' && !secureStorageAvailable ? 'Storage locked' : 'Not connected'}</i></span>
                   <small>{item.detail}</small>
                 </div>
-                {serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential(item.id)}><Key size={13} /> {configured ? 'Replace key' : 'Add key'}</button> : null}
-                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <button type="button" className="button button--icon" aria-label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash size={13} /></button> : null}
+                {serviceState === 'ready' ? <ApexButton disabled={busy} icon={<Key size={13} />} onClick={() => openCredential(item.id)}>{configured ? 'Replace key' : 'Add key'}</ApexButton> : null}
+                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <IconButton className="button button--icon" label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash size={13} /></IconButton> : null}
               </article>
             )
           })}
         </div> : null}
-        {failure && !credential ? <p className="settings-error" role="alert">{failure}</p> : null}
+        {failure && !credential ? <Banner status="error" role="alert" className="settings-error" title={failure} /> : null}
       </section>
 
       <section className="voice-section" aria-labelledby="voice-dictation-title">
@@ -213,13 +215,13 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
                 <span><strong>Access token</strong><small>Optional. Stored with the same OS-backed protection as your other voice keys.</small></span>
                 <span className="voice-self-hosted-auth__actions">
                   <i>{status?.configured['self-hosted'] ? status.source['self-hosted'] === 'session' ? 'Session only' : status.source['self-hosted'] === 'environment' ? 'Environment token' : 'Token saved' : status?.source['self-hosted'] === 'saved' ? 'Storage locked' : 'No token'}</i>
-                  {voice && serviceState === 'ready' ? <button type="button" className="button" disabled={busy} onClick={() => openCredential('self-hosted')}><Key size={13} /> {status?.configured['self-hosted'] ? 'Replace token' : 'Add token'}</button> : null}
-                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <button type="button" className="button button--icon" aria-label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash size={13} /></button> : null}
+                  {voice && serviceState === 'ready' ? <ApexButton disabled={busy} icon={<Key size={13} />} onClick={() => openCredential('self-hosted')}>{status?.configured['self-hosted'] ? 'Replace token' : 'Add token'}</ApexButton> : null}
+                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <IconButton className="button button--icon" label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash size={13} /></IconButton> : null}
                 </span>
               </div>
               <div className="voice-self-hosted-connect">
                 <span><strong>Connection check</strong><small>Uploads a tenth of a second of silence to verify the actual transcription route and model.</small></span>
-                <button type="button" className="button button--primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? <CircleNotch className="is-spinning" size={13} /> : <HardDrives size={13} />} {selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</button>
+                <ApexButton variant="primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} icon={selfHostedTestState === 'testing' ? <CircleNotch className="is-spinning" size={13} /> : <HardDrives size={13} />} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</ApexButton>
               </div>
               {selfHostedMessage ? <p className={`voice-self-hosted-result is-${selfHostedTestState}`} role={selfHostedTestState === 'error' ? 'alert' : 'status'}>{selfHostedTestState === 'connected' ? <Check size={13} /> : <ShieldWarning size={13} />}{selfHostedMessage}</p> : null}
               <p className="voice-self-hosted-note">Plain HTTP is allowed on this computer and private-network addresses. Use HTTPS for public hosts.</p>
@@ -262,10 +264,20 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
         </div>
       </section>
 
-      {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><button type="button" className="button" disabled={busy} onClick={closeCredential}>Cancel</button><button type="button" className="button button--primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</button></>}>
+      {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
         <p className="modal-intro">{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
-        {failure ? <p className="settings-error" role="alert">{failure}</p> : null}
-        <label className="field"><span>{credential === 'self-hosted' ? 'Access token' : 'API key'}</span><input autoFocus type="password" value={apiKey} autoComplete="off" spellCheck={false} placeholder={credential === 'self-hosted' ? 'Paste access token' : 'Paste API key'} onChange={(event) => setApiKey(event.target.value)} /></label>
+        {failure ? <Banner status="error" role="alert" className="settings-error" title={failure} /> : null}
+        <TextInput
+          label={credential === 'self-hosted' ? 'Access token' : 'API key'}
+          hasAutoFocus
+          type="password"
+          value={apiKey}
+          autoComplete="off"
+          hasSpellCheck={false}
+          placeholder={credential === 'self-hosted' ? 'Paste access token' : 'Paste API key'}
+          containerClassName="field"
+          onChange={(nextValue) => setApiKey(nextValue)}
+        />
       </Modal> : null}
     </>
   )

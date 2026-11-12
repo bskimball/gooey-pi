@@ -1,3 +1,4 @@
+import { SelectControl } from '@/components/ui'
 import type { AppSettings } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
 import { SettingsToggle } from './SettingsToggle'
@@ -21,25 +22,25 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
       ) : null}
       <section className="settings-group">
         <h2>Session defaults</h2>
-        <label className="settings-row">
+        <div className="settings-row">
           <span><strong>Git checkout style</strong><small>Worktrees use separate folders for safe parallel tasks. Branches reuse the same folder and require a clean, idle project.</small></span>
-          <select value={settings.checkoutStrategy} onChange={(event) => {
+          <SelectControl label="Git checkout style" value={settings.checkoutStrategy} onChange={(event) => {
             const checkoutStrategy = event.target.value
             if (checkoutStrategy === 'worktree' || checkoutStrategy === 'branch') void onUpdate({ checkoutStrategy })
           }}>
             <option value="worktree">Worktrees</option>
             <option value="branch">Branches</option>
-          </select>
-        </label>
-        <label className="settings-row">
+          </SelectControl>
+        </div>
+        <div className="settings-row">
           <span><strong>Default inspector tab</strong><small>The first detail surface shown in a session.</small></span>
-          <select value={settings.defaultInspectorTab} onChange={(event) => { void onUpdate({ defaultInspectorTab: event.target.value as AppSettings['defaultInspectorTab'] }) }}>
+          <SelectControl label="Default inspector tab" value={settings.defaultInspectorTab} onChange={(event) => { void onUpdate({ defaultInspectorTab: event.target.value as AppSettings['defaultInspectorTab'] }) }}>
             <option value="summary">Summary</option>
             <option value="changes">Changes</option>
             <option value="browser">Browser</option>
             <option value="files">Files</option>
-          </select>
-        </label>
+          </SelectControl>
+        </div>
       </section>
     </>
   )

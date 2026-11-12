@@ -1,3 +1,6 @@
+import { Badge } from '@astryxdesign/core/Badge'
+import { DropdownMenu } from '@astryxdesign/core/DropdownMenu'
+import * as stylex from '@stylexjs/stylex'
 import {
   DotsThree,
   GitBranch,
@@ -11,7 +14,22 @@ import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, IconButton } from './ui'
 import { ActivityStatusPill } from './activity/ActivityStatusPill'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useRef, useState } from 'react'
+
+const styles = stylex.create({
+  branchBadge: {
+    height: 22,
+    paddingInline: 7,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border)',
+    borderRadius: 999,
+    color: 'var(--text-secondary)',
+    backgroundColor: 'var(--surface-subtle)',
+    fontSize: 'var(--fs-micro)',
+    fontWeight: 500,
+  },
+})
 
 const viewTitles: Record<Exclude<WorkspaceView, 'session'>, MessageKey> = {
   projects: 'nav.projects', activity: 'nav.activity', scheduled: 'nav.scheduled', plugins: 'nav.capabilities', settings: 'nav.settings',
@@ -25,50 +43,39 @@ const windowsMenus: ReadonlyArray<{ name: ApplicationMenuName; label: string }> 
   { name: 'help', label: 'Help' },
 ]
 
-function openApplicationMenu(menu: ApplicationMenuName, event: MouseEvent<HTMLButtonElement>): void {
-  const rect = event.currentTarget.getBoundingClientRect()
-  void window.apex?.app.popupMenu?.(menu, rect.right + 4, rect.top).catch(() => undefined)
-}
-
 /** Windows keeps File/Edit/View behind one quiet button instead of a permanent menu row. */
 function WindowsAppMenu() {
   const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-  const close = (restoreFocus: boolean) => {
-    setOpen(false)
-    if (restoreFocus) rootRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus()
+  const triggerWrapRef = useRef<HTMLDivElement>(null)
+
+  const openApplicationMenu = (menu: ApplicationMenuName) => {
+    const rect = triggerWrapRef.current?.getBoundingClientRect()
+    void window.apex?.app.popupMenu?.(menu, (rect?.right ?? 0) + 4, rect?.top ?? 0).catch(() => undefined)
   }
-  useEffect(() => {
-    if (!open) return
-    listRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
-    const closeOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    window.addEventListener('pointerdown', closeOutside)
-    return () => window.removeEventListener('pointerdown', closeOutside)
-  }, [open])
-  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const items = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])]
-    const index = items.indexOf(document.activeElement as HTMLButtonElement)
-    const target = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: items.length - 1 }[event.key]
-    if (target !== undefined) {
-      event.preventDefault()
-      items[(target + items.length) % items.length]?.focus()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      close(true)
-    } else if (event.key === 'Tab') {
-      close(false)
-    }
-  }
+
   return (
-    <div ref={rootRef} className="windows-app-menu no-drag">
-      <IconButton className={open ? 'is-active' : ''} label="Application menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}><DotsThree size={18} /></IconButton>
-      {open ? <div ref={listRef} className="windows-app-menu__list" role="menu" aria-label="Application menu" onKeyDown={onMenuKeyDown}>
-        {windowsMenus.map(({ name, label }) => <button key={name} type="button" role="menuitem" tabIndex={-1} className="windows-app-menu__button" onClick={(event) => { openApplicationMenu(name, event); close(true) }}>{label}</button>)}
-      </div> : null}
+    <div ref={triggerWrapRef} className="windows-app-menu no-drag">
+      <DropdownMenu
+        presentation="popover"
+        placement="below"
+        alignment="start"
+        isMenuOpen={open}
+        onOpenChange={setOpen}
+        items={windowsMenus.map(({ name, label }) => ({
+          id: name,
+          label,
+          onClick: () => openApplicationMenu(name),
+        }))}
+        renderTrigger={(triggerProps) => (
+          <IconButton
+            {...triggerProps}
+            className={open ? 'is-active' : ''}
+            label="Application menu"
+          >
+            <DotsThree size={18} />
+          </IconButton>
+        )}
+      />
     </div>
   )
 }
@@ -100,6 +107,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', s
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
+  const branch = gitBranch ?? project?.gitBranch
   return (
     <header className="title-toolbar drag-region">
       {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
@@ -109,7 +117,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', s
       </div>
       <div className="title-toolbar__identity">
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>
-        {(gitBranch ?? project?.gitBranch) && view === 'session' ? <span className="branch-pill"><GitBranch size={12} />{gitBranch ?? project?.gitBranch}</span> : null}
+        {branch && view === 'session' ? <Badge icon={<GitBranch size={12} />} label={branch} className="branch-pill" xstyle={styles.branchBadge} /> : null}
       </div>
       <div className="title-toolbar__actions no-drag">
         {sessions ? <ActivityStatusPill sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} active={view === 'activity'} onOpen={onOpenActivity} /> : null}

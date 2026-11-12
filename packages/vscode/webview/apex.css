@@ -1,4 +1,5 @@
 /* Fit pi-desktop's conversation pane into a VS Code side panel. */
+@layer apex-responsive {
 body { padding: 0; }
 
 /* Borrow the active editor theme so the panel reads as part of the workbench, not an embedded app.
@@ -23,6 +24,15 @@ body[class*='vscode-'] {
   --apex-soft: color-mix(in srgb, var(--apex) 14%, var(--canvas));
   --accent: var(--apex);
   --annotation: var(--apex);
+  --primary-fill: var(--vscode-button-background, var(--apex));
+  --primary-ink: var(--vscode-button-foreground, #ffffff);
+  --success: var(--vscode-testing-iconPassed, #4ade80);
+  --success-soft: color-mix(in srgb, var(--success) 15%, var(--canvas));
+  --warning: var(--vscode-editorWarning-foreground, #fbbf24);
+  --warning-soft: color-mix(in srgb, var(--warning) 15%, var(--canvas));
+  --danger: var(--vscode-editorError-foreground, #f87171);
+  --danger-soft: color-mix(in srgb, var(--danger) 15%, var(--canvas));
+  --shadow-popover: 0 12px 32px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
 }
 .apex-shell, .apex-shell[data-platform='win32'] { padding-top: 0; }
 .apex-shell .conversation-pane { min-width: 0; }
@@ -342,4 +352,5 @@ body[class*='vscode-'] {
   background: var(--surface-raised);
   color: var(--text-primary);
   cursor: pointer;
+}
 }

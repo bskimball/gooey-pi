@@ -1,4 +1,11 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import * as stylex from '@stylexjs/stylex'
 import { ArrowsClockwise, ArrowSquareOut, CaretRight, Gauge, Lightning, MagnifyingGlass } from '@/components/icons'
+import { ApexButton, IconButton } from '@/components/ui'
 import { useMemo, useState } from 'react'
 import { errorMessage } from '@/lib/errors'
 import type { HarnessId, ApexModelCatalog, ApexModelDescriptor, } from '@/types/api'
@@ -15,6 +22,31 @@ interface ProviderSettingsProps {
   onSetModelEnabled(modelKey: string, enabled: boolean): Promise<void>
   onOpenDocs(): void
 }
+
+const searchControlStyles = stylex.create({
+  searchControl: {
+    height: 34,
+    minHeight: 34,
+    marginBlock: '3px 8px',
+    paddingInline: 9,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--surface-raised)',
+  },
+  groupHeading: {
+    width: '100%',
+    minHeight: 31,
+    height: 'auto',
+    justifyContent: 'flex-start',
+    paddingInline: 8,
+    paddingBlock: 0,
+    borderRadius: 0,
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  },
+})
 
 function activeFirst<T extends { enabled?: boolean }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => Number(right.enabled !== false) - Number(left.enabled !== false))
@@ -81,24 +113,58 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
   const availableModelCount = catalog?.models.filter((model) => model.available && model.enabled !== false).length ?? 0
   const disabledCount = catalog?.providers.filter((provider) => !provider.enabled).length ?? 0
 
+  const searchLabel = view === 'providers' ? 'Search providers' : 'Search models'
+
   return (
     <section className="settings-group provider-settings">
-      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <button type="button" className="button button--danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</button> : null}{disabledCount ? <button type="button" className="button" disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</button> : null}<button type="button" className="button button--icon" aria-label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></button></div></div>
+      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <ApexButton variant="danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</ApexButton> : null}{disabledCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</ApexButton> : null}<IconButton className="button button--icon" label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></IconButton></div></div>
       <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in Apex; ${agentName} checks credentials when you launch one`}</small> : null}</div>
-      {catalog?.warning ? <p className="provider-catalog-warning" role="status">{catalog.warning}</p> : null}
-      <div className="provider-catalog-tabs" role="tablist" aria-label="Provider catalogue view">
-        <button type="button" role="tab" aria-selected={view === 'providers'} className={view === 'providers' ? 'is-active' : ''} onClick={() => { setView('providers'); setQuery('') }}>Providers <span>{providerCount.toLocaleString()}</span></button>
-        <button type="button" role="tab" aria-selected={view === 'models'} className={view === 'models' ? 'is-active' : ''} onClick={() => { setView('models'); setQuery('') }}>Models <span>{modelCount.toLocaleString()}</span></button>
-      </div>
-      <label className="provider-search"><MagnifyingGlass size={13} /><input value={query} placeholder={view === 'providers' ? 'Search providers' : 'Search models'} aria-label={view === 'providers' ? 'Search providers' : 'Search models'} onChange={(event) => setQuery(event.target.value)} /></label>
-      {error ? <p className="settings-error" role="alert">{error}</p> : null}
+      {catalog?.warning ? <Banner status="warning" role="status" className="provider-catalog-warning" title={catalog.warning} /> : null}
+      <TabList
+        value={view}
+        onChange={(next) => {
+          if (next === 'providers' || next === 'models') {
+            setView(next)
+            setQuery('')
+          }
+        }}
+        role="tablist"
+        aria-label="Provider catalogue view"
+        size="sm"
+        layout="fill"
+        className="provider-catalog-tabs"
+      >
+        <Tab value="providers" label="Providers" endContent={<span>{providerCount.toLocaleString()}</span>} />
+        <Tab value="models" label="Models" endContent={<span>{modelCount.toLocaleString()}</span>} />
+      </TabList>
+      <TextInput
+        label={searchLabel}
+        aria-label={searchLabel}
+        isLabelHidden
+        type="search"
+        value={query}
+        placeholder={searchLabel}
+        startIcon={<MagnifyingGlass size={13} />}
+        onChange={(nextValue) => setQuery(nextValue)}
+        containerClassName="provider-search-field"
+        controlClassName="provider-search"
+        controlXstyle={searchControlStyles.searchControl}
+      />
+      {error ? <Banner status="error" role="alert" className="settings-error" title={error} /> : null}
       {view === 'providers' ? <div className="provider-list">
         {providers.map((provider) => {
           const busy = busyProvider === provider.id
           return <div className="provider-row" key={provider.id}>
-            <label className="provider-row__toggle" title={provider.enabled ? `Hide provider in ${agentName}` : `Show provider in ${agentName}`}><input type="checkbox" aria-label={`Show ${provider.name} provider`} checked={provider.enabled} disabled={busy} onChange={(event) => void run(provider.id, () => onSetEnabled(provider.id, event.target.checked))} /><i aria-hidden="true"><span /></i></label>
+            <CheckboxInput
+              label=""
+              aria-label={`Show ${provider.name} provider`}
+              value={provider.enabled}
+              isDisabled={busy}
+              onChange={(checked) => void run(provider.id, () => onSetEnabled(provider.id, checked))}
+              className="provider-row__toggle"
+            />
             <div className="provider-row__identity"><strong>{provider.name}</strong><small>{`Credentials managed by the pi CLI · ${provider.availableModelCount.toLocaleString()} models`}</small></div>
-            <div className="provider-row__actions"><button type="button" className="button" onClick={onOpenDocs}><ArrowSquareOut size={13} /> Credential setup</button></div>
+            <div className="provider-row__actions"><ApexButton icon={<ArrowSquareOut size={13} />} onClick={onOpenDocs}>Credential setup</ApexButton></div>
           </div>
         })}
       </div> : <div className="provider-list provider-model-list">
@@ -106,7 +172,20 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
           const collapsed = collapsedModelProviders.has(provider.id)
           const contentId = `provider-models-${provider.id.replace(/[^a-z0-9_-]/gi, '-')}`
           return <div className={`provider-model-group${provider.enabled ? '' : ' is-disabled'}${collapsed ? ' is-collapsed' : ''}`} key={provider.id}>
-          <button type="button" className="provider-model-group__heading" aria-expanded={!collapsed} aria-controls={contentId} onClick={() => toggleModelProvider(provider.id)}><strong>{provider.name}</strong><small>{models.filter((model) => model.enabled !== false).length.toLocaleString()} of {models.length.toLocaleString()} on</small><CaretRight className="provider-model-group__chevron" size={13} aria-hidden="true" /></button>
+          <AstryxButton
+            label={provider.name}
+            variant="ghost"
+            size="sm"
+            aria-expanded={!collapsed}
+            aria-controls={contentId}
+            className="provider-model-group__heading"
+            xstyle={searchControlStyles.groupHeading}
+            endContent={<CaretRight className="provider-model-group__chevron" size={13} aria-hidden="true" />}
+            onClick={() => toggleModelProvider(provider.id)}
+          >
+            <strong>{provider.name}</strong>
+            <small>{models.filter((model) => model.enabled !== false).length.toLocaleString()} of {models.length.toLocaleString()} on</small>
+          </AstryxButton>
           <div id={contentId} className="provider-model-group__models" hidden={collapsed}>{models.map((model) => <div className={`provider-model-row${model.enabled === false ? ' is-disabled' : ''}`} key={model.key}>
             <div className="provider-row__identity"><strong>{model.name}</strong><small>{model.id}</small></div>
             <div className="provider-model-row__capabilities">
@@ -114,7 +193,14 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
               {model.fastModeSupported ? <span><Lightning size={11} /> Fast</span> : null}
               <span className={model.available && model.enabled !== false ? 'is-available' : ''}>{model.enabled === false ? 'Hidden' : 'Shown'}</span>
             </div>
-            <label className="provider-row__toggle provider-model-row__toggle" title={model.enabled === false ? `Show model in ${agentName}` : `Hide model in ${agentName}`}><input type="checkbox" aria-label={`Show ${model.name} model`} checked={model.enabled !== false} disabled={busyProvider === `model:${model.key}`} onChange={(event) => void run(`model:${model.key}`, () => onSetModelEnabled(model.key, event.target.checked))} /><i aria-hidden="true"><span /></i></label>
+            <CheckboxInput
+              label=""
+              aria-label={`Show ${model.name} model`}
+              value={model.enabled !== false}
+              isDisabled={busyProvider === `model:${model.key}`}
+              onChange={(checked) => void run(`model:${model.key}`, () => onSetModelEnabled(model.key, checked))}
+              className="provider-row__toggle provider-model-row__toggle"
+            />
           </div>)}</div>
         </div>})}
       </div>}

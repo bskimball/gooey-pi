@@ -1,5 +1,8 @@
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
+import { Dialog } from '@astryxdesign/core/Dialog'
+import * as stylex from '@stylexjs/stylex'
 import { Bell, CalendarDots, ChatCircleText, ClockCounterClockwise, File, Folder, Gear, GitDiff, Info, MagnifyingGlass, NotePencil, Package, Robot, SidebarLeft, Terminal } from './icons'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { HarnessId, InspectorTab, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
@@ -8,7 +11,39 @@ import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { useProjectFileIndex } from '@/hooks/useProjectFileIndex'
-import { BrowserGlobe, useAppShellOverlay, useFocusTrap } from './ui'
+import { BrowserGlobe, useAppShellOverlay } from './ui'
+
+const styles = stylex.create({
+  dialog: {
+    marginInline: 'auto',
+    marginTop: 'min(14vh, 110px)',
+    marginBottom: 'auto',
+    padding: 0,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border-strong)',
+    borderRadius: 14,
+    color: 'var(--text)',
+    backgroundColor: 'var(--surface-raised)',
+    boxShadow: 'var(--shadow-popover)',
+    animationName: 'none',
+    transitionDuration: '0ms',
+    '::backdrop': {
+      backgroundColor: 'rgba(6, 11, 18, 0.46)',
+      backdropFilter: 'blur(4px)',
+      animationName: 'none',
+    },
+  },
+  closeButton: {
+    minHeight: 0,
+    height: 'auto',
+    padding: 0,
+    backgroundColor: 'transparent',
+    backgroundImage: 'none',
+    boxShadow: 'none',
+  },
+})
 
 type PaletteGroup = 'Recent sessions' | 'Sessions' | 'Projects' | 'Commands' | 'Files'
 interface PaletteItem { key: string; group: PaletteGroup; label: string; detail: string; shortcut?: string; icon: ReactNode; run(): void }
@@ -61,12 +96,30 @@ function fileName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
+function ensurePaletteDialogMethods(dialog: HTMLDialogElement | null): void {
+  if (!dialog) return
+  if (typeof dialog.showModal !== 'function') {
+    dialog.showModal = function showModal(this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+      this.querySelector<HTMLElement>('input[role="combobox"]')?.focus()
+    }
+  }
+  if (typeof dialog.close !== 'function') {
+    dialog.close = function close(this: HTMLDialogElement, returnValue?: string) {
+      if (returnValue !== undefined) this.returnValue = returnValue
+      this.removeAttribute('open')
+    }
+  }
+}
+
 /** Command palette over commands, sessions, projects, and the active project's files. */
 export function CommandPalette({ open, platform = 'darwin', harness, projects, sessions, activeProject, activeSessionId, liveBySession = NO_LIVE, onClose, onNavigate, onNewSession, onPreviousSession, onToggleSidebar, onToggleTerminal, onOpenBrowser, onOpenInspectorTab, onSelectSession, onSelectProject, onOpenFile }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const paletteRef = useFocusTrap<HTMLDivElement>(open, onClose)
+  const attachDialog = useCallback((node: HTMLDialogElement | null) => {
+    ensurePaletteDialogMethods(node)
+  }, [])
   const terms = useMemo(() => query.toLowerCase().split(/\s+/).filter(Boolean), [query])
   const fileRoot = onOpenFile && activeProject && !activeProject.inferred ? activeProject.primaryFolder : undefined
   const files = useProjectFileIndex(fileRoot, harness, open && terms.length > 0)
@@ -138,30 +191,42 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
   useEffect(() => { document.getElementById(`command-option-${active}`)?.scrollIntoView?.({ block: 'nearest' }) }, [active])
   useAppShellOverlay(open)
   if (!open) return null
-  // Results can arrive after the query (the file index loads lazily), so the stored index never goes negative.
   const activeIndex = Math.min(active, items.length - 1)
   const choose = (item?: PaletteItem) => { if (!item) return; item.run(); onClose() }
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') { event.preventDefault(); setActive(Math.max(0, Math.min(items.length - 1, activeIndex + 1))) }
     if (event.key === 'ArrowUp') { event.preventDefault(); setActive(Math.max(0, activeIndex - 1)) }
     if (event.key === 'Enter') { event.preventDefault(); choose(items[activeIndex]) }
-    if (event.key === 'Escape') onClose()
   }
   const placeholder = fileRoot ? 'Search sessions, projects, commands, and files' : 'Search sessions, projects, and commands'
-  return createPortal(<div className="palette-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-    <div ref={paletteRef} className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette" tabIndex={-1}>
+  return createPortal(
+    <Dialog
+      ref={attachDialog}
+      isOpen
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+      purpose="info"
+      width={580}
+      padding={0}
+      role="dialog"
+      aria-label="Command palette"
+      className="command-palette"
+      xstyle={styles.dialog}
+    >
       <div className="command-search">
         <MagnifyingGlass size={16} />
-        <input ref={inputRef} value={query} role="combobox" aria-expanded="true" aria-controls="command-results" aria-activedescendant={items[activeIndex] ? `command-option-${activeIndex}` : undefined} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} onKeyDown={onKeyDown} />
-        <button type="button" onClick={onClose} aria-label="Close command palette"><kbd>esc</kbd></button>
+        <input ref={inputRef} data-autofocus="" value={query} role="combobox" aria-expanded="true" aria-controls="command-results" aria-activedescendant={items[activeIndex] ? `command-option-${activeIndex}` : undefined} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} onKeyDown={onKeyDown} />
+        <AstryxButton label="Close command palette" variant="ghost" size="sm" xstyle={styles.closeButton} onClick={onClose}><kbd>esc</kbd></AstryxButton>
       </div>
       <div id="command-results" className="command-results" role="listbox" aria-label="Results">
         {items.map((item, index) => <PaletteRow key={item.key} item={item} index={index} active={index === activeIndex} showGroup={index === 0 || items[index - 1].group !== item.group} onHover={setActive} onChoose={choose} />)}
         {items.length === 0 ? <p>No sessions, projects, or commands match “{query}”.</p> : null}
       </div>
       <footer><span>↑↓ Navigate</span><span>↵ Open</span><span>esc Close</span></footer>
-    </div>
-  </div>, document.body)
+    </Dialog>,
+    document.body,
+  )
 }
 
 function PaletteRow({ item, index, active, showGroup, onHover, onChoose }: { item: PaletteItem; index: number; active: boolean; showGroup: boolean; onHover(index: number): void; onChoose(item: PaletteItem): void }) {

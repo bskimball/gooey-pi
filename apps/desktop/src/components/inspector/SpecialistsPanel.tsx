@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { isLiveSpecialist, specialistMarkState, specialistStatusLabel } from '@/lib/specialist-status'
+import { ApexButton } from '../ui'
 import { extractPiSpecialistSessions, type PiSpecialistSession } from '@/lib/specialist-records'
 import { CaretRight, Question, WarningCircle } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
@@ -347,7 +348,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           {finalReport && !report ? <section className="specialist-result" ref={resultRef}><h3>Result</h3><MarkdownText text={finalReport} /></section> : null}
         </div>
       </div>
-      {isLiveSpecialist(active.status) && !following ? <button type="button" className="specialist-jump" onClick={() => { pinnedToBottomRef.current = true; setFollowing(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }}>Jump to latest</button> : null}
+      {isLiveSpecialist(active.status) && !following ? <ApexButton compact className="specialist-jump" onClick={() => { pinnedToBottomRef.current = true; setFollowing(true); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }}>Jump to latest</ApexButton> : null}
     </div>
   )
 })

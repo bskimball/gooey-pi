@@ -6,7 +6,7 @@ import type { ProjectScriptKind } from '@/components/ProjectRunControl'
 import { Composer } from '@/components/Composer'
 import type { TerminalCommandOutcome, TerminalDrawerHandle } from '@/components/TerminalDrawer'
 import { ResizeHandle } from '@/components/ResizeHandle'
-import { NoHarnessPrompt } from '@/components/NoHarnessPrompt'
+import { AppToast } from '@/components/AppToast'
 import { useAppShortcuts, usePreviousSession } from '@/hooks/useAppShortcuts'
 import { RuntimeOwnerNotice, useRuntimeOwners } from '@/components/RuntimeOwnerNotice'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
@@ -51,6 +51,7 @@ const Transcript = lazy(() => import('@/components/Transcript').then((module) =>
 const Inspector = lazy(() => import('@/components/Inspector').then((module) => ({ default: module.Inspector })))
 const TerminalDrawer = lazy(() => import('@/components/TerminalDrawer').then((module) => ({ default: module.TerminalDrawer })))
 const CommandPalette = lazy(() => import('@/components/CommandPalette').then((module) => ({ default: module.CommandPalette })))
+const NoHarnessPrompt = lazy(() => import('@/components/NoHarnessPrompt').then((module) => ({ default: module.NoHarnessPrompt })))
 const ExtensionUiModal = lazy(() => import('@/components/ExtensionUiModal').then((module) => ({ default: module.ExtensionUiModal })))
 const VoiceOrb = lazy(() => import('@/components/VoiceOrb').then((module) => ({ default: module.VoiceOrb })))
 const DesktopPet = lazy(() => import('@/components/DesktopPet').then((module) => ({ default: module.DesktopPet })))
@@ -727,16 +728,16 @@ export default function App() {
     {paletteOpen ? <Suspense fallback={null}><CommandPalette open liveBySession={liveBySession} onClose={() => setPaletteOpen(false)} onNavigate={navigate} onNewSession={newSession} onPreviousSession={selectPreviousSession} onToggleSidebar={toggleSidebar} onToggleTerminal={toggleTerminal} onOpenBrowser={openBrowser} onOpenInspectorTab={showInspectorTab} harness={activeHarness} projects={projects} sessions={sessions} activeProject={activeProject} activeSessionId={workspace.activeSessionId} onSelectSession={(session) => void selectSession(session)} onSelectProject={selectProject} onOpenFile={bridge ? openPathInVsCode : undefined} platform={platform} /></Suspense> : null}
     {extension.extensionUi ? <Suspense fallback={<LoadingPanel label="request" />}><ExtensionUiModal request={extension.extensionUi.request} deadline={extension.extensionUi.deadline} onRespond={(response) => void extension.respondToExtensionUi(response)} platform={platform} /></Suspense> : null}
     {meta && !detectedHarnesses.length && !noHarnessPromptDismissed ? (
-      <NoHarnessPrompt
+      <Suspense fallback={null}><NoHarnessPrompt
         onClose={() => setNoHarnessPromptDismissed(true)}
         onOpenHarnessSettings={() => {
           setNoHarnessPromptDismissed(true)
           setSettingsSectionRequest((current) => ({ section: 'agent', id: current.id + 1 }))
           setView('settings')
         }}
-      />
+      /></Suspense>
     ) : null}
-    {toast ? <div className="toast" role="status">{toast}<button type="button" aria-label="Dismiss" onClick={() => setToast(null)}>×</button></div> : null}
+    {toast ? <AppToast message={toast} onDismiss={() => setToast(null)} /> : null}
     {bridge ? <AgentBrowserLayer tabs={agentBrowser.tabs} visibleTabId={agentTabVisible ? activeAgentTabId : null} rect={agentTabVisible ? agentSlotRect : null} pointerEvent={agentBrowser.pointerEvent} onAttach={agentBrowser.attach} /> : null}
   </div></I18nProvider>
 }

@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import stylex from '@stylexjs/unplugin'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -7,7 +8,18 @@ const piDesktop = resolve(process.env.PI_DESKTOP_DIR ?? resolve(__dirname, '../.
 
 export default defineConfig({
   root: resolve(__dirname, 'webview'),
-  plugins: [react()],
+  plugins: [
+    stylex.vite({
+      runtimeInjection: false,
+      unstable_moduleResolution: { type: 'commonJS', rootDir: resolve(__dirname, '../..') },
+      useCSSLayers: {
+        before: ['reset', 'apex-base', 'astryx-base', 'astryx-theme', 'apex'],
+        after: ['apex-responsive'],
+        prefix: 'stylex',
+      },
+    }),
+    react(),
+  ],
   publicDir: false,
   resolve: {
     alias: { '@': resolve(piDesktop, 'src') },

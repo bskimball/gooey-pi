@@ -1,4 +1,6 @@
+import { Banner } from '@astryxdesign/core/Banner'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { ApexButton } from '@/components/ui'
 import {
   createDraftState,
   errorMessage,
@@ -92,15 +94,13 @@ export function DraftSettingField({
         onBlur={() => { void commit() }}
         onKeyDown={onKeyDown}
       />
-      {state.error ? <p id={errorId} className="settings-error" role="alert">{state.error}</p> : null}
-      <button
-        type="button"
-        className="button"
+      {state.error ? <Banner id={errorId} status="error" role="alert" className="settings-error" title={state.error} /> : null}
+      <ApexButton
         disabled={!state.dirty || Boolean(state.error) || Boolean(state.pending)}
         onClick={() => { void commit() }}
       >
         {state.pending ? 'Saving…' : 'Save'}
-      </button>
+      </ApexButton>
     </div>
   )
 }

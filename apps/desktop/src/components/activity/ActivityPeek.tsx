@@ -19,6 +19,7 @@ import {
   WarningCircle,
 } from '@/components/icons'
 import { ContextUsageRing } from '@/components/ContextUsageRing'
+import { ApexButton } from '@/components/ui'
 import { StatusMark } from './StatusMark'
 import { resolveRunStart, runningPhaseLabel, type ActivitySectionKind } from './ActivityRow'
 import {
@@ -438,63 +439,69 @@ export function ActivityPeek({
                 onKeyDown={handleConfirmKeyDown}
               >
                 <span className="activity-stop-confirm__prompt">Stop this run?</span>
-                <button
+                <ApexButton
                   ref={cancelStopRef}
                   type="button"
-                  className="button button--compact activity-stop-confirm__cancel"
+                  compact
+                  className="activity-stop-confirm__cancel"
                   onClick={cancelStopConfirm}
                 >
                   Cancel
-                </button>
-                <button
+                </ApexButton>
+                <ApexButton
                   type="button"
-                  className="button button--compact button--danger activity-stop-confirm__confirm"
+                  compact
+                  variant="danger"
+                  className="activity-stop-confirm__confirm"
                   onClick={() => {
                     setConfirmingStop(false)
                     onStop(session, live?.runtimeId)
                   }}
                 >
                   Stop
-                </button>
+                </ApexButton>
               </div>
             ) : (
-              <button
+              <ApexButton
                 ref={stopTriggerRef}
                 type="button"
-                className="button button--compact activity-peek__stop"
+                compact
+                className="activity-peek__stop"
                 aria-label="Stop run"
                 title="Stop run (x)"
                 onClick={() => setConfirmingStop(true)}
+                icon={<Square size={11} weight="fill" />}
               >
-                <Square size={11} weight="fill" />
-                <span>Stop</span>
-              </button>
+                Stop
+              </ApexButton>
             )
           ) : null}
 
           {reviewable ? (
-            <button
+            <ApexButton
               type="button"
-              className="button button--compact activity-peek__clear"
+              compact
+              className="activity-peek__clear"
               aria-label="Mark reviewed"
               title="Mark reviewed (e)"
               onClick={() => onClear([session])}
+              icon={<Check size={12} />}
             >
-              <Check size={12} />
-              <span>Mark reviewed</span>
-            </button>
+              Mark reviewed
+            </ApexButton>
           ) : null}
 
-          <button
+          <ApexButton
             type="button"
-            className="button button--compact activity-peek__open"
+            compact
+            className="activity-peek__open"
             aria-label={`Open ${session.title}`}
             title="Open session (Enter)"
             onClick={() => onOpen(session)}
+            endIcon={<ArrowUpRight size={12} />}
           >
-            <span>Open session</span>
-            <ArrowUpRight size={12} />
-          </button>
+            Open session
+          </ApexButton>
         </div>
       </header>
 

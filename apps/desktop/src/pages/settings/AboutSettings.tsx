@@ -1,5 +1,5 @@
 import { ArrowClockwise, Question } from '@/components/icons'
-import { GooeyPiMark } from '@/components/ui'
+import { ApexButton, GooeyPiMark } from '@/components/ui'
 import type { AppMeta, AppUpdateState } from '@/types/api'
 
 interface AboutSettingsProps {
@@ -31,10 +31,10 @@ export function AboutSettings({ meta, updateState, onCheckForUpdates, onOpenDocs
       <header><h1>About Apex</h1><p>A desktop workspace for Pi.</p></header>
       <section className="about-card"><GooeyPiMark size={48} /><div><h2>Apex</h2><p>Pi workspace · Version {version}</p></div></section>
       <section className="settings-group">
-        <div className="settings-row"><span><strong>Software updates</strong><small role="status">{updateStatusCopy(updateState, version)}</small></span><button className="button" type="button" disabled={checking || updateState.phase === 'downloading' || updateState.phase === 'unsupported'} onClick={() => { void onCheckForUpdates() }}><ArrowClockwise className={checking ? 'spin' : undefined} size={13} /> {checking ? 'Checking…' : 'Check for updates'}</button></div>
+        <div className="settings-row"><span><strong>Software updates</strong><small role="status">{updateStatusCopy(updateState, version)}</small></span><ApexButton disabled={checking || updateState.phase === 'downloading' || updateState.phase === 'unsupported'} icon={<ArrowClockwise className={checking ? 'spin' : undefined} size={13} />} onClick={() => { void onCheckForUpdates() }}>{checking ? 'Checking…' : 'Check for updates'}</ApexButton></div>
         <div className="settings-row"><span><strong>Platform</strong><small>{meta?.platform ?? 'macOS'}</small></span></div>
         <div className="settings-row"><span><strong>Home directory</strong><small className="mono">{meta?.homeDir ?? '—'}</small></span></div>
-        <div className="settings-row"><span><strong>Help and documentation</strong></span><button className="button" type="button" onClick={onOpenDocs}><Question size={13} /> Open docs</button></div>
+        <div className="settings-row"><span><strong>Help and documentation</strong></span><ApexButton icon={<Question size={13} />} onClick={onOpenDocs}>Open docs</ApexButton></div>
       </section>
     </>
   )

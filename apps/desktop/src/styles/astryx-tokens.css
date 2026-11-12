@@ -1,0 +1,88 @@
+/* Bridge Apex light/dark and VS Code webview custom properties onto Astryx's
+   token contract so Astryx primitives render in the active Apex or editor
+   palette without adopting an external Astryx theme's look. Included on
+   `body[class*="vscode-"]` as well as `:root` so CSS custom property
+   inheritance re-evaluates `var(--*)` against VS Code's body-scoped theme
+   remapping. */
+:root,
+:root[data-theme="dark"],
+body[class*="vscode-"] {
+  --color-accent: var(--apex);
+  --color-accent-muted: var(--apex-soft);
+  --color-on-accent: var(--primary-ink);
+  --color-neutral: var(--surface-selected);
+  --color-background-body: var(--canvas);
+  --color-background-surface: var(--surface);
+  --color-background-card: var(--surface-raised);
+  --color-background-popover: var(--surface-raised);
+  --color-background-muted: var(--surface-subtle);
+  --color-background-inverted: var(--primary-fill);
+  --color-background-error-inverted: var(--danger);
+  --color-overlay: light-dark(rgba(9, 20, 36, 0.36), rgba(6, 11, 18, 0.52));
+  --color-overlay-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --color-overlay-pressed: color-mix(in srgb, var(--text) 11%, transparent);
+  --color-text-primary: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-disabled: var(--text-tertiary);
+  --color-text-accent: var(--apex);
+  --color-icon-accent: var(--apex);
+  --color-icon-primary: var(--text);
+  --color-icon-secondary: var(--text-secondary);
+  --color-icon-disabled: var(--text-tertiary);
+  --color-border: var(--border);
+  --color-border-emphasized: var(--border-strong);
+  --color-skeleton: var(--surface-hover);
+  --color-track: var(--border-strong);
+  --color-shadow: light-dark(rgba(9, 20, 36, 0.12), rgba(1, 4, 12, 0.5));
+  --color-info: var(--apex);
+  --color-info-muted: var(--apex-soft);
+  --color-text-info: var(--apex);
+  --color-icon-info: var(--apex);
+  --color-border-info: var(--apex);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-soft);
+  --color-text-success: var(--success);
+  --color-icon-success: var(--success);
+  --color-border-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-soft);
+  --color-text-warning: var(--warning);
+  --color-icon-warning: var(--warning);
+  --color-border-warning: var(--warning);
+  --color-error: var(--danger);
+  --color-error-muted: var(--danger-soft);
+  --color-text-error: var(--danger);
+  --color-icon-error: var(--danger);
+  --color-border-error: var(--danger);
+
+  --font-family-body: Vazirmatn, Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-family-heading: Vazirmatn, Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-family-code: "SFMono-Regular", "SF Mono", "Cascadia Code", Menlo, monospace;
+  --font-size-xs: var(--fs-micro);
+  --font-size-sm: var(--fs-meta);
+  --font-size-base: var(--fs-ui);
+  --font-size-lg: var(--fs-body);
+
+  --focus-outline-width: 2px;
+  --focus-outline-style: solid;
+  --focus-outline-color: var(--focus);
+  --focus-outline-offset: 1px;
+
+  --radius-inner: var(--radius-xs);
+  --radius-element: var(--radius-sm);
+  --radius-container: 12px;
+
+  --shadow-low: var(--shadow-popover);
+  --shadow-med: var(--shadow-popover);
+  --shadow-high: var(--shadow-popover);
+
+  --size-element-sm: 26px;
+  --size-element-md: 32px;
+  --size-element-lg: 36px;
+
+  /* Restore Apex's fast 120ms transition token after astryx-base's 175ms default. */
+  --duration-fast: 120ms;
+  --duration-medium: 180ms;
+  --ease-standard: var(--ease-out);
+  --ease-entrance: var(--ease-out);
+}
