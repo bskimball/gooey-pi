@@ -8,7 +8,7 @@
  *
  * Tiers, largest to smallest:
  * - SESSION_FILE_RECORD_LIMIT_BYTES (64 MiB): records in `~/.prime` session
- *   .jsonl files. Session files are produced by the local Prime Agent, so this
+ *   .jsonl files. Session files are produced by the local Pi, so this
  *   tier is deliberately generous; downstream display budgets
  *   (`MAX_TRANSCRIPT_GRAPH_BYTES` and friends) bound retained memory.
  * - RPC_READ_FRAME_LIMIT_BYTES (16 MiB): frames read from an agent RPC child's

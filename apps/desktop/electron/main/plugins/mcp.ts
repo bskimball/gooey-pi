@@ -39,7 +39,7 @@ function sameSettingsLockOwner(left: SettingsLockOwner | null, right: SettingsLo
   return left?.version === right.version && left.pid === right.pid && left.token === right.token && left.createdAt === right.createdAt
 }
 
-async function readSettingsForUpdate(path: string, agentName = 'Prime Agent'): Promise<{ settings: Record<string, unknown>; fingerprint: string; source: string | null }> {
+async function readSettingsForUpdate(path: string, agentName = 'Pi'): Promise<{ settings: Record<string, unknown>; fingerprint: string; source: string | null }> {
   let content: string
   try {
     const value = await readAtMost(path, MAX_SETTINGS_BYTES)
@@ -59,7 +59,7 @@ async function readSettingsForUpdate(path: string, agentName = 'Prime Agent'): P
 export async function settingsFingerprint(path: string): Promise<string> {
   try {
     const value = await readAtMost(path, MAX_SETTINGS_BYTES)
-    if (value.truncated) throw new TypeError('Prime Agent settings exceed the maximum supported size')
+    if (value.truncated) throw new TypeError('Pi settings exceed the maximum supported size')
     return createHash('sha256').update(value.content).digest('hex')
   } catch (error) {
     if (errorCode(error) === 'ENOENT') return 'missing'
@@ -145,7 +145,7 @@ export async function acquireSettingsLock(settingsPath: string, verify?: () => P
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, SETTINGS_LOCK_RETRY_MS))
   }
-  throw new Error('Prime Agent settings are busy; try again')
+  throw new Error('Pi settings are busy; try again')
 }
 
 interface FileIdentity {
@@ -159,7 +159,7 @@ function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
 
 async function regularFileIdentity(path: string): Promise<FileIdentity> {
   const stat = await lstat(path, { bigint: true })
-  if (stat.isSymbolicLink() || !stat.isFile()) throw new TypeError('Prime Agent settings staging file changed during update')
+  if (stat.isSymbolicLink() || !stat.isFile()) throw new TypeError('Pi settings staging file changed during update')
   return { dev: stat.dev.toString(), ino: stat.ino.toString() }
 }
 
@@ -223,10 +223,10 @@ async function writeSettingsAtomically(
     if (await fingerprint(path) !== expectedFingerprint) return false
     await verify?.()
     if (!sameFileIdentity(await regularFileIdentity(temporary), temporaryIdentity)) {
-      throw new TypeError('Prime Agent settings staging file changed during update')
+      throw new TypeError('Pi settings staging file changed during update')
     }
     if (backupIdentity && !sameFileIdentity(await regularFileIdentity(backup), backupIdentity)) {
-      throw new TypeError('Prime Agent settings backup changed during update')
+      throw new TypeError('Pi settings backup changed during update')
     }
     // There is no renameat-style API in Node on macOS. Await the pin re-check
     // immediately before the rename, then prove which inode won.
@@ -237,11 +237,11 @@ async function writeSettingsAtomically(
     renameSync(temporary, path)
     renamed = true
     if (!sameFileIdentity(await regularFileIdentity(path), temporaryIdentity)) {
-      throw new TypeError('Prime Agent settings target changed during update')
+      throw new TypeError('Pi settings target changed during update')
     }
     await verify?.()
     if (backupIdentity && !await removeOwnedFile(backup, backupIdentity)) {
-      throw new TypeError('Prime Agent settings backup changed during update')
+      throw new TypeError('Pi settings backup changed during update')
     }
     backupIdentity = null
     return true
@@ -251,7 +251,7 @@ async function writeSettingsAtomically(
         await rollbackSettingsRename(path, temporary, temporaryIdentity, backup, backupIdentity)
         renamed = false
       } catch (rollbackError) {
-        const message = error instanceof Error ? error.message : 'Prime Agent settings update failed'
+        const message = error instanceof Error ? error.message : 'Pi settings update failed'
         throw new AggregateError([error, rollbackError], `${message}; settings rollback could not be completed`)
       }
     }
@@ -385,7 +385,7 @@ export async function updateMcpSettings(
   if (isNetworkMcpDefinition(input)) throw new TypeError(NETWORK_MCP_UNAVAILABLE_DETAIL)
   if (options.harness !== undefined && options.harness !== 'pi') throw new TypeError('Invalid harness')
   if (input.type !== 'stdio') throw new TypeError(NETWORK_MCP_UNAVAILABLE_DETAIL)
-  const agentName = options.agentName ?? 'Prime Agent'
+  const agentName = options.agentName ?? 'Pi'
   const settingsPath = typeof target === 'string' ? target : target.path
   const verify = typeof target === 'string' ? undefined : target.verify
   const release = await acquireSettingsLock(settingsPath, verify)
@@ -421,7 +421,7 @@ export async function updateMcpState(
   options: { agentName?: string; harness?: HarnessId } = {},
 ): Promise<ProcessOutcome> {
   if (options.harness !== undefined && options.harness !== 'pi') throw new TypeError('Invalid harness')
-  const agentName = options.agentName ?? 'Prime Agent'
+  const agentName = options.agentName ?? 'Pi'
   const settingsPath = typeof target === 'string' ? target : target.path
   const verify = typeof target === 'string' ? undefined : target.verify
   const release = await acquireSettingsLock(settingsPath, verify)
@@ -456,7 +456,7 @@ export async function removeMcpDefinition(
   fingerprint: FingerprintSettings = settingsFingerprint,
   options: { agentName?: string } = {},
 ): Promise<ProcessOutcome> {
-  const agentName = options.agentName ?? 'Prime Agent'
+  const agentName = options.agentName ?? 'Pi'
   const settingsPath = typeof target === 'string' ? target : target.path
   const definitionKey = input.definitionKey ?? input.name
   if (definitionKey.length > MAX_MCP_DEFINITION_KEY_LENGTH) {
@@ -492,7 +492,7 @@ export async function updatePackageState(
   options: { agentName?: string } = {},
 ): Promise<ProcessOutcome> {
   const source = input.source!
-  const agentName = options.agentName ?? 'Prime Agent'
+  const agentName = options.agentName ?? 'Pi'
   const settingsPath = typeof target === 'string' ? target : target.path
   const verify = typeof target === 'string' ? undefined : target.verify
   const release = await acquireSettingsLock(settingsPath, verify)

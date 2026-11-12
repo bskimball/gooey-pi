@@ -79,9 +79,9 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
 
   const visible = useMemo(() => skills.map((skill) => skill.id === 'gooeypi-ask-user'
     ? { ...skill, enabled: askUserEnabled }
-    : skill.id === 'prime-work-browser' || skill.id === 'omp-work-browser' ? { ...skill, enabled: browserEnabled }
+    : skill.id === 'prime-work-browser' ? { ...skill, enabled: browserEnabled }
     : skill.id === 'gooeypi-computer-use' ? { ...skill, enabled: computerUseEnabled } : skill).filter((skill) => {
-    const capability = skill.id === 'prime-work-browser' || skill.id === 'omp-work-browser' || skill.kind !== 'skill' && skill.kind !== 'prompt'
+    const capability = skill.id === 'prime-work-browser' || skill.kind !== 'skill' && skill.kind !== 'prompt'
     return (tab === 'plugins' ? capability : !capability)
       && (filter === 'all' || filter === 'installed' && skill.enabled || filter === skill.location)
       && `${skill.name} ${skill.description}`.toLowerCase().includes(query.toLowerCase())
@@ -172,7 +172,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
   const disableCapability = async (skill: SkillRecord) => {
     setConfirmDisable(null)
     if (skill.id === 'gooeypi-ask-user') await setAskUser(skill, false)
-    else if (skill.id === 'prime-work-browser' || skill.id === 'omp-work-browser') await setBrowser(skill, false)
+    else if (skill.id === 'prime-work-browser') await setBrowser(skill, false)
     else if (skill.id === 'gooeypi-computer-use') await setComputerUse(skill, false)
     else if (skill.id === MCP_SUPPORT_SKILL_ID) await setMcpSupport(skill, false)
     else if (skill.kind === 'mcp') await setMcp(skill, false)
@@ -210,7 +210,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     if (harness === 'pi' && skill.kind === 'mcp' && !piMcpAdapterInstalled) {
       return <span className="plugin-toggle" role="img" aria-label={`Pi MCP Adapter required for ${skill.name}`} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
     }
-    const isBrowser = skill.id === 'prime-work-browser' || skill.id === 'omp-work-browser'
+    const isBrowser = skill.id === 'prime-work-browser'
     const actionable = skill.id === 'gooeypi-ask-user' || isBrowser || skill.id === 'gooeypi-computer-use' || skill.id === MCP_SUPPORT_SKILL_ID || skill.kind === 'mcp' || skill.kind === 'package'
     if (!actionable) return <span className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Enabled' : 'Unavailable'} ${skill.name}`}>{skill.enabled ? <Check size={14}/> : <Plus size={14}/>}</span>
     const updating = operation.busyId === skill.id

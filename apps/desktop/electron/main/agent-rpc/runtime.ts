@@ -123,7 +123,7 @@ export class RpcRuntime {
   private lastContextUsageEmitAt = 0
   // Turn, retry, continuation, and compaction activity; busy flags derive from it.
   private readonly activity: ReturnType<typeof createRuntimeActivityActor>
-  // Compaction watchdog: some Prime Agent event paths buffer compaction_start
+  // Compaction watchdog: some Pi event paths buffer compaction_start
   // until the surrounding RPC command settles, so the desktop would learn
   // about a compaction only after it finished. get_state responses are never
   // buffered, so polling the compacting flag while the runtime is active lets
@@ -683,7 +683,7 @@ export class RpcRuntime {
         this.emit({ type: 'session_usage', sessionUsage })
       }
       if (usage) this.applyAuthoritativeContextUsage(usage, request.activityTokens)
-    } catch { /* older Prime Agent versions may not expose session stats */ }
+    } catch { /* older Pi versions may not expose session stats */ }
   }
 
   private applyAuthoritativeContextUsage(usage: PrimeContextUsage, activityTokens?: number): void {

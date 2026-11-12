@@ -313,7 +313,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
       ) : null}
       {selectRequest ? (
         <div className="extension-question">
-          <p className="modal-intro">Choose an option to let Prime continue.</p>
+          <p className="modal-intro">Choose an option to let the agent continue.</p>
           {searchable ? (
             <label className="field extension-question__search">
               <span>Search {selectRequest.options.length} options</span>

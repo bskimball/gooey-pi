@@ -96,7 +96,7 @@ interface TitleToolbarProps {
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Prime Work', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])

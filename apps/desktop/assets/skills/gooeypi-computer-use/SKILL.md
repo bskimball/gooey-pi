@@ -26,4 +26,4 @@ For GUI actions:
 6. Never reuse element tokens or browser references after a newer snapshot, navigation, reconnect, or browser lifecycle change.
 7. End the session when the task finishes.
 
-On Prime Agent, the same CLI may be invoked with Python `subprocess.run([...], shell=False)` when a shell tool is unavailable. Never interpolate untrusted text into a shell command.
+On Pi, the same CLI may be invoked with Python `subprocess.run([...], shell=False)` when a shell tool is unavailable. Never interpolate untrusted text into a shell command.

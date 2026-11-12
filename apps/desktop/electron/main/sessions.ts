@@ -52,7 +52,7 @@ const authorizePrimeSessionPath: SessionPathAuthorizer = (root, path) => isPathW
 export interface SessionServiceOptions {
   /** Harness stamped on every record and change event this service emits; defaults to 'prime'. */
   harness?: HarnessId
-  /** Canonical-or-lexical session root; defaults to the Prime Agent session directory. */
+  /** Canonical-or-lexical session root; defaults to the Pi session directory. */
   sessionRoot?: string
   metadataCachePath?: string
   catalogIo?: SessionCatalogIo
@@ -265,7 +265,7 @@ export class SessionService {
       ? await this.resolveSessionCandidate(root, requested)
       : requested
     const path = await realpath(candidate)
-    if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the Prime session directory')
+    if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the Pi session directory')
     return path
   }
 

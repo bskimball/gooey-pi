@@ -413,7 +413,7 @@ export function BrowserPanel({
 		onNavigationRequestHandled?.(navigationRequest.id);
 	}, [domReady, navigate, navigationRequest, onNavigationRequestHandled]);
 
-	const capacityNotice = `Prime keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`;
+	const capacityNotice = `Apex keeps at most ${MAX_BROWSER_ANNOTATIONS} annotations. Remove one from the composer attachment to add more.`;
 
 	const toggleAnnotation = () => {
 		directCaptureRef.current = false;

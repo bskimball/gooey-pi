@@ -17,5 +17,5 @@ export const cleanRequestErrorDetail = (error: unknown): string =>
 
 export const requestFailureMessage = (error: unknown) => {
   const detail = cleanRequestErrorDetail(error)
-  return detail ? `Request failed: ${detail}` : 'Prime could not process the request.'
+  return detail ? `Request failed: ${detail}` : 'The request could not be processed.'
 }

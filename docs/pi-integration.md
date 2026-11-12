@@ -1,8 +1,8 @@
 # Pi (pi.dev) integration design
 
-> **Status:** Pi is now GooeyPi's only runtime; OMP and Prime Agent support has been removed. References below to Prime, OMP, the harness switcher, per-harness state, and `omp-integration.md` describe the original multi-harness design and are historical. Shared extensions may keep `omp-work-*` filenames and APIs may keep `PrimeWorkApi`/`window.prime`/storage names.
+> **Status:** Pi is now GooeyPi's only runtime; OMP and Prime Agent support has been removed. References below to Prime, OMP, the harness switcher, per-harness state describe the original multi-harness design and are historical. Shared extensions may keep `omp-work-*` filenames and APIs may keep `PrimeWorkApi`/`window.prime`/storage names.
 
-This document is the working spec for adding base Pi (`pi`, [pi.dev](https://pi.dev/), the pi-mono coding agent) as an agent harness. It follows the architecture established by `docs/omp-integration.md`: the shared transport, event, and UI machinery is reused wherever the protocols agree, and a per-harness adapter covers what differs. Read that document first; this one records only pi-specific facts and decisions.
+This document is the working spec for adding base Pi (`pi`, [pi.dev](https://pi.dev/), the pi-mono coding agent) as an agent harness. The shared transport, event, and UI machinery is reused wherever the protocols agree, and a per-harness adapter covers what differs. This document records pi-specific facts and decisions.
 
 ## Pi 1.5.0 compatibility
 

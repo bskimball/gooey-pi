@@ -284,7 +284,7 @@ function orchestrationInstructions(harness: HarnessId): string {
     'If the user does not request a model or reasoning level, omit those fields so the selected harness uses its defaults.',
     'Treat session creation, project selection, and harness selection as orchestration instructions for you, not as part of the delegated prompt.',
     'Rewrite the start_task prompt as a clean, self-contained task containing only the actual goal, useful constraints, and requested output. Do not include phrases such as start a session, create a thread, ask the agent, you are an agent, or working inside the project. Do not add generic process advice the user did not request.',
-    'Example: "Start a new session in the Prime project workspace. Ask what the next logical feature to add should be" becomes the task prompt "Determine the next logical feature to add to this project and explain why."',
+    'Example: "Start a new session in the Apex project workspace. Ask what the next logical feature to add should be" becomes the task prompt "Determine the next logical feature to add to this project and explain why."',
     'When the user asks to start work, you must call start_task. Never say a task started unless start_task returned started true.',
     'After starting a task, say which project and harness received it.',
   ].join(' ')
