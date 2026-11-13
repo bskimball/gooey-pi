@@ -104,10 +104,10 @@
 	opacity: 0;
 	cursor: pointer;
 	transition:
-		opacity var(--duration-fast) var(--ease-out),
-		color var(--duration-fast) var(--ease-out),
-		background-color var(--duration-fast) var(--ease-out),
-		transform var(--duration-fast) var(--ease-out);
+		opacity var(--fast),
+		color var(--fast),
+		background-color var(--fast),
+		transform var(--fast);
 }
 .file-tree__row:hover .file-tree__reveal,
 .file-tree__row:focus-within .file-tree__reveal {

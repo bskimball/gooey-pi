@@ -95,8 +95,8 @@
 	color: var(--text-tertiary);
 	background: transparent;
 	transition:
-		color var(--duration-fast) var(--ease-out),
-		background var(--duration-fast) var(--ease-out);
+		color var(--fast),
+		background var(--fast);
 }
 .composer-extension-pill button:hover {
 	color: var(--text);
@@ -1005,7 +1005,7 @@
 	transition:
 		transform 110ms ease-out,
 		opacity 120ms ease-out,
-		background var(--duration-fast) var(--ease-out);
+		background var(--fast);
 }
 .send-button:hover {
 	opacity: 0.88;
@@ -1230,7 +1230,7 @@
 	background: transparent;
 	text-align: left;
 	cursor: pointer;
-	transition: color var(--duration-fast) var(--ease-out);
+	transition: color var(--fast);
 }
 .composer-queue__toggle:hover {
 	color: var(--text-secondary);

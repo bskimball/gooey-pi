@@ -16,7 +16,7 @@
 .empty-state p { max-width: 380px; margin: 0; color: var(--text-tertiary); font-size: var(--fs-ui); }
 .empty-state__action { margin-top: 14px; }
 .project-library { display: flex; flex-direction: column; }
-.project-item { min-height: 90px; display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); transition: background var(--duration-fast) var(--ease-out); }
+.project-item { min-height: 90px; display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); transition: background var(--fast); }
 .project-item:hover { background: var(--surface-subtle); }
 .project-item__open { min-width: 0; min-height: 80px; display: flex; align-items: center; flex: 1; gap: 13px; padding: 9px 0; color: inherit; background: transparent; text-align: left; }
 .project-item__icon { width: 40px; height: 40px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--apex) 22%, var(--border)); border-radius: var(--radius-lg); color: var(--apex); background: color-mix(in srgb, var(--apex-soft) 36%, var(--surface-raised)); }
@@ -47,7 +47,7 @@
 .schedule-ledger-summary i.is-attention { background: var(--warning); }
 .schedule-tools { margin-top: 14px; }
 .schedule-ledger { border-top: 1px solid var(--border); }
-.schedule-row { width: 100%; min-height: 112px; display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(132px, auto) 18px; align-items: center; gap: 13px; padding: 15px 12px; border-bottom: 1px solid var(--border); color: inherit; background: transparent; text-align: left; transition: background var(--duration-fast) var(--ease-out); }
+.schedule-row { width: 100%; min-height: 112px; display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(132px, auto) 18px; align-items: center; gap: 13px; padding: 15px 12px; border-bottom: 1px solid var(--border); color: inherit; background: transparent; text-align: left; transition: background var(--fast); }
 .schedule-row:hover, .schedule-row:focus-visible { background: var(--surface-subtle); }
 .schedule-row__status { width: 34px; height: 34px; display: grid; place-items: center; align-self: start; margin-top: 1px; border-radius: var(--radius-lg); color: var(--apex); background: var(--apex-soft); }
 .schedule-row__status--paused, .schedule-row__status--completed { color: var(--text-tertiary); background: var(--surface-hover); }

@@ -38,7 +38,7 @@
 	background: transparent;
 	font-size: var(--fs-ui);
 	font-weight: 550;
-	transition: color var(--duration-fast) var(--ease-out);
+	transition: color var(--fast);
 }
 .inspector__tab-label {
 	position: absolute;
@@ -167,7 +167,7 @@
 	font-size: var(--fs-ui);
 	text-align: left;
 	cursor: pointer;
-	transition: background-color var(--duration-fast) var(--ease-out);
+	transition: background-color var(--fast);
 }
 .summary-agent-list > button:hover {
 	color: var(--text);
@@ -383,12 +383,6 @@
 		Menlo,
 		monospace;
 }
-.file-changes__empty {
-	margin: 16px 10px;
-	color: var(--text-tertiary);
-	font-size: var(--fs-meta);
-	text-align: center;
-}
 .diff-pane {
 	min-width: 0;
 	min-height: 0;
@@ -450,9 +444,6 @@
 	}
 	.changes-panel .file-changes small {
 		display: inline;
-	}
-	.changes-panel .file-changes__empty {
-		margin: 10px;
 	}
 }
 .diff-line > i {
@@ -882,8 +873,8 @@
 	font-weight: 550;
 	white-space: nowrap;
 	transition:
-		color var(--duration-fast) var(--ease-out),
-		background var(--duration-fast) var(--ease-out),
+		color var(--fast),
+		background var(--fast),
 		transform 100ms ease-out;
 }
 .browser-pop-out:hover {
@@ -1229,7 +1220,7 @@
 }
 .summary-section.run-config { padding: 8px 0; }
 .summary-section > .run-config__heading { margin: 0; font-size: var(--fs-meta); font-weight: 550; }
-.run-config__toggle { width: calc(100% + 16px); min-height: 28px; display: flex; align-items: center; gap: 6px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; text-align: left; cursor: pointer; transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
+.run-config__toggle { width: calc(100% + 16px); min-height: 28px; display: flex; align-items: center; gap: 6px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; text-align: left; cursor: pointer; transition: color var(--fast), background-color var(--fast); }
 .run-config__toggle:hover { color: var(--text); background: var(--surface-hover); }
 .run-config__toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .run-config__toggle > .disclosure-caret { color: var(--text-tertiary); }

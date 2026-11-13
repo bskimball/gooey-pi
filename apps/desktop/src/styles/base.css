@@ -107,6 +107,8 @@
   --ease-out: cubic-bezier(.2, .8, .2, 1);
   --duration-fast: 120ms;
   --duration-base: 200ms;
+  /* Fast transition shorthand (duration + easing). */
+  --fast: var(--duration-fast) var(--ease-out);
   /* Shared transcript column measure: grows with the pane from the reading
      minimum, capped so prose stays readable on very wide monitors. Sized in
      cqi against .conversation-pane so the scrolled column and the absolutely
