@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityPeek } from '@/components/activity/ActivityPeek'
+import { ActivityCoordinator } from '@/components/activity/ActivityCoordinator'
 import { ActivityQuestionCard } from '@/components/activity/ActivityQuestionCard'
 import { ActivityReplyBox } from '@/components/activity/ActivityReplyBox'
 import { ActivityRow, type ActivitySectionKind } from '@/components/activity/ActivityRow'
@@ -10,7 +11,7 @@ import { buildActivitySections, type ActivityRowItem, type SessionLiveMap } from
 import { activityNotificationSignature, isSessionRunning, signatureCleared } from '@/app/session-attention'
 import { ApexButton, EmptyState } from '@/components/ui'
 import type { ActivityControls } from '@/hooks/useActivityControls'
-import type { ProjectRecord, SessionRecord } from '@/types/api'
+import type { ApexApi, ProjectRecord, SessionRecord } from '@/types/api'
 
 const filterControlStyles = stylex.create({
   control: {
@@ -46,6 +47,7 @@ export function growActivityBatch(state: ActivityViewState, total: number): Acti
 }
 
 export interface ActivityPageProps {
+  bridge?: ApexApi | null
   sessions: SessionRecord[]
   projects: ProjectRecord[]
   clearedActivity: Record<string, string>
@@ -74,6 +76,7 @@ function isEditableElement(target: EventTarget | null): boolean {
 }
 
 export function ActivityPage({
+  bridge = null,
   sessions,
   projects,
   clearedActivity,
@@ -94,6 +97,26 @@ export function ActivityPage({
   const [stopConfirmSignal, setStopConfirmSignal] = useState(0)
   const [cancelConfirmSignal, setCancelConfirmSignal] = useState(0)
   const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const coordinatorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const [projectId, setProjectId] = useState('all')
+  const [detailMode, setDetailMode] = useState<'peek' | 'coordinator'>('peek')
+  const [focusReply, setFocusReply] = useState(false)
+  const selectedProject = projects.find((project) => project.id === projectId)
+  const coordinatorProject = selectedProject?.harness === 'pi' && !selectedProject.inferred && !selectedProject.readOnly
+    ? selectedProject : undefined
+  const scopedSessions = useMemo(() => sessions.filter((session) => session.role !== 'coordinator'
+    && (!selectedProject || [selectedProject.path, selectedProject.primaryFolder, ...selectedProject.folders].includes(session.projectPath))), [sessions, selectedProject])
+
+  useEffect(() => {
+    if (projectId !== 'all' && !selectedProject) setProjectId('all')
+  }, [projectId, selectedProject])
+
+  useEffect(() => {
+    if (focusReply && detailMode === 'peek') {
+      replyTextareaRef.current?.focus()
+      setFocusReply(false)
+    }
+  }, [detailMode, focusReply])
 
   useEffect(() => {
     if (selectedSessionId !== undefined) {
@@ -107,17 +130,17 @@ export function ActivityPage({
   )
   const projectName = (path: string) => projectNames.get(path) ?? path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 
-  const clearable = useMemo(() => sessions.filter((session) => {
+  const clearable = useMemo(() => scopedSessions.filter((session) => {
     if (session.archived) return false
     const live = liveBySession[session.filePath]
     if (isSessionRunning(session, live)) return false
     const signature = activityNotificationSignature(session)
     return Boolean(signature && !signatureCleared(signature, clearedActivity[session.id], session.unread))
-  }), [clearedActivity, liveBySession, sessions])
+  }), [clearedActivity, liveBySession, scopedSessions])
 
   const sections = useMemo(
-    () => buildActivitySections(sessions, liveBySession, clearedActivity, query),
-    [clearedActivity, liveBySession, query, sessions],
+    () => buildActivitySections(scopedSessions, liveBySession, clearedActivity, query),
+    [clearedActivity, liveBySession, query, scopedSessions],
   )
 
   const hasTickingRows = useMemo(
@@ -228,8 +251,21 @@ export function ActivityPage({
         return
       }
 
+      if (event.key === 'c') {
+        event.preventDefault()
+        setDetailMode('coordinator')
+        window.requestAnimationFrame(() => coordinatorTextareaRef.current?.focus())
+        return
+      }
+
       if (event.key === 'r') {
         if (!selectedEntry || compactLayout) return
+        if (detailMode !== 'peek') {
+          event.preventDefault()
+          setDetailMode('peek')
+          setFocusReply(true)
+          return
+        }
         const textarea = replyTextareaRef.current
         if (textarea && !textarea.disabled) {
           event.preventDefault()
@@ -241,6 +277,7 @@ export function ActivityPage({
       if (event.key === 'x') {
         if (!selectedEntry || selectedEntry.section !== 'running') return
         event.preventDefault()
+        setDetailMode('peek')
         setStopConfirmSignal((value) => value + 1)
         return
       }
@@ -259,11 +296,23 @@ export function ActivityPage({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [allVisibleEntries, compactLayout, onClear, onOpen, resolvedSelectedId, selectedEntry])
+  }, [allVisibleEntries, compactLayout, detailMode, onClear, onOpen, resolvedSelectedId, selectedEntry])
 
   return (
     <div className="page page--activity">
-      <div className={`page-container activity-page ${compactLayout ? 'activity-page--compact' : ''}`}>
+      <div className="activity-view-tools">
+        <label className="activity-project-filter">Project
+          <select aria-label="Activity project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setViewState((current) => ({ ...current, visibleLimit: RECENT_INITIAL_LIMIT })) }}>
+            <option value="all">All projects</option>
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.inferred || project.readOnly ? ' (read-only)' : ''}</option>)}
+          </select>
+        </label>
+        <div className="activity-detail-tabs" role="group" aria-label="Activity detail view">
+          <ApexButton compact aria-pressed={detailMode === 'peek'} onClick={() => setDetailMode('peek')}>Peek</ApexButton>
+          <ApexButton compact aria-pressed={detailMode === 'coordinator'} onClick={() => setDetailMode('coordinator')}>Chief of Staff</ApexButton>
+        </div>
+      </div>
+      <div className={`page-container activity-page ${compactLayout ? 'activity-page--compact' : ''} ${detailMode === 'coordinator' ? 'activity-page--coordinator' : ''}`}>
         <div className="activity-feed">
           <div className="activity-feed__top">
             <header className="page-header activity-header">
@@ -359,6 +408,8 @@ export function ActivityPage({
             <span aria-hidden="true">·</span>
             <span><kbd>r</kbd> reply</span>
             <span aria-hidden="true">·</span>
+            <span><kbd>c</kbd> coordinate</span>
+            <span aria-hidden="true">·</span>
             <span><kbd>x</kbd> stop</span>
             <span aria-hidden="true">·</span>
             <span><kbd>e</kbd> mark reviewed</span>
@@ -367,7 +418,7 @@ export function ActivityPage({
           </footer>
         </div>
 
-        {!compactLayout ? (
+        {detailMode === 'coordinator' ? <ActivityCoordinator key={coordinatorProject?.id ?? 'unscoped'} bridge={bridge} project={coordinatorProject} controls={controls} textareaRef={coordinatorTextareaRef} /> : !compactLayout ? (
           <ActivityPeek
             item={selectedEntry?.item ?? null}
             section={selectedEntry?.section ?? null}

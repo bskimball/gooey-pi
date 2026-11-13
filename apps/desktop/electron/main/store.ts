@@ -50,6 +50,7 @@ export interface DesktopState {
   archivedSessions: string[]
   dismissedProjectPaths: string[]
   schedules: StoredSchedule[]
+  coordinatorSessions?: Record<string, string>
 }
 
 export const CURRENT_DESKTOP_STATE_FILENAME = 'prime-work-state-v4.json'
@@ -459,6 +460,8 @@ function parseState(value: unknown, statePath: string): { sourceVersion: Support
     version: CURRENT_DESKTOP_STATE_VERSION,
     projects: Array.isArray(value.projects) ? value.projects.map((project) => parseProject(project, preHarnessProjectState)).filter((item): item is StoredProject => item !== null) : [],
     settings: parseSettings(value.settings),
+    coordinatorSessions: isRecord(value.coordinatorSessions) ? Object.fromEntries(Object.entries(value.coordinatorSessions)
+      .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 200 && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 4096).slice(0, 500)) : {},
     archivedSessions: Array.isArray(value.archivedSessions) ? value.archivedSessions.filter((item): item is string => typeof item === 'string') : [],
     dismissedProjectPaths: Array.isArray(value.dismissedProjectPaths) ? value.dismissedProjectPaths.filter((item): item is string => typeof item === 'string') : [],
     schedules:
@@ -580,6 +583,11 @@ export class JsonStateStore {
   getSettings(): AppSettings {
     this.assertCompatible()
     return structuredClone(this.state.settings)
+  }
+
+  getCoordinatorSessions(): Record<string, string> {
+    this.assertCompatible()
+    return { ...this.state.coordinatorSessions }
   }
 
   getProjects(): PersistedProject[] {

@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react'
 import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
-import { resolveRuntimeIdForSession } from './useSessionLive'
 import type { PendingExtensionUi } from './useExtensionUi'
 import type { useWorkspaceRuntime } from './useWorkspaceRuntime'
 import type {
@@ -55,15 +54,15 @@ export function useActivityControls({
     return bridge.sessions.read(filePath)
   }, [bridge])
 
-  const canFollowUpSession = useCallback((session: SessionRecord): boolean => {
-    return isActiveWorkspaceSession(session)
-  }, [isActiveWorkspaceSession])
+  const canFollowUpSession = useCallback((_session: SessionRecord): boolean => {
+    return Boolean(bridge)
+  }, [bridge])
 
   const onSendReply = useCallback(async (
     session: SessionRecord,
     text: string,
     mode: 'steer' | 'follow-up',
-    runtimeId?: string,
+    _runtimeId?: string,
   ): Promise<void> => {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -71,37 +70,23 @@ export function useActivityControls({
       await sendPrompt(trimmed, [], mode === 'steer' ? 'steer' : 'queue')
       return
     }
-    if (mode !== 'steer') {
-      const error = new Error('Open session to continue.')
-      reportError(error)
-      throw error
-    }
     if (!bridge) {
       const error = new Error('Agent commands require the desktop bridge.')
       reportError(error)
       throw error
     }
     try {
-      const resolvedId = await resolveRuntimeIdForSession(
-        bridge,
-        workspace.runtimeSessionsRef.current,
-        workspace.runtime,
-        session.filePath,
-        runtimeId,
-      )
-      if (!resolvedId) {
-        throw new Error('No active runtime found for this session. Open the session to continue.')
-      }
+      const accepted = await bridge.sessions.followUp(session.filePath, trimmed, mode === 'steer' ? 'steer' : 'queue')
+      if (!accepted) throw new Error('The session did not accept the message.')
       const sentAtIso = new Date().toISOString()
       setSessions((items) => items.map((item) => item.filePath === session.filePath
         ? { ...item, lastUserMessageAt: sentAtIso }
         : item))
-      await bridge.agent.command(resolvedId, { type: 'steer', message: trimmed })
     } catch (error) {
       reportError(error)
       throw error
     }
-  }, [bridge, isActiveWorkspaceSession, reportError, sendPrompt, setSessions, workspace.runtime, workspace.runtimeSessionsRef])
+  }, [bridge, isActiveWorkspaceSession, reportError, sendPrompt, setSessions])
 
   return useMemo<ActivityControls>(() => ({
     compactLayout,

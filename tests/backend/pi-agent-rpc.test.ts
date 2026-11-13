@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,13 @@ import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/mai
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
 import type { ApexModelDescriptor } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
+import { ActivityCoordinatorService } from '../../apps/desktop/electron/main/collaboration/coordinator'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+import { SessionService } from '../../apps/desktop/electron/main/sessions'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { piSessionServiceOptions } from 'apex-core/sessions/pi'
+
+vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn() } }))
 
 const dirs: string[] = []
 const managers: AgentRpcManager[] = []
@@ -162,6 +169,62 @@ describe('pi RPC adapter argv', () => {
 })
 
 describe('pi RPC handshake', () => {
+  it('owns a durable project coordinator separately, pins each attachment, and wakes background follow-ups only in granted projects', async () => {
+    const fake = fakePiAgent()
+    const cwd = realpathSync(fake.cwd)
+    const statePath = join(cwd, 'coordinator-state.json')
+    const store = new JsonStateStore(statePath)
+    const info = lstatSync(cwd, { bigint: true })
+    await store.update((draft) => { draft.projects.push({
+      id: 'project', harness: 'pi', name: 'Project', path: cwd, folders: [cwd], primaryFolder: cwd, pinned: false,
+      createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(),
+      folderIdentities: { [cwd]: { dev: info.dev.toString(), ino: info.ino.toString(), birthtimeNs: info.birthtimeNs.toString() } },
+    }) })
+    const projects = new ProjectService(store, () => null)
+    const sessions = new SessionService(store, () => null, 5000, piSessionServiceOptions(join(cwd, 'sessions')))
+    const manager = new AgentRpcManager(fake.executable, (path) => projects.authorizeCwd(path), (path) => sessions.requireSessionPath(path))
+    managers.push(manager)
+    const control = new ActivityCoordinatorService(store, projects, sessions, manager)
+    const events: Record<string, unknown>[] = []
+    const unsubscribe = manager.subscribe(({ event }) => events.push(event))
+    try {
+      await expect(control.open(1, 'not-granted')).rejects.toThrow('explicitly granted')
+      const [first, second] = await Promise.all([control.open(1, 'project'), control.open(2, 'project')])
+      expect(first.session.filePath).toBe(second.session.filePath)
+      expect(first.runtime.runtimeId).toBe(second.runtime.runtimeId)
+      expect(first.attachmentId).not.toBe(second.attachmentId)
+      expect(first.pendingDialogs).toEqual([])
+      expect((await sessions.list()).filter((session) => session.role === 'coordinator')).toHaveLength(1)
+      expect(events.some((event) => event.type === 'fake_prompt')).toBe(false)
+      expect(control.close(2, first.attachmentId)).toBe(false)
+      expect(control.close(1, first.attachmentId)).toBe(true)
+      expect(control.close(1, first.attachmentId)).toBe(false)
+      for (let i = 0; i < 4; i += 1) {
+        const worker = await sessions.create(cwd)
+        await manager.start({ cwd, sessionPath: worker.filePath })
+      }
+      expect(manager.getForSession(first.session.filePath)?.runtimeId).toBe(first.runtime.runtimeId)
+      expect(control.close(2, second.attachmentId)).toBe(true)
+      await manager.stop(first.runtime.runtimeId)
+      await expect(control.followUp(first.session.filePath, 'Summarize the implementor results.', 'queue')).resolves.toBe(true)
+      await waitUntil(() => events.some((event) => event.type === 'fake_prompt'))
+      expect(events.find((event) => event.type === 'fake_prompt')?.message).toContain("this project's Chief of Staff")
+      expect(events.find((event) => event.type === 'fake_prompt')?.message).toContain('Summarize the implementor results.')
+      expect(manager.getForSession(first.session.filePath)?.runtimeId).not.toBe(first.runtime.runtimeId)
+      const reopenedStore = new JsonStateStore(statePath)
+      await reopenedStore.ready()
+      expect(reopenedStore.getCoordinatorSessions().project).toBe(first.session.filePath)
+      await reopenedStore.beginShutdown()
+      await store.update((draft) => { draft.projects = [] })
+      await expect(control.followUp(first.session.filePath, 'Should be denied', 'queue')).rejects.toThrow()
+      await expect(control.open(1, 'project')).rejects.toThrow('explicitly granted')
+    } finally {
+      unsubscribe()
+      control.dispose()
+      await store.beginShutdown()
+    }
+  }, 60_000)
+
   it('releases the exact runtime environment after Pi termination', async () => {
     const fake = fakePiAgent()
     const manager = piManager(fake.executable)

@@ -42,6 +42,14 @@ const runtime = (runtimeId: string, cwd: string, sessionFile: string, isStreamin
 })
 
 describe('workspace and runtime ownership', () => {
+  it('does not promote a coordinator into the foreground workspace at startup', () => {
+    const owner = project('project', ['/project'])
+    const coordinator: SessionRecord = { ...session('coordinator', '/project', '/sessions/coordinator.jsonl'), role: 'coordinator' }
+    const implementor = session('implementor', '/project', '/sessions/implementor.jsonl')
+    expect(selectStartupWorkspace([owner], [coordinator, implementor], []).session).toBe(implementor)
+    expect(selectStartupWorkspace([owner], [coordinator], []).session).toBeUndefined()
+  })
+
   it('atomically selects the newest session, its multi-folder project, and its exact idle runtime', () => {
     const pinnedProject = project('pinned', ['/pinned'], true)
     const multiFolderProject = project('multi', ['/workspace/root', '/workspace/package'])

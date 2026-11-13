@@ -189,6 +189,7 @@ export class SessionService {
     const archived = new Set(this.store.getArchivedSessions().map((path) => resolve(path)))
     // One runtime snapshot per list call; each session then resolves in O(1).
     const runtimeBySession = this.snapshotRuntimeSessions()
+    const coordinators = new Set(Object.values(this.store.getCoordinatorSessions()).map((path) => resolve(path)))
     const records: SessionRecord[] = []
     for (const original of sessions) {
       const metadata = { ...original }
@@ -207,7 +208,7 @@ export class SessionService {
         if (typeof runtime.thinkingLevel === 'string') metadata.thinkingLevel = runtime.thinkingLevel
       }
       const { sessionName: _sessionName, ...record } = metadata
-      records.push({ ...record, harness: this.harness, archived: isArchived })
+      records.push({ ...record, harness: this.harness, archived: isArchived, role: coordinators.has(resolve(record.filePath)) ? 'coordinator' : undefined })
     }
     return records.sort((a, b) => Date.parse(b.lastUserMessageAt ?? b.createdAt) - Date.parse(a.lastUserMessageAt ?? a.createdAt) || comparePaths(a.filePath, b.filePath))
   }

@@ -495,7 +495,7 @@ export function buildActivitySections(
   const recent: ActivityRowItem[] = []
 
   for (const session of sessions) {
-    if (session.archived) continue
+    if (session.archived || session.role === 'coordinator') continue
     const live = liveBySession[session.filePath]
     const clearedSig = clearedActivity[session.id]
     const attention = deriveAttention(session, live, clearedSig)

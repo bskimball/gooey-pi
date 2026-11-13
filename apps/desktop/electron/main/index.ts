@@ -47,6 +47,7 @@ import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
+import { ActivityCoordinatorService } from "./collaboration/coordinator";
 import { BackgroundJobBridge } from "./background-jobs";
 import {
 	configureGooeyPiAgentMessageSigning,
@@ -117,6 +118,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null;
 let ipc: IpcRegistration | null = null;
 let piAgents: AgentRpcManager | null = null;
+let activityCoordinator: ActivityCoordinatorService | null = null;
 let terminals: TerminalService | null = null;
 let downloads: BrowserDownloadGuard | null = null;
 let updateService: UpdateService | null = null;
@@ -653,6 +655,10 @@ async function createWindow(): Promise<BrowserWindow | null> {
 		event.preventDefault();
 		requestShutdown(window, prompt);
 	});
+	window.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+		if (isMainFrame && !isInPlace) activityCoordinator?.releaseOwner(rendererId);
+	});
+	window.webContents.on("render-process-gone", () => activityCoordinator?.releaseOwner(rendererId));
 	window.on("closed", () => {
 		ipc?.revoke(rendererId);
 		if (mainWindow === window) mainWindow = null;
@@ -1157,6 +1163,7 @@ async function bootstrap(): Promise<void> {
 	});
 	const collaborationBridge = new AgentCollaborationBridge({
 		extensionPath: collaborationExtensionPath,
+		projects: piProjects,
 		sessions: { pi: piSessions },
 		agents: { pi: piManager },
 		catalogs: { pi: piCatalog },
@@ -1288,6 +1295,8 @@ async function bootstrap(): Promise<void> {
 		return { meta: structuredClone(meta), settings: currentSettings };
 	};
 	trustedRendererUrl = resolveRendererUrl();
+	const coordinator = new ActivityCoordinatorService(stateStore, piProjects, piSessions, piManager);
+	activityCoordinator = coordinator;
 	ipc = registerIpc(
 		{
 			meta,
@@ -1298,6 +1307,7 @@ async function bootstrap(): Promise<void> {
 			sessionHandoff,
 			extensionPathContext,
 			agents: piManager,
+			coordinator,
 			terminals,
 			backgroundJobs: jobsBridge,
 			git,

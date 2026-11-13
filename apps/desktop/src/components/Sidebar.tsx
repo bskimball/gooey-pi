@@ -131,7 +131,7 @@ export function indexSidebarSessions(
   }
   for (const session of sessions) {
     if (stats) stats.sessionScans += 1
-    if (session.archived) continue
+    if (session.archived || session.role === 'coordinator') continue
     activeSessions.push(session)
     for (const projectId of owners.get(session.projectPath) ?? []) sessionsByProject.get(projectId)?.push(session)
   }

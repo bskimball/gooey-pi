@@ -105,6 +105,8 @@ export interface SessionRecord {
   thinkingLevel?: string
   behaviorMode?: string
   depth: number
+  /** App-owned presentation role; it does not grant runtime capabilities. */
+  role?: 'coordinator'
   pinned?: boolean
   unread?: boolean
   /** Monotonic renderer lifecycle revision used to distinguish attention events. */
@@ -801,7 +803,19 @@ export interface AgentBrowserPointerEvent {
   durationMs: number
 }
 
+export interface CoordinatorAttachment {
+  attachmentId: string
+  session: SessionRecord
+  runtime: RuntimeInfo
+  messages: TranscriptMessage[]
+  pendingDialogs: Record<string, unknown>[]
+}
+
 export interface ApexApi {
+  coordinator: {
+    open(projectId: string): Promise<CoordinatorAttachment>
+    close(attachmentId: string): Promise<boolean>
+  }
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
     getState(): Promise<AppUpdateState>
