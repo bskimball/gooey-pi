@@ -117,9 +117,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
   const resultCount = visibleModels.length
   return (
     <div className="model-picker" ref={rootRef}>
-      <ApexButton
-        variant="quiet"
-        compact
+      <button
         ref={triggerRef}
         type="button"
         className="permissions-chip model-picker__trigger"
@@ -140,7 +138,7 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
         <Brain size={14} />
         <span>{label === 'Model' ? '' : `${label}: `}{selected?.name ?? unavailableLabel}</span>
         <CaretDown size={11} aria-hidden="true" />
-      </ApexButton>
+      </button>
       {open && !disabled ? (
         <div
           className="model-picker__popover"

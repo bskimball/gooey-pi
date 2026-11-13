@@ -69,9 +69,8 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   const label = checkoutLabel(catalog, fallbackLabel)
   return (
     <div className="worktree-picker" ref={rootRef}>
-      <ApexButton
-        variant="quiet"
-        compact
+      <button
+        type="button"
         className="permissions-chip worktree-picker__trigger"
         aria-label={`Checkout: ${label}`}
         aria-expanded={open}
@@ -82,7 +81,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
         <FolderSimpleStar size={12} />
         <span className="worktree-picker__label">{label}</span>
         <CaretDown className="worktree-picker__chevron" size={11} />
-      </ApexButton>
+      </button>
       {open && catalog ? (
         <div className="worktree-picker__menu" id={menuId} role="menu" aria-label={strategy === 'worktree' ? 'Git worktrees' : 'Git branches'}>
           <div className="worktree-picker__heading">Checkouts</div>

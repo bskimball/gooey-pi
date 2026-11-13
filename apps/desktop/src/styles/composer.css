@@ -692,7 +692,15 @@
 .worktree-picker__trigger,
 .model-picker__trigger {
 	max-width: 150px;
+	font-weight: 550;
 	cursor: pointer;
+}
+.worktree-picker__trigger:focus-visible,
+.model-picker__trigger:focus-visible {
+	color: var(--text);
+	border-color: var(--focus);
+	outline: 2px solid var(--focus);
+	outline-offset: 1px;
 }
 .worktree-picker__trigger:hover:not(:disabled),
 .worktree-picker__trigger[aria-expanded="true"],
