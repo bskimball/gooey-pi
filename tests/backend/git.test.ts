@@ -14,7 +14,7 @@ const git = (cwd: string, ...args: string[]) => {
 }
 const repository = (prefix = 'apex-git-') => {
   const cwd = mkdtempSync(join(tmpdir(), prefix)); dirs.push(cwd)
-  git(cwd, 'init', '-q'); git(cwd, 'config', 'user.name', 'Prime Work Test'); git(cwd, 'config', 'user.email', 'test@example.com')
+  git(cwd, 'init', '-q'); git(cwd, 'config', 'core.autocrlf', 'false'); git(cwd, 'config', 'user.name', 'Prime Work Test'); git(cwd, 'config', 'user.email', 'test@example.com')
   writeFileSync(join(cwd, 'file.txt'), 'base\n'); git(cwd, 'add', 'file.txt'); git(cwd, 'commit', '-qm', 'base')
   return cwd
 }
@@ -91,6 +91,27 @@ describe('GitService', () => {
     const committed = await service.commit(cwd, 'test commit')
     expect(committed.ok).toBe(true)
     expect(committed.output).toContain('test commit')
+  }, 15_000)
+
+  it('preserves global line-ending settings for diff, stage, and restore', async () => {
+    const cwd = repository('apex-git-crlf-')
+    const home = mkdtempSync(join(tmpdir(), 'apex-git-crlf-home-'))
+    dirs.push(home)
+    git(cwd, 'config', '--unset', 'core.autocrlf')
+    writeFileSync(join(home, '.gitconfig'), '[core]\n  autocrlf = true\n  eol = crlf\n')
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('USERPROFILE', home)
+    vi.stubEnv('XDG_CONFIG_HOME', join(home, '.config'))
+    const service = new GitService(async () => cwd)
+    writeFileSync(join(cwd, 'file.txt'), 'base\r\nchanged\r\n')
+
+    expect((await service.status(cwd)).files.find((file) => file.path === 'file.txt')).toMatchObject({ additions: 1, deletions: 0, staged: false })
+    expect((await service.diff(cwd, 'file.txt')).text).toContain('+changed')
+    await service.stage(cwd, ['file.txt'])
+    expect((await service.status(cwd)).files.find((file) => file.path === 'file.txt')).toMatchObject({ additions: 1, deletions: 0, staged: true })
+    expect(spawnSync('git', ['show', ':file.txt'], { cwd, encoding: 'utf8' }).stdout).toBe('base\nchanged\n')
+    await service.restore(cwd, ['file.txt'])
+    expect(readFileSync(join(cwd, 'file.txt'), 'utf8')).toBe('base\r\n')
   }, 15_000)
 
   it('uses repository-relative status paths for every action from a nested cwd', async () => {

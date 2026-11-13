@@ -19,10 +19,6 @@
   white-space: normal;
   color: var(--text);
 }
-.annotation-source .button {
-  justify-self: start;
-  min-height: 32px;
-}
 .annotation-source [role='alert'] {
   color: var(--danger);
 }

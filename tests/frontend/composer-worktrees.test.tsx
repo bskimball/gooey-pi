@@ -96,6 +96,26 @@ describe('composer worktree picker', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull()
   })
 
+  it('returns focus to the checkout trigger on Escape, but not on outside dismissal', async () => {
+    vi.useFakeTimers()
+    try {
+      act(() => root.render(<Composer {...props(statusBarProps())} />))
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')!
+      act(() => trigger.click())
+      const input = container.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
+      act(() => { input.focus(); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+      act(() => vi.runAllTimers())
+      expect(container.querySelector('[role="menu"]')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+
+      act(() => trigger.click())
+      const outside = container.querySelector<HTMLTextAreaElement>('textarea')!
+      act(() => { outside.focus(); outside.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+      act(() => vi.runAllTimers())
+      expect(document.activeElement).toBe(outside)
+    } finally { vi.useRealTimers() }
+  })
+
   it('creates a worktree from an inline branch form', async () => {
     const onExecuteCheckout = vi.fn().mockResolvedValue(undefined)
     act(() => root.render(<Composer {...props(statusBarProps({ onExecuteCheckout }))} />))

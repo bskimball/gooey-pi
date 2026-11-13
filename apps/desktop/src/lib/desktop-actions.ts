@@ -32,3 +32,13 @@ export async function openInVsCode(app: Pick<ApexApi['app'], 'openInVsCode'>, pa
     return errorMessage(error)
   }
 }
+
+export function pathToFileUrl(path: string): string {
+  const encoded = path
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .split('/')
+    .map((segment, index) => (index === 0 && /^[A-Za-z]:$/.test(segment) ? segment : encodeURIComponent(segment)))
+    .join('/')
+  return encoded.startsWith('/') ? `file://${encoded}` : `file:///${encoded}`
+}

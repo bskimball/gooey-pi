@@ -95,34 +95,36 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
         </SelectControl>
       ) : null}
       <span className="pi-mode-status" role="status">{pending === '/mode configure' ? 'Opening Fusion setup…' : pending === '/mode hydra sync' ? 'Syncing Hydra metrics…' : pending ? 'Updating Pi mode…' : ''}</span>
-      {mode === 'fusion' ? (
+      {mode === 'fusion' && !pair && <span className="pi-fusion-unreported" role="status">Pair not reported</span>}
+      {mode === 'fusion' && pair && (
         // Flatten the old full-row readout so these controls follow mode in the footer's flex order.
         <div className="pi-fusion-pair" aria-label="Fusion pair" role="group" style={{ display: 'contents' }}>
           {(['lead', 'sidekick'] as const).map((role) => {
             const label = role === 'lead' ? 'Lead' : 'Sidekick'
-            const choice = pair?.[role]
-            const identity = choice ? fusionModelIdentity(choice) : ''
-            const providerEnabled = providers.some((provider) => provider.id === choice?.provider && provider.enabled)
-            const model = choice && providerEnabled ? modelsByProvider.get(choice.provider)?.find((candidate) => candidate.id === choice.modelId && candidate.enabled !== false) : undefined
+            const choice = pair[role]
+            const identity = fusionModelIdentity(choice)
+            const providerEnabled = providers.some((provider) => provider.id === choice.provider && provider.enabled)
+            const model = providerEnabled ? modelsByProvider.get(choice.provider)?.find((candidate) => candidate.id === choice.modelId && candidate.enabled !== false) : undefined
             const levels = model?.available ? model.availableThinkingLevels : []
             return (
               <Fragment key={role}>
-                <ModelPicker label={`${label} model`} value={model?.key ?? identity} unavailableLabel={choice ? `${identity} (unavailable)` : 'Not reported'} modelsByProvider={modelsByProvider} providers={providers} disabled={controlsDisabled || !pair} onChange={(key) => {
+                <ModelPicker label={`${label} model`} value={model?.key ?? identity} unavailableLabel={`${identity} (unavailable)`} modelsByProvider={modelsByProvider} providers={providers} disabled={controlsDisabled} onChange={(key) => {
                   const next = [...modelsByProvider.values()].flat().find((candidate) => candidate.key === key)
                   if (next?.available) sendCommand(`/mode fusion-set ${role} model ${next.provider}/${next.id}`)
                 }} />
-                <SelectControl label={`${label} thinking`} compact icon={<Gauge size={12} />} value={choice?.thinking ?? ''} disabled={controlsDisabled || !pair || !levels.length} onChange={(event) => {
+                <SelectControl label={`${label} thinking`} compact icon={<Gauge size={12} />} value={choice.thinking} disabled={controlsDisabled || !levels.length} onChange={(event) => {
                   const level = levels.find((candidate) => candidate === event.target.value)
                   if (level) sendCommand(`/mode fusion-set ${role} thinking ${level}`)
                 }}>
-                  {!choice ? <option value="" disabled>{`${label}: Not reported`}</option> : !levels.includes(choice.thinking) ? <option value={choice.thinking} disabled>{`${label}: ${thinkingLabels[choice.thinking]} (unavailable)`}</option> : null}
+                  {!levels.includes(choice.thinking) ? <option value={choice.thinking} disabled>{`${label}: ${thinkingLabels[choice.thinking]} (unavailable)`}</option> : null}
                   {levels.map((level) => <option key={level} value={level}>{`${label}: ${thinkingLabels[level]}`}</option>)}
                 </SelectControl>
               </Fragment>
             )
           })}
         </div>
-      ) : children}
+      )}
+      {mode !== 'fusion' && children}
     </>
   )
 }

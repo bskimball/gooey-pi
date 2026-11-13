@@ -1,9 +1,10 @@
 /* Explicit cascade order so bare element defaults in `apex-base` never override
    Astryx primitives in `astryx-base`, `astryx-theme` bridges Apex + VS Code
    tokens onto Astryx, existing class-scoped Apex stylesheets live in `apex`,
-   authored StyleX rules emit into `stylex.*`, sidebar layout overrides primitive
+   authored StyleX rules emit into `stylex.*`, contextual sizing of StyleX
+   primitives lives in `apex-overrides`, sidebar layout overrides primitive
    defaults in `apex-sidebar`, and `apex-responsive` wins at narrow widths. */
-@layer reset, apex-base, astryx-base, astryx-theme, apex, stylex, apex-sidebar, apex-responsive;
+@layer reset, apex-base, astryx-base, astryx-theme, apex, stylex, apex-overrides, apex-sidebar, apex-responsive;
 
 @import './styles/base.css';
 @import '@astryxdesign/core/astryx.css';
@@ -15,6 +16,7 @@
 @import './styles/voice.css' layer(apex);
 @import './styles/pets.css' layer(apex);
 @import './styles/inspector.css' layer(apex);
+@import './styles/files-panel.css' layer(apex);
 @import './styles/agents.css' layer(apex);
 @import './styles/annotation-source.css' layer(apex);
 @import './styles/browser-references.css' layer(apex);
@@ -24,4 +26,5 @@
 @import './styles/plugins.css' layer(apex);
 @import './styles/settings.css' layer(apex);
 @import './styles/overlays.css' layer(apex);
+@import './styles/control-overrides.css' layer(apex-overrides);
 @import './styles/responsive.css' layer(apex-responsive);

@@ -161,6 +161,22 @@ describe('BrowserPanel annotation mode', () => {
     expect(markerCall).toContain('"index":1')
   })
 
+  it('restores the previously focused control on Escape from the comment dialog', async () => {
+    await act(async () => root.render(<Harness />))
+    await makeDomReady(); await toggleAnnotate()
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="Stop annotating"]')!
+    trigger.focus()
+    takeResult = capturedPayload
+    await act(async () => { await vi.advanceTimersByTimeAsync(120) })
+    takeResult = null
+    const textarea = container.querySelector<HTMLTextAreaElement>('.annotation-popover textarea')!
+    expect(document.activeElement).toBe(textarea)
+    await act(async () => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+    expect(container.querySelector('.annotation-popover')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
   it('shows checked source, navigates only on request, and attaches evidence without sending', async () => {
     const resolveBrowserSource = vi.fn(async () => ({ kind: 'resolved', path: '/repo/Button.tsx', line: 2, evidence: 'explicit' }))
     const openInVsCode = vi.fn(async () => true)

@@ -50,7 +50,7 @@
 	font-size: var(--fs-meta);
 	white-space: nowrap;
 	cursor: pointer;
-	transition: color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+	transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), transform 120ms ease-out;
 }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-tabstrip__item:hover { color: var(--text); background: var(--surface-hover); }
@@ -119,14 +119,14 @@
 	list-style: none;
 	cursor: pointer;
 	user-select: none;
-	transition: background-color 120ms ease-out, color 120ms ease-out;
+	transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 .specialist-header__details > summary::-webkit-details-marker { display: none; }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-header__details > summary:hover { color: var(--text); background: var(--surface-hover); }
 }
 .specialist-header__details > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.specialist-header__caret { flex: 0 0 auto; color: var(--text-tertiary); transition: transform 160ms var(--ease-out), color 120ms ease-out; }
+.specialist-header__caret { flex: 0 0 auto; color: var(--text-tertiary); transition: transform 160ms var(--ease-out), color var(--duration-fast) var(--ease-out); }
 .specialist-header__details > summary:hover .specialist-header__caret { color: var(--text); }
 .specialist-header__details[open] .specialist-header__caret { transform: rotate(90deg); }
 .specialist-header__agent { min-width: 0; overflow: hidden; color: var(--text); font-size: var(--fs-ui); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -167,7 +167,7 @@
 	list-style: none;
 	cursor: pointer;
 	user-select: none;
-	transition: background-color 120ms ease-out, color 120ms ease-out;
+	transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 .specialist-files > summary::-webkit-details-marker { display: none; }
 @media (hover: hover) and (pointer: fine) {
@@ -178,7 +178,7 @@
 .specialist-files > summary span { margin-left: auto; padding: 0 5px; border-radius: var(--radius-xs); color: var(--text-tertiary); background: var(--surface-subtle); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .specialist-files > small { display: block; margin: 4px 0 2px; color: var(--text-tertiary); font-size: var(--fs-micro); line-height: 1.35; }
 .specialist-files ul { max-height: 140px; overflow-y: auto; list-style: none; padding: 0; margin: 4px 0 2px; display: flex; flex-direction: column; gap: 1px; }
-.specialist-files button { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 26px; padding: 3px 6px; border-radius: var(--radius-xs); text-align: left; color: var(--text); background: transparent; cursor: pointer; transition: background-color 120ms ease-out; }
+.specialist-files button { display: flex; gap: 8px; align-items: center; width: 100%; min-height: 26px; padding: 3px 6px; border-radius: var(--radius-xs); text-align: left; color: var(--text); background: transparent; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out); }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-files button:hover { background: var(--surface-hover); }
 }
@@ -219,7 +219,7 @@
 	background: transparent;
 	text-align: left;
 	cursor: pointer;
-	transition: background-color 120ms ease-out, color 120ms ease-out;
+	transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-turn--user .specialist-turn__toggle:hover { color: var(--text); background: var(--surface-hover); }
@@ -264,7 +264,7 @@
 	padding: 4px 8px;
 	border-radius: var(--radius-sm);
 	cursor: pointer;
-	transition: background-color 120ms ease-out, color 120ms ease-out;
+	transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 .specialists-panel .activity-tool__summary:disabled { cursor: default; }
 @media (hover: hover) and (pointer: fine) {
@@ -381,7 +381,7 @@
 	font-size: var(--fs-meta);
 	font-weight: 550;
 	cursor: pointer;
-	transition: background-color 120ms ease-out, border-color 120ms ease-out;
+	transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-jump:hover { background: var(--surface-hover); }

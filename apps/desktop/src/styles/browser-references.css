@@ -81,8 +81,7 @@
   background: var(--surface-hover);
 }
 .browser-selection-card :is(button, summary):focus-visible,
-.user-browser-reference button:focus-visible,
-.composer-browser-target:focus-visible {
+.user-browser-reference button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -129,28 +128,6 @@
   margin: 6px 0 0;
   overflow-wrap: anywhere;
   white-space: normal;
-}
-.composer-browser-target {
-  display: flex;
-  max-width: calc(100% - 16px);
-  align-items: center;
-  gap: 5px;
-  margin: 4px 8px;
-  padding: 3px 0;
-  color: var(--text-tertiary);
-  background: transparent;
-  font-size: var(--fs-micro);
-}
-.composer-browser-target > svg {
-  flex: 0 0 auto;
-}
-.composer-browser-target > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.composer-browser-target:hover {
-  color: var(--text-secondary);
 }
 .composer__context-chips > .composer-attachment:has(> img) {
   height: auto;

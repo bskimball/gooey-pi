@@ -1,0 +1,34 @@
+/* Contextual sizing for StyleX-backed primitives. These rules sit in
+   a layer after `stylex`; the same selectors in the `apex` layer lose to the
+   primitive's own font-size, min-height, border, and background. */
+.activity-stop-confirm .button--compact { min-height: 22px; padding-inline: 7px; font-size: var(--fs-meta); }
+.activity-peek__actions .button--compact { min-height: 28px; gap: 5px; padding-inline: 9px; font-size: var(--fs-meta); }
+.annotation-source .button { justify-self: start; min-height: 32px; }
+.annotation-popover .button { min-height: 26px; font-size: var(--fs-meta); }
+.project-run-menu > footer .button { min-height: 28px; font-size: var(--fs-meta); }
+.changes-toolbar > .button { font-size: var(--fs-meta); }
+
+.compact-state > .empty-state { height: auto; min-height: 0; padding: 16px 10px; }
+.compact-state > .empty-state h2 { margin: 0; color: var(--text-tertiary); font-size: var(--fs-ui); font-weight: 400; overflow-wrap: anywhere; }
+
+.file-changes__header .button,
+.diff-header .button {
+	min-height: 24px;
+	gap: 4px;
+	padding-inline: 6px;
+	border-color: transparent;
+	border-radius: var(--radius-sm);
+	color: var(--text-secondary);
+	background: transparent;
+	box-shadow: none;
+	font-size: var(--fs-micro);
+}
+.file-changes__header .button:hover:not(:disabled),
+.diff-header .button:hover:not(:disabled) {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+.diff-header .button.danger-action:hover:not(:disabled) {
+	color: var(--danger);
+	background: var(--danger-soft);
+}

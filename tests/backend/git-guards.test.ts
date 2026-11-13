@@ -49,7 +49,7 @@ describe('withRepositoryGuards spawn dedupe', () => {
     expect(calls.filter((args) => args[0] === 'config' && args.includes('--list'))).toHaveLength(1)
     // The repository config is read once via --list; a cold global-excludes
     // cache may add one bounded `config --global --get core.excludesFile`.
-    const globalExcludesReads = calls.filter((args) => args[0] === 'config' && !args.includes('--list'))
+    const globalExcludesReads = calls.filter((args) => args[0] === 'config' && !args.includes('--list') && !args.includes('--get-regexp'))
     for (const call of globalExcludesReads) {
       expect(call).toEqual(expect.arrayContaining(['--global', '--get', 'core.excludesFile']))
     }
@@ -68,7 +68,7 @@ describe('withRepositoryGuards spawn dedupe', () => {
     // rev-parse --show-toplevel, config --list, commit — and nothing else.
     // (A cold global-excludes cache may interleave one `config --global --get
     // core.excludesFile`; it is unrelated to identity, so it is filtered out.)
-    const calls = spawnedGitArgs().filter((args) => !(args[0] === 'config' && args.includes('core.excludesFile')))
+    const calls = spawnedGitArgs().filter((args) => !(args[0] === 'config' && (args.includes('core.excludesFile') || args.includes('--get-regexp'))))
     expect(calls.map((args) => args[0])).toEqual(['rev-parse', 'config', 'commit'])
     expect(calls.some((args) => args.includes('--global') || args.includes('--get'))).toBe(false)
 

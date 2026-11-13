@@ -33,7 +33,7 @@ import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
 import { Badge } from '@astryxdesign/core/Badge'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { ApexButton, IconButton, Modal, PiMark, useFocusTrap } from './ui'
+import { ApexButton, EmptyState, IconButton, Modal, PiMark, useFocusTrap } from './ui'
 import { StatusMark } from './activity/StatusMark'
 import { SessionStatusGlyph, SidebarAttentionGroups } from './SidebarAttention'
 
@@ -297,7 +297,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
       <nav className="sidebar__primary" aria-label="Primary">
         <div className="sidebar-search">
           <MagnifyingGlass size={13} />
-          <input id="session-search" value={query} onChange={(event) => { setQuery(event.target.value); setSearchLimits({}) }} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} placeholder="Search projects, chats" aria-label="Search projects and sessions" />
+          <input id="session-search" value={query} onChange={(event) => { setQuery(event.target.value); setSearchLimits({}) }} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} placeholder="Search projects and sessions" aria-label="Search projects and sessions" />
           {query ? <IconButton size="small" label="Clear search" onClick={() => setQuery('')}>×</IconButton> : null}
         </div>
         <div className="sidebar__destinations">
@@ -321,8 +321,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
           />
         )}
         <div className="sidebar__section-heading"><span>{normalized ? 'Search results' : 'Projects'}</span><span className="sidebar__section-heading-actions">{!normalized ? <IconButton size="small" label="Collapse all projects" onClick={() => { setProjectMenu(null); setCollapsed(Object.fromEntries(projects.map((project) => [project.id, true]))) }}><CaretRight size={13} /></IconButton> : null}<IconButton size="small" className={`sidebar__sort-toggle ${projectSortMode !== 'recent' ? 'is-sorted' : ''}`} aria-haspopup="menu" aria-expanded={projectSortMenuOpen} label={t('projects.sort')} onClick={() => setProjectSortMenuOpen((open) => !open)}><FunnelSimple size={13} /></IconButton><IconButton size="small" label="Add project" onClick={onAddProject}><FolderPlus size={13} /></IconButton>{projectSortMenuOpen ? <div className="sidebar__sort-menu" role="menu" aria-label={t('projects.sort.menu')}><div className="sidebar-menu__label" aria-hidden="true">{t('projects.sort.menu')}</div>{PROJECT_SORT_MODES.map((mode) => <button key={mode} type="button" role="menuitemradio" aria-checked={projectSortMode === mode} className={projectSortMode === mode ? 'is-active' : ''} onClick={() => { setProjectSortMenuOpen(false); onSetProjectSortMode(mode) }}>{t(PROJECT_SORT_LABEL_KEYS[mode])}{projectSortMode === mode ? <Check size={12} aria-hidden="true" /> : null}</button>)}</div> : null}</span></div>
-        {loading ? <p className="sidebar__empty" role="status">Loading sessions…</p> : null}
-      {!loading && visibleProjects.length === 0 ? <p className="sidebar__empty">{normalized ? 'No matching projects or sessions' : 'No projects yet'}</p> : null}
+        {loading ? <div className="compact-state" role="status"><EmptyState title="Loading sessions…">{null}</EmptyState></div> : null}
+      {!loading && visibleProjects.length === 0 ? <div className="compact-state"><EmptyState title={normalized ? 'No matching projects or sessions' : 'No projects yet'}>{null}</EmptyState></div> : null}
         {projectSections.filter((section) => section.projects.length > 0).map((section) => (
           <section key={section.id} className="sidebar__project-section" aria-label={section.label}>
             {normalized ? <h2 className="sidebar__group-heading">{section.label}</h2> : null}

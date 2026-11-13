@@ -1,5 +1,6 @@
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { openExternalUrl, revealPath } from '@/lib/desktop-actions'
+import { openExternalUrl, pathToFileUrl, revealPath } from '@/lib/desktop-actions'
 
 describe('desktop shell actions', () => {
   it('reports nothing when the request reaches the operating system', async () => {
@@ -21,5 +22,18 @@ describe('desktop shell actions', () => {
     }
     await expect(openExternalUrl(app, 'https://example.com')).resolves.toBe('bridge closed')
     await expect(revealPath(app, '/tmp/session.jsonl')).resolves.toBe('bridge closed')
+  })
+
+  it('encodes POSIX and Windows filesystem paths into local file URLs', () => {
+    expect(pathToFileUrl('/workspace/test-project/src/App.tsx')).toBe(
+      'file:///workspace/test-project/src/App.tsx',
+    )
+    const winUrl = pathToFileUrl('C:\\Users\\dev\\project//Migration plan #1 ?draft.tsx')
+    expect(winUrl).toBe('file:///C:/Users/dev/project/Migration%20plan%20%231%20%3Fdraft.tsx')
+    if (process.platform === 'win32') {
+      expect(fileURLToPath(new URL(winUrl))).toBe(
+        'C:\\Users\\dev\\project\\Migration plan #1 ?draft.tsx',
+      )
+    }
   })
 })

@@ -14,7 +14,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename } from '@/lib/data'
 import { errorMessage } from '@/lib/errors'
 import type { GitStatus, ProjectFileEntry, ProjectRecord } from '@/types/api'
+import { Banner } from '@astryxdesign/core/Banner'
 import { EmptyState, IconButton } from '../ui'
+
+function fileManagerName(platform?: NodeJS.Platform): string {
+  if (platform === 'darwin') return 'Finder'
+  if (platform === 'win32') return 'File Explorer'
+  return 'file manager'
+}
 
 export interface FileTreeNode {
   id: string
@@ -214,10 +221,14 @@ export function collectDirectoryIds(nodes: FileTreeNode[]): Set<string> {
 export function FilesPanel({
   project,
   git,
+  platform,
+  onOpen,
   onReveal,
 }: {
   project?: ProjectRecord
   git: GitStatus
+  platform?: NodeJS.Platform
+  onOpen?(path: string): void
   onReveal(path: string): void
 }) {
   const [query, setQuery] = useState('')
@@ -299,6 +310,8 @@ export function FilesPanel({
     setExpandedIds(new Set(allDirIds))
   }
 
+  const managerName = fileManagerName(platform)
+
   if (!project) {
     return (
       <EmptyState icon={<Folder size={24} />} title="No project files">
@@ -342,8 +355,8 @@ export function FilesPanel({
           </strong>
         </button>
 
-        {loading ? <p>Loading project files…</p> : null}
-        {error ? <p>Unable to list project files: {error}</p> : null}
+        {loading ? <div className="compact-state" role="status"><EmptyState title="Loading project files…">{null}</EmptyState></div> : null}
+        {error ? <Banner status="error" role="alert" title={`Unable to list project files: ${error}`} /> : null}
         {!loading && !error && skipped > 0 ? (
           <p className="file-tree__skipped">
             {skipped} {skipped === 1 ? 'folder' : 'folders'} could not be read and{' '}
@@ -358,79 +371,72 @@ export function FilesPanel({
               const status =
                 node.root === project.primaryFolder ? changed.get(node.path) : undefined
 
-              if (isDirectory) {
-                return (
+              const statusClassName =
+                status === 'M'
+                  ? 'file-tree__status--modified'
+                  : status === 'A'
+                    ? 'file-tree__status--added'
+                    : status === 'D'
+                      ? 'file-tree__status--deleted'
+                      : ''
+
+              return (
+                <div key={node.id} className="file-tree__row">
                   <button
                     type="button"
-                    key={node.id}
-                    className="file-tree__item is-directory"
+                    className={`file-tree__item ${isDirectory ? 'is-directory' : 'is-file'}`}
                     style={{ paddingLeft: `${8 + node.depth * 14}px` }}
-                    title={node.path || node.name}
-                    aria-expanded={isExpanded}
-                    onClick={isSearching ? undefined : () => toggleExpand(node.id)}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation()
-                      onReveal(node.fullPath)
-                    }}
+                    title={isDirectory ? node.path || node.name : node.path}
+                    aria-expanded={isDirectory ? isExpanded : undefined}
+                    onClick={
+                      isDirectory
+                        ? isSearching
+                          ? undefined
+                          : () => toggleExpand(node.id)
+                        : () => onOpen?.(node.fullPath)
+                    }
+                    onDoubleClick={
+                      isDirectory
+                        ? (e) => {
+                            e.stopPropagation()
+                            onReveal(node.fullPath)
+                          }
+                        : undefined
+                    }
                   >
-                    <span className="file-tree__chevron">
-                      {node.children.length > 0 ? (
-                        isExpanded ? <CaretDown size={13} /> : <CaretRight size={13} />
-                      ) : (
-                        <span className="file-tree__expander-placeholder" />
-                      )}
-                    </span>
+                    {isDirectory ? (
+                      <span className="file-tree__chevron">
+                        {node.children.length > 0 ? (
+                          isExpanded ? <CaretDown size={13} /> : <CaretRight size={13} />
+                        ) : (
+                          <span className="file-tree__expander-placeholder" />
+                        )}
+                      </span>
+                    ) : (
+                      <span className="file-tree__expander-placeholder" />
+                    )}
                     <span className="file-tree__icon">
-                      {isExpanded ? <FolderOpen size={13} /> : <Folder size={13} />}
+                      {isDirectory ? (
+                        isExpanded ? <FolderOpen size={13} /> : <Folder size={13} />
+                      ) : (
+                        getFileIcon(node.name)
+                      )}
                     </span>
                     <span className="file-tree__name">{node.name}</span>
                     {status ? (
-                      <small
-                        className={`file-tree__status ${
-                          status === 'M'
-                            ? 'file-tree__status--modified'
-                            : status === 'A'
-                              ? 'file-tree__status--added'
-                              : status === 'D'
-                                ? 'file-tree__status--deleted'
-                                : ''
-                        }`}
-                      >
-                        {status}
-                      </small>
+                      <small className={`file-tree__status ${statusClassName}`}>{status}</small>
                     ) : null}
                   </button>
-                )
-              }
-
-              return (
-                <button
-                  type="button"
-                  key={node.id}
-                  className="file-tree__item is-file"
-                  style={{ paddingLeft: `${8 + node.depth * 14}px` }}
-                  title={node.path}
-                  onClick={() => onReveal(node.fullPath)}
-                >
-                  <span className="file-tree__expander-placeholder" />
-                  <span className="file-tree__icon">{getFileIcon(node.name)}</span>
-                  <span className="file-tree__name">{node.name}</span>
-                  {status ? (
-                    <small
-                      className={`file-tree__status ${
-                        status === 'M'
-                          ? 'file-tree__status--modified'
-                          : status === 'A'
-                            ? 'file-tree__status--added'
-                            : status === 'D'
-                              ? 'file-tree__status--deleted'
-                              : ''
-                      }`}
-                    >
-                      {status}
-                    </small>
-                  ) : null}
-                </button>
+                  <button
+                    type="button"
+                    className="file-tree__reveal"
+                    aria-label={`Reveal ${node.name} in ${managerName}`}
+                    title={`Reveal in ${managerName}`}
+                    onClick={() => onReveal(node.fullPath)}
+                  >
+                    <FolderOpen size={13} />
+                  </button>
+                </div>
               )
             })
           : null}
@@ -448,10 +454,10 @@ export function FilesPanel({
         ) : null}
 
         {!loading && !error && treeRoots.length > 0 && visibleNodes.length === 0 ? (
-          <p>{query.trim() ? `No files match “${query}”.` : 'No project files found.'}</p>
+          <div className="compact-state"><EmptyState title={query.trim() ? `No files match “${query}”.` : 'No project files found.'}>{null}</EmptyState></div>
         ) : null}
 
-        {!loading && !error && treeRoots.length === 0 ? <p>No project files found.</p> : null}
+        {!loading && !error && treeRoots.length === 0 ? <div className="compact-state"><EmptyState title="No project files found.">{null}</EmptyState></div> : null}
       </div>
     </div>
   )

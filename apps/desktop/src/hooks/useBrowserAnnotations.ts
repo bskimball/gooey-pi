@@ -1,13 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { addAnnotation, type BrowserAnnotationInput, createAnnotation, MAX_BROWSER_ANNOTATIONS, reconcileAnnotationsForUrl, removeAnnotation } from '@/lib/browser-annotations'
-import type { AgentBrowserTabRecord, BrowserAnnotation } from '@/types/api'
-
-export type BrowserTarget = Pick<AgentBrowserTabRecord, 'tabId' | 'url' | 'title' | 'sessionFile' | 'backend'>
+import type { BrowserAnnotation } from '@/types/api'
 
 export interface BrowserAnnotationsApi {
   annotations: BrowserAnnotation[]
-  target?: BrowserTarget
-  setTarget?(target: BrowserTarget): void
   focusSignal?: number
   focusComposer?(): void
   atCapacity: boolean
@@ -32,13 +28,8 @@ export function useBrowserAnnotations(scopeKey = 'default'): BrowserAnnotationsA
   const [annotations, setAnnotations] = useState<BrowserAnnotation[]>([])
   const [sendSignal, setSendSignal] = useState(0)
   const [focusSignal, setFocusSignal] = useState(0)
-  const [target, setTargetState] = useState<BrowserTarget>()
   const focusComposer = useCallback(() => {
     if (scopeRef.current === scope) setFocusSignal((value) => value + 1)
-  }, [scope])
-  const setTarget = useCallback((next: BrowserTarget) => {
-    if (scopeRef.current !== scope) return
-    setTargetState((current) => current?.tabId === next.tabId && current.url === next.url && current.title === next.title && current.sessionFile === next.sessionFile ? current : next)
   }, [scope])
   const requestSend = useCallback(() => {
     if (scopeRef.current === scope) setSendSignal((current) => current + 1)
@@ -51,7 +42,6 @@ export function useBrowserAnnotations(scopeKey = 'default'): BrowserAnnotationsA
     setAnnotations([])
     setSendSignal(0)
     setFocusSignal(0)
-    setTargetState(undefined)
     annotationsRef.current = []
   }
   const commit = useCallback((next: BrowserAnnotation[]) => {
@@ -76,5 +66,5 @@ export function useBrowserAnnotations(scopeKey = 'default'): BrowserAnnotationsA
 
   // Stable container identity so memoized consumers (Inspector, Composer) do
   // not re-render while an agent streams; fields update independently.
-  return useMemo(() => ({ annotations, target, setTarget, focusSignal, focusComposer, atCapacity: annotations.length >= MAX_BROWSER_ANNOTATIONS, add, remove, clear, handleNavigation, sendSignal, requestSend }), [add, annotations, target, setTarget, focusSignal, focusComposer, clear, handleNavigation, remove, requestSend, sendSignal])
+  return useMemo(() => ({ annotations, focusSignal, focusComposer, atCapacity: annotations.length >= MAX_BROWSER_ANNOTATIONS, add, remove, clear, handleNavigation, sendSignal, requestSend }), [add, annotations, focusSignal, focusComposer, clear, handleNavigation, remove, requestSend, sendSignal])
 }

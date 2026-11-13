@@ -5,7 +5,6 @@ import { useComposerImages } from "@/hooks/useComposerImages";
 import { useSharedBrowserSelection } from "@/hooks/useSharedBrowserSelection";
 import { useDictation } from "@/hooks/useDictation";
 import { appendAnnotationsToPrompt, type BrowserReference } from "@/lib/browser-annotations";
-import type { BrowserTarget } from "@/hooks/useBrowserAnnotations";
 import { BrowserSelectionTray } from "./BrowserSelectionTray";
 import { useComposerMenu } from "@/hooks/useComposerMenu";
 import {
@@ -66,7 +65,6 @@ import { ExtensionTabPill } from "./ExtensionTabControls";
 import {
 	ArrowUp,
 	CaretDown,
-	Globe,
 	CircleNotch,
 	Gauge,
 	Image as ImageIcon,
@@ -119,9 +117,7 @@ interface ComposerProps {
 	/** The active thread's tab driven through the browser extension, with its pause and focus controls. */
 	extensionTab?: AgentBrowserTabRecord;
 	browserExtension?: ExtensionTabControls;
-	browserTarget?: BrowserTarget;
 	focusSignal?: number;
-	onOpenBrowser?(): void;
 	onRevealBrowserReference?(reference: BrowserReference): void;
 	/** The active terminal's selection, updated on selection changes only; the chip shows and submit sends exactly this. */
 	terminalSelection?: TerminalPromptContext;
@@ -209,9 +205,7 @@ export const Composer = memo(function Composer({
 	annotations = EMPTY_ANNOTATIONS,
 	extensionTab,
 	browserExtension,
-	browserTarget,
 	focusSignal = 0,
-	onOpenBrowser,
 	onRevealBrowserReference,
 	terminalSelection,
 	queuedMessages = [],
@@ -717,7 +711,6 @@ export const Composer = memo(function Composer({
 					</div>
 				) : null}
 				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
-				{browserTarget && !extensionTab ? <ApexButton variant="quiet" compact className="composer-browser-target" label={browserTarget.title || browserTarget.url} title={browserTarget.url} onClick={onOpenBrowser}><Globe size={12} /><span>{browserTarget.title || browserTarget.url}</span></ApexButton> : null}
 				{images.length ||
 				unsupportedFiles.length ||
 				terminalSelection?.text ||

@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { pathToFileUrl } from "@/lib/desktop-actions";
 import type {
 	ExtensionTabControls,
 	StampedPointerEvent,
@@ -137,6 +138,10 @@ export const Inspector = memo(function Inspector({
 	const [selectReadiness] = useState(createReadinessSelector);
 	const readiness = useMemo(() => selectReadiness(messages), [messages, selectReadiness]);
 	const specialistCount = summary.specialists.length;
+	const handleOpenFile = useCallback(
+		(path: string) => onOpenExternal(pathToFileUrl(path)),
+		[onOpenExternal],
+	);
 	const moveTab = (current: number, key: string) => {
 		let next = current;
 		if (key === "ArrowRight") next = (current + 1) % tabs.length;
@@ -277,7 +282,13 @@ export const Inspector = memo(function Inspector({
 					</div>
 				) : null}
 				{activeTab === "files" ? (
-					<FilesPanel project={project} git={git} onReveal={onRevealPath} />
+					<FilesPanel
+						project={project}
+						git={git}
+						platform={platform}
+						onOpen={handleOpenFile}
+						onReveal={onRevealPath}
+					/>
 				) : null}
 			</div>
 		</aside>

@@ -95,8 +95,8 @@
 	color: var(--text-tertiary);
 	background: transparent;
 	transition:
-		color 130ms ease-out,
-		background 130ms ease-out;
+		color var(--duration-fast) var(--ease-out),
+		background var(--duration-fast) var(--ease-out);
 }
 .composer-extension-pill button:hover {
 	color: var(--text);
@@ -1005,7 +1005,7 @@
 	transition:
 		transform 110ms ease-out,
 		opacity 120ms ease-out,
-		background 120ms ease-out;
+		background var(--duration-fast) var(--ease-out);
 }
 .send-button:hover {
 	opacity: 0.88;
@@ -1182,6 +1182,11 @@
 	align-items: baseline;
 	column-gap: 5px;
 }
+.pi-fusion-unreported {
+	color: var(--text-tertiary);
+	font-size: var(--fs-meta);
+	padding-inline: 4px;
+}
 .pi-mode-status:empty {
 	position: absolute;
 	width: 1px;
@@ -1225,7 +1230,7 @@
 	background: transparent;
 	text-align: left;
 	cursor: pointer;
-	transition: color 120ms ease-out;
+	transition: color var(--duration-fast) var(--ease-out);
 }
 .composer-queue__toggle:hover {
 	color: var(--text-secondary);

@@ -146,10 +146,6 @@ export function BrowserPanel({
 	const showExtensionTab =
 		showAgentTab && activeAgentTab?.backend === "extension";
 	const showAgentWebview = visible && showAgentTab && !showExtensionTab;
-	useEffect(() => {
-		if (!visible || !agentSessionKey) return;
-		annotationsRef.current.setTarget?.(showAgentTab && activeAgentTab ? activeAgentTab : { tabId: "preview", url: currentUrl, title: address, sessionFile: agentSessionKey, backend: "webview" });
-	}, [visible, agentSessionKey, showAgentTab, activeAgentTab, currentUrl, address]);
 	const slotRef = useRef<HTMLDivElement | null>(null);
 	const onAgentSlotRectRef = useRef(onAgentSlotRect);
 	onAgentSlotRectRef.current = onAgentSlotRect;

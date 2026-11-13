@@ -30,6 +30,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   const error = snapshot.matches({ open: 'error' }) ? snapshot.context.error : ''
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const strategy = catalog?.strategy ?? 'worktree'
 
   useEffect(() => {
@@ -38,7 +39,11 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
       if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) send({ type: 'CLOSE' })
     }
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') send({ type: 'CLOSE' })
+      if (event.key === 'Escape' && rootRef.current?.contains(document.activeElement)) {
+        event.preventDefault()
+        send({ type: 'CLOSE' })
+        requestAnimationFrame(() => triggerRef.current?.focus())
+      } else if (event.key === 'Escape') send({ type: 'CLOSE' })
     }
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', onEscape)
@@ -71,6 +76,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
     <div className="worktree-picker" ref={rootRef}>
       <button
         type="button"
+        ref={triggerRef}
         className="permissions-chip worktree-picker__trigger"
         aria-label={`Checkout: ${label}`}
         aria-expanded={open}

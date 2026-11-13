@@ -192,6 +192,32 @@ async function repositoryConfig(cwd: string): Promise<Map<string, string>> {
   return config
 }
 
+// Read only line-ending keys with normal config precedence; never pass the
+// user's remaining system/global configuration to repository operations.
+async function lineEndingOverrides(cwd: string): Promise<string[]> {
+  const env = restrictedGitEnvironment()
+  delete env.GIT_CONFIG_NOSYSTEM
+  delete env.GIT_CONFIG_SYSTEM
+  delete env.GIT_CONFIG_GLOBAL
+  const result = await runProcess('git', hardenedGitArgs(['config', '--includes', '--null', '--get-regexp', '^core\\.(autocrlf|eol)$']), {
+    cwd, timeoutMs: 5_000, maxBytes: GIT_CONFIG_OUTPUT_LIMIT, env,
+  })
+  if (result.code === 1 && !result.timedOut && !result.outputExceeded) return []
+  requireProcessSuccess('Git line-ending configuration inspection', result)
+  const values = new Map<string, string>()
+  for (const field of result.stdout.split('\0')) {
+    if (!field) continue
+    const separator = field.indexOf('\n')
+    const key = (separator < 0 ? field : field.slice(0, separator)).toLowerCase()
+    // A bare boolean key has no value separator and means true to Git.
+    const value = separator < 0 ? 'true' : field.slice(separator + 1).trim().toLowerCase()
+    if (key === 'core.autocrlf' && !/^(true|false|input|yes|no|on|off|[-+]?\d+[kmg]?|)$/.test(value)) throw new Error('Invalid Git core.autocrlf configuration')
+    if (key === 'core.eol' && !/^(lf|crlf|native)$/.test(value)) throw new Error('Invalid Git core.eol configuration')
+    values.set(key, value)
+  }
+  return [...values].map(([key, value]) => `${key}=${value}`)
+}
+
 function filterOverridesFromConfig(config: ReadonlyMap<string, string>): string[] {
   const drivers = new Set<string>()
   for (const key of config.keys()) {
@@ -434,7 +460,7 @@ export async function validateGitBranch(cwd: string, branchValue: unknown): Prom
 export async function createGitWorktree(cwd: string, targetPath: string, branchValue: unknown): Promise<void> {
   const repositoryRoot = await inspectRepositoryRoot(cwd)
   const branch = await validateGitBranch(repositoryRoot, branchValue)
-  const result = await runGit(repositoryRoot, ['worktree', 'add', '-b', branch, '--', resolve(targetPath)], { timeoutMs: 2 * 60_000, maxBytes: GIT_WORKTREE_OUTPUT_LIMIT })
+  const result = await runGit(repositoryRoot, ['worktree', 'add', '-b', branch, '--', resolve(targetPath)], { timeoutMs: 2 * 60_000, maxBytes: GIT_WORKTREE_OUTPUT_LIMIT }, await lineEndingOverrides(repositoryRoot))
   requireProcessSuccess('Git worktree creation', result)
 }
 
@@ -491,7 +517,7 @@ async function inspectGitWorktreeCleanAtRoot(repositoryRoot: string, overrides: 
 
 export async function inspectGitWorktreeClean(cwd: string): Promise<GitWorktreeCleanliness> {
   const repositoryRoot = await inspectRepositoryRoot(cwd)
-  return inspectGitWorktreeCleanAtRoot(repositoryRoot, filterOverridesFromConfig(await repositoryConfig(repositoryRoot)))
+  return inspectGitWorktreeCleanAtRoot(repositoryRoot, [...filterOverridesFromConfig(await repositoryConfig(repositoryRoot)), ...await lineEndingOverrides(repositoryRoot)])
 }
 
 async function changeGitBranch(cwd: string, branchValue: unknown, create: boolean): Promise<GitBranchChangeResult> {
@@ -501,11 +527,12 @@ async function changeGitBranch(cwd: string, branchValue: unknown, create: boolea
   const existing = branches.find((candidate) => candidate.name === branch)
   if (!create && !existing) return { kind: 'not-found' }
   if (create && existing) return { kind: 'already-exists' }
-  const overrides = filterOverridesFromConfig(await repositoryConfig(repositoryRoot))
+  const filterOverrides = filterOverridesFromConfig(await repositoryConfig(repositoryRoot))
+  const overrides = [...filterOverrides, ...await lineEndingOverrides(repositoryRoot)]
   const cleanliness = await inspectGitWorktreeCleanAtRoot(repositoryRoot, overrides)
   if (cleanliness.kind === 'dirty') return cleanliness
   if (existing?.current) return { kind: 'unchanged' }
-  if (overrides.length) throw new Error('Git branch checkout is blocked because this repository configures clean/smudge filters. Use a trusted Git client with the required filter support.')
+  if (filterOverrides.length) throw new Error('Git branch checkout is blocked because this repository configures clean/smudge filters. Use a trusted Git client with the required filter support.')
   const result = await runGit(repositoryRoot, create ? ['switch', '--create', branch] : ['switch', '--no-guess', branch], {
     timeoutMs: 2 * 60_000,
     maxBytes: GIT_BRANCH_OUTPUT_LIMIT,
@@ -545,7 +572,7 @@ export class GitService {
     const cwd = await this.repositoryCwd(requireString(cwdValue, 'cwd', { min: 1, max: 4096 }), authorizer)
     const config = await repositoryConfig(cwd)
     const overrides = filterOverridesFromConfig(config)
-    overrides.push(...await globalExcludesOverride(cwd, config))
+    overrides.push(...await globalExcludesOverride(cwd, config), ...await lineEndingOverrides(cwd))
     if (paths?.length) await rejectFilteredPaths(cwd, paths, overrides)
     return { cwd, overrides, config }
   }

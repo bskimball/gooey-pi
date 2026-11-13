@@ -11,7 +11,7 @@ import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { useProjectFileIndex } from '@/hooks/useProjectFileIndex'
-import { BrowserGlobe, useAppShellOverlay } from './ui'
+import { BrowserGlobe, EmptyState, useAppShellOverlay } from './ui'
 
 const styles = stylex.create({
   dialog: {
@@ -221,7 +221,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
       </div>
       <div id="command-results" className="command-results" role="listbox" aria-label="Results">
         {items.map((item, index) => <PaletteRow key={item.key} item={item} index={index} active={index === activeIndex} showGroup={index === 0 || items[index - 1].group !== item.group} onHover={setActive} onChoose={choose} />)}
-        {items.length === 0 ? <p>No sessions, projects, or commands match “{query}”.</p> : null}
+        {items.length === 0 ? <div className="compact-state"><EmptyState title={`No sessions, projects, or commands match “${query}”.`}>{null}</EmptyState></div> : null}
       </div>
       <footer><span>↑↓ Navigate</span><span>↵ Open</span><span>esc Close</span></footer>
     </Dialog>,

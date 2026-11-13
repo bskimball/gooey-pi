@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import type { BrowserAnnotationElement, BrowserSourceResult } from '@/types/api'
 import { MAX_COMMENT_LENGTH } from '@/lib/browser-annotations'
@@ -20,6 +20,7 @@ interface Props {
 }
 
 export function BrowserAnnotationPopover({ element, cwd, index, platform, text, onTextChange, onCancel, onSave, onRequestSend }: Props) {
+  const [returnFocus] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null)
   const [snapshot, send] = useMachine(annotationSourceMachine)
   const { source, error } = snapshot.context
   const opening = snapshot.matches('opening')
@@ -54,8 +55,10 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
         aria-label="Comment on selected element"
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
+            event.preventDefault()
             event.stopPropagation()
             onCancel()
+            requestAnimationFrame(() => { if (returnFocus?.isConnected) returnFocus.focus() })
           }
         }}
       >

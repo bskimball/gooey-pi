@@ -29,9 +29,9 @@
 .activity-section__count, .tabular { font-variant-numeric: tabular-nums; }
 .mono { font-family: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace; }
 .activity-list { display: flex; flex-direction: column; }
-.activity-row { position: relative; min-height: 58px; max-height: 64px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); transition: background-color 110ms ease-out, box-shadow 110ms ease-out; }
+.activity-row { position: relative; min-height: 58px; max-height: 64px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); transition: background-color var(--duration-fast) var(--ease-out), box-shadow 110ms ease-out; }
 .activity-row--recent { min-height: 54px; max-height: 58px; }
-.activity-row:hover, .activity-row:focus-within { background: var(--surface-subtle); }
+.activity-row:hover, .activity-row:focus-within { background: var(--surface-hover); }
 .activity-row.is-selected { background: var(--surface-selected); box-shadow: inset 3px 0 0 var(--apex); }
 .activity-row__main { min-width: 0; width: 100%; height: 100%; min-height: 56px; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 7px 8px; color: inherit; background: transparent; text-align: left; }
 .activity-row--running .activity-row__main { padding-right: 4px; }
@@ -62,7 +62,7 @@
 .activity-meta__ring .context-usage-dial::before { inset: 2px; }
 .activity-meta__ring .context-usage-dial > span { font-size: 7px; }
 .activity-meta__cost { color: var(--text-secondary); font-family: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace; font-size: var(--fs-micro); }
-.activity-meta__elapsed, .activity-meta__time { display: inline-flex; align-items: center; gap: 3px; color: var(--text-tertiary); font-size: var(--fs-meta); white-space: nowrap; }
+.activity-meta__elapsed, .activity-meta__time { display: inline-flex; align-items: center; gap: 3px; color: var(--text-tertiary); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .activity-meta__elapsed { color: var(--text-secondary); font-family: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace; font-size: var(--fs-micro); }
 .activity-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--fs-micro); font-weight: 550; white-space: nowrap; }
 .activity-badge--deadline, .activity-badge--waiting { color: var(--warning); background: var(--warning-soft); }
@@ -74,8 +74,7 @@
 .activity-row__stop:hover, .activity-row__stop:focus-visible { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 24%, transparent); }
 .activity-stop-confirm { display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-raised); box-shadow: 0 2px 8px rgba(2, 8, 18, 0.08); }
 .activity-stop-confirm__prompt { color: var(--text-secondary); font-size: var(--fs-meta); font-weight: 550; white-space: nowrap; }
-.activity-stop-confirm .button--compact { min-height: 22px; padding-inline: 7px; font-size: var(--fs-meta); }
-.activity-row__clear { height: 26px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface-raised); font-size: var(--fs-meta); font-weight: 550; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 110ms ease-out, color 110ms ease-out, background-color 110ms ease-out, border-color 110ms ease-out, transform 100ms ease-out; }
+.activity-row__clear { height: 26px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--surface-raised); font-size: var(--fs-meta); font-weight: 550; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 110ms ease-out, color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), transform 100ms ease-out; }
 .activity-row:hover .activity-row__clear, .activity-row:focus-within .activity-row__clear, .activity-row.is-selected .activity-row__clear { opacity: 1; pointer-events: auto; }
 .activity-row__clear:hover, .activity-row__clear:focus-visible { color: var(--text); background: var(--surface-hover); border-color: var(--border-strong); }
 .activity-row__clear:active:not(:disabled) { transform: scale(0.96); }
@@ -104,7 +103,6 @@
 .activity-peek__phase--idle { color: var(--text-tertiary); }
 .activity-peek__metrics { display: inline-flex; align-items: center; gap: 8px; }
 .activity-peek__actions { flex: 0 0 auto; max-width: 100%; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
-.activity-peek__actions .button--compact { min-height: 28px; display: inline-flex; align-items: center; gap: 5px; padding-inline: 9px; font-size: var(--fs-meta); }
 .activity-peek__stop { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, var(--border)); }
 .activity-peek__stop:hover { background: var(--danger-soft); }
 
@@ -164,7 +162,7 @@
 .activity-reply__status--failed { color: var(--danger); }
 
 /* Toolbar status pill */
-.activity-status-pill { height: 26px; display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); background: color-mix(in srgb, var(--apex-soft) 36%, var(--surface-subtle)); font-size: var(--fs-meta); font-weight: 550; line-height: 1; white-space: nowrap; transition: background-color 120ms ease-out, border-color 120ms ease-out, transform 100ms ease-out; }
+.activity-status-pill { height: 26px; display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); background: color-mix(in srgb, var(--apex-soft) 36%, var(--surface-subtle)); font-size: var(--fs-meta); font-weight: 550; line-height: 1; white-space: nowrap; transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), transform 100ms ease-out; }
 .activity-status-pill.has-running { border-color: color-mix(in srgb, var(--apex) 26%, var(--border)); }
 .activity-status-pill.has-needs-you { border-color: color-mix(in srgb, var(--warning) 38%, var(--border)); background: color-mix(in srgb, var(--warning-soft) 52%, var(--surface-subtle)); }
 .activity-status-pill:hover { background: var(--surface-hover); border-color: var(--border-strong); }

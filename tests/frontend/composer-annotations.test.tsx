@@ -1348,9 +1348,14 @@ describe("Composer sendSignal", () => {
 		act(() => {
 			publishActivePiFusionPair(null);
 		});
-		expect(trigger("Lead model: Not reported").disabled).toBe(true);
-		expect(trigger("Sidekick thinking").disabled).toBe(true);
+		expect(container.querySelector('.pi-fusion-unreported')?.textContent).toBe('Pair not reported');
+		expect(container.querySelector('[aria-label="Lead thinking"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Sidekick thinking"]')).toBeNull();
 		expect(trigger("Behavior mode").disabled).toBe(false);
+		act(() => { publishActivePiFusionPair(pair); });
+		expect(container.querySelector('.pi-fusion-unreported')).toBeNull();
+		expect(trigger("Lead model: Lead Model").disabled).toBe(false);
+		expect(trigger("Sidekick thinking").disabled).toBe(false);
 		expect(container.querySelector('[aria-label="Model: Vision"]')).toBeNull();
 		act(() => {
 			publishActivePiBehaviorMode("apex");

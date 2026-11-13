@@ -239,9 +239,12 @@ describe('FilesPanel component', () => {
       value: { projects: { listFiles } },
     })
 
+    const onOpen = vi.fn()
     const onReveal = vi.fn()
     await act(async () => {
-      root.render(<FilesPanel project={sampleProject} git={emptyGit} onReveal={onReveal} />)
+      root.render(
+        <FilesPanel project={sampleProject} git={emptyGit} onOpen={onOpen} onReveal={onReveal} />,
+      )
       await Promise.resolve()
     })
 
@@ -312,17 +315,70 @@ describe('FilesPanel component', () => {
     expect(agentProgressButton.querySelector('.file-tree__name')?.textContent).toBe('AgentProgress.tsx')
     expect(agentProgressButton.style.paddingLeft).toBe('50px') // depth 3
 
-    // Clicking file reveals file
+    // Clicking file opens file directly instead of revealing parent folder
     act(() => {
       agentProgressButton.click()
     })
-    expect(onReveal).toHaveBeenCalledWith('/workspace/test-project/src/components/chat/AgentProgress.tsx')
+    expect(onOpen).toHaveBeenCalledWith('/workspace/test-project/src/components/chat/AgentProgress.tsx')
+    expect(onReveal).not.toHaveBeenCalled()
 
-    // Double clicking folder reveals folder
+    // Clicking the row reveal action reveals the file in its parent folder without triggering open
+    onOpen.mockClear()
+    const revealFileButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Reveal AgentProgress.tsx in file manager"]',
+    )
+    expect(revealFileButton).toBeTruthy()
+    act(() => {
+      revealFileButton?.click()
+    })
+    expect(onReveal).toHaveBeenCalledWith('/workspace/test-project/src/components/chat/AgentProgress.tsx')
+    expect(onOpen).not.toHaveBeenCalled()
+
+    // Clicking a folder's reveal action reveals the folder without toggling its expansion state
+    onReveal.mockClear()
+    const revealFolderButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Reveal components in file manager"]',
+    )
+    expect(revealFolderButton).toBeTruthy()
+    act(() => {
+      revealFolderButton?.click()
+    })
+    expect(onReveal).toHaveBeenCalledWith('/workspace/test-project/src/components')
+    expect(componentsButton.getAttribute('aria-expanded')).toBe('true')
+
+    // Double clicking folder still reveals folder
+    onReveal.mockClear()
     act(() => {
       componentsButton.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
     })
     expect(onReveal).toHaveBeenCalledWith('/workspace/test-project/src/components')
+  })
+
+  it('uses platform-specific file manager labels on reveal buttons', async () => {
+    const listFiles = vi.fn(async () => ({
+      entries: [{ path: 'package.json', type: 'file' as const }],
+      skipped: 0,
+    }))
+    Object.defineProperty(window, 'apex', {
+      configurable: true,
+      value: { projects: { listFiles } },
+    })
+
+    await act(async () => {
+      root.render(<FilesPanel project={sampleProject} git={emptyGit} platform="win32" onReveal={vi.fn()} />)
+      await Promise.resolve()
+    })
+    expect(
+      container.querySelector('button[aria-label="Reveal package.json in File Explorer"]'),
+    ).toBeTruthy()
+
+    await act(async () => {
+      root.render(<FilesPanel project={sampleProject} git={emptyGit} platform="darwin" onReveal={vi.fn()} />)
+      await Promise.resolve()
+    })
+    expect(
+      container.querySelector('button[aria-label="Reveal package.json in Finder"]'),
+    ).toBeTruthy()
   })
 
   it('displays git modification status for changed files', async () => {
