@@ -1000,6 +1000,44 @@ export class ProjectService {
     return authorizedRoot
   }
 
+  /** Resolve collaboration against one explicit, currently verified project grant. */
+  async collaborationScope(value: string): Promise<{ projectId: string; folders: string[] }> {
+    const cwd = await requireExistingDirectory(value, 'cwd')
+    const revision = this.authorizationRevision
+    const projects = this.ownProjects(this.store.snapshot().projects)
+    const fingerprint = JSON.stringify(projects)
+    const candidates: Array<{ projectId: string; folders: string[] }> = []
+    if ([...this.rootRemovals.keys()].some((root) => isPathWithin(root, cwd)) || this.pendingRemovalIds.has(inferredId(cwd))) {
+      throw new TypeError('project is being removed')
+    }
+    for (const project of projects) {
+      if (this.pendingRemovalIds.has(project.id)) {
+        if (project.folders.some((folder) => isPathWithin(resolve(folder), cwd))) throw new TypeError('project is being removed')
+        continue
+      }
+      const folders: string[] = []
+      for (const folder of project.folders) {
+        const { configured, canonical, verified } = await this.resolveFolderAuthorization(project, folder)
+        if (!verified || await this.isBroadRoot(verified.path)) {
+          // A stale grant cannot become a route through an overlapping parent grant.
+          if (isPathWithin(configured, cwd) || isPathWithin(canonical, cwd)) throw new TypeError('project folder identity changed')
+          continue
+        }
+        if (this.rootRemovals.has(configured) || this.rootRemovals.has(verified.path) || this.pendingRemovalIds.has(inferredId(verified.path))) continue
+        folders.push(verified.path)
+      }
+      if (folders.some((folder) => isPathWithin(folder, cwd))) candidates.push({ projectId: project.id, folders: [...new Set(folders)] })
+    }
+    if ([...this.rootRemovals.keys()].some((root) => isPathWithin(root, cwd)) || candidates.some(({ projectId }) => this.pendingRemovalIds.has(projectId))) {
+      throw new TypeError('project is being removed')
+    }
+    if (revision !== this.authorizationRevision || fingerprint !== JSON.stringify(this.ownProjects(this.store.snapshot().projects))) {
+      throw new TypeError('project authorization changed while the request was being checked')
+    }
+    if (candidates.length !== 1) throw new TypeError('cwd must belong to exactly one explicitly granted project')
+    return candidates[0]
+  }
+
   async authorizePath(value: string): Promise<string> {
     const path = await requireExistingPath(value)
     await this.authorizedRootFor(path, { readOnly: true })

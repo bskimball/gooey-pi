@@ -4,10 +4,11 @@ import type { ApexModelDescriptor, RuntimeInfo, SessionRecord, TranscriptMessage
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import type { AgentRpcManager } from '../agent-rpc'
+import type { ProjectService } from '../projects'
 import { CapabilityBridge, type CapabilityClaim } from 'apex-core/lib/capability-bridge'
 import type { ModelCatalogProvider } from '../model-catalog'
 import { availableModels, rankedModelMatches, resolveModel, resolveReasoning } from '../model-selection'
-import { requireBoolean, requireId, requireInteger, requireString } from 'apex-core/validation'
+import { requireBoolean, requireExistingDirectory, requireId, requireInteger, requireString } from 'apex-core/validation'
 import { encodeGooeyPiAgentMessage } from 'apex-core/collaboration/message-envelope'
 
 const MAX_LISTED_SESSIONS = 100
@@ -62,6 +63,7 @@ export interface AgentCollaborationBridgeOptions {
   disabledProviders: Record<'pi', () => ReadonlySet<string>>
   disabledModels: Record<'pi', () => ReadonlySet<string>>
   waitClock?: CollaborationWaitClock
+  projects?: Pick<ProjectService, 'collaborationScope'>
 }
 
 interface CollaborationMessage {
@@ -158,7 +160,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   private readonly sourcesByToken = new Map<string, CollaborationTarget>()
   private readonly activeWaitsByToken = new Map<string, number>()
   private readonly activeWaitTargets = new Set<string>()
-  private readonly activeCreations = new Set<string>()
+  private readonly creationQueues = new Map<string, { active: boolean; pending: Array<{ run: () => void; reject: (error: Error) => void }> }>()
   private readonly pendingRuntimeTokens = new Map<string, string>()
   private readonly waitClock: CollaborationWaitClock
 
@@ -179,7 +181,11 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const { token } = claim
     this.sourcesByToken.delete(token)
     this.activeWaitsByToken.delete(token)
-    this.activeCreations.delete(token)
+    const queue = this.creationQueues.get(token)
+    if (queue) {
+      for (const entry of queue.pending.splice(0)) entry.reject(new Error('Capability expired'))
+      if (!queue.active) this.creationQueues.delete(token)
+    }
     for (const key of this.activeWaitTargets) if (key.startsWith(`${token}:`)) this.activeWaitTargets.delete(key)
     for (const [runtimeId, pendingToken] of this.pendingRuntimeTokens) {
       if (pendingToken === token) this.pendingRuntimeTokens.delete(runtimeId)
@@ -244,18 +250,23 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const harness = source.session.harness
     if (harness !== 'pi') throw new Error('Invalid collaboration harness')
     const service = this.options.sessions[harness]
-    const sessions = await service.list(source.session.projectPath, false, true)
+    const scope = this.options.projects ? await this.options.projects.collaborationScope(source.session.projectPath) : undefined
+    const sessions = await service.list(scope ? undefined : source.session.projectPath, false, true)
     for (const session of sessions) {
-      if (session.id === source.session.id) continue
-      if (session.depth !== 0) continue
-      if (resolve(session.projectPath) !== resolve(source.session.projectPath)) continue
+      if (session.id === source.session.id || session.depth !== 0 || session.archived) continue
+      if (scope && this.options.projects) {
+        try {
+          const peerScope = await this.options.projects.collaborationScope(session.projectPath)
+          if (peerScope.projectId !== scope.projectId) continue
+        } catch { continue }
+      } else if (resolve(session.projectPath) !== resolve(source.session.projectPath)) continue
       peers.push({ session, service, manager: this.options.agents[harness] })
     }
     return peers.sort((left, right) => Date.parse(right.session.updatedAt) - Date.parse(left.session.updatedAt))
   }
 
   private async listPeers(source: CollaborationTarget): Promise<Array<Record<string, unknown>>> {
-    return (await this.peersFor(source)).slice(0, MAX_LISTED_SESSIONS).map(({ session, manager }) => ({
+    return (await this.peersFor(source)).filter(({ session }) => !('role' in session && session.role === 'coordinator')).slice(0, MAX_LISTED_SESSIONS).map(({ session, manager }) => ({
       id: session.id,
       harness: session.harness,
       title: session.title,
@@ -295,9 +306,22 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const selectedReasoning = selectedModel && reasoningQuery
       ? resolveReasoning(reasoningQuery, selectedModel.availableThinkingLevels)
       : undefined
+    const requestedCwd = params.cwd === undefined ? source.session.projectPath : requireString(params.cwd, 'cwd', { min: 1, max: 4096, trim: true })
+    let cwd = source.session.projectPath
+    if (this.options.projects) {
+      const sourceScope = await this.options.projects.collaborationScope(source.session.projectPath)
+      const targetScope = await this.options.projects.collaborationScope(requestedCwd)
+      if (sourceScope.projectId !== targetScope.projectId) throw new TypeError('cwd must belong to the source project')
+      // Resolve the exact cwd only after checking its project identity.
+      cwd = await requireExistingDirectory(requestedCwd, 'cwd')
+      const finalScope = await this.options.projects.collaborationScope(cwd)
+      if (sourceScope.projectId !== finalScope.projectId) throw new TypeError('cwd must belong to the source project')
+    } else if (resolve(requestedCwd) !== resolve(source.session.projectPath)) {
+      throw new TypeError('cwd must match the source working directory')
+    }
     const manager = source.manager
     const runtime = await manager.start({
-      cwd: source.session.projectPath,
+      cwd,
       ...(selectedModel ? { model: selectedModel.key } : {}),
       ...(selectedReasoning ? { thinking: selectedReasoning } : {}),
       ...(fast !== undefined ? { fast } : {}),
@@ -310,7 +334,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       }
       await manager.command(runtime.runtimeId, {
         type: 'prompt',
-        message: prompt,
+        message: encodeGooeyPiAgentMessage({ fromSessionId: source.session.id, text: prompt }),
         streamingBehavior: streamingBehaviorForIntent('queue'),
       })
       if (title) await manager.command(runtime.runtimeId, { type: 'set_session_name', name: title }).catch(() => undefined)
@@ -328,7 +352,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     }
     this.bindRuntimeSession(current.runtimeId, current.sessionFile)
     const sessionPath = resolve(current.sessionFile)
-    const created = (await source.service.list(source.session.projectPath, false, true))
+    const created = (await source.service.list(cwd, false, true))
       .find((candidate) => candidate.depth === 0 && resolve(candidate.filePath) === sessionPath)
     if (!created) {
       this.pendingRuntimeTokens.delete(runtime.runtimeId)
@@ -441,12 +465,31 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     }
   }
 
-  private async withCreationAdmission<T>(claim: CapabilityClaim, action: () => Promise<T>): Promise<T> {
-    if (this.claimForToken(claim.token) !== claim) throw new Error('Capability expired')
-    if (this.activeCreations.has(claim.token)) throw new Error('A session creation is already active for this runtime')
-    this.activeCreations.add(claim.token)
-    try { return await action() }
-    finally { this.activeCreations.delete(claim.token) }
+  private withCreationAdmission<T>(claim: CapabilityClaim, action: () => Promise<T>): Promise<T> {
+    if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) return Promise.reject(new Error('Capability expired'))
+    let queue = this.creationQueues.get(claim.token)
+    if (!queue) {
+      queue = { active: false, pending: [] }
+      this.creationQueues.set(claim.token, queue)
+    }
+    if (queue.active && queue.pending.length >= 4) return Promise.reject(new Error('Too many session creations are queued for this runtime'))
+    const currentQueue = queue
+    return new Promise<T>((resolveResult, reject) => {
+      const run = () => {
+        currentQueue.active = true
+        void (async () => {
+          if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
+          return action()
+        })().then(resolveResult, reject).finally(() => {
+          currentQueue.active = false
+          const next = currentQueue.pending.shift()
+          if (next) next.run()
+          else if (this.creationQueues.get(claim.token) === currentQueue) this.creationQueues.delete(claim.token)
+        })
+      }
+      if (currentQueue.active) currentQueue.pending.push({ run, reject })
+      else run()
+    })
   }
 
   private async wait(target: CollaborationTarget, rawCursor: unknown, rawTimeout: unknown): Promise<CollaborationSnapshot & { timed_out: boolean }> {
