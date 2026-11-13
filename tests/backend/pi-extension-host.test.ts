@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApexExtensionApi as BrowserExtensionApi } from '../../apps/desktop/assets/extensions/apex-browser'
 import type { ApexExtensionApi as ScheduleExtensionApi } from '../../apps/desktop/assets/extensions/apex-schedules'
 import type { ApexExtensionApi as AskUserExtensionApi } from '../../apps/desktop/assets/extensions/apex-ask-user'
-import type { ApexExtensionApi as CollaborationExtensionApi } from '../../apps/desktop/assets/extensions/apex-collaboration'
 
 /**
  * Base pi host simulation: unlike OMP, pi injects no `pi.typebox` shim.
@@ -138,10 +137,13 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
     vi.resetModules()
     vi.stubEnv('GOOEYPI_COLLABORATION_URL', 'http://127.0.0.1:1/')
     vi.stubEnv('GOOEYPI_COLLABORATION_TOKEN', 'token')
+    vi.stubEnv('GOOEYPI_COORDINATOR_INSTRUCTIONS', 'Coordinate this explicitly granted project.')
     const factory = (await import('../../apps/desktop/assets/extensions/apex-collaboration')).default
     const { tools, pi } = piHost()
-    await factory(pi as unknown as CollaborationExtensionApi)
-    expect(tools.map((tool) => tool.name)).toEqual(['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_wait'])
+    let beforeStart: ((event: { systemPrompt: string }) => { systemPrompt: string }) | undefined
+    await factory({ ...pi, on(_event, handler) { beforeStart = handler } })
+    expect(beforeStart?.({ systemPrompt: 'Base system prompt' })).toEqual({ systemPrompt: 'Base system prompt\n\nCoordinate this explicitly granted project.' })
+    expect(tools.map((tool) => tool.name)).toEqual(['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_steer', 'gooeypi_session_stop', 'gooeypi_session_wait'])
     // TypeBox omits required for all-optional fields; the plain fallback emits [].
     expect(schemaOf(tools[1]).required ?? []).toEqual([])
     expect(schemaOf(tools[2]).required).toEqual(['prompt'])
@@ -152,6 +154,10 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
     expect(schemaOf(tools[4]).required).toEqual(['target_session_id', 'message'])
     expect(tools[4].description).toContain('reply directly to its from_session_id')
     expect(JSON.stringify(schemaOf(tools[4]).properties.target_session_id)).toContain('from_session_id')
-    expect(schemaOf(tools[5]).properties.timeout_ms.type).toBe('number')
+    expect(schemaOf(tools[5]).required).toEqual(['target_session_id', 'message'])
+    expect(schemaOf(tools[6]).required).toEqual(['target_session_id'])
+    expect(schemaOf(tools[7]).required ?? []).toEqual([])
+    expect(schemaOf(tools[7]).properties.target_session_ids.type).toBe('array')
+    expect(schemaOf(tools[7]).properties.timeout_ms.type).toBe('number')
   })
 })

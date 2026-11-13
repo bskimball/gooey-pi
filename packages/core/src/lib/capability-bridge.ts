@@ -31,6 +31,7 @@ function safeEqual(left: string, right: string): boolean {
 }
 
 function send(response: ServerResponse, status: number, body: Record<string, unknown>): void {
+  if (response.destroyed) return
   const payload = JSON.stringify(body)
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(payload), 'Cache-Control': 'no-store' })
   response.end(payload)
@@ -54,7 +55,7 @@ export abstract class CapabilityBridge {
   /** Environment handed to the agent child; `url` points at this bridge. */
   protected abstract environmentEntries(url: string, token: string): NodeJS.ProcessEnv
   /** Handle one authenticated, rate-limited, parsed call. */
-  protected abstract dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim): Promise<unknown>
+  protected abstract dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim, signal?: AbortSignal): Promise<unknown>
 
   async start(): Promise<void> {
     if (this.server) return
@@ -164,8 +165,14 @@ export abstract class CapabilityBridge {
         send(response, 401, { ok: false, error: 'Capability expired' })
         return
       }
-      const result = await this.dispatch(method, params, claim)
-      send(response, 200, { ok: true, result })
+      const controller = new AbortController()
+      const disconnected = () => { if (!response.writableEnded) controller.abort() }
+      response.once('close', disconnected)
+      if (response.destroyed) controller.abort()
+      try {
+        const result = await this.dispatch(method, params, claim, controller.signal)
+        send(response, 200, { ok: true, result })
+      } finally { response.off('close', disconnected) }
     } catch (error) {
       send(response, error instanceof SyntaxError || error instanceof TypeError ? 400 : 409, {
         ok: false,

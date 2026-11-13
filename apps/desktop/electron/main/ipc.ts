@@ -15,6 +15,7 @@ import type {
 	ThemeMode,
 } from "../../src/types/api";
 import type { AgentRpcManager } from "./agent-rpc";
+import type { ActivityCoordinatorService } from "./collaboration/coordinator";
 import type { AgentBrowserService } from "./browser/agent-service";
 import { resolveBrowserSource } from "./browser/source";
 import { readWorkspaceImage } from "./workspace-image";
@@ -70,6 +71,7 @@ interface Services {
 	sessionHandoff: SessionHandoff;
 	extensionPathContext: ExtensionPathContext;
 	agents: AgentRpcManager;
+	coordinator: ActivityCoordinatorService;
 	terminals: TerminalService;
 	backgroundJobs: Pick<BackgroundJobBridge, "list" | "stopJob" | "dismissJob">;
 	git: GitService;
@@ -426,10 +428,21 @@ export function registerIpc(
 	handle("sessions:rewind", (_event, runtimeId, filePath, token, options) => services.rewind.execute(runtimeId, filePath, token, options));
 	handle("sessions:run-receipts", (_event, filePath) => services.agents.runReceipts().list(requireString(filePath, "filePath", { min: 1, max: 4096 })));
 	handle("sessions:run-file", (_event, filePath, userEntryId, path) => services.agents.runReceipts().file(requireString(filePath, "filePath", { min: 1, max: 4096 }), requireString(userEntryId, "user entry id"), requireString(path, "path", { min: 1, max: 4096 })));
-	handle("sessions:follow-up", async (_event, filePath) => {
+	handle("sessions:follow-up", async (_event, filePath, message, intent) => {
 		await sessionsForPath(filePath);
-		return false;
+		return services.coordinator.followUp(filePath, message, intent);
 	});
+	handle("coordinator:open", async (event, projectId) => {
+		const attachment = await services.coordinator.open(event.sender.id, projectId);
+		try {
+			verify(event);
+			return attachment;
+		} catch (error) {
+			services.coordinator.close(event.sender.id, attachment.attachmentId);
+			throw error;
+		}
+	});
+	handle("coordinator:close", (event, attachmentId) => services.coordinator.close(event.sender.id, attachmentId));
 	handle("sessions:rename", async (_event, filePath, title) =>
 		(await sessionsForPath(filePath)).service.rename(filePath, title),
 	);
@@ -916,6 +929,7 @@ export function registerIpc(
 		},
 		revoke(webContentsId) {
 			authorized.delete(webContentsId);
+			services.coordinator?.releaseOwner(webContentsId);
 			void services.terminals.killOwner(webContentsId).catch((error) => {
 				console.warn("Failed to stop revoked renderer terminals:", error);
 			});
@@ -925,6 +939,7 @@ export function registerIpc(
 			closed = true;
 			if (activeIpcRegistration === registration) activeIpcRegistration = null;
 			authorized.clear();
+			services.coordinator?.dispose();
 			unsubscribeExtensionStatus?.();
 			unsubscribeSessionChanges();
 			if (typeof unsubscribeScheduleChanges === "function")

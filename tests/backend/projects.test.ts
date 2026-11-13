@@ -74,6 +74,34 @@ function deferred<T>() {
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
 
+describe('collaboration project scope', () => {
+  it('uses verified identities from one explicit record and rejects inferred, drift and ambiguity', async () => {
+    const { root, service, store } = setup()
+    const linked = join(root, '..', 'linked'); mkdirSync(linked)
+    const other = join(root, '..', 'other'); mkdirSync(other)
+    const inferred = join(root, '..', 'inferred'); mkdirSync(inferred)
+    const now = new Date().toISOString()
+    await store.update((state) => { state.projects.push(
+      { id: 'a', harness: 'pi', name: 'A', path: root, folders: [root, linked], primaryFolder: root, pinned: false, createdAt: now, lastOpenedAt: now, folderIdentities: identities(root, linked) },
+      { id: 'b', harness: 'pi', name: 'B', path: other, folders: [other], primaryFolder: other, pinned: false, createdAt: now, lastOpenedAt: now, folderIdentities: identities(other) },
+    ) })
+    const a = await service.collaborationScope(root)
+    expect(a).toEqual({ projectId: 'a', folders: expect.arrayContaining([realpathSync(root), realpathSync(linked)]) })
+    expect((await service.collaborationScope(linked)).projectId).toBe('a')
+    expect((await service.collaborationScope(other)).projectId).toBe('b')
+    await expect(service.collaborationScope(inferred)).rejects.toThrow(/explicitly granted/)
+    await store.update((state) => { state.projects[1].folders.push(root); state.projects[1].folderIdentities = { ...state.projects[1].folderIdentities, ...identities(root) } })
+    await expect(service.collaborationScope(root)).rejects.toThrow(/exactly one/)
+    await store.update((state) => { state.projects[1].folders = [other] })
+    await store.update((state) => { state.projects[0].folderIdentities = { ...identities(root, linked), [realpathSync(root)]: { ...identity(root), ino: '0' } } })
+    await expect(service.collaborationScope(linked)).rejects.toThrow(/primary folder/)
+    await store.update((state) => { state.projects[0].folderIdentities = identities(root, linked) })
+    renameSync(linked, `${linked}-old`); mkdirSync(linked)
+    await expect(service.collaborationScope(linked)).rejects.toThrow(/identity changed/)
+    expect((await service.collaborationScope(root)).folders).not.toContain(realpathSync(linked))
+  })
+})
+
 describe('ProjectService list enrichment', () => {
   it.each(['persisted', 'inferred'])('fails closed when %s removal starts after a grant persists but before it publishes authorization', async (kind) => {
     const { root, service, store } = setup()

@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, normalize } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -17,6 +17,10 @@ import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/mai
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
 import type { ApexModelDescriptor } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
+import { ActivityCoordinatorService } from '../../apps/desktop/electron/main/collaboration/coordinator'
+import { ProjectService } from '../../apps/desktop/electron/main/projects'
+
+vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn() } }))
 
 const dirs: string[] = []
 const managers: AgentRpcManager[] = []
@@ -75,11 +79,11 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     transcript.push({ type: 'message', id, parentId: transcript.length ? transcript[transcript.length - 1].id : null, message: { role: 'user', content: command.message } })
     busy = true
     if (command.message === 'work resumed without receipts') send({ type: 'agent_start' })
-    send({ type: 'fake_prompt', message: command.message })
+    send({ type: 'fake_prompt', message: command.message, command: command.type })
     send({ id: command.id, type: 'response', command: command.type, success: true, data: { disposition: transcript.length === 1 ? 'started' : 'queued' } })
   } else if (command.type === 'get_state') {
     const reply = () => send({ id: command.id, type: 'response', command: 'get_state', success: true, data: {
-      sessionId, sessionFile: receipts ? sessionFile : undefined, isStreaming: busy, isCompacting: false, pendingMessageCount: 0, thinkingLevel: currentThinking,
+      sessionId, sessionFile: receipts || process.argv.includes('--session') ? sessionFile : undefined, isStreaming: busy, isCompacting: false, pendingMessageCount: 0, thinkingLevel: currentThinking,
       model: currentModel,
       serviceTier: 'priority', fastModeEnabled: true,
       contextUsage: { tokens: 999999, contextWindow: 272000, percent: 99 },
@@ -394,6 +398,26 @@ describe('finish task', () => {
 })
 
 describe('run receipts', () => {
+  it('preserves attached intent for an already busy runtime without an open receipt', async () => {
+    const fake = fakePiAgent({ receipts: true })
+    const manager = piManager(fake.executable)
+    const events: Array<Record<string, unknown>> = []
+    manager.setEventSink(({ event }) => events.push(event))
+    const runtime = await manager.start({ cwd: fake.cwd })
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'work resumed without receipts' })
+    await waitUntil(() => manager.getForSession(join(fake.cwd, 'session.jsonl'))?.isStreaming === true)
+    const storage = mkdtempSync(join(tmpdir(), 'apex-receipts-')); dirs.push(storage)
+    manager.setRunReceipts(new RunReceipts(storage, async (path) => path))
+    await manager.command(runtime.runtimeId, { type: 'attached_prompt', intent: 'steer', message: 'steering' })
+    await manager.command(runtime.runtimeId, { type: 'attached_prompt', intent: 'queue', message: 'queued' })
+    expect(events.filter((event) => event.type === 'fake_prompt').map(({ message, command }) => ({ message, command }))).toEqual([
+      { message: 'work resumed without receipts', command: 'prompt' },
+      { message: 'steering', command: 'steer' },
+      { message: 'queued', command: 'follow_up' },
+    ])
+    expect(events.some((event) => event.type === 'fake_baseline_wait')).toBe(false)
+  })
+
   it('reserves initial capture, joins queued messages, and finalizes only when Pi is idle', async () => {
     const fake = fakePiAgent({ receipts: true })
     const init = spawnSync('git', ['init', '-q'], { cwd: fake.cwd })
@@ -623,6 +647,61 @@ describe('pi RPC adapter argv', () => {
 })
 
 describe('pi RPC handshake', () => {
+  it('owns a durable project coordinator separately, pins each attachment, and wakes background follow-ups only in granted projects', async () => {
+    const fake = fakePiAgent()
+    const cwd = realpathSync(fake.cwd)
+    const statePath = join(cwd, 'coordinator-state.json')
+    const store = new JsonStateStore(statePath)
+    const info = lstatSync(cwd, { bigint: true })
+    await store.update((draft) => { draft.projects.push({
+      id: 'project', harness: 'pi', name: 'Project', path: cwd, folders: [cwd], primaryFolder: cwd, pinned: false,
+      createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(),
+      folderIdentities: { [cwd]: { dev: info.dev.toString(), ino: info.ino.toString(), birthtimeNs: info.birthtimeNs.toString() } },
+    }) })
+    const projects = new ProjectService(store, () => null)
+    const sessions = new SessionService(store, () => null, 5000, piSessionServiceOptions(join(cwd, 'sessions')))
+    const manager = new AgentRpcManager(fake.executable, (path) => projects.authorizeCwd(path), (path) => sessions.requireSessionPath(path))
+    managers.push(manager)
+    const control = new ActivityCoordinatorService(store, projects, sessions, manager)
+    const events: Record<string, unknown>[] = []
+    const unsubscribe = manager.subscribe(({ event }) => events.push(event))
+    try {
+      await expect(control.open(1, 'not-granted')).rejects.toThrow('explicitly granted')
+      const [first, second] = await Promise.all([control.open(1, 'project'), control.open(2, 'project')])
+      expect(first.session.filePath).toBe(second.session.filePath)
+      expect(first.runtime.runtimeId).toBe(second.runtime.runtimeId)
+      expect(first.attachmentId).not.toBe(second.attachmentId)
+      expect(first.pendingDialogs).toEqual([])
+      expect((await sessions.list()).filter((session) => session.role === 'coordinator')).toHaveLength(1)
+      expect(events.some((event) => event.type === 'fake_prompt')).toBe(false)
+      expect(control.close(2, first.attachmentId)).toBe(false)
+      expect(control.close(1, first.attachmentId)).toBe(true)
+      expect(control.close(1, first.attachmentId)).toBe(false)
+      for (let i = 0; i < 4; i += 1) {
+        const worker = await sessions.create(cwd)
+        await manager.start({ cwd, sessionPath: worker.filePath })
+      }
+      expect(manager.getForSession(first.session.filePath)?.runtimeId).toBe(first.runtime.runtimeId)
+      expect(control.close(2, second.attachmentId)).toBe(true)
+      await manager.stop(first.runtime.runtimeId)
+      await expect(control.followUp(first.session.filePath, 'Summarize the implementor results.', 'queue')).resolves.toBe(true)
+      await waitUntil(() => events.some((event) => event.type === 'fake_prompt'))
+      expect(events.find((event) => event.type === 'fake_prompt')?.message).toBe('Summarize the implementor results.')
+      expect(manager.getForSession(first.session.filePath)?.runtimeId).not.toBe(first.runtime.runtimeId)
+      const reopenedStore = new JsonStateStore(statePath)
+      await reopenedStore.ready()
+      expect(reopenedStore.getCoordinatorSessions().project).toBe(first.session.filePath)
+      await reopenedStore.beginShutdown()
+      await store.update((draft) => { draft.projects = [] })
+      await expect(control.followUp(first.session.filePath, 'Should be denied', 'queue')).rejects.toThrow()
+      await expect(control.open(1, 'project')).rejects.toThrow('explicitly granted')
+    } finally {
+      unsubscribe()
+      control.dispose()
+      await store.beginShutdown()
+    }
+  }, 60_000)
+
   it('releases the exact runtime environment after Pi termination', async () => {
     const fake = fakePiAgent()
     const manager = piManager(fake.executable)

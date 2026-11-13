@@ -46,6 +46,7 @@ export class AgentRpcManager {
   private runtimeEnvironmentRevision = 0
   private disabledModels: () => ReadonlySet<string> = () => new Set()
   private eventSink: (envelope: ApexEventEnvelope) => void = () => undefined
+  private eventSequence = 0
   private runtimeEnvironmentProvider: (scope: { cwd: string; sessionPath?: string; interactive: boolean }) => NodeJS.ProcessEnv = () => ({})
   private runtimeStartListener: (environment: NodeJS.ProcessEnv, info: RuntimeInfo) => void = () => undefined
   private runtimeEndListener: (environment: NodeJS.ProcessEnv, info?: RuntimeInfo) => void = () => undefined
@@ -94,11 +95,11 @@ export class AgentRpcManager {
     return () => { this.subscribers.delete(sink) }
   }
 
-  sessionSnapshot(runtimeId: string): DesktopSessionSnapshot {
+  sessionSnapshot(runtimeId: string): DesktopSessionSnapshot & { eventSequence: number } {
     const runtime = this.requireRuntime(runtimeId).snapshot()
     const projection = this.projections.get(runtimeId)
     if (!projection || this.unavailableProjections.has(runtimeId) || this.startingRuntimes.has(runtimeId) || this.sessionTransitions.has(runtimeId)) throw new Error('Runtime snapshot is not available')
-    return structuredClone({ runtime, messages: projection.messages, dialogs: projection.pendingDialogs(), statuses: projection.statuses })
+    return structuredClone({ runtime, messages: projection.messages, dialogs: projection.pendingDialogs(), statuses: projection.statuses, eventSequence: this.eventSequence })
   }
 
   pinAttachment(runtimeId: string): () => void {
@@ -116,10 +117,11 @@ export class AgentRpcManager {
 
   private publishEvent(envelope: ApexEventEnvelope): void {
     const normalized = this.projections.get(envelope.runtimeId)?.apply(envelope.event)
-    this.eventSink(envelope)
-    for (const sink of this.subscribers) sink(envelope)
+    const published = { ...envelope, sequence: ++this.eventSequence }
+    this.eventSink(published)
+    for (const sink of this.subscribers) sink(published)
     if (normalized) {
-      const event = { runtimeId: envelope.runtimeId, event: normalized }
+      const event = { runtimeId: envelope.runtimeId, event: normalized, sequence: ++this.eventSequence }
       this.eventSink(event)
       for (const sink of this.subscribers) sink(event)
     }
@@ -431,7 +433,7 @@ export class AgentRpcManager {
     if (runtime.isReadOnlySide() && ['switch_session', 'new_session', 'clone', 'fork', 'branch'].includes(String(command.type))) throw new Error(`Read-only side conversation blocks RPC command ${String(command.type)}`)
     // attached_prompt is resolved here, after validation, against owner state.
     const attachedPrompt = command.type === 'attached_prompt'
-    if (attachedPrompt && !this.receipts) {
+    if (attachedPrompt && (!this.receipts || this.isBusy(runtime))) {
       const busy = this.isBusy(runtime)
       command.type = busy ? command.intent === 'steer' ? 'steer' : 'follow_up' : 'prompt'
       delete command.intent

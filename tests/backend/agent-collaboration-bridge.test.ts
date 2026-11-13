@@ -1,8 +1,11 @@
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentCollaborationBridge } from '../../apps/desktop/electron/main/collaboration/agent-bridge'
 import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
 import type { AgentRpcManager } from '../../apps/desktop/electron/main/agent-rpc'
-import type { HarnessId, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { ApexEventEnvelope, HarnessId, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 const bridges: AgentCollaborationBridge[] = []
 configureGooeyPiAgentMessageSigning(Buffer.alloc(32, 7))
@@ -41,7 +44,14 @@ function service(records: SessionRecord[], transcripts: Record<string, Transcrip
 
 function manager(runtime?: RuntimeInfo, onCreate?: () => void) {
   let current = runtime
+  const listeners = new Set<(envelope: ApexEventEnvelope) => void>()
+  const dialogs: Record<string, unknown>[] = []
   return {
+    listeners,
+    dialogs,
+    subscribe: (listener: (envelope: ApexEventEnvelope) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    emit: (runtimeId: string, event: Record<string, unknown>) => { for (const listener of listeners) listener({ runtimeId, event }) },
+    sessionSnapshot: vi.fn((_runtimeId: string) => ({ dialogs })),
     getForSession: vi.fn((filePath: string) => current?.sessionFile === filePath ? current : undefined),
     start: vi.fn(async ({ cwd, sessionPath, model, fast }: { cwd: string; sessionPath?: string; model?: string; fast?: boolean }) => {
       if (sessionPath) current = { runtimeId: 'runtime-awakened', harness: target.harness, sessionId: target.id, sessionFile: sessionPath, cwd, isStreaming: false }
@@ -94,8 +104,13 @@ class FakeCollaborationWaitClock {
     const waiter = this.waiters.shift()
     if (waiter) waiter(timer)
     else this.pending.push(timer)
-    return { unref: timer.unref }
+    return timer
   }
+
+  readonly clearTimeout = vi.fn((timer: { unref(): void }) => {
+    const index = this.pending.findIndex((entry) => entry === timer)
+    if (index >= 0) this.pending.splice(index, 1)
+  })
 
   takeNextTimer(): Promise<ScheduledFakeTimer> {
     const timer = this.pending.shift()
@@ -113,6 +128,7 @@ async function fixture(
   live = true,
   targetTranscript: TranscriptMessage[] = defaultTargetTranscript,
   waitClock?: FakeCollaborationWaitClock,
+  projects?: ConstructorParameters<typeof AgentCollaborationBridge>[0]['projects'],
 ) {
   const records = [source, target, foreign, child, archived]
   const apexSessions = service(records, {
@@ -151,20 +167,121 @@ async function fixture(
     disabledProviders: { pi: () => new Set(['hidden']) },
     disabledModels: { pi: () => new Set(['openai-codex/desktop-hidden']) },
     ...(waitClock ? { waitClock } : {}),
+    ...(projects ? { projects } : {}),
   })
   await bridge.start()
   bridges.push(bridge)
   const environment = bridge.environmentFor({ cwd: '/project', sessionPath: source.filePath, harness: 'pi' })
-  const call = async (method: string, params: Record<string, unknown> = {}, token = environment.GOOEYPI_COLLABORATION_TOKEN) => {
+  const call = async (method: string, params: Record<string, unknown> = {}, token = environment.GOOEYPI_COLLABORATION_TOKEN, signal?: AbortSignal) => {
     const response = await fetch(environment.GOOEYPI_COLLABORATION_URL!, {
-      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ method, params }),
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ method, params }), signal,
     })
     return { status: response.status, body: await response.json() as { ok: boolean; result?: Record<string, unknown> | Array<Record<string, unknown>>; error?: string } }
   }
-  return { bridge, call, environment, apexManager, apexSessions }
+  return { bridge, call, environment, apexManager, apexSessions, records }
 }
 
 describe('AgentCollaborationBridge', () => {
+  it('serializes three concurrent HTTP creates', async () => {
+    const { call, apexManager } = await fixture()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const original = apexManager.start.getMockImplementation()!
+    apexManager.start.mockImplementationOnce(async (args) => { await gate; return original(args) })
+    const first = call('create', { prompt: 'one' })
+    await vi.waitFor(() => expect(apexManager.start).toHaveBeenCalledTimes(1))
+    const rest = [call('create', { prompt: 'two' }), call('create', { prompt: 'three' })]
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(apexManager.start).toHaveBeenCalledTimes(1)
+    release()
+    const results = await Promise.all([first, ...rest])
+    expect(results.map((result) => result.status)).toEqual([200, 200, 200])
+    expect(apexManager.start).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds pending creations and rejects them immediately on revocation', async () => {
+    const { call, apexManager, bridge, environment } = await fixture()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const original = apexManager.start.getMockImplementation()!
+    apexManager.start.mockImplementationOnce(async (args) => { await gate; return original(args) })
+    const first = call('create', { prompt: 'one' })
+    await vi.waitFor(() => expect(apexManager.start).toHaveBeenCalledTimes(1))
+    const pending = Array.from({ length: 4 }, (_, index) => call('create', { prompt: `pending ${index}` }))
+    const queues = (bridge as unknown as { creationQueues: Map<string, { pending: unknown[] }> }).creationQueues
+    await vi.waitFor(() => expect(queues.get(environment.GOOEYPI_COLLABORATION_TOKEN!)?.pending).toHaveLength(4))
+    const overflow = await call('create', { prompt: 'overflow' })
+    expect(overflow.status).toBe(409)
+    expect(overflow.body.error).toMatch(/Too many/)
+    bridge.revoke(environment.GOOEYPI_COLLABORATION_TOKEN)
+    expect((await Promise.all(pending)).map((result) => result.status)).toEqual([409, 409, 409, 409])
+    release()
+    expect((await first).status).toBe(409)
+    expect(apexManager.start).toHaveBeenCalledTimes(1)
+    expect(apexManager.command).not.toHaveBeenCalled()
+    expect(apexManager.stop).toHaveBeenCalledWith('runtime-created')
+  })
+
+  it('binds an ordinary new runtime when its first session file is actually reported by the manager', async () => {
+    const { call, bridge, apexManager, records } = await fixture()
+    const environment = bridge.environmentFor({ cwd: source.projectPath, harness: 'pi' })
+    bridge.bindSession(environment.GOOEYPI_COLLABORATION_TOKEN, undefined, 'ordinary-runtime')
+    expect((await call('list', {}, environment.GOOEYPI_COLLABORATION_TOKEN)).body.error).toContain('not available yet')
+    records.push(created)
+    apexManager.list.mockReturnValue([{ runtimeId: 'ordinary-runtime', harness: 'pi', cwd: source.projectPath, sessionFile: created.filePath, isStreaming: false }])
+    apexManager.emit('ordinary-runtime', { type: 'session_persisted', sessionFile: foreign.filePath })
+    const bound = await call('list', {}, environment.GOOEYPI_COLLABORATION_TOKEN)
+    expect(bound.status).toBe(200)
+    expect(bound.body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: source.id }), expect.objectContaining({ id: target.id })]))
+    expect(bound.body.result).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: created.id })]))
+  })
+
+  it('binds source authority to the runtime cwd and refuses a replacement project grant', async () => {
+    let owner = 'original-grant'
+    const collaborationScope = vi.fn(async (cwd: string) => ({ projectId: cwd === '/project' ? owner : 'other-project', folders: [cwd] }))
+    const { call, records, apexManager } = await fixture(true, defaultTargetTranscript, undefined, { collaborationScope })
+    records[0] = { ...source, projectPath: '/other' }
+    expect((await call('list')).body.error).toContain('project grant changed')
+    records[0] = source
+    expect((await call('models')).status).toBe(200)
+    owner = 'replacement-grant'
+    expect((await call('list')).body.error).toContain('project grant changed')
+    expect(apexManager.start).not.toHaveBeenCalled()
+    expect(apexManager.command).not.toHaveBeenCalled()
+  })
+
+  it('starts in an authorized linked folder and hides coordinators only from list', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'apex-collab-'))
+    try {
+      const canonical = realpathSync(folder)
+      const collaborationScope = vi.fn(async (cwd: string) => {
+        if (cwd === '/project' || cwd === canonical || cwd === folder) return { projectId: 'a', folders: ['/project', canonical] }
+        throw new TypeError('not granted')
+      })
+      const { call, apexManager, records } = await fixture(true, defaultTargetTranscript, undefined, { collaborationScope })
+      records.push({ ...target, id: '019f0000-0000-7000-8000-000000000009', filePath: '/sessions/coordinator.jsonl', role: 'coordinator' } as SessionRecord)
+      const listed = await call('list')
+      expect(JSON.stringify(listed.body.result)).not.toContain('019f0000-0000-7000-8000-000000000009')
+      expect((await call('read', { target_session_id: '019f0000-0000-7000-8000-000000000009' })).status).toBe(200)
+      expect((await call('create', { prompt: 'linked task', cwd: folder })).status).toBe(200)
+      expect(apexManager.start).toHaveBeenCalledWith({ cwd: canonical })
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
+  it('uses project identity for peers and denies a different create cwd', async () => {
+    const collaborationScope = vi.fn(async (cwd: string) => {
+      if (cwd === '/project' || cwd === '/other') return { projectId: 'project-a', folders: ['/project', '/other'] }
+      if (cwd === '/foreign') return { projectId: 'project-b', folders: ['/foreign'] }
+      throw new TypeError('not granted')
+    })
+    const { call, apexManager } = await fixture(true, defaultTargetTranscript, undefined, { collaborationScope })
+    const listed = await call('list')
+    expect(listed.body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: foreign.id })]))
+    const denied = await call('create', { prompt: 'no', cwd: '/foreign' })
+    expect(denied.status).toBe(400)
+    expect(apexManager.start).not.toHaveBeenCalled()
+  })
+
   it('revokes a runtime claim and clears its cached and pending session bindings', async () => {
     const { bridge, call, environment } = await fixture()
     const token = environment.GOOEYPI_COLLABORATION_TOKEN!
@@ -218,7 +335,7 @@ describe('AgentCollaborationBridge', () => {
     expect(archivedDenied.body.error).toContain('not found in this working directory')
   })
 
-  it('reads conversational I/O and thinking without exposing execution traces', async () => {
+  it('keeps conversational I/O separate from bounded tool outcome summaries', async () => {
     const toolOnly: TranscriptMessage[] = Array.from({ length: 45 }, (_, index) => ({
       id: `tool-${index}`,
       role: 'tool',
@@ -241,7 +358,9 @@ describe('AgentCollaborationBridge', () => {
     const read = await call('read', { target_session_id: target.id })
     expect(read.status).toBe(200)
     expect(read.body.result).toMatchObject({ token_limit: 30_000, truncated: false })
-    const serialized = JSON.stringify(read.body.result)
+    const snapshot = read.body.result as Record<string, unknown>
+    expect(snapshot.operations).toMatchObject({ truncated: true, character_limit: 6000, summaries: expect.any(Array) })
+    const serialized = JSON.stringify(snapshot.messages)
     expect(serialized).toContain('VISIBLE_USER_INPUT')
     expect(serialized).toContain('[image omitted]')
     expect(serialized).toContain('[thinking]\\nVISIBLE_THINKING')
@@ -252,6 +371,21 @@ describe('AgentCollaborationBridge', () => {
     expect(serialized).not.toContain('SECRET_TOOL_ARGUMENT')
     expect(serialized).not.toContain('SECRET_INLINE_TOOL_RESULT')
     expect(serialized).not.toContain('SECRET_COMPACTION_SUMMARY')
+  })
+
+  it('bounds tool-only errors and todo summaries independently of conversational history', async () => {
+    const { call } = await fixture(true, [
+      ...Array.from({ length: 12 }, (_, index): TranscriptMessage => ({ id: `operation-${index}`, role: 'tool', parts: [{ type: 'toolResult', name: 'bash', text: 'x'.repeat(10_000), isError: true }] })),
+      { id: 'todo', role: 'assistant', parts: [{ type: 'toolCall', name: 'todo_write', args: { todos: [{ content: 'Fix compiler error', status: 'in_progress' }] } }] },
+    ])
+    const read = await call('read', { target_session_id: target.id })
+    expect(read.status).toBe(200)
+    const snapshot = read.body.result as { messages: unknown[]; operations: { summaries: Array<{ kind: string; name: string; status: string; text: string }>; truncated: boolean; character_limit: number } }
+    expect(snapshot.messages).toEqual([])
+    expect(snapshot.operations.summaries).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'todo', text: 'in_progress: Fix compiler error' }), expect.objectContaining({ kind: 'tool', status: 'error' })]))
+    expect(snapshot.operations.summaries.length).toBeLessThanOrEqual(10)
+    expect(snapshot.operations.summaries.reduce((sum, item) => sum + item.name.length + item.text.length + item.status.length, 0)).toBeLessThanOrEqual(6000)
+    expect(snapshot.operations.truncated).toBe(true)
   })
 
   it('caps session reads at 30,000 estimated tokens and marks truncation', async () => {
@@ -331,7 +465,11 @@ describe('AgentCollaborationBridge', () => {
       cwd: '/project', model: 'openai-codex/gpt-5.6-sol', thinking: 'max', fast: true,
     })
     expect(apexManager.command).toHaveBeenNthCalledWith(1, 'runtime-created', {
-      type: 'prompt', message: 'Review the model integration.', streamingBehavior: 'followUp',
+      type: 'prompt', message: expect.any(String), streamingBehavior: 'followUp',
+    })
+    const initialPrompt = (apexManager.command.mock.calls[0] as unknown as [string, { message: string }])[1].message
+    expect(parseGooeyPiAgentMessage(initialPrompt)).toEqual({
+      fromSessionId: source.id, text: 'Review the model integration.',
     })
     expect(apexManager.command).toHaveBeenCalledWith('runtime-created', { type: 'set_session_name', name: 'Model reviewer' })
     expect(apexManager.command).toHaveBeenCalledWith('runtime-created', { type: 'get_state' })
@@ -391,7 +529,7 @@ describe('AgentCollaborationBridge', () => {
     expect(apexManager.command).toHaveBeenCalledTimes(2)
   })
 
-  it('allows only one active wait per target and bounds idle transcript polling', async () => {
+  it('allows only one active wait per target and reads idle transcripts only at admission and deadline', async () => {
     const { call, apexSessions } = await fixture()
     const read = await call('read', { target_session_id: target.id })
     const cursor = (read.body.result as Record<string, unknown>).cursor
@@ -460,6 +598,87 @@ describe('AgentCollaborationBridge', () => {
     ]))
     expect(clock.now()).toBe(10_050)
     expect(reads).toBe(3)
+  })
+
+  it('waits on three busy targets without polling and wakes for sanitized human input or runtime errors', async () => {
+    const { call, apexManager, apexSessions, records } = await fixture()
+    records[2] = { ...foreign, projectPath: source.projectPath }
+    records.push(created)
+    const peers = [target, records[2], created]
+    const runtimes = peers.map((session, index): RuntimeInfo => ({ runtimeId: `run-${index}`, harness: 'pi', cwd: source.projectPath, sessionId: session.id, sessionFile: session.filePath, isStreaming: true }))
+    apexManager.getForSession.mockImplementation((path) => runtimes.find((runtime) => runtime.sessionFile === path))
+    apexManager.list.mockImplementation(() => runtimes)
+    const pending = call('wait', { target_session_ids: peers.map((session) => session.id), timeout_ms: 5_000 })
+    await vi.waitFor(() => expect(apexSessions.read).toHaveBeenCalledTimes(3))
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 30))
+    expect(apexSessions.read).toHaveBeenCalledTimes(3)
+    expect(apexManager.listeners.size).toBe(2)
+    apexManager.sessionSnapshot.mockImplementation((runtimeId) => ({ dialogs: runtimeId === 'run-0' ? [{ id: 'private-answer-id', method: 'confirm', title: 'Deploy?', message: 'Private prompt', options: ['secret'], deadline: Date.now() + 60_000 }] : [] }))
+    apexManager.emit('run-0', { type: 'extension_ui_request', id: 'private-answer-id', method: 'confirm' })
+    const ready = await pending
+    expect(ready.status).toBe(200)
+    expect(ready.body.result).toMatchObject({ timed_out: false, changed_session_ids: [target.id], snapshots: expect.arrayContaining([expect.objectContaining({ session: expect.objectContaining({ id: target.id, status: 'waiting' }), waiting_for_user: { count: 1, method: 'confirm', title: 'Deploy?', deadline: expect.any(Number) } })]) })
+    const snapshots = (ready.body.result as { snapshots: Array<{ token_limit: number; operations: { character_limit: number } }> }).snapshots
+    expect(snapshots.map((snapshot) => snapshot.token_limit)).toEqual([10_000, 10_000, 10_000])
+    expect(snapshots.map((snapshot) => snapshot.operations.character_limit)).toEqual([2_000, 2_000, 2_000])
+    expect(JSON.stringify(ready.body)).not.toContain('private-answer-id')
+    expect(JSON.stringify(ready.body)).not.toContain('secret')
+    expect(JSON.stringify(ready.body)).not.toContain('Private prompt')
+    expect(apexManager.listeners.size).toBe(1)
+    apexManager.sessionSnapshot.mockReturnValue({ dialogs: [] })
+    const errorWait = call('wait', { target_session_id: created.id, timeout_ms: 5_000 })
+    await vi.waitFor(() => expect(apexManager.listeners.size).toBe(2))
+    apexManager.emit('run-2', { type: 'error', error: 'Compiler rejected the change' })
+    expect((await errorWait).body.result).toMatchObject({ timed_out: false, last_error: 'Compiler rejected the change', session: { id: created.id, status: 'failed' } })
+    expect(apexManager.listeners.size).toBe(1)
+  })
+
+  it('cancels wait subscriptions and deadlines on HTTP disconnect and token revocation', async () => {
+    const clock = new FakeCollaborationWaitClock()
+    const { call, bridge, environment, apexManager } = await fixture(true, defaultTargetTranscript, clock)
+    const cursor = ((await call('read', { target_session_id: target.id })).body.result as Record<string, unknown>).cursor
+    const controller = new AbortController()
+    const disconnected = call('wait', { target_session_id: target.id, after_cursor: cursor }, environment.GOOEYPI_COLLABORATION_TOKEN, controller.signal)
+    await vi.waitFor(() => expect(apexManager.listeners.size).toBe(2))
+    controller.abort()
+    await expect(disconnected).rejects.toThrow()
+    await vi.waitFor(() => expect(apexManager.listeners.size).toBe(1))
+    expect(clock.clearTimeout).toHaveBeenCalledOnce()
+    const revoked = call('wait', { target_session_id: target.id, after_cursor: cursor })
+    await vi.waitFor(() => expect(apexManager.listeners.size).toBe(2))
+    bridge.revoke(environment.GOOEYPI_COLLABORATION_TOKEN)
+    expect((await revoked).body.error).toContain('Capability expired')
+    expect(apexManager.listeners.size).toBe(1)
+    expect(clock.clearTimeout).toHaveBeenCalledTimes(2)
+  })
+
+  it('steers and aborts only authorized peer turns, without answering dialogs or waking stopped peers', async () => {
+    const { call, apexManager } = await fixture()
+    const runtime = apexManager.list()[0]
+    apexManager.getForSession.mockReturnValue({ ...runtime, isStreaming: true })
+    expect((await call('steer', { target_session_id: target.id, message: 'Use the new acceptance criteria.' })).status).toBe(200)
+    expect(apexManager.command).toHaveBeenLastCalledWith(runtime.runtimeId, { type: 'steer', message: expect.any(String) })
+    const envelope = (apexManager.command.mock.calls[0] as unknown as [string, { message: string }])[1].message
+    expect(parseGooeyPiAgentMessage(envelope)).toEqual({ fromSessionId: source.id, text: 'Use the new acceptance criteria.' })
+    expect((await call('stop', { target_session_id: target.id })).body.result).toMatchObject({ stopped: true })
+    expect(apexManager.command).toHaveBeenLastCalledWith(runtime.runtimeId, { type: 'abort' })
+    expect((await call('stop', { target_session_id: foreign.id })).status).toBe(409)
+    expect((await call('steer', { target_session_id: foreign.id, message: 'No' })).status).toBe(409)
+    expect((await call('extension_ui_response', { target_session_id: target.id, id: 'approval', confirmed: true })).status).toBe(400)
+    apexManager.getForSession.mockReturnValue(undefined)
+    expect((await call('stop', { target_session_id: target.id })).body.result).toMatchObject({ stopped: false })
+    expect(apexManager.command).toHaveBeenCalledTimes(2)
+    expect(apexManager.start).not.toHaveBeenCalled()
+    expect(apexManager.stop).not.toHaveBeenCalled()
+  })
+
+  it('rejects ambiguous, repeated, cross-project, or excessive wait targets', async () => {
+    const { call } = await fixture()
+    expect((await call('wait', { target_session_id: target.id, target_session_ids: [target.id] })).status).toBe(400)
+    expect((await call('wait', { target_session_ids: [target.id], after_cursor: 'cursor' })).status).toBe(400)
+    expect((await call('wait', { target_session_ids: [target.id, target.id] })).status).toBe(400)
+    expect((await call('wait', { target_session_ids: Array.from({ length: 17 }, () => target.id) })).status).toBe(400)
+    expect((await call('wait', { target_session_ids: [target.id, foreign.id] })).status).toBe(409)
   })
 
   it('wakes an offline target while rejecting missing source scope and invalid tokens', async () => {

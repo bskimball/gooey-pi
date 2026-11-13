@@ -122,7 +122,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const { layout, settingsState, sessions, workspace, setView, reportError } = getDeps()
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
     if (workspace.workspaceRef.current.project?.id === project.id) { acknowledgeSession(); setView('session'); return }
-    const session = sessions.find((candidate) => !candidate.archived && projectContainsPath(project, candidate.projectPath))
+    const session = sessions.find((candidate) => candidate.role !== 'coordinator' && !candidate.archived && projectContainsPath(project, candidate.projectPath))
     if (session) acknowledgeSession(session)
     const generation = workspace.activateWorkspace(project, session)
     setView('session')
@@ -131,6 +131,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
   }
   const selectSession = async (session: SessionRecord) => {
     const { layout, settingsState, projects, workspace, setView, reportError } = getDeps()
+    if (session.role === 'coordinator') { reportError('Coordinator sessions cannot be opened as chats.'); return }
     if (layout.compactLayout) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
     acknowledgeSession(session)
     const project = findProjectForSession(projects, session)
@@ -208,7 +209,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       setProjects((items) => items.filter((item) => item.id !== project.id))
       if (workspace.workspaceRef.current.project?.id === project.id) {
         const fallback = projects.find((item) => item.id !== project.id)
-        const session = fallback ? sessions.find((candidate) => !candidate.archived && projectContainsPath(fallback, candidate.projectPath)) : undefined
+        const session = fallback ? sessions.find((candidate) => candidate.role !== 'coordinator' && !candidate.archived && projectContainsPath(fallback, candidate.projectPath)) : undefined
         workspace.activateWorkspace(fallback, session)
       }
       setToast('Project removed. Files and saved sessions were kept.')

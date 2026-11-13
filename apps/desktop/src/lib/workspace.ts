@@ -68,7 +68,7 @@ export function selectStartupWorkspace(
   sessions: SessionRecord[],
   runtimes: RuntimeInfo[],
 ): WorkspaceSelection {
-  const session = sessions.find((candidate) => !candidate.archived && Boolean(findProjectForSession(projects, candidate)))
+  const session = sessions.find((candidate) => !candidate.archived && candidate.role !== 'coordinator' && Boolean(findProjectForSession(projects, candidate)))
   const project = findProjectForSession(projects, session) ?? projects[0]
   const cwd = workspaceCwd(project, session)
   const runtime = findRuntimeForWorkspace(runtimes, cwd, session?.filePath)

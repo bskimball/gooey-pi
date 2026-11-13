@@ -53,6 +53,8 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['projects', 'updateScripts', 'projects:update-scripts', ['project-id', { setup: 'npm install', run: 'npm run dev' }, 'omp']],
   ['projects', 'markSetupStarted', 'projects:mark-setup-started', ['project-id', 'npm install', 'omp']],
   ['projects', 'finishSetup', 'projects:finish-setup', ['project-id', 'npm install', 0, 'omp']],
+  ['coordinator', 'open', 'coordinator:open', ['project-id']],
+  ['coordinator', 'close', 'coordinator:close', ['attachment-id']],
   ['sessions', 'create', 'sessions:create', ['/repo', 'pi']],
   ['sessions', 'list', 'sessions:list', ['/repo', true, 'omp', true]],
   ['sessions', 'read', 'sessions:read', ['/session.jsonl']],

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import {
   EMPTY_GIT_STATUS,
   findRuntimeForWorkspace,
@@ -42,6 +43,46 @@ const runtime = (runtimeId: string, cwd: string, sessionFile: string, isStreamin
 })
 
 describe('workspace and runtime ownership', () => {
+  it('never selects a coordinator during project navigation, removal fallback, or direct selection', async () => {
+    const a = project('a', ['/a'])
+    const b = project('b', ['/b'])
+    const coordinator: SessionRecord = { ...session('coordinator', '/a', '/coordinator.jsonl'), role: 'coordinator' }
+    const chat = session('chat', '/a', '/chat.jsonl')
+    const bChat = session('b-chat', '/b', '/b.jsonl')
+    const workspaceRef = { current: { project: a, session: chat, generation: 1 } }
+    const activateWorkspace = vi.fn((next: ProjectRecord, selected: SessionRecord) => {
+      workspaceRef.current = { project: next, session: selected, generation: workspaceRef.current.generation + 1 }
+      return workspaceRef.current.generation
+    })
+    const clearSessionAttention = vi.fn()
+    const reportError = vi.fn()
+    const actions = createWorkspaceActions(() => ({
+      bridge: null, projects: [a, b], sessions: [coordinator, chat, bChat],
+      layout: { compactLayout: false }, settingsState: {},
+      workspace: { workspaceRef, activateWorkspace, reconcileRuntime: vi.fn() },
+      setView: vi.fn(), setProjects: vi.fn(), setSessions: vi.fn(), setToast: vi.fn(), clearSessionAttention, reportError,
+    } as unknown as WorkspaceActionsDeps))
+    await actions.selectProject(b)
+    await actions.selectProject(a)
+    expect(activateWorkspace).toHaveBeenLastCalledWith(a, chat)
+    await actions.selectProject(b)
+    await actions.removeProject(b)
+    expect(activateWorkspace).toHaveBeenLastCalledWith(a, chat)
+    activateWorkspace.mockClear(); clearSessionAttention.mockClear()
+    await actions.selectSession(coordinator)
+    expect(activateWorkspace).not.toHaveBeenCalled()
+    expect(clearSessionAttention).not.toHaveBeenCalled()
+    expect(reportError).toHaveBeenCalledWith(expect.stringMatching(/coordinator/i))
+  })
+
+  it('does not promote a coordinator into the foreground workspace at startup', () => {
+    const owner = project('project', ['/project'])
+    const coordinator: SessionRecord = { ...session('coordinator', '/project', '/sessions/coordinator.jsonl'), role: 'coordinator' }
+    const implementor = session('implementor', '/project', '/sessions/implementor.jsonl')
+    expect(selectStartupWorkspace([owner], [coordinator, implementor], []).session).toBe(implementor)
+    expect(selectStartupWorkspace([owner], [coordinator], []).session).toBeUndefined()
+  })
+
   it('atomically selects the newest session, its multi-folder project, and its exact idle runtime', () => {
     const pinnedProject = project('pinned', ['/pinned'], true)
     const multiFolderProject = project('multi', ['/workspace/root', '/workspace/package'])

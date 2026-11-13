@@ -83,6 +83,30 @@
 .activity-feed__hint { flex: 0 0 auto; min-height: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 14px; border-top: 1px solid var(--border); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-meta); }
 .activity-feed__hint kbd { padding: 1px 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); color: var(--text-secondary); background: var(--surface-raised); font-family: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace; font-size: var(--fs-micro); }
 
+/* Project-scoped coordination shares the existing detail column. */
+.activity-view-tools { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--canvas); }
+.activity-project-filter { min-width: 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: var(--fs-ui); }
+.activity-project-filter select, .activity-coordinator__delivery select { min-width: 0; max-width: 240px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--surface-raised); font: inherit; }
+.activity-project-filter select:focus-visible, .activity-coordinator__delivery select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.activity-detail-tabs { display: flex; gap: 4px; }
+.activity-detail-tabs button { min-height: 40px; }
+.activity-detail-tabs button[aria-pressed="true"] { color: var(--apex); background: var(--apex-soft); }
+.activity-coordinator { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-subtle); }
+.activity-coordinator__scope { color: var(--text-secondary); font-size: var(--fs-ui); overflow-wrap: anywhere; }
+.activity-coordinator__boundary { flex: 0 0 auto; margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--border); color: var(--text-tertiary); font-size: var(--fs-meta); line-height: 1.5; }
+.activity-coordinator__messages { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; padding: 18px; }
+.activity-coordinator__empty { max-width: 440px; margin-block: 16px; color: var(--text-secondary); font-size: var(--fs-ui); line-height: 1.6; text-wrap: pretty; }
+.activity-coordinator__message { min-width: 0; padding-block: 12px; overflow-wrap: anywhere; }
+.activity-coordinator__message + .activity-coordinator__message { border-top: 1px solid var(--border); }
+.activity-coordinator__message--user { color: var(--text-secondary); }
+.activity-coordinator__message .markdown { font-size: var(--fs-ui); }
+.activity-coordinator__message pre { max-width: 100%; overflow: auto; }
+.activity-coordinator__tools, .activity-coordinator__status { color: var(--text-tertiary); font-size: var(--fs-meta); }
+.activity-coordinator__delivery { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+.activity-coordinator .activity-reply__input { min-height: 64px; }
+.activity-page--compact.activity-page--coordinator .activity-feed { display: none; }
+.activity-coordinator .activity-reply button { min-height: 40px; }
+
 /* Peek pane */
 .activity-peek { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; background: var(--surface-subtle); overflow: hidden; }
 .activity-peek--empty { align-items: center; justify-content: center; padding: 32px; }
@@ -204,6 +228,7 @@
   .page-container.activity-page, .activity-page { grid-template-columns: minmax(0, 1fr); }
   .activity-feed { border-right: 0; }
   .activity-peek { display: none; }
+  .activity-page--coordinator .activity-feed { display: none; }
 }
 
 @media (max-width: 720px) {

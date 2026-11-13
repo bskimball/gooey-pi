@@ -357,14 +357,19 @@ describe('registerIpc verify gate', () => {
     const archive = vi.fn().mockResolvedValue(true)
     const closeForSession = vi.fn()
     const unbindSession = vi.fn()
+    const followUp = vi.fn().mockResolvedValue(true)
+    const disposeCoordinator = vi.fn()
+    const releaseOwner = vi.fn()
+    stubs.coordinator = { followUp, dispose: disposeCoordinator, releaseOwner }
     stubs.projects = { authorizePath }
     stubs.sessions = { requireSessionPath, create, read, rename, archive }
     stubs.browser = { closeForSession }
-    stubs.terminals = { unbindSession }
+    stubs.terminals = { unbindSession, killOwner: vi.fn().mockResolvedValue(undefined) }
     await expect(handlers.get('sessions:create')!(event, '/repo')).resolves.toBe('created')
     expect(create).toHaveBeenCalledWith('/authorized')
     await expect(handlers.get('sessions:read')!(event, '/session')).resolves.toBe('transcript')
-    await expect(handlers.get('sessions:follow-up')!(event, '/session')).resolves.toBe(false)
+    await expect(handlers.get('sessions:follow-up')!(event, '/session', 'Continue here', 'queue')).resolves.toBe(true)
+    expect(followUp).toHaveBeenCalledWith('/session', 'Continue here', 'queue')
     await expect(handlers.get('sessions:rename')!(event, '/session', 'Title')).resolves.toBe(true)
     expect(rename).toHaveBeenCalledWith('/session', 'Title')
     await expect(handlers.get('sessions:archive')!(event, '/session', true)).resolves.toBe(true)
@@ -373,7 +378,12 @@ describe('registerIpc verify gate', () => {
     requireSessionPath.mockRejectedValue(new Error('denied'))
     await expect(handlers.get('sessions:archive')!(event, '/denied', true)).rejects.toThrow('denied')
     expect(archive).toHaveBeenCalledOnce()
+    await expect(handlers.get('sessions:follow-up')!(event, '/denied', 'Do not deliver')).rejects.toThrow('denied')
+    expect(followUp).toHaveBeenCalledOnce()
+    registration.revoke(event.sender.id)
+    expect(releaseOwner).toHaveBeenCalledWith(event.sender.id)
     registration.dispose()
+    expect(disposeCoordinator).toHaveBeenCalledOnce()
   })
 
   it('opens busy and idle authorized sessions alongside VS Code while retaining Desktop ownership', async () => {

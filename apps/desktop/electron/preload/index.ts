@@ -109,6 +109,10 @@ const api: ApexApi = {
 		finishSetup: (id, setup, exitCode, harness) =>
 			invoke("projects:finish-setup", id, setup, exitCode, harness),
 	},
+	coordinator: {
+		open: (projectId) => invoke("coordinator:open", projectId),
+		close: (attachmentId) => invoke("coordinator:close", attachmentId),
+	},
 	sessions: {
 		create: (projectPath, harness) => invoke("sessions:create", projectPath, harness),
 		list: (projectPath, includeArchived, harness, force) =>

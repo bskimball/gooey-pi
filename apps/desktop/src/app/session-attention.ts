@@ -88,6 +88,7 @@ export function hasRendererStatusProvenance(session: SessionRecord): boolean {
 }
 
 export function sessionAttentionSignature(session: SessionRecord): string | undefined {
+  if (session.role === 'coordinator') return undefined
   const revision = session.eventRevision ?? session.updatedAt
   if (session.status === 'waiting') return `waiting:${revision}`
   if (session.status === 'failed') return `failed:${revision}`
@@ -96,6 +97,7 @@ export function sessionAttentionSignature(session: SessionRecord): string | unde
 }
 
 export function sessionCompanionNotificationSignature(session: SessionRecord): string | undefined {
+  if (session.role === 'coordinator') return undefined
   const revision = session.eventRevision ?? session.updatedAt
   if (session.status === 'waiting' || session.status === 'failed') return `${session.status}:${revision}`
   if (session.status === 'complete' && (session.unread || typeof session.eventRevision === 'number')) return `complete:${revision}`
@@ -113,7 +115,7 @@ export function signatureCleared(signature: string | undefined, clearedSignature
 }
 
 export function activityNotificationSignature(session: SessionRecord): string | undefined {
-  if (session.archived || session.status === 'running') return undefined
+  if (session.role === 'coordinator' || session.archived || session.status === 'running') return undefined
   return `${session.status}:${session.eventRevision ?? session.updatedAt}`
 }
 

@@ -153,7 +153,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
       icon: <ChatCircleText size={14} />,
       run: () => onSelectSession(session),
     })
-    const candidates = sessions.filter((session) => !session.archived && session.depth === 0).sort((left, right) => sessionRecency(right) - sessionRecency(left))
+    const candidates = sessions.filter((session) => session.role !== 'coordinator' && !session.archived && session.depth === 0).sort((left, right) => sessionRecency(right) - sessionRecency(left))
     if (!terms.length) {
       const recent = candidates.filter((session) => session.id !== activeSessionId).slice(0, RECENT_SESSION_LIMIT).map(sessionItem('Recent sessions'))
       return [...recent, ...commands]

@@ -71,7 +71,7 @@ const expectedRegistrations: Record<string, Registration[]> = {
   ],
   'apex-ask-user.ts': [{ kind: 'tool', name: 'ask_user' }],
   'apex-collaboration.ts': [
-    ...['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_wait'].map((name) => ({ kind: 'tool' as const, name })),
+    ...['gooeypi_session_list', 'gooeypi_session_models', 'gooeypi_session_create', 'gooeypi_session_read', 'gooeypi_session_send', 'gooeypi_session_steer', 'gooeypi_session_stop', 'gooeypi_session_wait'].map((name) => ({ kind: 'tool' as const, name })),
   ],
   'apex-schedules.ts': [
     ...['scheduled_tasks_list', 'scheduled_task_create_once', 'scheduled_task_create_recurring', 'scheduled_task_update', 'scheduled_task_manage'].map((name) => ({ kind: 'tool' as const, name })),

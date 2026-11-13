@@ -8,7 +8,7 @@ import type { HarnessId } from '../../apps/desktop/src/types/api'
 import { HARNESS_SHORT_NAMES } from '../../apps/desktop/src/lib/harness'
 import App from '../../apps/desktop/src/App'
 import { CommandPalette } from '../../apps/desktop/src/components/CommandPalette'
-import { SAMPLE_PROJECTS } from '../../apps/desktop/src/lib/data'
+import { SAMPLE_PROJECTS, SAMPLE_SESSIONS } from '../../apps/desktop/src/lib/data'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -175,6 +175,20 @@ describe.each<HarnessId>(['pi'])('command palette for %s', (harness) => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', ctrlKey: true, bubbles: true, cancelable: true }))
     })
     await waitFor(() => selectedTitle() === 'Build the workspace shell' ? true : null)
+  })
+})
+
+describe('command palette coordinator isolation', () => {
+  it('excludes coordinator sessions from recent and search results even with a full catalog', async () => {
+    const coordinator = { ...SAMPLE_SESSIONS[0], id: 'hidden-coordinator', title: 'Secret coordinator task', role: 'coordinator' as const, depth: 0, archived: false, updatedAt: '2099-01-01T00:00:00.000Z' }
+    const noop = () => undefined
+    await act(async () => {
+      root.render(<CommandPalette open platform="darwin" harness="pi" projects={SAMPLE_PROJECTS} sessions={[coordinator, ...SAMPLE_SESSIONS]} onClose={noop} onNavigate={noop} onNewSession={noop} onPreviousSession={noop} onToggleSidebar={noop} onToggleTerminal={noop} onOpenBrowser={noop} onOpenInspectorTab={noop} onSelectSession={noop} onSelectProject={noop} />)
+    })
+    const dialog = await waitFor(() => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="Command palette"]'))
+    expect(optionLabels(commandOptions(dialog, 'Recent sessions'))).not.toContain(coordinator.title)
+    await search(dialog.querySelector<HTMLInputElement>('[role="combobox"]')!, 'secret coordinator task')
+    expect(optionLabels(commandOptions(dialog, 'Sessions'))).not.toContain(coordinator.title)
   })
 })
 

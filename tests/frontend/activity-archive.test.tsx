@@ -3,7 +3,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activityNotificationSignature } from '../../apps/desktop/src/app/session-attention'
+import { activityNotificationSignature, sessionAttentionSignature, sessionCompanionNotificationSignature } from '../../apps/desktop/src/app/session-attention'
+import { indexSidebarSessions } from '../../apps/desktop/src/components/Sidebar'
 import { type SessionLiveMap } from '../../apps/desktop/src/app/session-live'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { ActivityStatusPill } from '../../apps/desktop/src/components/activity/ActivityStatusPill'
@@ -45,6 +46,51 @@ afterEach(async () => {
 })
 
 describe('archived activity cleanup', () => {
+  it('filters the feed and review actions to the selected project, including its worktrees', async () => {
+    const otherProject: ProjectRecord = { ...project, id: 'other', name: 'Other', path: '/other', primaryFolder: '/other', folders: ['/other', '/other-worktree'] }
+    const otherSession: SessionRecord = { ...activeSession, id: 'other-session', title: 'Other worktree run', filePath: '/sessions/other.jsonl', projectPath: '/other-worktree' }
+    const onClear = vi.fn()
+    await act(async () => root.render(<ActivityPage sessions={[activeSession, otherSession]} projects={[project, otherProject]} clearedActivity={{}} onOpen={vi.fn()} onClear={onClear} />))
+    expect(container.textContent).toContain('Active chat')
+    expect(container.textContent).toContain('Other worktree run')
+    await act(async () => {
+      const select = container.querySelector<HTMLSelectElement>('[aria-label="Activity project"]')!
+      select.value = 'other'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.textContent).not.toContain('Active chat')
+    expect(container.textContent).toContain('Other worktree run')
+    await act(async () => container.querySelector<HTMLButtonElement>('.activity-clear-all')!.click())
+    expect(onClear).toHaveBeenCalledWith([otherSession])
+  })
+
+  it('opens project-scoped coordination without taking over reply and Escape shortcuts', async () => {
+    await act(async () => root.render(<ActivityPage sessions={[activeSession]} projects={[project]} clearedActivity={{}} controls={{ canFollowUpSession: () => true, onSendReply: vi.fn() }} onOpen={vi.fn()} onClear={vi.fn()} />))
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true })))
+    expect(container.querySelector('[aria-label="Chief of Staff"]')?.textContent).toContain('Select a granted project')
+    expect(container.querySelector('.activity-peek')).toBeNull()
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })))
+    const reply = container.querySelector<HTMLTextAreaElement>('.activity-reply__input')!
+    expect(document.activeElement).toBe(reply)
+    await act(async () => reply.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(document.activeElement).not.toBe(reply)
+  })
+
+  it('keeps coordinator runs out of implementor rows, attention, companion notices, and sidebar counts', async () => {
+    const coordinator: SessionRecord = { ...activeSession, id: 'coordinator', title: 'Hidden coordinator run', role: 'coordinator', status: 'running' }
+    await act(async () => root.render(<ActivityPage sessions={[activeSession, coordinator]} projects={[project]} clearedActivity={{}} onOpen={vi.fn()} onClear={vi.fn()} />))
+    expect(container.textContent).not.toContain('Hidden coordinator run')
+    expect(indexSidebarSessions([project], [activeSession, coordinator]).activeSessions).toEqual([activeSession])
+    for (const status of ['running', 'complete', 'waiting', 'failed'] as const) {
+      const session = { ...coordinator, status }
+      expect(activityNotificationSignature(session)).toBeUndefined()
+      expect(sessionAttentionSignature(session)).toBeUndefined()
+      expect(sessionCompanionNotificationSignature(session)).toBeUndefined()
+    }
+    await act(async () => root.render(<ActivityStatusPill sessions={[coordinator]} onOpen={vi.fn()} />))
+    expect(container.querySelector('.activity-status-pill')).toBeNull()
+  })
+
   it('never renders archived chats in Activity', async () => {
     const onOpen = vi.fn()
     await act(async () => {
