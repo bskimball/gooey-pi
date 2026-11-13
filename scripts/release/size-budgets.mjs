@@ -13,16 +13,16 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 693663 bytes with Effect Schema validation, async effective-config IPC,
-  // explicit XState lifecycle machines across runtime, schedules, desktop-link, and extension bridge,
-  // and the background-job capability bridge that mirrors bg_start jobs into the terminal drawer.
-  mainBytes: 680 * KIB,
+  // Measured 716215 bytes with project-scoped collaboration, event-driven monitoring,
+  // and the Activity Chief of Staff coordinator.
+  mainBytes: 704 * KIB,
   preloadBytes: 16 * KIB,
-  // Measured 1411830 initialRendererBytes (lazy WindowsAppMenu + strict react-vendor split + dead-code cleanup)
-  // and 3089297 rendererJsCssBytes with @astryxdesign/core, @stylexjs/stylex, and explicit XState UI machines.
+  // Measured 1413865 initialRendererBytes (lazy WindowsAppMenu + strict react-vendor split + dead-code cleanup)
+  // and 3109290 rendererJsCssBytes with @astryxdesign/core, @stylexjs/stylex, explicit XState UI machines,
+  // and the Activity Chief of Staff pane.
   initialRendererBytes: 1384 * KIB,
   largestRendererChunkBytes: 600 * KIB,
-  rendererJsCssBytes: 3024 * KIB,
+  rendererJsCssBytes: 3040 * KIB,
 })
 
 /**
