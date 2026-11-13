@@ -8,6 +8,27 @@ function deferred(): { promise: Promise<void>; resolve(): void } {
 }
 
 describe('RepositoryUseGate', () => {
+  it('reserves a worktree against overlapping owners and new ancestor users', async () => {
+    const gate = new RepositoryUseGate()
+    const owner = { kind: 'agent' as const, harness: 'pi' as const, runtimeId: 'owner' }
+    const agent = await gate.beginWorkspaceUse('/repo/worktree', owner)
+    await expect(gate.runExclusiveWorktree('/repo/worktree', 'missing', async () => undefined)).rejects.toThrow('owning runtime is not registered')
+    const other = await gate.beginWorkspaceUse('/repo', { kind: 'terminal', terminalId: 'other' })
+    await expect(gate.runExclusiveWorktree('/repo/worktree', 'owner', async () => undefined)).rejects.toMatchObject({ code: 'active-work' })
+    other.release()
+    const started = deferred(); const finish = deferred()
+    const exclusive = gate.runExclusiveWorktree('/repo/worktree', 'owner', async () => { started.resolve(); await finish.promise })
+    await started.promise
+    let admitted = false
+    const waiting = gate.beginWorkspaceUse('/repo', { kind: 'terminal', terminalId: 'new' }).then((lease) => { admitted = true; return lease })
+    await Promise.resolve()
+    expect(admitted).toBe(false)
+    finish.resolve(); await exclusive
+    const lease = await waiting
+    expect(admitted).toBe(true)
+    lease.release(); agent.release()
+  })
+
   it('retires an idle resident agent before branch checkout', async () => {
     const gate = new RepositoryUseGate()
     let lease!: { release(): void }

@@ -12,6 +12,7 @@ import {
   collectDirectoryIds,
 } from '../../apps/desktop/src/components/inspector/FilesPanel'
 import type { GitStatus, ProjectFileEntry, ProjectRecord } from '../../apps/desktop/src/types/api'
+import { TaskWorkflowContext, type TaskWorkflowContextValue } from '../../apps/desktop/src/lib/task-context'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -234,9 +235,10 @@ describe('FilesPanel component', () => {
       entries: sampleEntries,
       skipped: 0,
     }))
+    const readTextFile = vi.fn(async (_root: string, path: string) => ({ path, text: 'Current file text', truncated: false }))
     Object.defineProperty(window, 'apex', {
       configurable: true,
-      value: { projects: { listFiles } },
+      value: { projects: { listFiles, readTextFile } },
     })
 
     const onOpen = vi.fn()
@@ -315,12 +317,19 @@ describe('FilesPanel component', () => {
     expect(agentProgressButton.querySelector('.file-tree__name')?.textContent).toBe('AgentProgress.tsx')
     expect(agentProgressButton.style.paddingLeft).toBe('50px') // depth 3
 
-    // Clicking file opens file directly instead of revealing parent folder
-    act(() => {
+    // File rows now preview in-app; opening externally remains an explicit action.
+    await act(async () => {
       agentProgressButton.click()
     })
-    expect(onOpen).toHaveBeenCalledWith('/workspace/test-project/src/components/chat/AgentProgress.tsx')
+    expect(readTextFile).toHaveBeenCalledWith('/workspace/test-project', 'src/components/chat/AgentProgress.tsx', 'pi')
+    expect(document.querySelector('dialog pre')?.textContent).toBe('Current file text')
+    expect(onOpen).not.toHaveBeenCalled()
     expect(onReveal).not.toHaveBeenCalled()
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Open external')!.click()
+    })
+    expect(onOpen).toHaveBeenCalledWith('/workspace/test-project/src/components/chat/AgentProgress.tsx')
+    await act(async () => document.querySelector<HTMLButtonElement>('dialog button[aria-label="Close"]')!.click())
 
     // Clicking the row reveal action reveals the file in its parent folder without triggering open
     onOpen.mockClear()
@@ -352,6 +361,67 @@ describe('FilesPanel component', () => {
       componentsButton.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
     })
     expect(onReveal).toHaveBeenCalledWith('/workspace/test-project/src/components')
+  })
+
+  it('attaches the exact current-file span with BOM, CRLF, source root and resolved line range', async () => {
+    const text = '\uFEFFfirst\r\nselected β\r\nlast\n'
+    const readTextFile = vi.fn(async () => ({ path: 'readme.txt', text, truncated: false }))
+    Object.defineProperty(window, 'apex', { configurable: true, value: { projects: {
+      listFiles: vi.fn(async () => ({ entries: [{ path: 'readme.txt', type: 'file' }], skipped: 0 })), readTextFile,
+    } } })
+    const attach = vi.fn()
+    const workflow: TaskWorkflowContextValue = { sessionFile: '/sessions/current.jsonl', excerpts: [], attach, remove: vi.fn(), receipts: [], persistedUserIds: new Set(), idle: true, pending: false, edit: vi.fn(), review: vi.fn(), createSide: vi.fn(), bringBack: vi.fn(), isSide: false, finished: new Set() }
+    await act(async () => root.render(<TaskWorkflowContext.Provider value={workflow}><FilesPanel project={sampleProject} git={emptyGit} onReveal={vi.fn()} /></TaskWorkflowContext.Provider>))
+    await act(async () => container.querySelector<HTMLButtonElement>('.file-tree__item.is-file')!.click())
+    const pre = document.querySelector('dialog pre')!
+    expect(pre.textContent).toBe(text)
+    const selected = document.createRange()
+    selected.setStart(pre.firstChild!, 0)
+    selected.setEnd(pre.firstChild!, text.indexOf('last'))
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(selected)
+    await act(async () => pre.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })))
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Ask about this')!.click())
+    expect(attach).toHaveBeenCalledWith({ source: 'Current file in /workspace/test-project · Ask about this', path: 'readme.txt', text: '\uFEFFfirst\r\nselected β\r\n', range: 'lines 1–2', sessionFile: '/sessions/current.jsonl' })
+    expect(document.querySelector('dialog')?.textContent).toContain('Added to composer')
+  })
+
+  it('uses the selected root, reports read failures, and retries with a truncated preview', async () => {
+    const readTextFile = vi.fn(async () => ({ path: 'readme.txt', text: 'partial text', truncated: true }))
+    readTextFile.mockRejectedValueOnce(new Error('Binary files cannot be previewed'))
+    const project = { ...sampleProject, folders: ['/workspace/one', '/workspace/two'] }
+    Object.defineProperty(window, 'apex', { configurable: true, value: { projects: {
+      listFiles: vi.fn(async () => ({ entries: [{ path: 'readme.txt', type: 'file' }], skipped: 0 })), readTextFile,
+    } } })
+    await act(async () => root.render(<FilesPanel project={project} git={emptyGit} onReveal={vi.fn()} />))
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Expand all folders"]')!.click())
+    await act(async () => container.querySelectorAll<HTMLButtonElement>('.file-tree__item.is-file')[1].click())
+    expect(readTextFile).toHaveBeenCalledWith('/workspace/two', 'readme.txt', 'pi')
+    expect(document.querySelector('dialog [role="alert"]')?.textContent).toContain('Binary files cannot be previewed')
+    expect(document.querySelector('dialog pre')).toBeNull()
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('dialog button')].find((button) => button.textContent === 'Try again')!.click())
+    expect(document.querySelector('dialog')?.textContent).toContain('Preview truncated at 256 KiB')
+    expect(document.querySelector('dialog pre')?.textContent).toBe('partial text')
+  })
+
+  it('uses native modal cancellation and ignores file responses after closing', async () => {
+    let resolveResponse!: (value: { path: string; text: string; truncated: boolean }) => void
+    const response = new Promise<{ path: string; text: string; truncated: boolean }>((resolve) => { resolveResponse = resolve })
+    Object.defineProperty(window, 'apex', { configurable: true, value: { projects: {
+      listFiles: vi.fn(async () => ({ entries: [{ path: 'readme.txt', type: 'file' }], skipped: 0 })), readTextFile: vi.fn(() => response),
+    } } })
+    await act(async () => root.render(<FilesPanel project={sampleProject} git={emptyGit} onReveal={vi.fn()} />))
+    const trigger = container.querySelector<HTMLButtonElement>('.file-tree__item.is-file')!
+    trigger.focus()
+    await act(async () => trigger.click())
+    const dialog = document.querySelector('dialog')!
+    expect(dialog.textContent).toContain('Loading file…')
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    await act(async () => dialog.dispatchEvent(new Event('cancel', { cancelable: true })))
+    expect(document.querySelector('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+    await act(async () => resolveResponse({ path: 'readme.txt', text: 'late response', truncated: false }))
+    expect(document.querySelector('dialog')).toBeNull()
+    expect(container.textContent).not.toContain('late response')
   })
 
   it('uses platform-specific file manager labels on reveal buttons', async () => {

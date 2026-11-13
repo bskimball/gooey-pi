@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -8,6 +8,7 @@ import { GitService } from '../../apps/desktop/electron/main/git'
 import { ProjectService } from '../../apps/desktop/electron/main/projects'
 import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { WorktreeProvenance } from '../../apps/desktop/electron/main/worktree-provenance'
 import type { CheckoutStrategy } from '../../apps/desktop/src/types/api'
 
 vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() } }))
@@ -48,11 +49,31 @@ async function setup() {
   await projects.list()
   let strategy: CheckoutStrategy = 'branch'
   const gate = new RepositoryUseGate()
-  const service = new CheckoutService(() => strategy, projects, gate)
-  return { root: canonical, store, projects, service, gate, setStrategy: (value: CheckoutStrategy) => { strategy = value } }
+  const provenanceDir = join(dir, 'provenance')
+  const provenance = new WorktreeProvenance(provenanceDir)
+  const service = new CheckoutService(() => strategy, projects, gate, provenance)
+  return { root: canonical, dir, store, projects, service, gate, provenance, provenanceDir, setStrategy: (value: CheckoutStrategy) => { strategy = value } }
 }
 
 describe('CheckoutService', () => {
+  it('records only successfully created linked worktrees, not adopted worktrees', async () => {
+    const { root, dir, projects, service, provenance, provenanceDir, setStrategy } = await setup()
+    setStrategy('worktree')
+    const adopted = join(dir, 'adopted')
+    runGit(root, 'worktree', 'add', '-qb', 'external-branch', adopted)
+    const created = join(dir, 'created')
+    vi.spyOn(projects, 'chooseCheckoutWorktreePath').mockResolvedValue(created)
+    expect(provenance.isCreated(adopted)).toBe(false)
+    expect((await service.execute('project', { strategy: 'worktree', operation: 'create', branch: 'created-branch' })).kind).toBe('applied')
+    expect(new WorktreeProvenance(provenanceDir).isCreated(created)).toBe(true)
+    expect((await service.execute('project', { strategy: 'worktree', operation: 'open', path: adopted })).kind).toBe('applied')
+    expect(provenance.isCreated(adopted)).toBe(false)
+    expect(provenance.isCreated(root)).toBe(false)
+    const gitLink = join(created, '.git')
+    const contents = readFileSync(gitLink, 'utf8')
+    renameSync(gitLink, `${gitLink}.old`); writeFileSync(gitLink, contents)
+    expect(provenance.isCreated(created)).toBe(false)
+  })
   it('switches a clean local branch without changing project identity or folders', async () => {
     const { root, service } = await setup()
     const before = await service.list('project')

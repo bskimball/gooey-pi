@@ -1,4 +1,5 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
+import { appendTaskContext, EXCERPT_LIMIT, useTaskWorkflowContext, type TaskExcerpt } from '@/lib/task-context';
 import { cleanRequestErrorDetail } from "@/app/workspace";
 import type { ExtensionTabControls } from "@/hooks/useAgentBrowserTabs";
 import { useComposerImages } from "@/hooks/useComposerImages";
@@ -121,6 +122,8 @@ interface ComposerProps {
 	onRevealBrowserReference?(reference: BrowserReference): void;
 	/** The active terminal's selection, updated on selection changes only; the chip shows and submit sends exactly this. */
 	terminalSelection?: TerminalPromptContext;
+	taskExcerpts?: TaskExcerpt[];
+	onRemoveTaskExcerpts?(ids: string[]): void;
 	/** Messages waiting for a turn boundary. */
 	queuedMessages?: QueuedPrompt[];
 	onSendQueuedMessage?(message: QueuedPrompt): void;
@@ -156,6 +159,7 @@ interface ComposerProps {
 	onCommand?(action: ComposerCommandAction): void;
 	/** A new `id` appends `text` to the draft without sending it. */
 	insertDraft?: { id: number; text: string };
+	onDraftInserted?(id: number): void;
 }
 
 const reasoningLabels: Record<ApexThinkingLevel, string> = {
@@ -208,6 +212,8 @@ export const Composer = memo(function Composer({
 	focusSignal = 0,
 	onRevealBrowserReference,
 	terminalSelection,
+	taskExcerpts,
+	onRemoveTaskExcerpts,
 	queuedMessages = [],
 	onSendQueuedMessage,
 	onDeleteQueuedMessage,
@@ -233,7 +239,11 @@ export const Composer = memo(function Composer({
 	runtimeCommands,
 	onCommand,
 	insertDraft,
+	onDraftInserted,
 }: ComposerProps) {
+	const taskWorkflow = useTaskWorkflowContext();
+	const excerpts = taskExcerpts ?? taskWorkflow?.excerpts ?? [];
+	const removeExcerpts = onRemoveTaskExcerpts ?? taskWorkflow?.remove;
 	const modelControls = (
 		<>
 			<ModelPicker
@@ -312,7 +322,7 @@ export const Composer = memo(function Composer({
 		[skills],
 	);
 
-	const insertedDraftId = useRef(insertDraft?.id);
+	const insertedDraftId = useRef<number | undefined>(undefined);
 	useEffect(() => {
 		if (!insertDraft || insertDraft.id === insertedDraftId.current) return;
 		insertedDraftId.current = insertDraft.id;
@@ -320,8 +330,9 @@ export const Composer = memo(function Composer({
 		const next = current ? `${current}\n\n${insertDraft.text}` : insertDraft.text;
 		setValue(next);
 		setCaret(next.length);
+		onDraftInserted?.(insertDraft.id);
 		requestAnimationFrame(() => textareaRef.current?.focus());
-	}, [insertDraft]);
+	}, [insertDraft, onDraftInserted]);
 
 	useEffect(() => {
 		if (!draftKey || restoredDraftRef.current) return;
@@ -493,6 +504,7 @@ export const Composer = memo(function Composer({
 		intent: PromptDeliveryIntent = "queue",
 		valueOverride?: string,
 	) => {
+		const currentExcerpts = excerpts;
 		const currentImages = imagesRef.current;
 		const currentUnsupportedFiles = unsupportedFilesRef.current;
 		const currentAnnotations = annotationsRef.current;
@@ -511,18 +523,22 @@ export const Composer = memo(function Composer({
 						: "[Attached files]"
 					: currentAnnotations.length > 0
 						? "[Page annotations]"
-						: "[Terminal selection]");
+						: currentExcerpts.length ? "[Selected context]" : "[Terminal selection]");
 		if (
 			(!draftValue.trim() &&
 				currentImages.length === 0 &&
 				currentUnsupportedFiles.length === 0 &&
 				currentAnnotations.length === 0 &&
-				!hasTerminalSelection) ||
+				!hasTerminalSelection && currentExcerpts.length === 0) ||
 			loading ||
 			disabled ||
 			(intent !== "steer" && !busy && (admitting || submittingRef.current))
 		)
 			return;
+		if (currentExcerpts.some((excerpt) => excerpt.text.length > EXCERPT_LIMIT)) {
+			setAttachmentError('Select a shorter excerpt. Each context attachment is limited to 32,768 characters.');
+			return;
+		}
 		const slash = parseSlashCommand(draftValue);
 		if (slash && isLocalCommand(slash.name)) {
 			const outcome = resolveLocalCommand(slash.name, slash.args, {
@@ -543,6 +559,10 @@ export const Composer = memo(function Composer({
 		// Commands take their text verbatim: context blocks would become command arguments.
 		const commandDraft = /^\s*[/!]/.test(draftValue);
 		const bashDraft = /^\s*!/.test(draftValue);
+		if (commandDraft && currentExcerpts.length) {
+			setAttachmentError('Selected context cannot be sent with a command. Remove it or write a message.');
+			return;
+		}
 		const annotationImages = commandDraft ? [] : currentAnnotations.flatMap((annotation) => annotation.preview ? [annotation.preview] : []);
 		if (processingSelection) {
 			setAttachmentError("Wait for the element preview to finish before sending.");
@@ -612,12 +632,13 @@ export const Composer = memo(function Composer({
 			),
 		);
 		const sentAnnotations = commandDraft ? [] : currentAnnotations;
-		const promptWithContext = bashDraft
+		const promptWithExistingContext = bashDraft
 			? prompt
 			: appendTerminalContextToPrompt(
 					appendAnnotationsToPrompt(promptWithCapabilities, sentAnnotations, currentImages.length),
 					commandDraft ? undefined : currentTerminalContext,
 				);
+		const promptWithContext = appendTaskContext(promptWithExistingContext, currentExcerpts);
 		const frame = `${JSON.stringify({ type: intent === "steer" ? "steer" : "follow_up", message: promptWithContext, ...(submittedImages.length ? { images: submittedImages } : {}), id: "00000000-0000-0000-0000-000000000000" })}\n`;
 		if (new TextEncoder().encode(frame).byteLength > MAX_IMAGE_PROMPT_BYTES) {
 			setAttachmentError(
@@ -638,6 +659,7 @@ export const Composer = memo(function Composer({
 			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (sentAnnotations.length > 0) onClearAnnotations();
+			if (currentExcerpts.length) removeExcerpts?.(currentExcerpts.map((excerpt) => excerpt.id));
 		} catch (error) {
 			if (!mountedRef.current && draftKeyRef.current) {
 				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
@@ -710,6 +732,7 @@ export const Composer = memo(function Composer({
 						Drop files to attach
 					</div>
 				) : null}
+				{excerpts.length ? <div className="task-context-tray" aria-label="Selected context attachments">{excerpts.map((excerpt) => <div className="task-context-tray__item" key={excerpt.id}><details><summary>{excerpt.source}{excerpt.path ? ` · ${excerpt.path}` : ''}{excerpt.range ? ` · ${excerpt.range}` : ''}</summary>{excerpt.sessionFile ? <small>{excerpt.sessionFile}</small> : null}<pre>{excerpt.text}</pre></details><IconButton size="small" label={`Remove context ${excerpt.source}`} onClick={() => removeExcerpts?.([excerpt.id])}><X size={12} /></IconButton></div>)}</div> : null}
 				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
 				{images.length ||
 				unsupportedFiles.length ||
@@ -1100,7 +1123,7 @@ export const Composer = memo(function Composer({
 											images.length === 0 &&
 											unsupportedFiles.length === 0 &&
 											annotations.length === 0 && !sharedSelection &&
-											!terminalSelection?.text) ||
+											!terminalSelection?.text && excerpts.length === 0) ||
 										processingImages ||
 										(!busy && admitting) ||
 										loading ||

@@ -1,7 +1,7 @@
 import type { ApexEventEnvelope, ApexModelDescriptor, RuntimeInfo } from '../../../src/types/api'
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '../../../src/lib/session-actions'
-import { resolveExecutable, type ExecutableSource } from '../process-utils'
+import { resolveExecutable, runProcess, type ExecutableSource } from '../process-utils'
 import { canonicalSessionPath } from 'apex-core/session-paths'
 import { RuntimeSessionClaims, type RuntimeSessionRelease } from 'apex-core/sessions/runtime-owners'
 import { isPathWithin, isRecord, rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
@@ -13,6 +13,7 @@ import type { WorkspaceUseLease, WorkspaceUseOwner } from '../repository-use-gat
 import { readPiTranscript } from 'apex-core/sessions/pi'
 import type { DesktopSessionSnapshot } from 'apex-core/sessions/desktop-link'
 import { DesktopSessionProjection } from '../desktop-link-projection'
+import type { RunReceipts } from '../run-receipts'
 
 /**
  * Structural slice of the provider catalog the manager needs; ApexProviderService
@@ -56,6 +57,21 @@ export class AgentRpcManager {
     retireIfIdle: () => Promise<boolean>,
   ) => Promise<WorkspaceUseLease> = async () => ({ release: () => undefined })
   private closed = false
+  private promptAccepted: (session: string) => void = () => undefined
+  setPromptAcceptedListener(listener: (session: string) => void): void { this.promptAccepted = listener }
+  private receipts?: RunReceipts
+  private isReadOnlySession: (path: string) => boolean = () => false
+  private sideCreation: Promise<void> = Promise.resolve()
+  async withSideCreation<T>(action: () => Promise<T>): Promise<T> {
+    const previous = this.sideCreation
+    let release!: () => void
+    this.sideCreation = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    try { return await action() } finally { release() }
+  }
+  setReadOnlySessionProvider(provider: (path: string) => boolean): void { this.isReadOnlySession = provider }
+  setRunReceipts(receipts: RunReceipts): void { this.receipts = receipts }
+  runReceipts(): RunReceipts { if (!this.receipts) throw new Error('Run receipts are unavailable'); return this.receipts }
 
   constructor(
     private readonly executable: ExecutableSource,
@@ -140,6 +156,15 @@ export class AgentRpcManager {
 
   beginShutdown(): void { this.closed = true; clearInterval(this.idleSweep) }
 
+  async checkReadOnlySupport(cwd: string, executable = resolveExecutable(this.executable)): Promise<void> {
+    if (this.adapter.id !== 'pi') throw new Error('Read-only side conversations are unavailable for this harness')
+    if (!executable) throw new Error('Pi executable was not found; read-only side conversations are unavailable')
+    const help = await runProcess(executable, ['--help'], { cwd, timeoutMs: 10_000, maxBytes: 1024 * 1024 }).catch((error: unknown) => {
+      throw new Error(`Unable to verify configured Pi read-only capability: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    if (help.code !== 0 || help.timedOut || help.outputExceeded || !['--tools', '--no-extensions', '--no-mcp'].every((flag) => new RegExp(`^\\s*${flag}(?:[\\s,=]|$)`, 'm').test(help.stdout))) throw new Error('Configured Pi does not support the required read-only side conversation flags')
+  }
+
   async start(raw: unknown): Promise<RuntimeInfo> {
     return this.startWithMode(raw, true)
   }
@@ -157,10 +182,14 @@ export class AgentRpcManager {
     rejectUnknownKeys(options, ['cwd', 'sessionPath', 'model', 'thinking', 'fast'], 'options')
     const cwd = await this.authorizeCwd(requireString(options.cwd, 'cwd', { min: 1, max: 4096 }))
     this.requireOpen()
+    // A side file can be visible in the catalog before its policy is durable.
+    await this.sideCreation
     const sessionPath = options.sessionPath === undefined
       ? undefined
       : await this.validateSessionPath(requireString(options.sessionPath, 'sessionPath', { max: 4096 }))
     if (sessionPath) await this.sessionAttachGuard(sessionPath)
+    const readOnly = sessionPath ? this.isReadOnlySession(sessionPath) : false
+    if (readOnly) await this.checkReadOnlySupport(cwd, executable)
     let selectedModel: ApexModelDescriptor | undefined
     let modelId: string | undefined
     if (options.model !== undefined) {
@@ -181,9 +210,10 @@ export class AgentRpcManager {
     const runtimeEnvironment = this.runtimeEnvironmentProvider({ cwd, sessionPath, interactive })
     let runtime: RpcRuntime | undefined
     let workspaceUse!: WorkspaceUseLease
+    const workspaceOwner: Extract<WorkspaceUseOwner, { kind: 'agent' }> = { kind: 'agent', harness: this.adapter.id, runtimeId: `starting-${Date.now()}` }
     workspaceUse = await this.beginWorkspaceUse(
       cwd,
-      { kind: 'agent', harness: this.adapter.id, runtimeId: `starting-${Date.now()}` },
+      workspaceOwner,
       async () => {
         if (!runtime) return false
         const retired = await this.retireForCheckout(runtime)
@@ -212,6 +242,7 @@ export class AgentRpcManager {
         modelId,
         thinking,
         environment: runtimeEnvironment,
+        readOnly,
       })
       // Read before spawn: persistence cannot race the baseline and live frames.
       const baseline = sessionPath ? await readPiTranscript(sessionPath, false) : []
@@ -241,6 +272,15 @@ export class AgentRpcManager {
           {},
           this.adapter,
         )
+        if (readOnly) created.enforceReadOnly()
+        created.setInternalEventListener((event) => {
+          this.receipts?.event(created, event)
+          // A run may start even when its RPC acknowledgement is lost or late.
+          if (event.type === 'agent_start') {
+            const session = created.snapshot().sessionFile
+            if (session) this.promptAccepted(session)
+          }
+        })
         this.projections.set(created.runtimeId, new DesktopSessionProjection(baseline))
         claims.setChildPid(created.childPid())
         this.sessionClaims.set(created.runtimeId, claims)
@@ -256,6 +296,7 @@ export class AgentRpcManager {
         this.runtimeEnvironmentRevisions.set(created.runtimeId, runtimeEnvironmentRevision)
         return created
       })
+      workspaceOwner.runtimeId = runtime.runtimeId
       if (runtimeEnvironmentRevision < this.runtimeEnvironmentRevision) void this.retireWhenIdle(runtime)
       await runtime.handshake()
       finishReservation?.()
@@ -310,9 +351,43 @@ export class AgentRpcManager {
     await Promise.all([...this.runtimes.values()].map((runtime) => this.retireWhenIdle(runtime)))
   }
 
+  async withRewind<T>(runtimeId: unknown, sessionPath: string, action: (runtime: RpcRuntime, fork: (entryId: string) => Promise<RpcObject>) => Promise<T>): Promise<T> {
+    const id = requireId(runtimeId, 'runtimeId')
+    const runtime = this.requireRuntime(id)
+    if (this.sessionTransitions.has(id) || this.activeCommands.has(id) || !this.isIdle(runtime)) throw new Error('Runtime is busy')
+    this.sessionTransitions.add(id)
+    this.activeCommands.set(id, 1)
+    const previous = runtime.snapshot().sessionFile
+    try {
+      const session = await this.validateSessionPath(sessionPath)
+      if (!previous || canonicalSessionPath(previous) !== canonicalSessionPath(session)) throw new Error('Runtime does not own this session')
+      const state = await runtime.command({ type: 'get_state' })
+      if (!isRecord(state.data) || state.data.isStreaming !== false || state.data.isCompacting !== false || state.data.pendingMessageCount !== 0 || typeof state.data.sessionFile !== 'string' || canonicalSessionPath(state.data.sessionFile) !== canonicalSessionPath(session)) throw new Error('Runtime is busy or session state is unavailable')
+      return await action(runtime, (entryId) => {
+        this.publishEvent({ runtimeId: id, event: { type: 'desktop_session_revoked', reason: 'Desktop session is changing' } })
+        return this.dispatchCommand(id, { type: 'fork', entryId })
+      })
+    } finally {
+      const next = this.runtimes.get(id)?.snapshot()
+      if (next && next.sessionFile !== previous) {
+        this.unavailableProjections.add(id)
+        try {
+          const baseline = next.sessionFile ? await readPiTranscript(next.sessionFile, false) : []
+          this.projections.set(id, new DesktopSessionProjection(baseline))
+          this.unavailableProjections.delete(id)
+        } catch { /* Do not expose the previous session's projection. */ }
+      }
+      this.sessionTransitions.delete(id)
+      const remaining = (this.activeCommands.get(id) ?? 1) - 1
+      if (remaining) this.activeCommands.set(id, remaining)
+      else this.activeCommands.delete(id)
+    }
+  }
+
   async command(runtimeId: unknown, rawCommand: unknown): Promise<RpcObject> {
     const id = requireId(runtimeId, 'runtimeId')
     const transition = isRecord(rawCommand) && ['switch_session', 'new_session', 'clone', 'fork', 'branch'].includes(String(rawCommand.type))
+    if (transition && this.runtimes.get(id)?.isReadOnlySide()) throw new Error(`Read-only side conversation blocks RPC command ${String(rawCommand.type)}`)
     if (this.sessionTransitions.has(id) && !(isRecord(rawCommand) && rawCommand.type === 'extension_ui_response')) throw new Error('A session change is already in progress')
     const previousSession = transition ? this.runtimes.get(id)?.snapshot().sessionFile : undefined
     if (transition) {
@@ -353,24 +428,45 @@ export class AgentRpcManager {
     const runtime = this.requireRuntime(runtimeId)
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired for a branch checkout')
     const command = await validateRpcCommand(rawCommand, this.validateSessionPath)
+    if (runtime.isReadOnlySide() && ['switch_session', 'new_session', 'clone', 'fork', 'branch'].includes(String(command.type))) throw new Error(`Read-only side conversation blocks RPC command ${String(command.type)}`)
     // attached_prompt is resolved here, after validation, against owner state.
     const attachedPrompt = command.type === 'attached_prompt'
-    if (attachedPrompt) {
+    if (attachedPrompt && !this.receipts) {
       const busy = this.isBusy(runtime)
       command.type = busy ? command.intent === 'steer' ? 'steer' : 'follow_up' : 'prompt'
       delete command.intent
     }
-    if (command.type === 'switch_session' && typeof command.sessionPath === 'string') await this.sessionAttachGuard(command.sessionPath)
+    if (command.type === 'switch_session' && typeof command.sessionPath === 'string') {
+      await this.sideCreation
+      if (this.isReadOnlySession(command.sessionPath)) throw new Error('A read-only side conversation must be opened in its own runtime')
+      await this.sessionAttachGuard(command.sessionPath)
+    }
+    if (command.type === 'new_session' && typeof command.parentSession === 'string' && this.isReadOnlySession(command.parentSession)) throw new Error('A read-only side conversation cannot be used to bypass its runtime policy')
     this.requireOpen()
     if (this.retiringRuntimes.has(runtime.runtimeId)) throw new Error('Runtime is being retired')
     this.lastUsedAt.set(runtime.runtimeId, Date.now())
-    const policyPrompt = command.type === 'prompt' || command.type === 'steer' || command.type === 'follow_up'
+    const policyPrompt = command.type === 'prompt' || command.type === 'steer' || command.type === 'follow_up' || command.type === 'attached_prompt'
       ? command.message
       : undefined
     if (typeof policyPrompt === 'string') assertNoMcpAuthenticationCommand(policyPrompt, this.adapter.id)
+    // Clear the finished marker only after Pi confirms that a user prompt was accepted.
+    const forwardPrompt = async (admitted: RpcObject): Promise<RpcObject> => {
+      const session = runtime.snapshot().sessionFile
+      const response = await runtime.command(this.adapter.translateCommand(admitted))
+      const disposition = isRecord(response.data) ? response.data.disposition : undefined
+      if (response.success === true && disposition !== 'handled' && session) {
+        try { this.promptAccepted(session) }
+        catch (error) { throw new Error(`Prompt was accepted but finished status could not be cleared: ${error instanceof Error ? error.message : String(error)}`) }
+      }
+      return response
+    }
     // Validation is harness-independent; the harness vocabulary applies after
     // it. set_service_tier passes through untranslated because the fast-mode
     // interception below routes it via runtime.setServiceTier instead.
+    if (this.receipts && ['prompt', 'attached_prompt', 'steer', 'follow_up'].includes(String(command.type))) {
+      if (Array.isArray(command.images) && command.images.length > 0 && runtime.snapshot().imageInputSupported === false) throw new Error('The active model does not accept images. Choose a vision model and try again.')
+      return this.receipts.admit(runtime, command, forwardPrompt)
+    }
     const translated = this.adapter.translateCommand(command)
     if (command.type === 'set_model' && this.providers) {
       await this.providers.requireAvailableModel(`${String(command.provider)}/${String(command.modelId)}`, this.disabledProviders(), this.disabledModels())
@@ -397,7 +493,9 @@ export class AgentRpcManager {
     if (holdsAdmission) this.promptAdmissions.set(runtime.runtimeId, (this.promptAdmissions.get(runtime.runtimeId) ?? 0) + 1)
     let response: RpcObject
     try {
-      response = await runtime.command(translated)
+      response = this.receipts && ['switch_session', 'new_session', 'clone', 'fork', 'branch', 'bash', 'compact'].includes(String(command.type))
+        ? await this.receipts.mutate(runtime, () => runtime.command(translated))
+        : ['prompt', 'steer', 'follow_up'].includes(String(command.type)) ? await forwardPrompt(command) : await runtime.command(translated)
       if (dialogId && response.success === true) this.publishEvent({ runtimeId: runtime.runtimeId, event: { type: 'extension_ui_resolved', id: dialogId } })
       finishReservation?.()
     } catch (error) {
@@ -460,6 +558,7 @@ export class AgentRpcManager {
 
   async stop(runtimeId: unknown): Promise<boolean> {
     const id = requireId(runtimeId, 'runtimeId')
+    if (this.sessionTransitions.has(id)) return false
     const runtime = this.runtimes.get(id)
     if (!runtime) return false
     return runtime.stop()

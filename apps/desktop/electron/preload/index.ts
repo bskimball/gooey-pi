@@ -90,6 +90,7 @@ const api: ApexApi = {
 	projects: {
 		list: (harness) => invoke("projects:list", harness),
 		listFiles: (root, harness) => invoke("projects:list-files", root, harness),
+		readTextFile: (root, path, harness) => invoke("projects:read-text-file", root, path, harness),
 		listCheckouts: (projectId, harness) =>
 			invoke("projects:list-checkouts", projectId, harness),
 		executeCheckout: (projectId, action, harness) =>
@@ -113,6 +114,18 @@ const api: ApexApi = {
 		list: (projectPath, includeArchived, harness, force) =>
 			invoke("sessions:list", projectPath, includeArchived, harness, force),
 		read: (filePath) => invoke("sessions:read", filePath),
+		reviewFinish: (runtimeId, filePath) => invoke("sessions:finish-review", runtimeId, filePath),
+		finishTask: (runtimeId, filePath, token, confirmation) => invoke("sessions:finish-confirm", runtimeId, filePath, token, confirmation),
+		getFinishedTask: (filePath) => invoke("sessions:finished-get", filePath),
+		listFinishedTasks: () => invoke("sessions:finished-list"),
+		createSideConversation: (parentSession, options) => invoke("sessions:side-create", parentSession, options),
+		listSideConversations: (parentSession) => invoke("sessions:side-list", parentSession),
+		getSideConversation: (sessionFile) => invoke("sessions:side-get", sessionFile),
+		prepareSideReturn: (runtimeId, sideSession, text) => invoke("sessions:side-prepare-return", runtimeId, sideSession, text),
+		previewRewind: (runtimeId, filePath, userEntryId) => invoke("sessions:preview-rewind", runtimeId, filePath, userEntryId),
+		rewind: (runtimeId, filePath, token, options) => invoke("sessions:rewind", runtimeId, filePath, token, options),
+		listRunReceipts: (filePath) => invoke("sessions:run-receipts", filePath),
+		readRunFile: (filePath, userEntryId, path) => invoke("sessions:run-file", filePath, userEntryId, path),
 		followUp: (filePath, message, intent) =>
 			invoke("sessions:follow-up", filePath, message, intent),
 		rename: (filePath, title) => invoke("sessions:rename", filePath, title),
@@ -192,6 +205,7 @@ const api: ApexApi = {
 	},
 	git: {
 		status: (cwd) => invoke("git:status", cwd),
+		reviewIntegration: (cwd) => invoke("git:review-integration", cwd),
 		diff: (cwd, path, staged) => invoke("git:diff", cwd, path, staged),
 		stage: (cwd, paths) => invoke("git:stage", cwd, paths),
 		unstage: (cwd, paths) => invoke("git:unstage", cwd, paths),

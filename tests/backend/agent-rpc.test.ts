@@ -225,6 +225,7 @@ describe('Desktop session attachment over real local sockets', () => {
     const f = await linkedFixture(undefined, true)
     const openExternal = vi.fn(async () => undefined)
     const handoff = new SessionHandoff({
+      isReadOnlySession: () => false,
       agents: f.manager,
       sessions: { requireSessionPath: async () => f.sessionPath, list: async () => [{ filePath: f.sessionPath, projectPath: f.fake.cwd }] as Awaited<ReturnType<import('../../apps/desktop/electron/main/sessions').SessionService['list']>> },
       projects: { authorizePath: async (cwd) => cwd },
@@ -255,6 +256,7 @@ describe('Desktop session attachment over real local sockets', () => {
       release()
     })
     const handoff = new SessionHandoff({
+      isReadOnlySession: () => false,
       agents: f.manager,
       sessions: { requireSessionPath: async () => f.sessionPath, list: async () => [{ filePath: f.sessionPath, projectPath: f.fake.cwd }] as Awaited<ReturnType<import('../../apps/desktop/electron/main/sessions').SessionService['list']>> },
       projects: { authorizePath: async (cwd) => cwd },
@@ -536,6 +538,7 @@ describe('agent RPC command frame bounds', () => {
     const wireCommand = vi.fn(async () => ({ type: 'response', command: 'prompt', success: true, data: {} }))
     const runtime = {
       snapshot: () => ({ runtimeId: 'runtime-auth-policy', harness, cwd: '/tmp', isStreaming: false, imageInputSupported: true }),
+      isReadOnlySide: () => false,
       command: wireCommand,
     }
     const manager = new AgentRpcManager(null, async (cwd) => cwd, async (path) => path, undefined, () => new Set(), adapter)

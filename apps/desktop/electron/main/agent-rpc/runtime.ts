@@ -17,6 +17,8 @@ import { activityEventFromFrame, compactingActivity, createRuntimeActivityActor,
 import { createRpcRuntimeLifecycle } from './rpcRuntimeLifecycleMachine'
 import type { RpcObject } from './types'
 
+export class RpcCommandRejectedError extends Error {}
+
 interface PendingRequest {
   resolve(value: RpcObject): void
   reject(error: Error): void
@@ -87,6 +89,11 @@ export class RpcRuntime {
   private readonly transport: FramedRpcTransport
   private readonly eventForwarder: AgentEventForwarder
   private firstPromptNeedsPersistence = false
+  private readOnly = false
+  enforceReadOnly(): void { this.readOnly = true }
+  isReadOnlySide(): boolean { return this.readOnly }
+  private internalEventListener: (event: RpcObject) => void = () => undefined
+  setInternalEventListener(listener: (event: RpcObject) => void): void { this.internalEventListener = listener }
 
   persistFirstPrompt(): void {
     this.firstPromptNeedsPersistence = true
@@ -251,6 +258,7 @@ export class RpcRuntime {
   serviceTierPreference(): 'default' | 'priority' { return this.requestedServiceTier === 'priority' ? 'priority' : 'default' }
 
   async command(command: RpcObject): Promise<RpcObject> {
+    if (this.readOnly && command.type === 'extension_ui_response') throw new Error('Read-only side conversation blocks extension commands')
     this.lastActivityAt = Date.now()
     if (command.type === 'abort') this.activity.send({ type: 'CANCEL' })
     if (command.type === 'extension_ui_response') {
@@ -389,6 +397,11 @@ export class RpcRuntime {
   }
 
   private request(command: RpcObject, timeoutMs: number): Promise<RpcObject> {
+    if (this.readOnly) {
+      const allowed = new Set(['get_state', 'get_entries', 'get_fork_messages', 'get_session_stats', 'get_messages', 'get_commands', 'get_available_models', 'get_available_thinking_levels', 'get_last_assistant_text', 'prompt', 'steer', 'follow_up', 'abort', 'abort_retry', 'clear_queue', 'set_session_name', 'set_model', 'cycle_model', 'set_thinking_level', 'cycle_thinking_level', 'set_steering_mode', 'set_follow_up_mode', 'set_auto_compaction', 'set_auto_retry', 'compact'])
+      if (!allowed.has(String(command.type))) return Promise.reject(new Error(`Read-only side conversation blocks RPC command ${String(command.type)}`))
+      if (['prompt', 'steer', 'follow_up'].includes(String(command.type)) && typeof command.message === 'string' && /^[!/]/.test(command.message.trimStart())) return Promise.reject(new Error('Read-only side conversation blocks shell and slash commands'))
+    }
     if (!this.transport.writable()) return Promise.reject(new Error('Runtime is not available'))
     if (this.pending.size >= 32) return Promise.reject(new Error('Too many pending RPC requests'))
     const commandType = String(command.type)
@@ -471,7 +484,7 @@ export class RpcRuntime {
       }
       if (raw.success !== true) {
         const detail = typeof raw.error === 'string' && raw.error.trim() ? raw.error.trim().slice(0, 4_000) : `RPC command ${pending.command} failed`
-        pending.reject(new Error(detail))
+        pending.reject(new RpcCommandRejectedError(detail))
         return
       }
       pending.resolve(raw)
@@ -808,7 +821,10 @@ export class RpcRuntime {
     } else if (raw.model === null) this.info.model = null
   }
 
-  private emit(event: RpcObject): void { this.eventForwarder.emit(event) }
+  private emit(event: RpcObject): void {
+    try { this.internalEventListener(event) } catch (error) { console.error('[run-receipts] event handling failed:', error) }
+    this.eventForwarder.emit(event)
+  }
 
   private rememberUncertainDelivery(id: string): void {
     this.uncertainDeliveries.add(id)

@@ -11,6 +11,7 @@ export interface HarnessStartArgsInput {
   modelId?: string
   thinking?: string
   environment: NodeJS.ProcessEnv
+  readOnly?: boolean
 }
 
 export interface HarnessStateReading {
@@ -84,6 +85,7 @@ export const PI_RPC_ADAPTER: HarnessRpcAdapter = {
       args.push('--model', input.modelId)
     }
     if (input.thinking) args.push('--thinking', input.thinking)
+    if (input.readOnly) return [...args, '--tools', 'read,grep,find,ls', '--no-extensions', '--no-mcp']
     const computerUseSkillPath = input.environment.GOOEYPI_COMPUTER_USE_SKILL_PATH
     if (computerUseSkillPath && !unsafeArgValue(computerUseSkillPath)) args.push('--skill', computerUseSkillPath)
     for (const injection of extensionInjections('pi')) {

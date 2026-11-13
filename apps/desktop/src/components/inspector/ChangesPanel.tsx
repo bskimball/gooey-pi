@@ -8,6 +8,7 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { EmptyState, ApexButton, IconButton, Modal, Segmented } from '../ui'
 import { changesPanelMachine } from './changesPanelMachine'
+import { ContextExcerpt } from '../ContextExcerpt'
 
 const MAX_RENDERED_DIFF_CHARACTERS = 2 * 1024 * 1024
 const MAX_RENDERED_DIFF_LINES = 4_000
@@ -32,10 +33,10 @@ function FilePathLabel({ path }: { path: string }) {
   return <span className="changes-file-path" title={path}>{dir ? <i>{dir}</i> : null}<b>{name}</b></span>
 }
 
-const DiffView = memo(function DiffView({ text }: { text: string }) {
+const DiffView = memo(function DiffView({ text, path, scope }: { text: string; path?: string; scope: string }) {
   if (!text) return <div className="diff-placeholder"><FileCode size={22} /><span>Select a changed file to inspect its diff.</span></div>
   const { lines, truncated } = boundLines(text, MAX_RENDERED_DIFF_CHARACTERS, MAX_RENDERED_DIFF_LINES)
-  return <pre className="diff-view">{lines.map((line, index) => <span key={index} className={line.startsWith('+') && !line.startsWith('+++') ? 'diff-line diff-line--add' : line.startsWith('-') && !line.startsWith('---') ? 'diff-line diff-line--remove' : line.startsWith('@@') ? 'diff-line diff-line--hunk' : 'diff-line'}><i>{index + 1}</i><code>{line || ' '}</code></span>)}{truncated ? <span className="diff-line diff-line--truncated"><i>…</i><code>Diff truncated in the desktop view. Open the file or use Git for the complete diff.</code></span> : null}</pre>
+  return <ContextExcerpt key={`${path}:${scope}`} source={`Live ${scope} diff`} path={path} text={text}><pre className="diff-view">{lines.map((line, index) => <span key={index} data-context-line={index + 1} data-context-line-kind="diff display lines" className={line.startsWith('+') && !line.startsWith('+++') ? 'diff-line diff-line--add' : line.startsWith('-') && !line.startsWith('---') ? 'diff-line diff-line--remove' : line.startsWith('@@') ? 'diff-line diff-line--hunk' : 'diff-line'}><i>{index + 1}</i><code>{line || ' '}</code></span>)}{truncated ? <span className="diff-line diff-line--truncated"><i>…</i><code>Diff truncated in the desktop view. Open the file or use Git for the complete diff.</code></span> : null}</pre></ContextExcerpt>
 })
 
 export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRefreshGit }: { cwd?: string; git: GitStatus; readOnly?: boolean; onGrantProject?(): Promise<void> | void; onRefreshGit(): Promise<void> | void }) {
@@ -162,7 +163,7 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
         </div>
         <div className="diff-pane scroll-area">
           {selectedPath ? <div className="diff-header"><div><FileCode size={13} /><FilePathLabel path={selectedPath} /></div><div>{scope === 'unstaged' ? <ApexButton compact icon={<ArrowLineDown size={12} />} disabled={readOnly} onClick={() => void mutate('stage', [selectedPath])}>Stage</ApexButton> : <ApexButton compact icon={<ArrowUUpLeft size={12} />} disabled={readOnly} onClick={() => void mutate('unstage', [selectedPath])}>Unstage</ApexButton>}<ApexButton compact className="danger-action" icon={<ArrowUUpLeft size={12} />} disabled={readOnly} onClick={() => send({ type: 'OPEN_CONFIRM_UNDO', path: selectedPath })}>Undo changes</ApexButton></div></div> : null}
-          {loading ? <div className="diff-loading" role="status"><CircleNotch className="spin" size={15} aria-hidden="true" /><div className="compact-state"><EmptyState title="Loading diff…">{null}</EmptyState></div></div> : <DiffView text={diff} />}
+          {loading ? <div className="diff-loading" role="status"><CircleNotch className="spin" size={15} aria-hidden="true" /><div className="compact-state"><EmptyState title="Loading diff…">{null}</EmptyState></div></div> : <DiffView text={diff} path={activeSelectedPath} scope={scope} />}
         </div>
       </div>
       {commitOpen ? <Modal title="Commit staged changes" onClose={() => send({ type: 'CLOSE_MODAL' })} footer={<><ApexButton onClick={() => send({ type: 'CLOSE_MODAL' })}>Cancel</ApexButton><ApexButton variant="primary" disabled={readOnly || !commitMessage.trim() || commitSubmitting} onClick={() => void commit()}>Commit changes</ApexButton></>}><label className="field"><span>Commit message</span><div className="commit-message-input"><TextInput label="Commit message" isLabelHidden hasAutoFocus value={commitMessage} onChange={(message) => send({ type: 'SET_COMMIT_MESSAGE', message })} placeholder="Describe this change" containerStyle={{ flex: 1, minWidth: 0 }} /><ApexButton compact icon={<Sparkle size={13} />} onClick={fillCommitSummary} title="Generate a summary from staged files">Generate summary</ApexButton></div></label><p className="muted-copy">This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}

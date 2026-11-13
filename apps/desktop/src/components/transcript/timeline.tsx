@@ -71,8 +71,8 @@ function serialize(value: unknown, pretty = false): string {
 
 /** Settled file reads and searches fold into one row when they run back to back; edits, commands, and agents stay visible. */
 const READ_TOOLS = /^(?:read|read_file|ls)$/i
-const SEARCH_TOOLS = /^(?:ffgrep|fffind|grep|find|glob)$/i
-const isExploreTool = (name: string) => READ_TOOLS.test(name) || SEARCH_TOOLS.test(name)
+export const SEARCH_TOOLS = /^(?:ffgrep|fffind|grep|find|glob)$/i
+export const isExploreTool = (name: string) => READ_TOOLS.test(name) || SEARCH_TOOLS.test(name)
 
 const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`
 

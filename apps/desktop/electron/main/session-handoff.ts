@@ -28,6 +28,7 @@ interface SessionHandoffDeps {
   agents: Pick<AgentRpcManager, 'list' | 'getForSession' | 'start' | 'pinAttachment' | 'stopForSession' | 'releaseIdleSession' | 'setSessionAttachGuard' | 'setSessionClaimProvider'>
   sessions: Pick<SessionService, 'requireSessionPath' | 'list'>
   projects: Pick<ProjectService, 'authorizePath'>
+  isReadOnlySession(path: string): boolean
   openExternal(url: string): Promise<void>
   ownersDir?: string
   focusDelayMs?: number
@@ -98,7 +99,7 @@ export class SessionHandoff {
     let released = false
     for (const request of await readSessionReleaseRequests(this.ownersDir)) {
       if (this.disposed) return
-      if (!this.deps.agents.getForSession(request.session)) continue
+      if (!this.deps.agents.getForSession(request.session) || this.deps.isReadOnlySession(request.session)) continue
       if (!(await this.deps.agents.releaseIdleSession(request.session))) continue
       request.remove()
       released = true
@@ -113,6 +114,7 @@ export class SessionHandoff {
   async continueInVsCode(filePath: unknown, mode: unknown = 'transfer'): Promise<void> {
     if (mode !== 'transfer' && mode !== 'attach') throw new TypeError('Invalid VS Code handoff mode')
     const sessionPath = await this.deps.sessions.requireSessionPath(filePath)
+    if (this.deps.isReadOnlySession(sessionPath)) throw new Error('side read-only sessions cannot continue in VS Code')
     const wanted = canonicalSessionPath(sessionPath)
     const session = (await this.deps.sessions.list(undefined, true)).find((candidate) => canonicalSessionPath(candidate.filePath) === wanted)
     if (!session) throw new Error('This session is not in the session catalog.')

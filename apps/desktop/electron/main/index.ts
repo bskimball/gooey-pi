@@ -46,6 +46,11 @@ import { AgentBrowserService } from "./browser/agent-service";
 import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
+import { RunReceipts } from "./run-receipts";
+import { RewindService } from "./rewind";
+import { SideConversations } from "./side-conversations";
+import { FinishTaskService } from "./finish-task";
+import { WorktreeProvenance } from "./worktree-provenance";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
 import { BackgroundJobBridge } from "./background-jobs";
 import {
@@ -869,11 +874,13 @@ async function bootstrap(): Promise<void> {
 	);
 	const piProjects = new ProjectService(stateStore, () => mainWindow, "pi");
 	const repositoryUseGate = new RepositoryUseGate();
+	const worktreeProvenance = new WorktreeProvenance(join(app.getPath("userData"), "worktree-provenance"));
 	const checkouts = {
 		pi: new CheckoutService(
 			() => stateStore.getSettings().checkoutStrategy,
 			piProjects,
 			repositoryUseGate,
+			worktreeProvenance,
 		),
 	};
 	const authorizeCwd = (cwd: string) => piProjects.authorizeCwd(cwd);
@@ -891,8 +898,14 @@ async function bootstrap(): Promise<void> {
 		piDisabledProviders,
 		PI_RPC_ADAPTER,
 	);
+	piManager.setRunReceipts(new RunReceipts(join(app.getPath("userData"), "run-receipts"), (path) => piSessions.requireSessionPath(path), (path) => piSessions.notifyReceiptChange(path)));
 	piManager.setDisabledModelsProvider(piDisabledModels);
-	const sessionHandoff = new SessionHandoff({ agents: piManager, sessions: piSessions, projects: piProjects, openExternal: (url) => shell.openExternal(url, { activate: true }) });
+	const sideConversations = new SideConversations(join(app.getPath("userData"), "side-conversations"), piSessions, piManager, authorizeCwd);
+	piManager.setReadOnlySessionProvider((path) => sideConversations.isReadOnly(path));
+	const sessionHandoff = new SessionHandoff({ agents: piManager, sessions: piSessions, projects: piProjects, isReadOnlySession: (path) => sideConversations.isReadOnly(path), openExternal: (url) => shell.openExternal(url, { activate: true }) });
+	const rewind = new RewindService(piManager, piManager.runReceipts(), repositoryUseGate, () => piSessions.list(undefined, true, true), () => sessionHandoff.otherOwners());
+	const finishTask = new FinishTaskService(join(app.getPath("userData"), "finished-tasks"), piManager, git, repositoryUseGate, (path) => piSessions.requireSessionPath(path), () => piSessions.list(undefined, true, true), () => sessionHandoff.otherOwners(), worktreeProvenance);
+	piManager.setPromptAcceptedListener((path) => finishTask.clearForAcceptedPrompt(path));
 	desktopLink = new DesktopLinkServer(piManager, (cwd) => piProjects.authorizePath(cwd));
 	await desktopLink.start();
 	piManager.setWorkspaceUseProvider((cwd, owner, retireIfIdle) =>
@@ -1295,6 +1308,9 @@ async function bootstrap(): Promise<void> {
 			projects: piProjects,
 			checkouts,
 			sessions: piSessions,
+			sideConversations,
+			finishTask,
+			rewind,
 			sessionHandoff,
 			extensionPathContext,
 			agents: piManager,

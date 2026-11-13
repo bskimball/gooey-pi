@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { sortProjects } from '../../src/lib/project-order'
 import type { GitWorktree, ProjectFileEntry, ProjectFileListing, ProjectRecord, ProjectScripts, SessionRecord } from '../../src/types/api'
 import { listGitWorktrees } from './git'
+import { readWorkspaceText } from './workspace-text'
 import { HARNESSES } from './harness'
 import { mapLimit } from 'apex-core/lib/async'
 import { isPiProject, type FolderIdentity, type JsonStateStore, type PersistedProject, type StoredProject } from './store'
@@ -872,6 +873,10 @@ export class ProjectService {
       project.scripts.setupLastExitCode = exitCode
       return { ...project.scripts }
     })
+  }
+
+  async readTextFile(root: unknown, path: unknown): Promise<{ path: string; text: string; truncated: boolean }> {
+    return readWorkspaceText(this, root, path)
   }
 
   async listFiles(rootValue: unknown): Promise<ProjectFileListing> {

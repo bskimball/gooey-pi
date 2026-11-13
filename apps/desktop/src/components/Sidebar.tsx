@@ -36,6 +36,7 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { ApexButton, EmptyState, IconButton, Modal, PiMark, useFocusTrap } from './ui'
 import { StatusMark } from './activity/StatusMark'
 import { SessionStatusGlyph, SidebarAttentionGroups } from './SidebarAttention'
+import { useTaskWorkflowContext } from '@/lib/task-context'
 
 const PROJECT_SORT_LABEL_KEYS = { recent: 'projects.sort.recent', alphabetical: 'projects.sort.alphabetical' } as const satisfies Record<ProjectSortMode, MessageKey>
 
@@ -171,6 +172,7 @@ async function copySessionUuid(id: string): Promise<void> {
 
 function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, terminalOpen = false, voiceOpen = false, onToggleTerminal, onToggleVoice, onOpenInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
+  const workflow = useTaskWorkflowContext()
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
   const [sessionLimits, setSessionLimits] = useState<Record<string, number>>({})
@@ -366,7 +368,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                           <div key={session.id} className={`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`}>
                             <button type="button" title={session.title} aria-current={isSelected ? 'page' : undefined} className="session-row" onClick={() => openSession(session, project.id)} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
                               <span className="sr-only">{statusLabel[session.status]}: </span>
-                              <span className="session-row__text"><span className="session-row__title">{session.title}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
+                              <span className="session-row__text"><span className="session-row__title">{session.title}{workflow?.finished.has(session.filePath) ? <span className="task-finished-badge">Finished</span> : null}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
                               <SessionStatusGlyph session={session} attention={hasAttn} live={liveBySession[session.filePath]} />
                             </button>
                             <IconButton

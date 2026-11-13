@@ -13,9 +13,11 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename } from '@/lib/data'
 import { errorMessage } from '@/lib/errors'
-import type { GitStatus, ProjectFileEntry, ProjectRecord } from '@/types/api'
+import type { ApexApi, GitStatus, HarnessId, ProjectFileEntry, ProjectRecord } from '@/types/api'
 import { Banner } from '@astryxdesign/core/Banner'
-import { EmptyState, IconButton } from '../ui'
+import { ApexButton, EmptyState, IconButton, Modal } from '../ui'
+import { ContextExcerpt } from '../ContextExcerpt'
+import '../task-workflows.css'
 
 function fileManagerName(platform?: NodeJS.Platform): string {
   if (platform === 'darwin') return 'Finder'
@@ -218,6 +220,36 @@ export function collectDirectoryIds(nodes: FileTreeNode[]): Set<string> {
   return ids
 }
 
+// Apply the existing review modal and composer excerpt pattern to current files.
+function CurrentFilePreview({ node, harness, onOpen, onClose }: { node: FileTreeNode; harness: HarnessId; onOpen?(path: string): void; onClose(): void }) {
+  const [content, setContent] = useState<Awaited<ReturnType<ApexApi['projects']['readTextFile']>>>()
+  const [error, setError] = useState('')
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    let current = true
+    setContent(undefined); setError('')
+    void (async () => {
+      try {
+        if (!window.apex) throw new Error('File preview is available in the desktop app.')
+        const next = await window.apex.projects.readTextFile(node.root, node.path, harness)
+        if (current) setContent(next)
+      } catch (reason) { if (current) setError(errorMessage(reason)) }
+    })()
+    return () => { current = false }
+  }, [node.root, node.path, harness, revision])
+  return <Modal title={`Current file: ${node.path}`} onClose={onClose} footer={<>
+    {onOpen ? <ApexButton onClick={() => onOpen(node.fullPath)}>Open external</ApexButton> : null}
+    <ApexButton onClick={onClose}>Close</ApexButton>
+  </>}><div className="task-review">
+    <p>Current checkout contents, not a saved run snapshot. Select text to attach it to the composer.</p>
+    <p>Root: <code>{node.root}</code></p>
+    {error ? <><Banner status="error" role="alert" title={`Unable to preview file: ${error}`} /><ApexButton onClick={() => setRevision((value) => value + 1)}>Try again</ApexButton></> : !content ? <p role="status">Loading file…</p> : <>
+      {content.truncated ? <p role="note">Preview truncated at 256 KiB. Only the displayed text can be selected. Open external to inspect the complete file.</p> : null}
+      {content.text.length ? <ContextExcerpt key={revision} source={`Current file in ${node.root}`} path={content.path} text={content.text} plainText><pre className="task-history-code">{content.text}</pre></ContextExcerpt> : <p>This file is empty.</p>}
+    </>}
+  </div></Modal>
+}
+
 export function FilesPanel({
   project,
   git,
@@ -239,9 +271,11 @@ export function FilesPanel({
   const [skipped, setSkipped] = useState(0)
   const [visibleLimit, setVisibleLimit] = useState(1_000)
   const loadToken = useRef(0)
+  const [selectedFile, setSelectedFile] = useState<FileTreeNode | null>(null)
 
   const load = async () => {
     const token = ++loadToken.current
+    setSelectedFile(null)
     setTreeRoots([])
     setExpandedIds(new Set())
     setError('')
@@ -322,6 +356,7 @@ export function FilesPanel({
 
   return (
     <div className="files-panel">
+      {selectedFile ? <CurrentFilePreview key={`${selectedFile.id}:${project.harness}`} node={selectedFile} harness={project.harness} onOpen={onOpen} onClose={() => setSelectedFile(null)} /> : null}
       <div className="files-search">
         <TextInput label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
         {!isSearching && allDirIds.size > 0 ? (
@@ -393,7 +428,7 @@ export function FilesPanel({
                         ? isSearching
                           ? undefined
                           : () => toggleExpand(node.id)
-                        : () => onOpen?.(node.fullPath)
+                        : () => setSelectedFile(node)
                     }
                     onDoubleClick={
                       isDirectory

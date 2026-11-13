@@ -1,6 +1,17 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { RunReceipts } from '../../apps/desktop/electron/main/run-receipts'
+import { SideConversations } from '../../apps/desktop/electron/main/side-conversations'
+import { FinishTaskService } from '../../apps/desktop/electron/main/finish-task'
+import { GitService } from '../../apps/desktop/electron/main/git'
+import { WorktreeProvenance } from '../../apps/desktop/electron/main/worktree-provenance'
+import { SessionService } from '../../apps/desktop/electron/main/sessions'
+import { piSessionServiceOptions } from 'apex-core/sessions/pi'
+import { JsonStateStore } from '../../apps/desktop/electron/main/store'
+import { RewindService } from '../../apps/desktop/electron/main/rewind'
+import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/main/agent-rpc'
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
@@ -20,6 +31,8 @@ interface FakePiOptions {
   promptScript?: string
   /** Initial model reported by get_state before any set_model RPC. */
   initialModel?: { provider: string; id: string; name: string }
+  receipts?: boolean
+  noReadOnlyFlags?: boolean
 }
 
 function fakePiAgent(options: FakePiOptions = {}): { cwd: string; executable: string } {
@@ -33,6 +46,15 @@ function fakePiAgent(options: FakePiOptions = {}): { cwd: string; executable: st
   // ignore, and get_session_stats owns the authoritative context usage.
   writeFileSync(executable, `#!/usr/bin/env node
 const readline = require('node:readline')
+const fs = require('node:fs')
+if (process.argv.includes('--help')) { console.log(${JSON.stringify(options.noReadOnlyFlags ? '--tools' : '--tools\n--no-extensions\n--no-mcp')}); process.exit(0) }
+const receipts = ${JSON.stringify(Boolean(options.receipts))}
+let busy = false
+let transcript = []
+let baseline = true
+let sessionFile = process.argv.includes('--session') ? process.argv[process.argv.indexOf('--session') + 1] : process.cwd() + '/session.jsonl'
+let sessionId = 'pi-session'
+let forkCount = 0
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
 let currentModel = ${initialModel}
 let currentThinking = 'medium'
@@ -41,13 +63,28 @@ send({ type: 'fake_cwd', cwd: process.cwd() })
 send({ type: 'fake_env', env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PI_'))) })
 readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
-  if (command.type === 'get_state') {
-    send({ id: command.id, type: 'response', command: 'get_state', success: true, data: {
-      sessionId: 'pi-session', isStreaming: false, isCompacting: false, thinkingLevel: currentThinking,
+  if (receipts && command.type === 'get_entries') {
+    const reply = () => send({ id: command.id, type: 'response', command: 'get_entries', success: true, data: { entries: transcript, leafId: transcript.length ? transcript[transcript.length - 1].id : null } })
+    if (baseline) { baseline = false; send({ type: 'fake_baseline_wait' }); const timer = setInterval(() => { if (fs.existsSync('allow-baseline')) { clearInterval(timer); reply() } }, 10) }
+    else if (fs.existsSync('hold-post')) { fs.unlinkSync('hold-post'); send({ type: 'fake_post_wait' }); const timer = setInterval(() => { if (fs.existsSync('allow-post')) { clearInterval(timer); reply() } }, 10) }
+    else reply()
+  } else if (command.type === 'prompt' && command.message === 'reject me') {
+    send({ id: command.id, type: 'response', command: command.type, success: false, error: 'Prompt rejected for test' })
+  } else if (receipts && (command.type === 'prompt' || command.type === 'follow_up' || command.type === 'steer')) {
+    const id = 'user-' + (transcript.length + 1)
+    transcript.push({ type: 'message', id, parentId: transcript.length ? transcript[transcript.length - 1].id : null, message: { role: 'user', content: command.message } })
+    busy = true
+    if (command.message === 'work resumed without receipts') send({ type: 'agent_start' })
+    send({ type: 'fake_prompt', message: command.message })
+    send({ id: command.id, type: 'response', command: command.type, success: true, data: { disposition: transcript.length === 1 ? 'started' : 'queued' } })
+  } else if (command.type === 'get_state') {
+    const reply = () => send({ id: command.id, type: 'response', command: 'get_state', success: true, data: {
+      sessionId, sessionFile: receipts ? sessionFile : undefined, isStreaming: busy, isCompacting: false, pendingMessageCount: 0, thinkingLevel: currentThinking,
       model: currentModel,
       serviceTier: 'priority', fastModeEnabled: true,
       contextUsage: { tokens: 999999, contextWindow: 272000, percent: 99 },
     } })
+    if (fs.existsSync('hold-state')) { fs.unlinkSync('hold-state'); send({ type: 'fake_state_wait' }); const timer = setInterval(() => { if (fs.existsSync('allow-state')) { clearInterval(timer); reply() } }, 10) } else reply()
   } else if (command.type === 'set_model') {
     currentModel = { provider: command.provider, id: command.modelId, name: command.modelId }
     send({ type: 'fake_set_model', provider: command.provider, modelId: command.modelId })
@@ -58,19 +95,36 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     send({ id: command.id, type: 'response', command: 'set_thinking_level', success: true })
   } else if (command.type === 'get_session_stats') {
     send({ id: command.id, type: 'response', command: 'get_session_stats', success: true, data: { contextUsage: { tokens: 12000, contextWindow: 272000, percent: 4 }, tokens: { input: 10000, output: 2000, cacheRead: 500, cacheWrite: 100, total: 12600 }, cost: 0.4321 } })
+  } else if (receipts && command.type === 'get_fork_messages') {
+    send({ id: command.id, type: 'response', command: command.type, success: true, data: { messages: transcript.map((item) => ({ entryId: item.id, text: item.message.content })) } })
+  } else if (receipts && command.type === 'fork') {
+    send({ type: 'fake_fork', entryId: command.entryId })
+    const selected = transcript.find((item) => item.id === command.entryId)
+    const cancelled = fs.existsSync('cancel-fork')
+    if (!cancelled) { if (fs.existsSync('change-on-fork')) fs.writeFileSync('work.txt', 'race'); sessionFile = process.cwd() + '/fork-' + (++forkCount) + '.jsonl'; sessionId = 'fork-session'; fs.writeFileSync(sessionFile, '') }
+    send({ id: command.id, type: 'response', command: command.type, success: true, data: { text: selected?.message.content, cancelled } })
   } else if (command.type === 'fork' || command.type === 'get_fork_messages') {
     send({ id: command.id, type: 'response', command: command.type, success: true, data: { received: command.type, entryId: command.entryId } })
   } else if (command.type === 'prompt') {
     send({ type: 'fake_prompt', message: command.message })
     send({ id: command.id, type: 'response', command: 'prompt', success: true, data: { agentInvoked: true } })
     ${options.promptScript ?? ''}
+  } else if (command.type === 'bash') {
+    require('node:child_process').execSync(command.command, { cwd: process.cwd() })
+    send({ id: command.id, type: 'response', command: 'bash', success: true })
   } else if (command.type === 'abort') {
+    busy = false
+    send({ type: 'agent_settled' })
     send({ id: command.id, type: 'response', command: 'abort', success: true })
   } else {
     send({ type: 'fake_unknown_command', command: command.type })
     send({ id: command.id, type: 'response', command: command.type, success: false, error: 'Unknown command ' + command.type })
   }
 })
+if (receipts) setInterval(() => {
+  if (fs.existsSync('emit-end')) { fs.unlinkSync('emit-end'); send({ type: 'agent_end' }) }
+  if (fs.existsSync('settle')) { fs.unlinkSync('settle'); busy = false; send({ type: 'agent_settled' }) }
+}, 10)
 `)
   chmodSync(executable, 0o755)
   if (process.platform === 'win32') {
@@ -106,6 +160,413 @@ function piManager(executable: string, options: { providers?: ProviderCatalog } 
   managers.push(manager)
   return manager
 }
+
+describe('read-only side conversations', () => {
+  it('reports unsupported Pi flags before creating a side session', async () => {
+    const fake = fakePiAgent({ noReadOnlyFlags: true })
+    const root = join(fake.cwd, 'sessions'); mkdirSync(root)
+    const sessions = new SessionService(new JsonStateStore(join(fake.cwd, 'state.json')), null, undefined, piSessionServiceOptions(root))
+    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path))
+    managers.push(manager)
+    const sides = new SideConversations(join(fake.cwd, 'side-metadata'), sessions, manager, async (cwd) => cwd)
+    const parent = await sessions.create(fake.cwd)
+    await expect(sides.create(parent.filePath)).rejects.toThrow('Configured Pi does not support the required read-only side conversation flags')
+    expect(await sides.list(parent.filePath)).toEqual([])
+    expect(await sessions.list(undefined, true, true)).toHaveLength(1)
+  })
+  it('persists independent policy, protects resumes and commands, and admits return only to an idle parent', async () => {
+    const fake = fakePiAgent({ receipts: true })
+    const root = join(fake.cwd, 'sessions'); mkdirSync(root)
+    const sessions = new SessionService(new JsonStateStore(join(fake.cwd, 'state.json')), null, undefined, piSessionServiceOptions(root))
+    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path))
+    managers.push(manager)
+    const gate = new RepositoryUseGate()
+    manager.setWorkspaceUseProvider((cwd, owner, retire) => gate.beginWorkspaceUse(cwd, owner, retire))
+    manager.setRuntimeEnvironmentProvider(() => ({ APEX_EDITOR_EXTENSION_PATH: '/explicit-extension.ts', GOOEYPI_COMPUTER_USE_SKILL_PATH: '/explicit-skill' }))
+    const storage = join(fake.cwd, 'side-metadata')
+    let sides = new SideConversations(storage, sessions, manager, async (cwd) => cwd)
+    manager.setReadOnlySessionProvider((path) => sides.isReadOnly(path))
+    const events: Array<{ runtimeId: string; event: Record<string, unknown> }> = []
+    manager.subscribe((event) => events.push(event))
+    const parentSession = await sessions.create(fake.cwd)
+    const parent = await manager.start({ cwd: fake.cwd, sessionPath: parentSession.filePath })
+    await manager.command(parent.runtimeId, { type: 'prompt', message: 'parent is working' })
+    await waitUntil(() => manager.getForSession(parentSession.filePath)?.isStreaming === true)
+    const createSession = sessions.create.bind(sessions)
+    let reveal!: (path: string) => void
+    let release!: () => void
+    const visible = new Promise<string>((resolve) => { reveal = resolve })
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const createSpy = vi.spyOn(sessions, 'create').mockImplementation(async (cwd, beforeWrite) => {
+      const child = await createSession(cwd, (path) => {
+        beforeWrite?.(path)
+        expect(sides.isReadOnly(path)).toBe(true)
+        expect(existsSync(path)).toBe(false)
+      })
+      reveal(child.filePath)
+      await held
+      return child
+    })
+    const creating = sides.create(parentSession.filePath, { excerpt: 'chosen context' })
+    const visiblePath = await visible
+    const starting = manager.start({ cwd: fake.cwd, sessionPath: visiblePath })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(manager.getForSession(visiblePath)).toBeUndefined()
+    release()
+    const side = await creating
+    createSpy.mockRestore()
+    expect(side.sessionFile).not.toBe(parentSession.filePath)
+    expect(side.initialContext).toBe('chosen context')
+    const child = await starting
+    expect(manager.getForSession(parentSession.filePath)?.isStreaming).toBe(true)
+    const argv = events.find((item) => item.runtimeId === child.runtimeId && item.event.type === 'fake_argv')?.event.argv as string[]
+    expect(argv).toContain('--no-extensions'); expect(argv).toContain('--no-mcp')
+    expect(argv.slice(argv.indexOf('--tools'), argv.indexOf('--tools') + 2)).toEqual(['--tools', 'read,grep,find,ls'])
+    expect(argv).not.toContain('--extension'); expect(argv).not.toContain('--skill')
+    const sentinel = join(fake.cwd, 'mutation-sentinel')
+    await expect(manager.command(child.runtimeId, { type: 'bash', command: 'node -e "require(\'fs\').writeFileSync(\'mutation-sentinel\',\'bad\')"' })).rejects.toThrow('Read-only side conversation blocks RPC command bash')
+    expect(existsSync(sentinel)).toBe(false)
+    await expect(manager.command(child.runtimeId, { type: 'prompt', message: '!echo unsafe' })).rejects.toThrow('blocks shell and slash commands')
+    await expect(manager.command(child.runtimeId, { type: 'new_session' })).rejects.toThrow('Read-only side conversation blocks RPC command new_session')
+    await expect(sides.prepareReturn(parent.runtimeId, side.sessionFile, 'selected')).rejects.toThrow(/busy/)
+    await manager.command(parent.runtimeId, { type: 'abort' })
+    await waitUntil(() => manager.getForSession(parentSession.filePath)?.isStreaming === false)
+    await manager.command(parent.runtimeId, { type: 'bash', command: 'node -e "require(\'fs\').writeFileSync(\'control-sentinel\',\'ok\')"' })
+    expect(existsSync(join(fake.cwd, 'control-sentinel'))).toBe(true)
+    await manager.command(parent.runtimeId, { type: 'get_state' })
+    writeFileSync(join(fake.cwd, 'hold-state'), '')
+    const returning = sides.prepareReturn(parent.runtimeId, side.sessionFile, 'selected')
+    await waitUntil(() => events.some((item) => item.runtimeId === parent.runtimeId && item.event.type === 'fake_state_wait'))
+    await expect(manager.command(parent.runtimeId, { type: 'prompt', message: 'race' })).rejects.toThrow('session change is already in progress')
+    writeFileSync(join(fake.cwd, 'allow-state'), '')
+    expect(await returning).toEqual({ sourceSession: side.sessionFile, text: 'selected' })
+    await manager.stop(child.runtimeId)
+    const resumedManager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path))
+    managers.push(resumedManager)
+    resumedManager.setRuntimeEnvironmentProvider(() => ({ APEX_EDITOR_EXTENSION_PATH: '/explicit-extension.ts', GOOEYPI_COMPUTER_USE_SKILL_PATH: '/explicit-skill' }))
+    resumedManager.subscribe((event) => events.push(event))
+    sides = new SideConversations(storage, sessions, resumedManager, async (cwd) => cwd)
+    resumedManager.setReadOnlySessionProvider((path) => sides.isReadOnly(path))
+    expect(await sides.list(parentSession.filePath)).toEqual([side])
+    expect(await sides.get(side.sessionFile)).toEqual(side)
+    const resumed = await resumedManager.start({ cwd: side.cwd, sessionPath: side.sessionFile })
+    const resumedArgs = events.find((item) => item.runtimeId === resumed.runtimeId && item.event.type === 'fake_argv')?.event.argv as string[]
+    expect(resumedArgs).toContain('--no-extensions'); expect(resumedArgs).toContain('--no-mcp')
+    expect(resumedArgs).not.toContain('--extension'); expect(resumedArgs).not.toContain('--skill')
+    await expect(resumedManager.command(resumed.runtimeId, { type: 'bash', command: 'node -e "require(\'fs\').writeFileSync(\'mutation-sentinel\',\'bad\')"' })).rejects.toThrow('blocks RPC command bash')
+    expect(existsSync(sentinel)).toBe(false)
+    await expect(manager.command(parent.runtimeId, { type: 'switch_session', sessionPath: side.sessionFile })).rejects.toThrow('must be opened in its own runtime')
+  })
+})
+
+describe('finish task', () => {
+  it('rechecks fresh observations, retains files and refs, and persists explicit completion', async () => {
+    const fake = fakePiAgent({ receipts: true })
+    const checkout = join(fake.cwd, 'checkout'); mkdirSync(checkout)
+    const sessionRoot = join(fake.cwd, 'sessions'); mkdirSync(sessionRoot)
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: checkout, encoding: 'utf8' })
+      if (result.status !== 0) throw new Error(result.stderr)
+      return result.stdout.trim()
+    }
+    git('init', '-q'); git('config', 'user.email', 'finish@example.test'); git('config', 'user.name', 'Finish Test')
+    writeFileSync(join(checkout, 'tracked.txt'), 'base\n')
+    git('add', 'tracked.txt'); git('commit', '-qm', 'base')
+    const target = git('branch', '--show-current')
+    git('checkout', '-qb', 'finish-feature')
+    writeFileSync(join(checkout, 'tracked.txt'), 'committed\n')
+    git('commit', '-qam', 'feature')
+    git('config', 'branch.finish-feature.remote', '.'); git('config', 'branch.finish-feature.merge', `refs/heads/${target}`)
+    writeFileSync(join(checkout, 'dirty.txt'), 'user work')
+    const sessions = new SessionService(new JsonStateStore(join(fake.cwd, 'state.json')), null, undefined, piSessionServiceOptions(sessionRoot))
+    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path)); managers.push(manager)
+    const gate = new RepositoryUseGate()
+    manager.setWorkspaceUseProvider((cwd, owner, retire) => gate.beginWorkspaceUse(cwd, owner, retire))
+    const session = await sessions.create(checkout)
+    const runtime = await manager.start({ cwd: checkout, sessionPath: session.filePath })
+    const storage = join(fake.cwd, 'finished')
+    const service = () => new FinishTaskService(storage, manager, new GitService(async (cwd) => cwd), gate, (path) => sessions.requireSessionPath(path), () => sessions.list(undefined, true, true), async () => [])
+    const finish = service()
+    manager.setPromptAcceptedListener((path) => finish.clearForAcceptedPrompt(path))
+    const first = await finish.review(runtime.runtimeId, session.filePath)
+    expect(first.worktree.kind).toBe('primary')
+    expect(first.worktree.ownership).toBe('unknown')
+    expect(first.git.integration.kind).toBe('not-integrated')
+    expect(first.git.status.files.map((item) => item.path)).toContain('dirty.txt')
+    expect(first.cleanup.eligible).toBe(false)
+    expect(first.cleanup.reasons.join(' ')).toMatch(/Primary worktree/)
+    await expect(finish.finish(runtime.runtimeId, session.filePath, first.token, 'no')).rejects.toThrow('explicit confirmation')
+    writeFileSync(join(checkout, 'second.txt'), 'new work')
+    await expect(finish.finish(runtime.runtimeId, session.filePath, first.token, 'finish')).rejects.toThrow('stale')
+    const terminal = await gate.beginWorkspaceUse(checkout, { kind: 'terminal', terminalId: 'terminal-1' })
+    const shared = await finish.review(runtime.runtimeId, session.filePath)
+    expect(shared.conflicts).toContainEqual({ kind: 'terminal', terminalId: 'terminal-1' })
+    terminal.release()
+    await expect(finish.finish(runtime.runtimeId, session.filePath, shared.token, 'finish')).rejects.toThrow('stale')
+    const beforeBusy = await finish.review(runtime.runtimeId, session.filePath)
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'still working' })
+    await waitUntil(() => manager.getForSession(session.filePath)?.isStreaming === true)
+    await expect(finish.review(runtime.runtimeId, session.filePath)).rejects.toThrow(/busy/)
+    await expect(finish.finish(runtime.runtimeId, session.filePath, beforeBusy.token, 'finish')).rejects.toThrow('invalid or expired')
+    expect(await finish.get(session.filePath)).toBeNull()
+    await manager.command(runtime.runtimeId, { type: 'abort' })
+    await waitUntil(() => manager.getForSession(session.filePath)?.isStreaming === false)
+    const review = await finish.review(runtime.runtimeId, session.filePath)
+    const statusBefore = git('status', '--porcelain=v1', '--untracked-files=all')
+    const refsBefore = git('show-ref')
+    let result = await finish.finish(runtime.runtimeId, session.filePath, review.token, 'finish')
+    expect(result.review.git.integration.kind).toBe('not-integrated')
+    expect(result.review.nextActions.join(' ')).toMatch(/uncommitted/)
+    expect(git('status', '--porcelain=v1', '--untracked-files=all')).toBe(statusBefore)
+    expect(git('show-ref')).toBe(refsBefore)
+    expect(readFileSync(join(checkout, 'dirty.txt'), 'utf8')).toBe('user work')
+    expect(existsSync(session.filePath)).toBe(true)
+    expect(await service().get(session.filePath)).toEqual(result)
+    expect(await service().list()).toEqual([result])
+    await expect(finish.finish(runtime.runtimeId, session.filePath, review.token, 'finish')).rejects.toThrow('invalid or expired')
+    await expect(manager.command(runtime.runtimeId, { type: 'prompt', message: 'reject me' })).rejects.toThrow('Prompt rejected for test')
+    expect(await service().get(session.filePath)).toEqual(result)
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'work resumed without receipts' })
+    expect(await service().get(session.filePath)).toBeNull()
+    await manager.command(runtime.runtimeId, { type: 'abort' })
+    await waitUntil(() => manager.getForSession(session.filePath)?.isStreaming === false)
+    const rereview = await finish.review(runtime.runtimeId, session.filePath)
+    result = await finish.finish(runtime.runtimeId, session.filePath, rereview.token, 'finish')
+    await manager.stop(runtime.runtimeId)
+    const resumed = await manager.start({ cwd: checkout, sessionPath: session.filePath })
+    const reloaded = service()
+    manager.setPromptAcceptedListener((path) => reloaded.clearForAcceptedPrompt(path))
+    manager.setRunReceipts(new RunReceipts(join(fake.cwd, 'run-receipts'), (path) => sessions.requireSessionPath(path)))
+    writeFileSync(join(checkout, 'allow-baseline'), '')
+    expect(await reloaded.get(session.filePath)).toEqual(result)
+    await expect(manager.command(resumed.runtimeId, { type: 'prompt', message: 'reject me' })).rejects.toThrow('Prompt rejected for test')
+    expect(await service().get(session.filePath)).toEqual(result)
+    await manager.command(resumed.runtimeId, { type: 'prompt', message: 'work resumed' })
+    expect(await service().get(session.filePath)).toBeNull()
+    expect(await service().list()).toEqual([])
+
+    const linked = join(fake.cwd, 'linked')
+    git('worktree', 'add', '-qb', 'finish-linked', linked)
+    git('remote', 'add', 'origin', checkout)
+    git('update-ref', 'refs/remotes/origin/target', 'refs/heads/finish-linked')
+    git('config', 'branch.finish-linked.remote', 'origin')
+    git('config', 'branch.finish-linked.merge', 'refs/heads/target')
+    const linkedSession = await sessions.create(linked)
+    const linkedRuntime = await manager.start({ cwd: linked, sessionPath: linkedSession.filePath })
+    const linkedFinish = new FinishTaskService(storage, manager, new GitService(async (cwd) => cwd), gate, (path) => sessions.requireSessionPath(path), () => sessions.list(undefined, true, true), async () => [{ app: 'vscode', label: 'other window', sessions: [join(fake.cwd, 'missing-session.jsonl')] }])
+    const linkedReview = await linkedFinish.review(linkedRuntime.runtimeId, linkedSession.filePath)
+    expect(linkedReview.worktree.kind).toBe('linked')
+    expect(linkedReview.worktree.ownership).toBe('unknown')
+    expect(linkedReview.git.integration).toEqual({ kind: 'integrated', target: 'origin/target', evidence: 'local-cached-remote-tracking-ref' })
+    expect(linkedReview.conflicts).toContainEqual({ kind: 'external-session', app: 'vscode', label: 'other window', session: join(fake.cwd, 'missing-session.jsonl') })
+    expect(linkedReview.cleanup.eligible).toBe(false)
+    expect(linkedReview.cleanup.reasons.join(' ')).toMatch(/provenance is unknown/)
+    const linkedRefs = git('show-ref')
+    await linkedFinish.finish(linkedRuntime.runtimeId, linkedSession.filePath, linkedReview.token, 'finish')
+    expect(git('show-ref')).toBe(linkedRefs)
+    expect(existsSync(linked)).toBe(true)
+    const provenance = new WorktreeProvenance(join(fake.cwd, 'worktree-provenance'))
+    const candidateService = new FinishTaskService(storage, manager, new GitService(async (cwd) => cwd), gate, (path) => sessions.requireSessionPath(path), () => sessions.list(undefined, true, true), async () => [], provenance)
+    expect((await candidateService.review(linkedRuntime.runtimeId, linkedSession.filePath)).cleanup.eligible).toBe(false)
+    provenance.recordCreated(linked)
+    const candidate = await candidateService.review(linkedRuntime.runtimeId, linkedSession.filePath)
+    expect(candidate.worktree.ownership).toBe('apex-created')
+    expect(candidate.cleanup).toEqual({ eligible: true, reasons: [] })
+    expect(candidate.nextActions.join(' ')).toMatch(/Stop the task runtime/)
+    writeFileSync(join(linked, 'dirty-later.txt'), 'changed')
+    await expect(candidateService.finish(linkedRuntime.runtimeId, linkedSession.filePath, candidate.token, 'finish')).rejects.toThrow('stale')
+    expect((await candidateService.review(linkedRuntime.runtimeId, linkedSession.filePath)).cleanup.eligible).toBe(false)
+    rmSync(join(linked, 'dirty-later.txt'))
+    const clean = await candidateService.review(linkedRuntime.runtimeId, linkedSession.filePath)
+    expect(clean.cleanup.eligible).toBe(true)
+    const sharedLease = await gate.beginWorkspaceUse(linked, { kind: 'terminal', terminalId: 'shared-linked' })
+    await expect(candidateService.finish(linkedRuntime.runtimeId, linkedSession.filePath, clean.token, 'finish')).rejects.toThrow('stale')
+    const sharedCandidate = await candidateService.review(linkedRuntime.runtimeId, linkedSession.filePath)
+    expect(sharedCandidate.cleanup.eligible).toBe(false)
+    expect(sharedCandidate.conflicts).toContainEqual({ kind: 'terminal', terminalId: 'shared-linked' })
+    sharedLease.release()
+    git('config', '--unset', 'branch.finish-linked.merge')
+    const noTarget = await linkedFinish.review(linkedRuntime.runtimeId, linkedSession.filePath)
+    expect(noTarget.git.integration.kind).toBe('unknown')
+    expect(noTarget.cleanup.eligible).toBe(false)
+    expect(noTarget.cleanup.reasons.join(' ')).toMatch(/target or result is unknown/)
+  })
+})
+
+describe('run receipts', () => {
+  it('reserves initial capture, joins queued messages, and finalizes only when Pi is idle', async () => {
+    const fake = fakePiAgent({ receipts: true })
+    const init = spawnSync('git', ['init', '-q'], { cwd: fake.cwd })
+    expect(init.status).toBe(0)
+    writeFileSync(join(fake.cwd, '.git', 'info', 'exclude'), 'allow-baseline\nemit-end\nsettle\nhold-post\nallow-post\nsession.jsonl\n')
+    const storage = mkdtempSync(join(tmpdir(), 'apex-receipts-')); dirs.push(storage)
+    const session = join(fake.cwd, 'session.jsonl')
+    writeFileSync(session, '')
+    writeFileSync(join(fake.cwd, 'work.txt'), 'before')
+    const manager = piManager(fake.executable)
+    const changes: string[] = []
+    let notify!: (path: string) => void
+    const terminal = new Promise<string>((resolve) => { notify = resolve })
+    const receipts = new RunReceipts(storage, async (path) => path, (path) => { changes.push(path); notify(path) })
+    manager.setRunReceipts(receipts)
+    const events: Array<Record<string, unknown>> = []
+    manager.setEventSink(({ event }) => events.push(event))
+    const runtime = await manager.start({ cwd: fake.cwd })
+    const first = manager.command(runtime.runtimeId, { type: 'prompt', message: 'first' })
+    await waitUntil(() => events.some((event) => event.type === 'fake_baseline_wait'))
+    expect(events.some((event) => event.type === 'fake_prompt')).toBe(false)
+    expect((await manager.command(runtime.runtimeId, { type: 'abort' })).success).toBe(true)
+    writeFileSync(join(fake.cwd, 'allow-baseline'), '')
+    await first
+    await manager.command(runtime.runtimeId, { type: 'attached_prompt', intent: 'queue', message: 'second' })
+    writeFileSync(join(fake.cwd, 'work.txt'), 'after')
+    writeFileSync(join(fake.cwd, 'emit-end'), '')
+    await waitUntil(() => events.some((event) => event.type === 'agent_end'))
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect((await receipts.list(session))[0].state).toBe('open')
+    writeFileSync(join(fake.cwd, 'hold-post'), '')
+    writeFileSync(join(fake.cwd, 'settle'), '')
+    await waitUntil(() => events.some((event) => event.type === 'fake_post_wait'))
+    expect(changes).toEqual([])
+    const third = manager.command(runtime.runtimeId, { type: 'prompt', message: 'third' })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(events.filter((event) => event.type === 'fake_prompt')).toHaveLength(2)
+    writeFileSync(join(fake.cwd, 'allow-post'), '')
+    await third
+    expect(normalize(await terminal)).toBe(session)
+    const reopened = new RunReceipts(storage, async (path) => path)
+    const receipt = (await reopened.list(session)).find((item) => item.state === 'complete')
+    expect(receipt).toMatchObject({ state: 'complete', anchorUserEntryId: 'user-1', memberUserEntryIds: ['user-1', 'user-2'], attribution: 'observed-checkout', inputs: [{ kind: 'prompt', disposition: 'started' }, { kind: 'follow_up', disposition: 'queued' }] })
+    await expect(reopened.file(join(fake.cwd, 'other.jsonl'), 'user-1', 'work.txt')).rejects.toThrow('unavailable')
+    expect(await reopened.file(session, 'user-2', 'work.txt')).toMatchObject({ before: { base64: Buffer.from('before').toString('base64') }, after: { base64: Buffer.from('after').toString('base64') } })
+    expect((await reopened.list(session))).toHaveLength(2)
+    await manager.stop(runtime.runtimeId)
+    expect(changes.map(normalize)).toEqual([session, session])
+    const interrupted = (await reopened.list(session)).find((item) => item.state === 'incomplete')
+    expect(interrupted?.error).toMatch(/exited|interrupted/)
+  }, 15_000)
+})
+
+describe('rewind contract', () => {
+  it('checks worktree, busy and stale state, honors cancellation, then forks the run anchor and restores', async () => {
+    const fake = fakePiAgent({ receipts: true })
+    const git = (...args: string[]) => { const result = spawnSync('git', args, { cwd: fake.cwd, encoding: 'utf8' }); if (result.status !== 0) throw new Error(result.stderr) }
+    git('init', '-q'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.com')
+    writeFileSync(join(fake.cwd, 'work.txt'), 'before')
+    git('add', 'work.txt'); git('commit', '-qm', 'base')
+    writeFileSync(join(fake.cwd, '.git', 'info', 'exclude'), 'allow-baseline\nemit-end\nsettle\ncancel-fork\nchange-on-fork\nsession.jsonl\nfork-*.jsonl\nignored.txt\n')
+    const parent = mkdtempSync(join(tmpdir(), 'apex-rewind-tree-')); dirs.push(parent)
+    const checkout = join(parent, 'linked')
+    git('worktree', 'add', '-qb', 'rewind-fixture', checkout)
+    const headBefore = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).stdout
+    const indexBefore = spawnSync('git', ['ls-files', '--stage'], { cwd: checkout, encoding: 'utf8' }).stdout
+    const storage = mkdtempSync(join(tmpdir(), 'apex-rewind-store-')); dirs.push(storage)
+    const session = join(checkout, 'session.jsonl'); writeFileSync(session, '')
+    const manager = piManager(fake.executable)
+    const gate = new RepositoryUseGate()
+    manager.setWorkspaceUseProvider((cwd, owner, retire) => gate.beginWorkspaceUse(cwd, owner, retire))
+    const receipts = new RunReceipts(storage, async (path) => path)
+    manager.setRunReceipts(receipts)
+    let otherSessions: string[] = []
+    const rewind = new RewindService(manager, receipts, gate,
+      async () => [{ id: 'other', harness: 'pi', filePath: 'other-session.jsonl', projectPath: checkout, title: 'Other', createdAt: '', updatedAt: '', status: 'running', depth: 0 }],
+      async () => otherSessions.length ? [{ app: 'vscode', label: 'VS Code', sessions: otherSessions }] : [])
+    const events: Array<Record<string, unknown>> = []
+    manager.setEventSink(({ event }) => events.push(event))
+    const runtime = await manager.start({ cwd: checkout })
+    const first = manager.command(runtime.runtimeId, { type: 'prompt', message: 'first prompt' })
+    await waitUntil(() => events.some((event) => event.type === 'fake_baseline_wait'))
+    writeFileSync(join(checkout, 'allow-baseline'), ''); await first
+    await manager.command(runtime.runtimeId, { type: 'attached_prompt', intent: 'queue', message: 'queued prompt' })
+    await expect(rewind.preview(runtime.runtimeId, session, 'user-2')).rejects.toThrow(/busy/)
+    writeFileSync(join(checkout, 'work.txt'), 'after')
+    writeFileSync(join(checkout, 'ignored.txt'), 'ignored')
+    writeFileSync(join(checkout, 'settle'), '')
+    let done = false
+    for (let n = 0; n < 200 && !done; n++) { done = (await receipts.list(session)).some((r) => r.state === 'complete'); if (!done) await new Promise((r) => setTimeout(r, 10)) }
+    expect(done).toBe(true)
+    await expect(rewind.preview(runtime.runtimeId, session, 'desktop-user-1')).rejects.toThrow(/not available/)
+    const busyPreview = await rewind.preview(runtime.runtimeId, session, 'user-1')
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'another run' })
+    await expect(rewind.execute(runtime.runtimeId, session, busyPreview.token)).rejects.toThrow(/busy/)
+    writeFileSync(join(checkout, 'settle'), '')
+    let secondDone = false
+    for (let n = 0; n < 200 && !secondDone; n++) { secondDone = (await receipts.list(session)).filter((r) => r.state === 'complete').length === 2; if (!secondDone) await new Promise((r) => setTimeout(r, 10)) }
+    expect(secondDone).toBe(true)
+    const preview = await rewind.preview(runtime.runtimeId, session, 'user-2')
+    await expect(rewind.execute(runtime.runtimeId, join(checkout, 'other.jsonl'), preview.token)).rejects.toThrow(/invalid or expired/)
+    expect(preview).toMatchObject({ anchorUserEntryId: 'user-1', rewindToRunStart: true, prompt: 'first prompt', worktree: { linked: true, primary: false }, restore: { available: true } })
+    writeFileSync(join(checkout, 'work.txt'), 'later')
+    await expect(rewind.execute(runtime.runtimeId, session, preview.token, { restoreFiles: true, confirmation: 'restore', fingerprint: preview.restore.fingerprint })).rejects.toThrow('Stale restore preview')
+    expect(events.some((event) => event.type === 'fake_fork')).toBe(false)
+    otherSessions = ['other-session.jsonl']
+    const registered = await rewind.preview(runtime.runtimeId, session, 'user-1')
+    expect(registered.restore.reason).toMatch(/registered session/)
+    otherSessions = []
+    const unconfirmed = await rewind.preview(runtime.runtimeId, session, 'user-1')
+    await expect(rewind.execute(runtime.runtimeId, session, unconfirmed.token, { restoreFiles: true, fingerprint: unconfirmed.restore.fingerprint })).rejects.toThrow(/Confirmed/)
+    const beforeConflict = await rewind.preview(runtime.runtimeId, session, 'user-1')
+    const conflict = await gate.beginWorkspaceUse(checkout, { kind: 'terminal', terminalId: 'other' })
+    const blocked = await rewind.preview(runtime.runtimeId, session, 'user-1')
+    expect(blocked.restore.available).toBe(false)
+    await expect(rewind.execute(runtime.runtimeId, session, beforeConflict.token, { restoreFiles: true, confirmation: 'restore', fingerprint: beforeConflict.restore.fingerprint })).rejects.toMatchObject({ code: 'active-work' })
+    expect(events.some((event) => event.type === 'fake_fork')).toBe(false)
+    conflict.release()
+    writeFileSync(join(checkout, 'cancel-fork'), '')
+    const cancelled = await rewind.preview(runtime.runtimeId, session, 'user-2')
+    expect(await rewind.execute(runtime.runtimeId, session, cancelled.token, { restoreFiles: true, confirmation: 'restore', fingerprint: cancelled.restore.fingerprint })).toEqual({ kind: 'cancelled' })
+    expect(readFileSync(join(checkout, 'work.txt'), 'utf8')).toBe('later')
+    rmSync(join(checkout, 'cancel-fork'))
+    const final = await rewind.preview(runtime.runtimeId, session, 'user-2')
+    expect(await rewind.execute(runtime.runtimeId, session, final.token, { restoreFiles: true, confirmation: 'restore', fingerprint: final.restore.fingerprint })).toMatchObject({ kind: 'rewound', sessionId: 'fork-session', prompt: 'first prompt', files: 'restored' })
+    expect(events.filter((event) => event.type === 'fake_fork').every((event) => event.entryId === 'user-1')).toBe(true)
+    expect(readFileSync(join(checkout, 'work.txt'), 'utf8')).toBe('before')
+    expect(readFileSync(join(checkout, 'ignored.txt'), 'utf8')).toBe('ignored')
+    expect(spawnSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).stdout).toBe(headBefore)
+    expect(spawnSync('git', ['ls-files', '--stage'], { cwd: checkout, encoding: 'utf8' }).stdout).toBe(indexBefore)
+    const forkSession = join(checkout, 'fork-1.jsonl')
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'race prompt' })
+    writeFileSync(join(checkout, 'work.txt'), 'run-edited')
+    writeFileSync(join(checkout, 'settle'), '')
+    let raceDone = false
+    for (let n = 0; n < 200 && !raceDone; n++) { raceDone = (await receipts.list(forkSession)).some((r) => r.state === 'complete'); if (!raceDone) await new Promise((r) => setTimeout(r, 10)) }
+    expect(raceDone).toBe(true)
+    const racePreview = await rewind.preview(runtime.runtimeId, forkSession, 'user-4')
+    writeFileSync(join(checkout, 'change-on-fork'), '')
+    expect(await rewind.execute(runtime.runtimeId, forkSession, racePreview.token, { restoreFiles: true, confirmation: 'restore', fingerprint: racePreview.restore.fingerprint })).toMatchObject({ kind: 'restore-failed', filesMayBePartial: false, error: expect.stringMatching(/Stale restore preview/) })
+    expect(readFileSync(join(checkout, 'work.txt'), 'utf8')).toBe('race')
+    rmSync(join(checkout, 'change-on-fork'))
+    const secondForkSession = join(checkout, 'fork-2.jsonl')
+    await manager.command(runtime.runtimeId, { type: 'prompt', message: 'disk failure prompt' })
+    writeFileSync(join(checkout, 'work.txt'), 'changed again')
+    writeFileSync(join(checkout, 'settle'), '')
+    let failureRunDone = false
+    for (let n = 0; n < 200 && !failureRunDone; n++) { failureRunDone = (await receipts.list(secondForkSession)).some((r) => r.state === 'complete'); if (!failureRunDone) await new Promise((r) => setTimeout(r, 10)) }
+    expect(failureRunDone).toBe(true)
+    const failurePreview = await rewind.preview(runtime.runtimeId, secondForkSession, 'user-5')
+    vi.spyOn(receipts, 'restoreCheckpoint').mockImplementationOnce(() => { writeFileSync(join(checkout, 'work.txt'), 'partial'); throw new Error('disk failure') })
+    expect(await rewind.execute(runtime.runtimeId, secondForkSession, failurePreview.token, { restoreFiles: true, confirmation: 'restore', fingerprint: failurePreview.restore.fingerprint })).toMatchObject({ kind: 'restore-failed', filesMayBePartial: true, error: 'disk failure' })
+    expect(readFileSync(join(checkout, 'work.txt'), 'utf8')).toBe('partial')
+
+    const primarySession = join(fake.cwd, 'session.jsonl'); writeFileSync(primarySession, '')
+    writeFileSync(join(fake.cwd, 'allow-baseline'), '')
+    const primary = await manager.start({ cwd: fake.cwd })
+    await manager.command(primary.runtimeId, { type: 'prompt', message: 'primary prompt' })
+    writeFileSync(join(fake.cwd, 'settle'), '')
+    let primaryDone = false
+    for (let n = 0; n < 200 && !primaryDone; n++) { primaryDone = (await receipts.list(primarySession)).some((r) => r.state === 'complete'); if (!primaryDone) await new Promise((r) => setTimeout(r, 10)) }
+    expect(primaryDone).toBe(true)
+    const primaryPreview = await rewind.preview(primary.runtimeId, primarySession, 'user-1')
+    expect(primaryPreview.worktree.primary).toBe(true)
+    expect(primaryPreview.restore).toMatchObject({ available: false, reason: expect.stringMatching(/primary/) })
+    await expect(rewind.execute(primary.runtimeId, primarySession, primaryPreview.token, { restoreFiles: true, confirmation: 'restore', fingerprint: primaryPreview.restore.fingerprint })).rejects.toThrow(/Confirmed/)
+    const emptyStorage = mkdtempSync(join(tmpdir(), 'apex-rewind-empty-')); dirs.push(emptyStorage)
+    const noCheckpoint = new RewindService(manager, new RunReceipts(emptyStorage, async (path) => path), gate, async () => [], async () => [])
+    const conversationOnly = await noCheckpoint.preview(primary.runtimeId, primarySession, 'user-1')
+    expect(conversationOnly.restore).toMatchObject({ available: false, reason: expect.stringMatching(/No completed checkpoint/) })
+    await expect(noCheckpoint.execute(primary.runtimeId, primarySession, conversationOnly.token)).resolves.toMatchObject({ kind: 'rewound', files: 'kept', prompt: 'primary prompt' })
+  }, 20_000)
+})
 
 describe('pi RPC adapter argv', () => {
   const baseInput = { cwd: '/work/project', environment: {} as NodeJS.ProcessEnv }

@@ -385,3 +385,19 @@ article.message--user:last-of-type, .transcript-active-placeholder { animation: 
 .activity-run__summary .disclosure-caret { margin-left: auto; color: var(--text-tertiary); }
 .activity-run__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
 .activity-run__items { margin-left: 6px; animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
+/* A run of agent work condenses to one summary row; live, only the step in progress shows beneath it. */
+.work-group { min-width: 0; display: flex; flex-direction: column; margin: 4px 0 12px; color: var(--text-secondary); font-size: var(--chat-ui); line-height: 1.5; }
+.work-group__summary { width: 100%; min-height: 28px; display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; color: inherit; background: transparent; text-align: left; }
+.work-group__summary:hover { background: var(--surface-subtle); }
+.work-group__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.work-group__label { min-width: 0; overflow: hidden; color: var(--text-secondary); font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.work-group__summary:hover .work-group__label { color: var(--text); }
+.work-group.is-running > .work-group__summary .activity-line__icon { color: var(--apex); }
+.work-group__failed { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); font-size: var(--chat-meta); white-space: nowrap; }
+.work-group__summary .disclosure-caret { margin-left: auto; color: var(--text-tertiary); }
+.work-group__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
+.work-group .work-timeline { padding: 4px 0 0; }
+.work-group__body { animation: disclosure-in 160ms cubic-bezier(.2, .8, .2, 1) both; }
+/* Live reasoning is a rolling window: newest lines at the bottom, older ones fading off the top. */
+.work-group__current .activity-line--reasoning { max-height: calc(6 * 1.65em + 14px); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); mask-image: linear-gradient(180deg, transparent 0, #000 1.4em); }
+.work-group__current .timeline-page__body > * { animation: row-in 180ms cubic-bezier(.23, 1, .32, 1) both; }

@@ -31,7 +31,7 @@ export function piSessionBucketDir(cwd: string, root = piSessionRoot()): string 
   return join(root, `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`)
 }
 
-export async function createPiSessionFile(sessionRoot: string, cwd: string): Promise<string> {
+export async function createPiSessionFile(sessionRoot: string, cwd: string, beforeWrite?: (filePath: string) => void): Promise<string> {
   const id = randomUUID()
   const timestamp = new Date().toISOString()
   const bucket = piSessionBucketDir(cwd, sessionRoot)
@@ -40,6 +40,7 @@ export async function createPiSessionFile(sessionRoot: string, cwd: string): Pro
   const directory = await realpath(bucket)
   if (!isPathWithin(root, directory)) throw new Error('Session directory is outside the session root')
   const filePath = join(directory, `${timestamp.replace(/[:.]/g, '-')}_${id}.jsonl`)
+  beforeWrite?.(filePath)
   await writeFile(filePath, `${JSON.stringify({ type: 'session', version: 3, id, timestamp, cwd })}\n`, { encoding: 'utf8', flag: 'wx' })
   return filePath
 }

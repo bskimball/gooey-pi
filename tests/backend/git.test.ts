@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAndSwitchGitBranch, createGitWorktree, GIT_DIFF_LINE_LIMIT, GIT_STATUS_ENTRY_LIMIT, GitService, inspectGitWorktreeClean, listGitWorktrees, listLocalGitBranches, switchGitBranch } from '../../apps/desktop/electron/main/git'
 import { restrictedGitEnvironment } from '../../apps/desktop/electron/main/process-utils'
+import { CheckoutSnapshotStore } from '../../apps/desktop/electron/main/checkout-snapshots'
 
 const dirs: string[] = []
 afterEach(() => { vi.unstubAllEnvs(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
@@ -19,7 +20,71 @@ const repository = (prefix = 'apex-git-') => {
   return cwd
 }
 
+describe('checkout snapshots', () => {
+  it('persists observed content and refuses a stale restore without touching ignored files', () => {
+    const cwd = repository('apex-snapshot-')
+    const storage = mkdtempSync(join(tmpdir(), 'apex-snapshot-store-')); dirs.push(storage)
+    writeFileSync(join(cwd, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(join(cwd, 'ignored.txt'), 'private')
+    writeFileSync(join(cwd, 'binary.bin'), Buffer.from([0, 255, 7]))
+    const store = new CheckoutSnapshotStore(storage)
+    const indexBefore = spawnSync('git', ['ls-files', '--stage'], { cwd, encoding: 'utf8' }).stdout
+    const headBefore = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout
+    const before = store.capture(cwd)
+    rmSync(join(cwd, 'file.txt'))
+    writeFileSync(join(cwd, 'binary.bin'), Buffer.from([1, 2]))
+    writeFileSync(join(cwd, 'new.txt'), 'new')
+    const after = store.capture(cwd)
+    const reopened = new CheckoutSnapshotStore(storage)
+    expect(reopened.diff(before, after)).toEqual([
+      { path: 'binary.bin', kind: 'modified' },
+      { path: 'file.txt', kind: 'deleted' },
+      { path: 'new.txt', kind: 'added' },
+    ])
+    expect(reopened.content(before, 'binary.bin')).toMatchObject({ kind: 'file', data: Buffer.from([0, 255, 7]).toString('base64') })
+    const preview = reopened.previewRestore(cwd, before)
+    expect(preview.changes.map((change) => change.path)).toEqual(['binary.bin', 'file.txt', 'new.txt'])
+    writeFileSync(join(cwd, 'new.txt'), 'changed later')
+    expect(() => reopened.restore(cwd, preview, 'restore')).toThrow('Stale restore preview')
+    expect(readFileSync(join(cwd, 'new.txt'), 'utf8')).toBe('changed later')
+    reopened.restore(cwd, reopened.previewRestore(cwd, before), 'restore')
+    expect(readFileSync(join(cwd, 'file.txt'), 'utf8')).toBe('base\n')
+    expect(readFileSync(join(cwd, 'binary.bin'))).toEqual(Buffer.from([0, 255, 7]))
+    expect(existsSync(join(cwd, 'new.txt'))).toBe(false)
+    expect(readFileSync(join(cwd, 'ignored.txt'), 'utf8')).toBe('private')
+    expect(spawnSync('git', ['ls-files', '--stage'], { cwd, encoding: 'utf8' }).stdout).toBe(indexBefore)
+    expect(spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout).toBe(headBefore)
+    expect(reopened.diff(before, after)).toEqual(preview.changes.map((change) => ({ ...change, kind: change.kind === 'added' ? 'deleted' : change.kind === 'deleted' ? 'added' : 'modified' })))
+  }, 15_000)
+})
+
 describe('GitService', () => {
+  it('reviews configured local or cached remote targets independently of dirty files', async () => {
+    const cwd = repository('apex-git-review-')
+    const service = new GitService(async () => cwd)
+    const target = spawnSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf8' }).stdout.trim()
+    git(cwd, 'switch', '-qc', 'review-feature')
+    expect((await service.reviewIntegration(cwd)).integration.kind).toBe('unknown')
+    git(cwd, 'branch', '--set-upstream-to', target, 'review-feature')
+    writeFileSync(join(cwd, 'untracked.txt'), 'pending\n')
+    let review = await service.reviewIntegration(cwd)
+    expect(review.integration).toEqual({ kind: 'integrated', target })
+    expect(review.status.files.some((file) => file.path === 'untracked.txt')).toBe(true)
+    git(cwd, 'add', 'untracked.txt'); git(cwd, 'commit', '-qm', 'feature')
+    review = await service.reviewIntegration(cwd)
+    expect(review.integration).toEqual({ kind: 'not-integrated', target })
+    git(cwd, 'config', 'branch.review-feature.remote', 'origin')
+    git(cwd, 'config', 'branch.review-feature.merge', `refs/heads/${target}`)
+    expect((await service.reviewIntegration(cwd)).integration.kind).toBe('unknown')
+    git(cwd, 'remote', 'add', 'origin', cwd)
+    git(cwd, 'update-ref', `refs/remotes/origin/${target}`, `refs/heads/${target}`)
+    const remoteBefore = spawnSync('git', ['rev-parse', `refs/remotes/origin/${target}`], { cwd, encoding: 'utf8' }).stdout
+    expect((await service.reviewIntegration(cwd)).integration).toEqual({ kind: 'not-integrated', target: `origin/${target}`, evidence: 'local-cached-remote-tracking-ref' })
+    expect(spawnSync('git', ['rev-parse', `refs/remotes/origin/${target}`], { cwd, encoding: 'utf8' }).stdout).toBe(remoteBefore)
+    git(cwd, 'update-ref', `refs/remotes/origin/${target}`, 'HEAD')
+    expect((await service.reviewIntegration(cwd)).integration).toEqual({ kind: 'integrated', target: `origin/${target}`, evidence: 'local-cached-remote-tracking-ref' })
+  }, 15_000)
+
   it('lists local branches and switches without consulting remotes', async () => {
     const cwd = repository('apex-git-branches-')
     git(cwd, 'branch', 'feature/local')

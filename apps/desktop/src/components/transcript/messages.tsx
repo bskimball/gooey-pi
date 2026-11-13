@@ -10,22 +10,25 @@ import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { MarkdownText } from '../MarkdownText'
-import { PiMark } from '../ui'
+import { ApexButton, PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { ImageParts } from './TranscriptImage'
-import { pairSubagentCalls } from './subagent-lane'
+import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
 import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
+import { WorkGroup } from './work-group'
+import { ContextExcerpt } from '../ContextExcerpt'
+import { splitTaskContext, useTaskWorkflowContext } from '@/lib/task-context'
 
 function renderImage(part: Extract<MessagePart, { type: 'image' }>, key: string) {
   return <ImageParts key={key} images={[part]} />
 }
 
-export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false) {
+export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false, source = 'Assistant narrative') {
   return parts.map((part, index) => {
     if (part.type === 'text') {
       if (streaming && !part.text.trim()) return null
-      return <MarkdownText key={`${keyPrefix}-${index}`} text={part.text} streaming={streaming && index === parts.length - 1} />
+      return <ContextExcerpt key={`${keyPrefix}-${index}`} source={source} text={part.text}><MarkdownText text={part.text} streaming={streaming && index === parts.length - 1} /></ContextExcerpt>
     }
     if (part.type === 'image') return renderImage(part, `${keyPrefix}-${index}`)
     if (part.type === 'toolResult') return <ImageParts key={`${keyPrefix}-${index}`} images={part.images} />
@@ -33,25 +36,42 @@ export function renderNarrative(parts: MessagePart[], keyPrefix: string, streami
   })
 }
 
+/** Plan updates and subagent lanes (a failed task_wait stays a plain tool row), with their results. */
+function isPinnedPart(parts: MessagePart[], index: number): boolean {
+  const callIndex = parts[index].type === 'toolResult' ? index - 1 : index
+  const call = parts[callIndex]
+  if (call?.type !== 'toolCall') return false
+  if (call.name === 'todo_write') return true
+  if (!isSubagentTool(call.name)) return false
+  const result = parts[callIndex + 1]
+  return !(call.name === 'task_wait' && result?.type === 'toolResult' && result.isError)
+}
+
 /**
  * The turn as it happened: narrative and work segments in order. Subagent follow-ups pair across the
  * whole turn; work stays live until the turn settles, and only the newest narrative streams.
+ * `condensed` folds each work run into a WorkGroup summary so the chat reads as narrative; plan updates and
+ * subagent lanes stay visible between them because they carry progress and the worker's status and report.
  */
-export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false) {
+export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false, condensed = false, source = 'Assistant narrative') {
   const subagents = pairSubagentCalls(parts)
-  const groups: Array<{ activity: boolean; parts: MessagePart[] }> = []
-  for (const part of parts) {
-    if (subagents.absorbed.has(part)) continue
+  const groups: Array<{ activity: boolean; pinned: boolean; parts: MessagePart[] }> = []
+  parts.forEach((part, index) => {
+    if (subagents.absorbed.has(part)) return
     const activity = part.type !== 'text' && part.type !== 'image'
+    const pinned = condensed && isPinnedPart(parts, index)
     const current = groups.at(-1)
-    if (current?.activity === activity) current.parts.push(part)
-    else groups.push({ activity, parts: [part] })
-  }
+    if (current?.activity === activity && current.pinned === pinned) current.parts.push(part)
+    else groups.push({ activity, pinned, parts: [part] })
+  })
   return groups.map((group, index) => {
+    if (group.activity && !group.pinned && condensed) {
+      return <WorkGroup key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} live={streaming && index === groups.length - 1} subagents={subagents} />
+    }
     return group.activity ? (
       <WorkTimeline key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} subagents={subagents} />
     ) : (
-      <div key={`${keyPrefix}-narrative-${index}`}>{renderNarrative(group.parts, `${keyPrefix}-${index}`, streaming && index === groups.length - 1)}</div>
+      <div key={`${keyPrefix}-narrative-${index}`}>{renderNarrative(group.parts, `${keyPrefix}-${index}`, streaming && index === groups.length - 1, source)}</div>
     )
   })
 }
@@ -123,7 +143,7 @@ export const AssistantMessage = memo(
       <article className="message message--assistant">
         <div className="message__content">
           {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
-          {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming)}
+          {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming, true, `Assistant response ${message.id}`)}
           {message.streaming && !hasVisibleActivity ? (
             <div className="streaming-state" aria-live="polite">
               <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
@@ -184,7 +204,7 @@ function SessionReferenceText({ text, references, onOpen }: { text: string; refe
 }
 
 function visibleUserText(text: string): string {
-  const terminal = splitTerminalContextBlock(text)
+  const terminal = splitTerminalContextBlock(splitTaskContext(text).text)
   const annotations = splitAnnotationBlock(terminal.text)
   const capability = splitCapabilityRouting(annotations.text)
   return splitSessionRouting(capability.text).text
@@ -194,15 +214,17 @@ function UserText({ text, images, onOpenSessionReference }: { text: string; imag
   // Sent prompts can carry verbose model-facing context blocks. Keep both
   // attachments collapsed and capability routing hidden while preserving the
   // user's own message.
-  const terminal = splitTerminalContextBlock(text)
+  const task = splitTaskContext(text)
+  const terminal = splitTerminalContextBlock(task.text)
   const annotations = splitAnnotationBlock(terminal.text)
   const capability = splitCapabilityRouting(annotations.text)
   const sessions = splitSessionRouting(capability.text)
   const references = routedSessionReferences(sessions.block)
-  if (!sessions.block && !capability.block && !annotations.block && !terminal.block) return <InlineText text={text} />
+  if (!task.block && !sessions.block && !capability.block && !annotations.block && !terminal.block) return <InlineText text={text} />
   return (
     <>
       {sessions.text && sessions.text !== '[Page annotations]' && sessions.text !== '[Terminal selection]' ? <SessionReferenceText text={sessions.text} references={references} onOpen={onOpenSessionReference} /> : null}
+      {task.block ? <details className="user-annotations"><summary>Selected context</summary><pre>{task.block}</pre></details> : null}
       {annotations.block ? <BrowserReferenceCards references={parseAnnotationReferences(annotations.block)} images={images} /> : null}
       {annotations.block ? (
         <details className="user-annotations">
@@ -221,6 +243,8 @@ function UserText({ text, images, onOpenSessionReference }: { text: string; imag
 }
 
 export const UserMessage = memo(function UserMessage({ message, turnLabel, turnSince, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnSince?: string | number; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+  const workflow = useTaskWorkflowContext()
+  const receipt = workflow?.receipts.find((run) => run.memberUserEntryIds.includes(message.id) || run.anchorUserEntryId === message.id)
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
   const turnState = turnRunning ? 'running' : turnFailed ? 'failed' : turnLabel ? 'done' : undefined
   const images = message.parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
@@ -238,6 +262,10 @@ export const UserMessage = memo(function UserMessage({ message, turnLabel, turnS
       ) : null}
       {message.steerState ? <div className={`message__steer-state is-${message.steerState}`} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}
       <MessageActions message={message} text={copyableText} />
+      {workflow ? <div className="task-message-actions">
+        <ApexButton compact variant="quiet" disabled={!workflow.idle || workflow.pending || !workflow.persistedUserIds.has(message.id)} title={!workflow.persistedUserIds.has(message.id) ? 'Waiting for the saved prompt entry' : !workflow.idle ? 'Available when this saved Pi session is idle' : undefined} onClick={() => workflow.edit(message.id)}>Edit from here</ApexButton>
+        {receipt && receipt.state !== 'open' ? <ApexButton compact variant="quiet" onClick={() => workflow.review(receipt)}>Review run{receipt.state === 'incomplete' ? ' · incomplete' : ''}</ApexButton> : null}
+      </div> : null}
     </article>
   )
 })

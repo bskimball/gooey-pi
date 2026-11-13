@@ -81,6 +81,10 @@ describe('transcript rendering', () => {
     const root = createRoot(container)
     try {
       await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop })))
+      // The failed receipt folds into the work summary, which names the failure and expands to the row.
+      const group = container.querySelector('.work-group')!
+      expect(group.querySelector('.work-group__failed')?.textContent).toContain('1 failed')
+      await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
       const operation = container.querySelector('.activity-line--tool.is-error')!
       expect(operation.textContent).toContain(tool)
       await act(async () => operation.querySelector<HTMLButtonElement>('.activity-tool__summary')!.click())
@@ -138,7 +142,10 @@ describe('transcript rendering', () => {
       parts: [{ type: 'thinking', text: 'Checking the workspace.' }, { type: 'toolCall', id: 'tool-1', name, args }],
     }], false, showTools)
 
-    expect(html).toContain('activity-line--reasoning')
+    // The live step replaces the previous one: a visible tool call folds the reasoning into the summary row.
+    expect(html.includes('activity-line--reasoning')).toBe(!showTools)
+    expect(html.includes('Checking the workspace.')).toBe(!showTools)
+    expect(html.includes('class="work-group__label">Thought</span>')).toBe(showTools)
     expect(html.includes('activity-line--tool')).toBe(showTools)
     if (activity) {
       expect(html).toContain(`role="status"><span class="work-disclosure__activity" title="${activity}">${activity}</span>`)
@@ -218,7 +225,8 @@ describe('transcript rendering', () => {
       ],
     }], true)
 
-    expect(html).toContain('Following the external session.')
+    expect(html).toContain('class="work-group__label">Thought</span>')
+    expect(html).not.toContain('Following the external session.')
     expect(html).toContain('Explaining the next step.')
     expect(html).toContain('read_file')
     expect(html).toContain('src/App.tsx')
@@ -244,8 +252,9 @@ describe('transcript rendering', () => {
     }], true)
 
     expect(html).toContain('Turn finished in</span> 1s')
-    // The prior turn's reasoning stays settled under its Thought header rather than reopening as live work.
-    expect(html).toContain('activity-line--reasoning is-settled')
+    // The prior turn's reasoning stays folded under its Thought summary rather than reopening as live work.
+    expect(html).toContain('class="work-group__label">Thought</span>')
+    expect(html).not.toContain('Prior completed reasoning.')
     expect(html).toContain('transcript-active-placeholder')
     expect(html).toContain('Pi is working')
   })
@@ -272,7 +281,7 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('transcript-active-placeholder')
   })
 
-  it('keeps settled reasoning open under a foldable Thought header once the response yields', () => {
+  it('folds settled reasoning into an expandable Thought summary once the response yields', () => {
     const html = render([{
       id: 'complete',
       role: 'assistant',
@@ -284,10 +293,9 @@ describe('transcript rendering', () => {
 
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 3s')
-    expect(html).toContain('activity-line--reasoning is-settled')
-    expect(html).toContain('>Thought</span>')
-    expect(html).toContain('aria-expanded="true"')
-    expect(html).toContain('This stays visible after the turn.')
+    expect(html).toContain('class="work-group__label">Thought</span>')
+    expect(html).toContain('class="work-group__summary" aria-expanded="false"')
+    expect(html).not.toContain('This stays visible after the turn.')
     expect(html).not.toContain('thinking-dots')
   })
 
@@ -409,8 +417,7 @@ describe('transcript rendering', () => {
     }])
 
     expect(html).toContain('The final answer stays visible.')
-    expect(html).toContain('Message from agent')
-    expect(html).toContain('late-reviewer')
+    expect(html).toContain('class="work-group__label">1 agent message</span>')
     expect(html).not.toContain('Late details.')
     expect(html).toContain('aria-label="Copy assistant message"')
   })
@@ -430,10 +437,10 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Turn finished in</span> 1s')
     expect(html).toContain('The primary final report stays visible.')
-    // Both reasoning blocks stay readable in place around the report.
-    expect(html.match(/activity-line--reasoning is-settled/g)).toHaveLength(2)
-    expect(html).toContain('Trailing lightweight reasoning.')
-    expect(html).toContain('Earlier reasoning.')
+    // Both reasoning blocks fold into their own summary rows around the report.
+    expect(html.match(/class="work-group__label">Thought<\/span>/g)).toHaveLength(2)
+    expect(html.indexOf('The primary final report stays visible.')).toBeGreaterThan(html.indexOf('work-group__label'))
+    expect(html).not.toContain('Trailing lightweight reasoning.')
     expect(html).toContain('aria-label="Copy assistant message"')
   })
 
@@ -456,13 +463,13 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 1s')
     const report = html.indexOf('This is the complete substantive report with the requested conclusions and evidence.')
-    const tool = html.indexOf('update_todo')
+    const tool = html.indexOf('>Used 1 tool</span>')
     expect(report).toBeGreaterThan(html.indexOf('>Thought</span>'))
     expect(tool).toBeGreaterThan(report)
     expect(html.indexOf('Cleanup complete.')).toBeGreaterThan(tool)
     expect(html).toContain('class="turn-receipt"')
     expect(html).toContain('1 tool')
-    expect(html).toContain('Earlier reasoning.')
+    expect(html).not.toContain('Earlier reasoning.')
     // Copy rides on the receipt line instead of a separate actions row.
     expect(html).toContain('turn-receipt__copy')
     expect(html).toContain('aria-label="Copy assistant message"')
@@ -570,7 +577,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('1 agent')
   })
 
-  it('nests agent messages in active work without opening their contents', () => {
+  it('summarizes earlier agent messages in active work without opening their contents', () => {
     const html = render([{
       id: 'active-agent-message',
       role: 'assistant',
@@ -582,9 +589,8 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html).toContain('activity-line--agent')
-    expect(html).toContain('Message from agent')
-    expect(html).toContain('reviewer')
+    expect(html).toContain('class="work-group__label">Thought, 1 agent message</span>')
+    expect(html).toContain('activity-line--tool')
     expect(html).not.toContain('Detailed child-agent response.')
     expect(html).not.toContain('message--agent')
     expect(html.match(/aria-expanded="false"/g)).toHaveLength(2)

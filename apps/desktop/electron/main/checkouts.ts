@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import type { AppSettings, CheckoutAction, CheckoutCatalog, CheckoutChangeResult, CheckoutStrategy, ProjectRecord } from '../../src/types/api'
 import { createAndSwitchGitBranch, createGitWorktree, isNotARepositoryFailure, listGitWorktrees, listLocalGitBranches, resolveGitRepositoryRoot, switchGitBranch, validateGitBranch } from './git'
 import type { ProjectService } from './projects'
+import type { WorktreeProvenance } from './worktree-provenance'
 import { RepositoryUseError, type RepositoryUseGate } from './repository-use-gate'
 import { rejectUnknownKeys, requireId, requireRecord, requireString } from 'apex-core/validation'
 
@@ -31,6 +32,7 @@ export class CheckoutService {
     private readonly strategy: () => AppSettings['checkoutStrategy'],
     private readonly projects: ProjectService,
     private readonly useGate: RepositoryUseGate,
+    private readonly provenance?: WorktreeProvenance,
   ) {}
 
   async list(projectIdValue: unknown): Promise<CheckoutCatalog> {
@@ -84,6 +86,8 @@ export class CheckoutService {
     if (!targetPath) return { kind: 'cancelled' }
     await createGitWorktree(project.primaryFolder, targetPath, branch)
     const next = await this.projects.adoptCheckoutWorktree(project.id, project.primaryFolder, targetPath)
+    try { this.provenance?.recordCreated(targetPath) }
+    catch (error) { throw new Error(`Worktree was created and registered at ${targetPath}, but its provenance could not be saved: ${error instanceof Error ? error.message : String(error)}`) }
     return { kind: 'applied', project: next, checkout: { strategy: 'worktree', path: targetPath } }
   }
 

@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isBroadProjectRoot, ProjectService } from '../../apps/desktop/electron/main/projects'
+import { MAX_WORKSPACE_TEXT_BYTES } from '../../apps/desktop/electron/main/workspace-text'
 import { CheckoutService } from '../../apps/desktop/electron/main/checkouts'
 import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
@@ -487,6 +488,50 @@ describe('broad project root authorization', () => {
 })
 
 describe('ProjectService file listing', () => {
+  it('reads authorized current UTF-8 text with explicit truncation and rejects escaped or binary paths', async () => {
+    const { root, service, store } = setup()
+    const outside = join(root, '..', 'outside'); mkdirSync(outside)
+    mkdirSync(join(root, 'src'))
+    writeFileSync(join(root, 'src', 'current.txt'), 'first\nsecond ☃\n')
+    writeFileSync(join(outside, 'secret.txt'), 'outside')
+    symlinkSync(outside, join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+    writeFileSync(join(root, 'binary.txt'), Buffer.from([65, 0, 66]))
+    writeFileSync(join(root, 'invalid.txt'), Buffer.from([0xc3, 0x28]))
+    writeFileSync(join(root, 'large.txt'), `${'a'.repeat(MAX_WORKSPACE_TEXT_BYTES - 1)}😀tail`)
+    await expect(service.readTextFile(root, 'src/current.txt')).rejects.toThrow(/not inside an added/)
+    await store.update((state) => { state.projects.push({ id: 'project', harness: 'pi', name: 'Project', path: root, folders: [root], primaryFolder: root, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(root) }) })
+    expect(await service.readTextFile(root, 'src/current.txt')).toEqual({ path: 'src/current.txt', text: 'first\nsecond ☃\n', truncated: false })
+    writeFileSync(join(root, 'src', 'current.txt'), '\uFEFFupdated\r\n')
+    expect((await service.readTextFile(root, 'src/current.txt')).text).toBe('\uFEFFupdated\r\n')
+    await expect(service.readTextFile(root, '../outside/secret.txt')).rejects.toThrow(/outside the active workspace/)
+    await expect(service.readTextFile(root, join(outside, 'secret.txt'))).rejects.toThrow(/outside the active workspace/)
+    await expect(service.readTextFile(root, 'escape/secret.txt')).rejects.toThrow(/resolves outside/)
+    await expect(service.readTextFile(root, 'binary.txt')).rejects.toThrow(/Binary/)
+    await expect(service.readTextFile(root, 'invalid.txt')).rejects.toThrow(/UTF-8/)
+    const large = await service.readTextFile(root, 'large.txt')
+    expect(large.truncated).toBe(true)
+    expect(large.text).toBe('a'.repeat(MAX_WORKSPACE_TEXT_BYTES - 1))
+    await expect(service.readTextFile(root, 'src')).rejects.toThrow(/regular file/)
+  })
+
+  it('rejects a swapped directory symlink even when the path is restored after opening', async () => {
+    const { root, service, store } = setup()
+    const directory = join(root, 'src'); const moved = join(root, 'original-src'); const outside = join(root, '..', 'outside')
+    mkdirSync(directory); mkdirSync(outside)
+    writeFileSync(join(directory, 'file.txt'), 'inside')
+    writeFileSync(join(outside, 'file.txt'), 'secret')
+    await store.update((state) => { state.projects.push({ id: 'project', harness: 'pi', name: 'Project', path: root, folders: [root], primaryFolder: root, pinned: false, createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(), folderIdentities: identities(root) }) })
+    const originalOpen = filesystem.open
+    const openSpy = vi.spyOn(filesystem, 'open').mockImplementation((async (...args: Parameters<typeof filesystem.open>) => {
+      if (String(args[0]) !== join(directory, 'file.txt')) return originalOpen(...args)
+      renameSync(directory, moved)
+      symlinkSync(outside, directory, process.platform === 'win32' ? 'junction' : 'dir')
+      try { return await originalOpen(...args) }
+      finally { rmSync(directory); renameSync(moved, directory) }
+    }) as typeof filesystem.open)
+    try { await expect(service.readTextFile(root, 'src/file.txt')).rejects.toThrow(/identity changed/) }
+    finally { openSpy.mockRestore() }
+  })
   it('lists project files while excluding generated trees and symlinks', async () => {
     const { root, service, store } = setup()
     mkdirSync(join(root, 'src')); mkdirSync(join(root, '.git')); mkdirSync(join(root, 'node_modules')); mkdirSync(join(root, 'vendor')); mkdirSync(join(root, 'release'))

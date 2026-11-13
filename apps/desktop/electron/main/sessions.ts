@@ -156,6 +156,10 @@ export class SessionService {
     this.renameRuntimeSession = hooks.rename
   }
 
+  notifyReceiptChange(filePath: string): void {
+    this.emitChange({ filePath, harness: this.harness })
+  }
+
   onDidChange(listener: (event: SessionChangeEvent) => void): () => void {
     this.changeListeners.add(listener)
     this.startWatcher()
@@ -165,9 +169,9 @@ export class SessionService {
     }
   }
 
-  async create(projectPath: string): Promise<SessionRecord> {
+  async create(projectPath: string, beforeWrite?: (filePath: string) => void): Promise<SessionRecord> {
     const cwd = await requireExistingDirectory(projectPath, 'projectPath')
-    const filePath = await createPiSessionFile(this.sessionRoot, cwd)
+    const filePath = await createPiSessionFile(this.sessionRoot, cwd, beforeWrite)
     const { sessionName: _sessionName, ...record } = await this.readMetadata(filePath)
     this.catalog.invalidateLiveCatalog()
     return { ...record, harness: this.harness, archived: false }

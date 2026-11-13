@@ -448,6 +448,14 @@ export interface GitStatus {
 }
 export interface GitDiff { path?: string; staged: boolean; text: string; truncated: boolean; error?: string }
 
+/** A fresh Git observation, not a cleanup authorization. */
+export interface GitIntegrationReview {
+  status: GitStatus
+  integration:
+    | { kind: 'integrated' | 'not-integrated'; target: string; evidence?: 'local-cached-remote-tracking-ref' }
+    | { kind: 'unknown'; reason: string }
+}
+
 /**
  * The one result shape for subprocess-backed operations (git commit, package
  * install, MCP settings updates). `reason` classifies failures: the subprocess
@@ -801,6 +809,69 @@ export interface AgentBrowserPointerEvent {
   durationMs: number
 }
 
+/** A run records observed checkout changes, not exclusively agent-authored edits. */
+export interface RunReceipt {
+  id: string
+  sessionId: string
+  sessionFile?: string
+  startedAt: string
+  finishedAt?: string
+  state: 'open' | 'complete' | 'incomplete'
+  error?: string
+  anchorUserEntryId?: string
+  memberUserEntryIds: string[]
+  inputs: Array<{ kind: 'prompt' | 'steer' | 'follow_up'; disposition: 'pending' | 'started' | 'queued' | 'handled' | 'rejected' | 'uncertain' }>
+  changes?: Array<{ path: string; kind: 'added' | 'deleted' | 'modified' }>
+  attribution: 'observed-checkout'
+}
+export type RunHistoricalContent = { kind: 'file'; base64: string; binary: boolean; size: number } | { kind: 'symlink'; target: string } | null
+export interface RunHistoricalFile { before: RunHistoricalContent; after: RunHistoricalContent }
+
+/** A separate session with Pi read/search tools only; this is not an OS sandbox. */
+export interface SideConversation {
+  parentSession: string
+  sessionFile: string
+  cwd: string
+  createdAt: string
+  policy: 'read-only-tools'
+  initialContext?: string
+}
+export interface SideReturnContext { sourceSession: string; text: string }
+
+export type FinishLocalUse =
+  | { kind: 'agent'; harness: HarnessId; runtimeId: string }
+  | { kind: 'terminal'; terminalId: string }
+  | { kind: 'external-session'; app: 'desktop' | 'vscode'; label: string; session: string; projectPath?: string }
+export interface FinishObservation {
+  sessionFile: string
+  cwd: string
+  git: GitIntegrationReview
+  worktree: { root?: string; kind: 'primary' | 'linked' | 'unknown'; head?: string; ownership: 'apex-created' | 'unknown'; ownershipReason: string }
+  conflicts: FinishLocalUse[]
+  /** Candidate only: the idle task runtime is still attached and must be stopped before manual cleanup. */
+  cleanup: { eligible: boolean; reasons: string[] }
+  nextActions: string[]
+}
+export interface FinishReview extends FinishObservation { token: string; expiresAt: string }
+export interface FinishedTask { status: 'finished'; sessionFile: string; finishedAt: string; review: FinishObservation }
+
+export interface RewindPreview {
+  token: string
+  selectedUserEntryId: string
+  anchorUserEntryId: string
+  prompt: string
+  rewindToRunStart: boolean
+  receipt?: RunReceipt
+  checkout: string
+  worktree: { linked: boolean; primary: boolean }
+  restore: { available: boolean; reason?: string; fingerprint?: string; changes: Array<{ path: string; kind: 'added' | 'deleted' | 'modified' }> }
+  warning: string
+}
+export type RewindResult =
+  | { kind: 'cancelled' }
+  | { kind: 'rewound'; sessionFile: string; sessionId: string; prompt: string; files: 'kept' | 'restored' }
+  | { kind: 'restore-failed'; sessionFile: string; sessionId: string; prompt: string; error: string; filesMayBePartial: boolean }
+
 export interface ApexApi {
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
@@ -812,6 +883,7 @@ export interface ApexApi {
   projects: {
     list(harness?: HarnessId): Promise<ProjectRecord[]>
     listFiles(root: string, harness?: HarnessId): Promise<ProjectFileListing>
+    readTextFile(root: string, path: string, harness?: HarnessId): Promise<{ path: string; text: string; truncated: boolean }>
     listCheckouts(projectId: string, harness?: HarnessId): Promise<CheckoutCatalog>
     executeCheckout(projectId: string, action: CheckoutAction, harness?: HarnessId): Promise<CheckoutChangeResult>
     add(harness?: HarnessId): Promise<ProjectRecord | null>
@@ -827,6 +899,18 @@ export interface ApexApi {
     create(projectPath: string, harness?: HarnessId): Promise<SessionRecord>
     list(projectPath?: string, includeArchived?: boolean, harness?: HarnessId, force?: boolean): Promise<SessionRecord[]>
     read(filePath: string): Promise<TranscriptMessage[]>
+    reviewFinish(runtimeId: string, filePath: string): Promise<FinishReview>
+    finishTask(runtimeId: string, filePath: string, token: string, confirmation: 'finish'): Promise<FinishedTask>
+    getFinishedTask(filePath: string): Promise<FinishedTask | null>
+    listFinishedTasks(): Promise<FinishedTask[]>
+    createSideConversation(parentSession: string, options?: { excerpt?: string; harness?: HarnessId }): Promise<SideConversation>
+    listSideConversations(parentSession: string): Promise<SideConversation[]>
+    getSideConversation(sessionFile: string): Promise<SideConversation | null>
+    prepareSideReturn(parentRuntimeId: string, sideSession: string, text: string): Promise<SideReturnContext>
+    previewRewind(runtimeId: string, filePath: string, userEntryId: string): Promise<RewindPreview>
+    rewind(runtimeId: string, filePath: string, token: string, options?: { restoreFiles: false } | { restoreFiles: true; confirmation: 'restore'; fingerprint: string }): Promise<RewindResult>
+    listRunReceipts(filePath: string): Promise<RunReceipt[]>
+    readRunFile(filePath: string, userEntryId: string, path: string): Promise<RunHistoricalFile>
     followUp(filePath: string, message: string, intent?: PromptDeliveryIntent): Promise<boolean>
     rename(filePath: string, title: string): Promise<boolean>
     archive(filePath: string, archived?: boolean): Promise<boolean>
@@ -883,7 +967,7 @@ export interface ApexApi {
     dismiss(key: string): Promise<boolean>
     onEvent(callback: (event: BackgroundJobEvent) => void): () => void
   }
-  git: { status(cwd: string): Promise<GitStatus>; diff(cwd: string, path?: string, staged?: boolean): Promise<GitDiff>; stage(cwd: string, paths: string[]): Promise<boolean>; unstage(cwd: string, paths: string[]): Promise<boolean>; restore(cwd: string, paths: string[]): Promise<boolean>; commit(cwd: string, message: string): Promise<ProcessOutcome> }
+  git: { status(cwd: string): Promise<GitStatus>; reviewIntegration(cwd: string): Promise<GitIntegrationReview>; diff(cwd: string, path?: string, staged?: boolean): Promise<GitDiff>; stage(cwd: string, paths: string[]): Promise<boolean>; unstage(cwd: string, paths: string[]): Promise<boolean>; restore(cwd: string, paths: string[]): Promise<boolean>; commit(cwd: string, message: string): Promise<ProcessOutcome> }
   plugins: {
     list(projectPath?: string, harness?: HarnessId): Promise<PluginCatalog>
     install(source: string, harness?: HarnessId): Promise<ProcessOutcome>

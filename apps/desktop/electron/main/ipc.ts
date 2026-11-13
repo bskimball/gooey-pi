@@ -19,6 +19,9 @@ import type { AgentBrowserService } from "./browser/agent-service";
 import { resolveBrowserSource } from "./browser/source";
 import { readWorkspaceImage } from "./workspace-image";
 import type { CheckoutService } from "./checkouts";
+import type { RewindService } from "./rewind";
+import type { SideConversations } from "./side-conversations";
+import type { FinishTaskService } from "./finish-task";
 import type { CuaDriverService } from "./cua-driver";
 import { createEffectiveConfigIpc } from "./effective-config-ipc";
 import type { ExtensionPathContext } from "./extension-manifest";
@@ -61,6 +64,9 @@ interface Services {
 	projects: ProjectService;
 	checkouts: { pi: CheckoutService };
 	sessions: SessionService;
+	sideConversations: SideConversations;
+	finishTask: FinishTaskService;
+	rewind: RewindService;
 	sessionHandoff: SessionHandoff;
 	extensionPathContext: ExtensionPathContext;
 	agents: AgentRpcManager;
@@ -354,6 +360,9 @@ export function registerIpc(
 	handle("projects:list", (_event, harness) =>
 		projectsFor(requireHarness(harness)).list(),
 	);
+	handle("projects:read-text-file", (_event, root, path, harness) =>
+		projectsFor(requireHarness(harness)).readTextFile(root, path),
+	);
 	handle("projects:list-files", (_event, root, harness) =>
 		projectsFor(requireHarness(harness)).listFiles(root),
 	);
@@ -405,6 +414,18 @@ export function registerIpc(
 	handle("sessions:read", async (_event, filePath) =>
 		(await sessionsForPath(filePath)).service.read(filePath),
 	);
+	handle("sessions:finish-review", (_event, runtimeId, filePath) => services.finishTask.review(runtimeId, filePath));
+	handle("sessions:finish-confirm", (_event, runtimeId, filePath, token, confirmation) => services.finishTask.finish(runtimeId, filePath, token, confirmation));
+	handle("sessions:finished-get", (_event, filePath) => services.finishTask.get(filePath));
+	handle("sessions:finished-list", () => services.finishTask.list());
+	handle("sessions:side-create", (_event, parentSession, options) => services.sideConversations.create(parentSession, options));
+	handle("sessions:side-list", (_event, parentSession) => services.sideConversations.list(parentSession));
+	handle("sessions:side-get", (_event, sessionFile) => services.sideConversations.get(sessionFile));
+	handle("sessions:side-prepare-return", (_event, runtimeId, sessionFile, text) => services.sideConversations.prepareReturn(runtimeId, sessionFile, text));
+	handle("sessions:preview-rewind", (_event, runtimeId, filePath, entryId) => services.rewind.preview(runtimeId, filePath, entryId));
+	handle("sessions:rewind", (_event, runtimeId, filePath, token, options) => services.rewind.execute(runtimeId, filePath, token, options));
+	handle("sessions:run-receipts", (_event, filePath) => services.agents.runReceipts().list(requireString(filePath, "filePath", { min: 1, max: 4096 })));
+	handle("sessions:run-file", (_event, filePath, userEntryId, path) => services.agents.runReceipts().file(requireString(filePath, "filePath", { min: 1, max: 4096 }), requireString(userEntryId, "user entry id"), requireString(path, "path", { min: 1, max: 4096 })));
 	handle("sessions:follow-up", async (_event, filePath) => {
 		await sessionsForPath(filePath);
 		return false;
@@ -620,6 +641,7 @@ export function registerIpc(
 	);
 
 	handle("git:status", (_event, cwd) => services.git.status(cwd));
+	handle("git:review-integration", (_event, cwd) => services.git.reviewIntegration(cwd));
 	handle("git:diff", (_event, cwd, path, staged) =>
 		services.git.diff(cwd, path, staged),
 	);

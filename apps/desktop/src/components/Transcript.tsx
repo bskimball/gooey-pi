@@ -59,9 +59,9 @@ function ActiveAssistantMessage({ message, harness, showReasoning, showTools }: 
     <article className="message message--assistant message--streaming">
       <div className="message__content">
         {visibleActivity
-          ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true)}</WorkDisclosure>
+          ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true, true, `Assistant response ${message.id}`)}</WorkDisclosure>
           : <>
-            {renderNarrative(message.parts, 'live', true)}
+            {renderNarrative(message.parts, 'live', true, `Assistant response ${message.id}`)}
             <div className="streaming-state" aria-live="polite"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} /> <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
           </>}
       </div>

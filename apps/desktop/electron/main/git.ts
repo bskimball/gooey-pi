@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
-import type { GitDiff, GitFileChange, GitStatus, GitWorktree, LocalGitBranch, ProcessOutcome } from '../../src/types/api'
+import type { GitDiff, GitFileChange, GitIntegrationReview, GitStatus, GitWorktree, LocalGitBranch, ProcessOutcome } from '../../src/types/api'
 import { restrictedGitEnvironment, runProcess, type ProcessResult } from './process-utils'
 import { errorMessage, requireGitPath, requireString, stripAnsi } from 'apex-core/validation'
 
@@ -608,6 +608,30 @@ export class GitService {
       if (isNotARepositoryFailure(error)) return { isRepo: false, files: [], error: message || 'Not a Git repository' }
       return { isRepo: true, files: [], error: message || 'Git status failed' }
     }
+  }
+
+  async reviewIntegration(cwdValue: unknown): Promise<GitIntegrationReview> {
+    const status = await this.status(cwdValue)
+    if (status.error || !status.isRepo || status.truncated) {
+      return { status, integration: { kind: 'unknown', reason: status.error || 'Git status is incomplete' } }
+    }
+    const { cwd, overrides } = await this.withRepositoryGuards(cwdValue, undefined, { readOnly: true })
+    const options = { timeoutMs: 5_000, maxBytes: 64 * 1024 }
+    const targetResult = await runGit(cwd, ['rev-parse', '--symbolic-full-name', '@{upstream}'], options, overrides)
+    if (targetResult.timedOut || targetResult.outputExceeded) requireProcessSuccess('Git upstream inspection', targetResult)
+    const target = targetResult.stdout.trim()
+    const local = target.startsWith('refs/heads/')
+    const cachedRemote = target.startsWith('refs/remotes/')
+    if (targetResult.code !== 0 || (!local && !cachedRemote)) {
+      return { status, integration: { kind: 'unknown', reason: 'No configured local or cached remote upstream branch is available' } }
+    }
+    const result = await runGit(cwd, ['merge-base', '--is-ancestor', 'HEAD', target], options, overrides)
+    if (result.timedOut || result.outputExceeded || (result.code !== 0 && result.code !== 1)) requireProcessSuccess('Git integration inspection', result)
+    const kind = result.code === 0 ? 'integrated' : 'not-integrated'
+    return { status, integration: local
+      ? { kind, target: target.slice('refs/heads/'.length) }
+      : { kind, target: target.slice('refs/remotes/'.length), evidence: 'local-cached-remote-tracking-ref' } }
+
   }
 
   async diff(cwdValue: unknown, pathValue?: unknown, stagedValue?: unknown): Promise<GitDiff> {

@@ -89,6 +89,27 @@ describe('registerIpc verify gate', () => {
     registration = registerIpc(stubs as never, EXPECTED_URL)
   })
 
+  it('validates run receipt IPC arguments before forwarding', async () => {
+    const list = vi.fn(() => [])
+    const file = vi.fn(() => ({ before: null, after: null }))
+    stubs.agents = { runReceipts: () => ({ list, file }) }
+    const event = fakeEvent()
+    const receipts = handlers.get('sessions:run-receipts')!
+    const runFile = handlers.get('sessions:run-file')!
+    expect(() => receipts(event, 'session.jsonl')).toThrow('IPC sender is not authorized')
+    registration.authorize(event.sender as never)
+    expect(() => receipts(event, 42)).toThrow('filePath must be a string')
+    expect(() => runFile(event, 'session.jsonl', 42, 'file.txt')).toThrow('user entry id must be a string')
+    expect(() => runFile(event, 'session.jsonl', 'entry', 42)).toThrow('path must be a string')
+    expect(list).not.toHaveBeenCalled()
+    expect(file).not.toHaveBeenCalled()
+    expect(receipts(event, 'session.jsonl')).toEqual([])
+    expect(runFile(event, 'session.jsonl', 'entry', 'file.txt')).toEqual({ before: null, after: null })
+    expect(list).toHaveBeenCalledWith('session.jsonl')
+    expect(file).toHaveBeenCalledWith('session.jsonl', 'entry', 'file.txt')
+    await registration.dispose()
+  })
+
   it('runs effective config only after sender, input and project authorization', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'apex-effect-config-'))
     mkdirSync(join(directory, '.git'))
@@ -379,7 +400,9 @@ describe('registerIpc verify gate', () => {
     }
     const openExternal = vi.fn(async (url: string) => { order.push(url) })
     const authorizePath = vi.fn(async (path: string) => { order.push(`authorize ${path}`); return '/work/repo' })
+    let readOnly = false
     const handoff = new SessionHandoff({
+      isReadOnlySession: () => readOnly,
       agents: agents as never,
       sessions: { requireSessionPath: vi.fn(async () => sessionPath), list: vi.fn(async () => [{ filePath: sessionPath, projectPath: '/work/repo' }]) } as never,
       projects: { authorizePath },
@@ -390,6 +413,12 @@ describe('registerIpc verify gate', () => {
     stubs.sessionHandoff = handoff
     try {
       expect(agents.setSessionAttachGuard).toHaveBeenCalledOnce()
+      readOnly = true
+      for (const mode of ['transfer', 'attach']) await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath, mode)).rejects.toThrow('side read-only sessions cannot continue in VS Code')
+      expect(agents.releaseIdleSession).not.toHaveBeenCalled()
+      expect(agents.pinAttachment).not.toHaveBeenCalled()
+      expect(openExternal).not.toHaveBeenCalled()
+      readOnly = false
       await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath, 'invalid')).rejects.toThrow('Invalid VS Code handoff mode')
       await expect(handlers.get('sessions:continue-in-vscode')!(event, sessionPath)).rejects.toThrow('Stop the current run')
       expect(openExternal).not.toHaveBeenCalled()
@@ -443,12 +472,17 @@ describe('registerIpc verify gate', () => {
       setSessionAttachGuard: vi.fn(),
       setSessionClaimProvider: vi.fn(),
     }
-    const handoff = new SessionHandoff({ agents: agents as never, sessions: {} as never, projects: {} as never, openExternal: vi.fn(), ownersDir })
+    let readOnly = true
+    const handoff = new SessionHandoff({ agents: agents as never, sessions: {} as never, projects: {} as never, isReadOnlySession: () => readOnly, openExternal: vi.fn(), ownersDir })
     try {
       await runtimeOwners.requestSessionRelease(sessionPath, ownersDir)
       await handoff.releaseRequestedSessions()
+      expect(agents.releaseIdleSession).not.toHaveBeenCalled()
       expect(runtime).toBeDefined()
       expect(await runtimeOwners.readSessionReleaseRequests(ownersDir)).toHaveLength(1)
+      readOnly = false
+      await handoff.releaseRequestedSessions()
+      expect(runtime).toBeDefined()
 
       busy = false
       await handoff.releaseRequestedSessions()
@@ -475,6 +509,7 @@ describe('registerIpc verify gate', () => {
       agents: { list: () => [], setSessionAttachGuard: vi.fn(), setSessionClaimProvider: vi.fn() } as never,
       sessions: {} as never,
       projects: {} as never,
+      isReadOnlySession: () => false,
       openExternal: vi.fn(),
       ownersDir,
     })
