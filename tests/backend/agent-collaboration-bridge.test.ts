@@ -1,3 +1,6 @@
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentCollaborationBridge } from '../../apps/desktop/electron/main/collaboration/agent-bridge'
 import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
@@ -113,6 +116,7 @@ async function fixture(
   live = true,
   targetTranscript: TranscriptMessage[] = defaultTargetTranscript,
   waitClock?: FakeCollaborationWaitClock,
+  projects?: ConstructorParameters<typeof AgentCollaborationBridge>[0]['projects'],
 ) {
   const records = [source, target, foreign, child, archived]
   const apexSessions = service(records, {
@@ -151,6 +155,7 @@ async function fixture(
     disabledProviders: { pi: () => new Set(['hidden']) },
     disabledModels: { pi: () => new Set(['openai-codex/desktop-hidden']) },
     ...(waitClock ? { waitClock } : {}),
+    ...(projects ? { projects } : {}),
   })
   await bridge.start()
   bridges.push(bridge)
@@ -161,10 +166,80 @@ async function fixture(
     })
     return { status: response.status, body: await response.json() as { ok: boolean; result?: Record<string, unknown> | Array<Record<string, unknown>>; error?: string } }
   }
-  return { bridge, call, environment, apexManager, apexSessions }
+  return { bridge, call, environment, apexManager, apexSessions, records }
 }
 
 describe('AgentCollaborationBridge', () => {
+  it('serializes three concurrent HTTP creates', async () => {
+    const { call, apexManager } = await fixture()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const original = apexManager.start.getMockImplementation()!
+    apexManager.start.mockImplementationOnce(async (args) => { await gate; return original(args) })
+    const first = call('create', { prompt: 'one' })
+    await vi.waitFor(() => expect(apexManager.start).toHaveBeenCalledTimes(1))
+    const rest = [call('create', { prompt: 'two' }), call('create', { prompt: 'three' })]
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(apexManager.start).toHaveBeenCalledTimes(1)
+    release()
+    const results = await Promise.all([first, ...rest])
+    expect(results.map((result) => result.status)).toEqual([200, 200, 200])
+    expect(apexManager.start).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds pending creations and rejects them immediately on revocation', async () => {
+    const { call, apexManager, bridge, environment } = await fixture()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const original = apexManager.start.getMockImplementation()!
+    apexManager.start.mockImplementationOnce(async (args) => { await gate; return original(args) })
+    const first = call('create', { prompt: 'one' })
+    await vi.waitFor(() => expect(apexManager.start).toHaveBeenCalledTimes(1))
+    const pending = Array.from({ length: 4 }, (_, index) => call('create', { prompt: `pending ${index}` }))
+    const queues = (bridge as unknown as { creationQueues: Map<string, { pending: unknown[] }> }).creationQueues
+    await vi.waitFor(() => expect(queues.get(environment.GOOEYPI_COLLABORATION_TOKEN!)?.pending).toHaveLength(4))
+    const overflow = await call('create', { prompt: 'overflow' })
+    expect(overflow.status).toBe(409)
+    expect(overflow.body.error).toMatch(/Too many/)
+    bridge.revoke(environment.GOOEYPI_COLLABORATION_TOKEN)
+    expect((await Promise.all(pending)).map((result) => result.status)).toEqual([409, 409, 409, 409])
+    release()
+    expect((await first).status).toBe(200)
+    expect(apexManager.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts in an authorized linked folder and hides coordinators only from list', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'apex-collab-'))
+    try {
+      const canonical = realpathSync(folder)
+      const collaborationScope = vi.fn(async (cwd: string) => {
+        if (cwd === '/project' || cwd === canonical || cwd === folder) return { projectId: 'a', folders: ['/project', canonical] }
+        throw new TypeError('not granted')
+      })
+      const { call, apexManager, records } = await fixture(true, defaultTargetTranscript, undefined, { collaborationScope })
+      records.push({ ...target, id: '019f0000-0000-7000-8000-000000000009', filePath: '/sessions/coordinator.jsonl', role: 'coordinator' } as SessionRecord)
+      const listed = await call('list')
+      expect(JSON.stringify(listed.body.result)).not.toContain('019f0000-0000-7000-8000-000000000009')
+      expect((await call('read', { target_session_id: '019f0000-0000-7000-8000-000000000009' })).status).toBe(200)
+      expect((await call('create', { prompt: 'linked task', cwd: folder })).status).toBe(200)
+      expect(apexManager.start).toHaveBeenCalledWith({ cwd: canonical })
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
+  it('uses project identity for peers and denies a different create cwd', async () => {
+    const collaborationScope = vi.fn(async (cwd: string) => {
+      if (cwd === '/project' || cwd === '/other') return { projectId: 'project-a', folders: ['/project', '/other'] }
+      if (cwd === '/foreign') return { projectId: 'project-b', folders: ['/foreign'] }
+      throw new TypeError('not granted')
+    })
+    const { call, apexManager } = await fixture(true, defaultTargetTranscript, undefined, { collaborationScope })
+    const listed = await call('list')
+    expect(listed.body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: foreign.id })]))
+    const denied = await call('create', { prompt: 'no', cwd: '/foreign' })
+    expect(denied.status).toBe(400)
+    expect(apexManager.start).not.toHaveBeenCalled()
+  })
+
   it('revokes a runtime claim and clears its cached and pending session bindings', async () => {
     const { bridge, call, environment } = await fixture()
     const token = environment.GOOEYPI_COLLABORATION_TOKEN!
@@ -331,7 +406,11 @@ describe('AgentCollaborationBridge', () => {
       cwd: '/project', model: 'openai-codex/gpt-5.6-sol', thinking: 'max', fast: true,
     })
     expect(apexManager.command).toHaveBeenNthCalledWith(1, 'runtime-created', {
-      type: 'prompt', message: 'Review the model integration.', streamingBehavior: 'followUp',
+      type: 'prompt', message: expect.any(String), streamingBehavior: 'followUp',
+    })
+    const initialPrompt = (apexManager.command.mock.calls[0] as unknown as [string, { message: string }])[1].message
+    expect(parseGooeyPiAgentMessage(initialPrompt)).toEqual({
+      fromSessionId: source.id, text: 'Review the model integration.',
     })
     expect(apexManager.command).toHaveBeenCalledWith('runtime-created', { type: 'set_session_name', name: 'Model reviewer' })
     expect(apexManager.command).toHaveBeenCalledWith('runtime-created', { type: 'get_state' })

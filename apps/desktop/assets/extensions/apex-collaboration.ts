@@ -79,7 +79,7 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
   pi.registerTool({
     name: 'gooeypi_session_list',
     label: 'List sessions',
-    description: 'List other Apex sessions in this working directory. Results include title, UUID, harness, status, and whether the session is live. Use an exact UUID with the other session tools.',
+    description: 'List other Apex sessions in this granted project, including verified linked folders. Results include title, UUID, harness, status, and whether the session is live. Use an exact UUID with the other session tools.',
     parameters: Type.Object({}),
     async execute() { return result(await call('list')) },
   })
@@ -92,12 +92,13 @@ function registerTools(pi: ExtensionApi, Type: HostTypebox): void {
     }),
     async execute(_id, params) { return result(await call('models', params)) },
   })
-  pi.registerTool<{ prompt: string; title?: string; model?: string; reasoning?: string; fast?: boolean }>({
+  pi.registerTool<{ prompt: string; title?: string; model?: string; reasoning?: string; fast?: boolean; cwd?: string }>({
     name: 'gooeypi_session_create',
     label: 'Create session',
-    description: 'Create and immediately start a new readable top-level Apex session in this same harness and working directory. Use gooeypi_session_models when selecting a model. Model and reasoning wording may be approximate; Apex resolves and revalidates them against active GUI providers before launch. Set fast true to request fast/priority mode when the selected model and harness support it. The result includes the exact session UUID for gooeypi_session_read, gooeypi_session_send, and gooeypi_session_wait.',
+    description: 'Create and start a readable top-level Apex session in this harness. An optional cwd must belong to the same explicitly granted project. Creates are serialized per source, with up to four pending; excess requests are rejected. Use gooeypi_session_models when selecting a model. Model and reasoning wording may be approximate; Apex resolves and revalidates them against active GUI providers before launch. Set fast true to request fast/priority mode. The result includes the session UUID for read, send, and wait.',
     parameters: Type.Object({
       prompt: Type.String({ minLength: 1, maxLength: 1_000_000, description: 'The self-contained initial task for the new session' }),
+      cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 4096, description: 'Optional working directory within the same explicitly granted project' })),
       title: Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: 'Optional concise session title' })),
       model: Type.Optional(Type.String({ minLength: 1, maxLength: 512, description: 'Optional exact key from gooeypi_session_models or approximate model wording' })),
       reasoning: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: 'Optional reasoning intensity; the closest level supported by the selected or default model is used' })),
