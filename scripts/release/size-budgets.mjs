@@ -13,9 +13,10 @@ const MIB = 1024 * KIB
  * bundle-size creep still fails the release build.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 687933 bytes with Effect Schema validation, async effective-config IPC,
-  // and explicit XState lifecycle machines across runtime, schedules, desktop-link, and extension bridge.
-  mainBytes: 672 * KIB,
+  // Measured 693663 bytes with Effect Schema validation, async effective-config IPC,
+  // explicit XState lifecycle machines across runtime, schedules, desktop-link, and extension bridge,
+  // and the background-job capability bridge that mirrors bg_start jobs into the terminal drawer.
+  mainBytes: 680 * KIB,
   preloadBytes: 16 * KIB,
   // Measured 1411830 initialRendererBytes (lazy WindowsAppMenu + strict react-vendor split + dead-code cleanup)
   // and 3089297 rendererJsCssBytes with @astryxdesign/core, @stylexjs/stylex, and explicit XState UI machines.
