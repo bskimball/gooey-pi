@@ -10,6 +10,7 @@ import type { ModelCatalogProvider } from '../model-catalog'
 import { availableModels, rankedModelMatches, resolveModel, resolveReasoning } from '../model-selection'
 import { requireBoolean, requireExistingDirectory, requireId, requireInteger, requireString } from 'apex-core/validation'
 import { encodeGooeyPiAgentMessage } from 'apex-core/collaboration/message-envelope'
+import { recentOperations, type CollaborationOperations } from './session-summary'
 
 const MAX_LISTED_SESSIONS = 100
 const MAX_MESSAGES = 40
@@ -19,37 +20,30 @@ const MAX_CONTEXT_CHARS = MAX_CONTEXT_TOKENS * TOKEN_ESTIMATE_CHARS
 const MAX_SEND_CHARS = 64 * 1024
 const MAX_CREATE_PROMPT_CHARS = 1_000_000
 const MAX_WAIT_MS = 30_000
-const WAIT_TRANSCRIPT_POLL_MS = 1_000
-const WAIT_RUNTIME_POLL_MS = 250
-const MAX_ACTIVE_WAITS_PER_TOKEN = 2
+const MAX_WAIT_TARGETS = 16
+const MAX_ACTIVE_WAITS_PER_TOKEN = 16
 
 interface CollaborationWaitClock {
   now(): number
   setTimeout(callback: () => void, delayMs: number): { unref(): void }
+  clearTimeout(timer: { unref(): void }): void
 }
 
 const nativeWaitClock: CollaborationWaitClock = {
   now: () => Date.now(),
   setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-}
-
-async function delayUntil(targetTime: number, clock: CollaborationWaitClock): Promise<void> {
-  while (true) {
-    const remaining = targetTime - clock.now()
-    if (remaining <= 0) return
-    await new Promise<void>((resolveDelay) => {
-      const timer = clock.setTimeout(resolveDelay, remaining)
-      timer.unref()
-    })
-  }
+  clearTimeout: (timer) => globalThis.clearTimeout(timer as NodeJS.Timeout),
 }
 
 interface CollaborationSessionService {
   list(projectPath?: unknown, includeArchived?: unknown, force?: unknown): Promise<SessionRecord[]>
   read(filePath: unknown): Promise<TranscriptMessage[]>
+  onDidChange?(listener: () => void): () => void
 }
 
 interface CollaborationTarget {
+  cwd: string
+  projectId?: string
   session: SessionRecord
   service: CollaborationSessionService
   manager: AgentRpcManager
@@ -81,6 +75,24 @@ interface CollaborationSnapshot {
   token_limit: number
   truncated: boolean
   messages: CollaborationMessage[]
+  waiting_for_user?: { count: number; method: string; title: string; deadline?: number }
+  last_error?: string
+  operations: CollaborationOperations
+}
+
+function waitingForUser(manager: AgentRpcManager, runtime?: RuntimeInfo): CollaborationSnapshot['waiting_for_user'] {
+  if (!runtime) return undefined
+  try {
+    const dialogs = manager.sessionSnapshot(runtime.runtimeId).dialogs.filter((dialog) => typeof dialog.deadline !== 'number' || dialog.deadline > Date.now())
+    const first = dialogs[0]
+    if (!first) return undefined
+    return {
+      count: dialogs.length,
+      method: typeof first.method === 'string' ? first.method.slice(0, 64) : 'question',
+      title: typeof first.title === 'string' ? first.title.slice(0, 200) : 'Human input required',
+      ...(typeof first.deadline === 'number' ? { deadline: first.deadline } : {}),
+    }
+  } catch { return undefined } // Session transitions have no stable dialog snapshot.
 }
 
 function messageText(message: TranscriptMessage): string {
@@ -102,12 +114,12 @@ function truncateMiddle(value: string, maxChars: number): string {
   return `${value.slice(0, headChars)}${marker}${value.slice(-(available - headChars))}`
 }
 
-function boundedMessages(transcript: TranscriptMessage[]): {
+function boundedMessages(transcript: TranscriptMessage[], characterLimit = MAX_CONTEXT_CHARS): {
   messages: CollaborationMessage[]
   estimatedTokens: number
   truncated: boolean
 } {
-  let remaining = MAX_CONTEXT_CHARS
+  let remaining = characterLimit
   const messages: CollaborationMessage[] = []
   let truncated = false
   let includedMessages = 0
@@ -128,7 +140,7 @@ function boundedMessages(transcript: TranscriptMessage[]): {
   }
   return {
     messages: messages.reverse(),
-    estimatedTokens: Math.ceil((MAX_CONTEXT_CHARS - remaining) / TOKEN_ESTIMATE_CHARS),
+    estimatedTokens: Math.ceil((characterLimit - remaining) / TOKEN_ESTIMATE_CHARS),
     truncated,
   }
 }
@@ -138,11 +150,11 @@ function targetKey(target: CollaborationTarget): string {
   return `${target.session.harness}:${resolve(target.session.filePath)}`
 }
 
-function cursorFor(session: SessionRecord, messages: CollaborationMessage[], live: boolean): string {
+function cursorFor(session: SessionRecord, messages: CollaborationMessage[], live: boolean, metadata: unknown): string {
   const tail = messages.at(-1)
   return createHash('sha256').update(JSON.stringify([
     session.id, session.harness, session.status, session.updatedAt, session.eventRevision,
-    live, tail?.id, tail?.text.slice(-2_048),
+    live, tail?.id, tail?.text.slice(-2_048), metadata,
   ])).digest('base64url').slice(0, 32)
 }
 
@@ -163,10 +175,39 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   private readonly creationQueues = new Map<string, { active: boolean; pending: Array<{ run: () => void; reject: (error: Error) => void }> }>()
   private readonly pendingRuntimeTokens = new Map<string, string>()
   private readonly waitClock: CollaborationWaitClock
+  private readonly waitCancellations = new Map<string, Set<() => void>>()
+  private readonly lastErrors = new Map<string, string>()
+  private readonly managerSubscriptions: Array<() => void> = []
 
   constructor(private readonly options: AgentCollaborationBridgeOptions) {
     super()
     this.waitClock = options.waitClock ?? nativeWaitClock
+  }
+
+  override async start(): Promise<void> {
+    await super.start()
+    if (this.managerSubscriptions.length) return
+    for (const manager of new Set(Object.values(this.options.agents))) {
+      this.managerSubscriptions.push(manager.subscribe(({ runtimeId, event }) => {
+        const runtime = manager.list().find((candidate) => candidate.runtimeId === runtimeId)
+        if (!runtime?.sessionFile) return
+        this.bindRuntimeSession(runtimeId, runtime.sessionFile)
+        const key = resolve(runtime.sessionFile)
+        if (event.type === 'agent_start') this.lastErrors.delete(key)
+        if (event.type !== 'error' && event.type !== 'transport_error' && event.type !== 'extension_error') return
+        const error = event.error ?? event.message
+        if (typeof error !== 'string') return
+        this.lastErrors.delete(key)
+        this.lastErrors.set(key, error.slice(0, 2_000))
+        if (this.lastErrors.size > 256) this.lastErrors.delete(this.lastErrors.keys().next().value!)
+      }))
+    }
+  }
+
+  override async stop(): Promise<void> {
+    for (const unsubscribe of this.managerSubscriptions.splice(0)) unsubscribe()
+    await super.stop()
+    this.lastErrors.clear()
   }
 
   protected environmentEntries(url: string, token: string): NodeJS.ProcessEnv {
@@ -181,6 +222,8 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const { token } = claim
     this.sourcesByToken.delete(token)
     this.activeWaitsByToken.delete(token)
+    for (const cancel of this.waitCancellations.get(token) ?? []) cancel()
+    this.waitCancellations.delete(token)
     const queue = this.creationQueues.get(token)
     if (queue) {
       for (const entry of queue.pending.splice(0)) entry.reject(new Error('Capability expired'))
@@ -210,35 +253,70 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     if (token) this.bindSession(token, sessionFile, runtimeId)
   }
 
-  protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim): Promise<unknown> {
+  protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim, signal?: AbortSignal): Promise<unknown> {
     const source = await this.sourceFor(claim)
     if (method === 'list') return this.listPeers(source)
     if (method === 'models') return this.listModels(source, params.query)
-    if (method === 'create') return this.withCreationAdmission(claim, () => this.create(source, params))
+    if (method === 'create') return this.withCreationAdmission(claim, () => this.create(source, params, claim))
+    if (method === 'wait') {
+      const many = params.target_session_ids !== undefined
+      if (many && (params.target_session_id !== undefined || params.after_cursor !== undefined)) throw new TypeError('Use either target_session_ids or a single target_session_id with after_cursor')
+      const rawIds = many ? params.target_session_ids : [params.target_session_id]
+      if (!Array.isArray(rawIds) || rawIds.length < 1 || rawIds.length > MAX_WAIT_TARGETS) throw new TypeError('target_session_ids must contain 1 to 16 UUIDs')
+      const ids = rawIds.map((id) => requireId(id, 'target_session_id'))
+      if (new Set(ids).size !== ids.length) throw new TypeError('Duplicate wait targets are not allowed')
+      return this.withWaitAdmission(claim, ids, async () => {
+        const targets = await Promise.all(ids.map((id) => this.targetFor(source, id)))
+        const result = await this.wait(targets, params.after_cursor, params.timeout_ms, claim, signal)
+        await Promise.all(ids.map((id) => this.targetFor(source, id)))
+        await this.sourceFor(claim)
+        if (this.claimForToken(claim.token) !== claim || signal?.aborted) throw new Error('Capability expired or request disconnected')
+        return many ? result : { ...result.snapshots[0], timed_out: result.timed_out }
+      })
+    }
     const targetId = requireId(params.target_session_id, 'target_session_id')
-    if (method === 'wait') return this.withWaitAdmission(claim, targetId, async () => {
-      const target = await this.targetFor(source, targetId)
-      return this.wait(target, params.after_cursor, params.timeout_ms)
-    })
     const target = await this.targetFor(source, targetId)
-    if (method === 'read') return this.snapshot(target)
-    if (method === 'send') return this.withDeliveryLock(target, () => this.send(source, target, params.message))
+    if (method === 'read') {
+      const snapshot = await this.snapshot(target)
+      await this.sourceFor(claim)
+      await this.targetFor(source, targetId)
+      return snapshot
+    }
+    if (method === 'send' || method === 'steer') return this.withDeliveryLock(target, () => this.send(source, target, params.message, claim, method === 'steer'))
+    if (method === 'stop') return this.withDeliveryLock(target, async () => {
+      await this.sourceFor(claim)
+      await this.targetFor(source, targetId)
+      if (this.claimForToken(claim.token) !== claim) throw new Error('Capability expired')
+      const runtime = target.manager.getForSession(target.session.filePath)
+      if (!runtime) return { stopped: false, target_session_id: targetId }
+      const response = await target.manager.command(runtime.runtimeId, { type: 'abort' })
+      if (response.success === false) throw new Error('The target rejected the stop request')
+      return { stopped: true, target_session_id: targetId }
+    })
     throw new TypeError(`Unsupported collaboration method ${method}`)
   }
 
   private async sourceFor(claim: CapabilityClaim): Promise<CollaborationTarget> {
     if (claim.harness !== 'pi' || !claim.sessionPath) throw new Error('Session collaboration is not available yet for this thread; try again in a moment')
-    const cached = this.sourcesByToken.get(claim.token)
-    if (cached) return cached
-    const sessions = await this.options.sessions[claim.harness].list(undefined, true, true)
-    const sessionPath = resolve(claim.sessionPath)
-    const session = sessions.find((candidate) => resolve(candidate.filePath) === sessionPath)
-    if (!session) throw new Error('The current collaboration session was not found')
-    if (session.depth !== 0) throw new Error('Session collaboration is available only to top-level sessions')
-    const source = { session, service: this.options.sessions[claim.harness], manager: this.options.agents[claim.harness] }
-    // An asynchronous catalog scan can finish after the owning runtime exits.
-    // Let that already-admitted call settle without recreating revoked state.
-    if (this.claimForToken(claim.token) === claim) this.sourcesByToken.set(claim.token, source)
+    let source = this.sourcesByToken.get(claim.token)
+    if (!source) {
+      const sessions = await this.options.sessions[claim.harness].list(undefined, true, true)
+      const sessionPath = resolve(claim.sessionPath)
+      const session = sessions.find((candidate) => resolve(candidate.filePath) === sessionPath)
+      if (!session) throw new Error('The current collaboration session was not found')
+      if (session.depth !== 0) throw new Error('Session collaboration is available only to top-level sessions')
+      source = { cwd: claim.cwd, session, service: this.options.sessions[claim.harness], manager: this.options.agents[claim.harness] }
+    }
+    if (this.options.projects) {
+      const claimed = await this.options.projects.collaborationScope(claim.cwd)
+      const recorded = await this.options.projects.collaborationScope(source.session.projectPath)
+      if (claimed.projectId !== recorded.projectId || (source.projectId && source.projectId !== claimed.projectId)) throw new Error('The collaboration project grant changed')
+      source.projectId = claimed.projectId
+    } else if (resolve(claim.cwd) !== resolve(source.session.projectPath)) {
+      throw new Error('The session does not belong to its runtime working directory')
+    }
+    if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
+    this.sourcesByToken.set(claim.token, source)
     return source
   }
 
@@ -250,7 +328,8 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const harness = source.session.harness
     if (harness !== 'pi') throw new Error('Invalid collaboration harness')
     const service = this.options.sessions[harness]
-    const scope = this.options.projects ? await this.options.projects.collaborationScope(source.session.projectPath) : undefined
+    const scope = this.options.projects ? await this.options.projects.collaborationScope(source.cwd) : undefined
+    if (scope && source.projectId && scope.projectId !== source.projectId) throw new Error('The collaboration project grant changed')
     const sessions = await service.list(scope ? undefined : source.session.projectPath, false, true)
     for (const session of sessions) {
       if (session.id === source.session.id || session.depth !== 0 || session.archived) continue
@@ -260,7 +339,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
           if (peerScope.projectId !== scope.projectId) continue
         } catch { continue }
       } else if (resolve(session.projectPath) !== resolve(source.session.projectPath)) continue
-      peers.push({ session, service, manager: this.options.agents[harness] })
+      peers.push({ cwd: session.projectPath, session, service, manager: this.options.agents[harness] })
     }
     return peers.sort((left, right) => Date.parse(right.session.updatedAt) - Date.parse(left.session.updatedAt))
   }
@@ -270,9 +349,11 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       id: session.id,
       harness: session.harness,
       title: session.title,
-      status: session.status,
+      status: waitingForUser(manager, manager.getForSession(session.filePath)) ? 'waiting' : session.status,
       updated_at: session.updatedAt,
       live: Boolean(manager.getForSession(session.filePath)),
+      waiting_for_user: waitingForUser(manager, manager.getForSession(session.filePath)),
+      last_error: this.lastErrors.get(resolve(session.filePath)),
     }))
   }
 
@@ -295,7 +376,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     return { models, matched: matches.length, returned: models.length, truncated: matches.length > models.length }
   }
 
-  private async create(source: CollaborationTarget, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async create(source: CollaborationTarget, params: Record<string, unknown>, claim: CapabilityClaim): Promise<Record<string, unknown>> {
     const prompt = requireString(params.prompt, 'prompt', { min: 1, max: MAX_CREATE_PROMPT_CHARS, trim: true })
     assertNoMcpAuthenticationCommand(prompt, source.session.harness)
     const title = params.title === undefined ? undefined : requireString(params.title, 'title', { min: 1, max: 200, trim: true })
@@ -306,17 +387,17 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const selectedReasoning = selectedModel && reasoningQuery
       ? resolveReasoning(reasoningQuery, selectedModel.availableThinkingLevels)
       : undefined
-    const requestedCwd = params.cwd === undefined ? source.session.projectPath : requireString(params.cwd, 'cwd', { min: 1, max: 4096, trim: true })
-    let cwd = source.session.projectPath
+    const requestedCwd = params.cwd === undefined ? source.cwd : requireString(params.cwd, 'cwd', { min: 1, max: 4096, trim: true })
+    let cwd = source.cwd
     if (this.options.projects) {
-      const sourceScope = await this.options.projects.collaborationScope(source.session.projectPath)
+      const sourceScope = await this.options.projects.collaborationScope(source.cwd)
       const targetScope = await this.options.projects.collaborationScope(requestedCwd)
       if (sourceScope.projectId !== targetScope.projectId) throw new TypeError('cwd must belong to the source project')
       // Resolve the exact cwd only after checking its project identity.
       cwd = await requireExistingDirectory(requestedCwd, 'cwd')
       const finalScope = await this.options.projects.collaborationScope(cwd)
       if (sourceScope.projectId !== finalScope.projectId) throw new TypeError('cwd must belong to the source project')
-    } else if (resolve(requestedCwd) !== resolve(source.session.projectPath)) {
+    } else if (resolve(requestedCwd) !== resolve(source.cwd)) {
       throw new TypeError('cwd must match the source working directory')
     }
     const manager = source.manager
@@ -332,6 +413,9 @@ export class AgentCollaborationBridge extends CapabilityBridge {
         appliedReasoning = resolveReasoning(reasoningQuery, runtime.availableThinkingLevels ?? [])
         await manager.command(runtime.runtimeId, { type: 'set_thinking_level', level: appliedReasoning })
       }
+      await this.sourceFor(claim)
+      if (this.options.projects && (await this.options.projects.collaborationScope(cwd)).projectId !== source.projectId) throw new Error('The collaboration project grant changed')
+      if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
       await manager.command(runtime.runtimeId, {
         type: 'prompt',
         message: encodeGooeyPiAgentMessage({ fromSessionId: source.session.id, text: prompt }),
@@ -389,27 +473,40 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     return matches[0]
   }
 
-  private async snapshot(target: CollaborationTarget): Promise<CollaborationSnapshot> {
-    const context = boundedMessages(await target.service.read(target.session.filePath))
-    // The target was authorized through a forced catalog scan. Polling waits
-    // use the service cache so a 30-second wait never rescans every session
-    // file four times per second.
+  private async snapshot(target: CollaborationTarget, tokenLimit = MAX_CONTEXT_TOKENS, operationLimit = 6_000): Promise<CollaborationSnapshot> {
+    const transcript = await target.service.read(target.session.filePath)
+    const context = boundedMessages(transcript, tokenLimit * TOKEN_ESTIMATE_CHARS)
+    const operations = recentOperations(transcript, operationLimit)
     const refreshed = (await target.service.list(target.session.projectPath, true, false))
       .find((candidate) => candidate.id === target.session.id) ?? target.session
     target.session = refreshed
-    const live = Boolean(target.manager.getForSession(refreshed.filePath))
+    const runtime = target.manager.getForSession(refreshed.filePath)
+    const waiting = waitingForUser(target.manager, runtime)
+    const error = this.lastErrors.get(resolve(refreshed.filePath)) ?? transcript.at(-1)?.errorMessage
+    const lastError = typeof error === 'string' ? error.slice(0, 2_000) : undefined
+    const busy = runtime && (runtime.isStreaming || runtime.isCompacting || runtime.sessionActions?.active || (runtime.sessionActions?.queuedCount ?? 0) > 0)
+    let status = refreshed.status
+    if (waiting) status = 'waiting'
+    else if (lastError) status = 'failed'
+    else if (busy) status = 'running'
+    else if (runtime && status === 'running') status = 'complete'
+    const session = { id: refreshed.id, harness: refreshed.harness, title: refreshed.title, status, updatedAt: refreshed.updatedAt }
+    const live = Boolean(runtime)
     return {
-      session: { id: refreshed.id, harness: refreshed.harness, title: refreshed.title, status: refreshed.status, updatedAt: refreshed.updatedAt },
-      cursor: cursorFor(refreshed, context.messages, live),
+      session,
+      cursor: cursorFor({ ...refreshed, status }, context.messages, live, [waiting, lastError, operations]),
       live,
       estimated_tokens: context.estimatedTokens,
-      token_limit: MAX_CONTEXT_TOKENS,
+      token_limit: tokenLimit,
       truncated: context.truncated,
       messages: context.messages,
+      waiting_for_user: waiting,
+      last_error: lastError,
+      operations,
     }
   }
 
-  private async send(source: CollaborationTarget, target: CollaborationTarget, rawMessage: unknown): Promise<Record<string, unknown>> {
+  private async send(source: CollaborationTarget, target: CollaborationTarget, rawMessage: unknown, claim: CapabilityClaim, steer = false): Promise<Record<string, unknown>> {
     const message = requireString(rawMessage, 'message', { min: 1, max: MAX_SEND_CHARS, trim: true })
     assertNoMcpAuthenticationCommand(message, source.session.harness)
     const existing = target.manager.getForSession(target.session.filePath)
@@ -419,8 +516,14 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       fromSessionId: source.session.id,
       text: message,
     })
+    await this.sourceFor(claim)
+    await this.targetFor(source, target.session.id)
+    if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
     const busy = runtime.isStreaming || runtime.isCompacting || runtime.sessionActions?.active
-    await target.manager.command(runtime.runtimeId, { type: busy ? 'follow_up' : 'prompt', message: attribution })
+    let type = 'prompt'
+    if (busy) type = steer ? 'steer' : 'follow_up'
+    const response = await target.manager.command(runtime.runtimeId, { type, message: attribution })
+    if (response.success === false) throw new Error('The target rejected the message')
     return { delivered: true, target_session_id: target.session.id, awakened: !existing, queued: Boolean(busy), cursor_before: before.cursor }
   }
 
@@ -448,17 +551,17 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     }
   }
 
-  private async withWaitAdmission<T>(claim: CapabilityClaim, targetId: string, action: () => Promise<T>): Promise<T> {
+  private async withWaitAdmission<T>(claim: CapabilityClaim, targetIds: string[], action: () => Promise<T>): Promise<T> {
     if (this.claimForToken(claim.token) !== claim) throw new Error('Capability expired')
-    const waitKey = `${claim.token}:${claim.harness}:${targetId}`
+    const keys = targetIds.map((id) => `${claim.token}:${claim.harness}:${id}`)
     const active = this.activeWaitsByToken.get(claim.token) ?? 0
     if (active >= MAX_ACTIVE_WAITS_PER_TOKEN) throw new Error('Too many session waits are active for this runtime')
-    if (this.activeWaitTargets.has(waitKey)) throw new Error('A wait for this target session is already active')
+    if (keys.some((key) => this.activeWaitTargets.has(key))) throw new Error('A wait for this target session is already active')
     this.activeWaitsByToken.set(claim.token, active + 1)
-    this.activeWaitTargets.add(waitKey)
+    for (const key of keys) this.activeWaitTargets.add(key)
     try { return await action() }
     finally {
-      this.activeWaitTargets.delete(waitKey)
+      for (const key of keys) this.activeWaitTargets.delete(key)
       const remaining = (this.activeWaitsByToken.get(claim.token) ?? 1) - 1
       if (remaining > 0) this.activeWaitsByToken.set(claim.token, remaining)
       else this.activeWaitsByToken.delete(claim.token)
@@ -492,27 +595,82 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     })
   }
 
-  private async wait(target: CollaborationTarget, rawCursor: unknown, rawTimeout: unknown): Promise<CollaborationSnapshot & { timed_out: boolean }> {
+  private wait(targets: CollaborationTarget[], rawCursor: unknown, rawTimeout: unknown, claim: CapabilityClaim, signal?: AbortSignal): Promise<{ snapshots: CollaborationSnapshot[]; changed_session_ids: string[]; timed_out: boolean }> {
     const afterCursor = rawCursor === undefined ? undefined : requireString(rawCursor, 'after_cursor', { min: 1, max: 128, trim: true })
     const timeoutMs = rawTimeout === undefined ? 15_000 : requireInteger(rawTimeout, 'timeout_ms', 0, MAX_WAIT_MS)
-    const startedAt = this.waitClock.now()
-    const deadline = startedAt + timeoutMs
-    let snapshot = await this.snapshot(target)
-    while (this.waitClock.now() < deadline) {
-      const runtime = target.manager.getForSession(target.session.filePath)
-      const idle = !runtime || (!runtime.isStreaming && !runtime.isCompacting && !runtime.sessionActions?.active && (runtime.sessionActions?.queuedCount ?? 0) === 0)
-      if (idle && (afterCursor === undefined || snapshot.cursor !== afterCursor)) return { ...snapshot, timed_out: false }
-      // Busy runtimes need only a cheap in-memory state probe. Transcript
-      // reads resume at a bounded cadence once the target is idle/offline.
-      // Re-arm an early timer wake until the intended poll instant so a short
-      // wait cannot perform multiple transcript reads at its deadline.
-      const nextPollAt = Math.min(deadline, this.waitClock.now() + (idle ? WAIT_TRANSCRIPT_POLL_MS : WAIT_RUNTIME_POLL_MS))
-      await delayUntil(nextPollAt, this.waitClock)
-      if (idle) {
-        snapshot = await this.snapshot(target)
-        if (afterCursor === undefined || snapshot.cursor !== afterCursor) return { ...snapshot, timed_out: false }
+    const deadline = this.waitClock.now() + timeoutMs
+    return new Promise((resolveWait, rejectWait) => {
+      let done = false
+      let checking = false
+      let dirty = false
+      let expired = timeoutMs === 0
+      let baseline: CollaborationSnapshot[] | undefined
+      let timer: { unref(): void } | undefined
+      const subscriptions: Array<() => void> = []
+      const cancellations = this.waitCancellations.get(claim.token) ?? new Set<() => void>()
+      this.waitCancellations.set(claim.token, cancellations)
+      const finish = (error?: Error, result?: { snapshots: CollaborationSnapshot[]; changed_session_ids: string[]; timed_out: boolean }) => {
+        if (done) return
+        done = true
+        if (timer) this.waitClock.clearTimeout(timer)
+        for (const unsubscribe of subscriptions) unsubscribe()
+        cancellations.delete(cancel)
+        if (!cancellations.size) this.waitCancellations.delete(claim.token)
+        signal?.removeEventListener('abort', disconnect)
+        if (error) rejectWait(error)
+        else if (result) resolveWait(result)
       }
-    }
-    return { ...snapshot, timed_out: true }
+      const cancel = () => finish(new Error('Capability expired'))
+      const disconnect = () => finish(new Error('Request disconnected'))
+      const check = async () => {
+        if (done) return
+        if (checking) { dirty = true; return }
+        checking = true
+        try {
+          do {
+            dirty = false
+            const deadlineSnapshot = expired
+            const snapshots = await Promise.all(targets.map((target) => this.snapshot(target, Math.floor(MAX_CONTEXT_TOKENS / targets.length), Math.floor(6_000 / targets.length))))
+            if (done) return
+            if (expired && !deadlineSnapshot) { dirty = true; continue }
+            if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) { cancel(); return }
+            const changed = snapshots.filter((snapshot, index) => {
+              const previous = afterCursor ?? baseline?.[index]?.cursor
+              const runtime = targets[index].manager.getForSession(targets[index].session.filePath)
+              const idle = !runtime || (!runtime.isStreaming && !runtime.isCompacting && !runtime.sessionActions?.active && !(runtime.sessionActions?.queuedCount ?? 0))
+              return Boolean(snapshot.waiting_for_user || snapshot.last_error || (previous !== undefined ? snapshot.cursor !== previous : idle))
+            }).map((snapshot) => snapshot.session.id)
+            baseline ??= snapshots
+            if (changed.length || expired) {
+              finish(undefined, { snapshots, changed_session_ids: changed, timed_out: !changed.length })
+              return
+            }
+          } while (dirty && !done)
+        } catch (error) { finish(error instanceof Error ? error : new Error(String(error))) }
+        finally { checking = false }
+      }
+      const notify = () => { void check() }
+      const relevant = new Set(['agent_end', 'error', 'transport_error', 'extension_error', 'extension_ui_request', 'extension_ui_resolved', 'runtime_exit', 'tool_execution_end', 'message_end', 'desktop_user_message', 'session_persisted', 'desktop_session_revoked'])
+      cancellations.add(cancel)
+      signal?.addEventListener('abort', disconnect, { once: true })
+      for (const manager of new Set(targets.map((target) => target.manager))) {
+        subscriptions.push(manager.subscribe(({ runtimeId, event }) => {
+          if (relevant.has(String(event.type)) && targets.some((target) => target.manager === manager && manager.getForSession(target.session.filePath)?.runtimeId === runtimeId)) notify()
+        }))
+      }
+      for (const service of new Set(targets.map((target) => target.service))) {
+        if (service.onDidChange) subscriptions.push(service.onDidChange(notify))
+      }
+      const armDeadline = () => {
+        timer = this.waitClock.setTimeout(() => {
+          if (this.waitClock.now() < deadline) armDeadline()
+          else { expired = true; notify() }
+        }, Math.max(0, deadline - this.waitClock.now()))
+        timer.unref()
+      }
+      if (signal?.aborted) disconnect()
+      else if (this.claimForToken(claim.token) !== claim) cancel()
+      else { if (!expired) armDeadline(); notify() }
+    })
   }
 }

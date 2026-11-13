@@ -17,19 +17,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-export function recentOperations(transcript: TranscriptMessage[]): CollaborationOperations {
+export function recentOperations(transcript: TranscriptMessage[], characterLimit = CHARACTER_LIMIT): CollaborationOperations {
   const summaries: Summary[] = []
   let truncated = false
-  let remaining = CHARACTER_LIMIT
+  let remaining = characterLimit
 
   for (let m = transcript.length - 1; m >= 0; m -= 1) {
     const message = transcript[m]
     for (let p = message.parts.length - 1; p >= 0; p -= 1) {
       const part = message.parts[p]
       if (part.type !== 'toolCall' && part.type !== 'toolResult') continue
-      if (summaries.length === ITEM_LIMIT || remaining < 7) {
+      if (summaries.length === ITEM_LIMIT || remaining < 8) {
         truncated = true
-        return { summaries: summaries.reverse(), truncated, character_limit: CHARACTER_LIMIT }
+        return { summaries: summaries.reverse(), truncated, character_limit: characterLimit }
       }
 
       const isTodo = part.type === 'toolCall' && part.name === 'todo_write'
@@ -37,7 +37,9 @@ export function recentOperations(transcript: TranscriptMessage[]): Collaboration
       let status: Summary['status'] = 'unknown'
       if (part.type === 'toolResult') {
         text = part.text
-        status = part.isError ? 'error' : part.streaming ? 'running' : 'success'
+        status = 'success'
+        if (part.streaming) status = 'running'
+        if (part.isError) status = 'error'
       } else if (isTodo) {
         const todos = isRecord(part.args) ? part.args.todos : undefined
         if (Array.isArray(todos)) {
@@ -69,5 +71,5 @@ export function recentOperations(transcript: TranscriptMessage[]): Collaboration
       summaries.push({ kind: isTodo ? 'todo' : 'tool', name, status, text: boundedText })
     }
   }
-  return { summaries: summaries.reverse(), truncated, character_limit: CHARACTER_LIMIT }
+  return { summaries: summaries.reverse(), truncated, character_limit: characterLimit }
 }

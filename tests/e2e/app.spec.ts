@@ -1044,6 +1044,8 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: 'Chief of Staff', exact: true }).click()
     await expect(coordinator.locator('.activity-question-card')).toContainText('Approve background deployment?')
     expect(existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(false)
+    expect(await coordinator.evaluate((element) => Math.round(element.getBoundingClientRect().right - innerWidth))).toBeLessThanOrEqual(1)
+    await page.screenshot({ path: test.info().outputPath('chief-of-staff.png'), scale: 'css', fullPage: true })
     await coordinator.locator('.activity-question-card__yes').click()
     await expect.poll(() => existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(true)
     expect(JSON.parse(readFileSync(join(fixtureRoot, 'activity-confirm-response.json'), 'utf8'))).toMatchObject({ confirmed: true })

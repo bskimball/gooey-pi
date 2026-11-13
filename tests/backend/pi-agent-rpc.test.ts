@@ -43,6 +43,8 @@ const readline = require('node:readline')
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\\n')
 let currentModel = ${initialModel}
 let currentThinking = 'medium'
+const sessionArg = process.argv.indexOf('--session')
+const sessionFile = sessionArg >= 0 ? process.argv[sessionArg + 1] : undefined
 send({ type: 'fake_argv', argv: process.argv.slice(2) })
 send({ type: 'fake_cwd', cwd: process.cwd() })
 send({ type: 'fake_env', env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PI_'))) })
@@ -50,7 +52,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
   if (command.type === 'get_state') {
     send({ id: command.id, type: 'response', command: 'get_state', success: true, data: {
-      sessionId: 'pi-session', isStreaming: false, isCompacting: false, thinkingLevel: currentThinking,
+      sessionId: 'pi-session', sessionFile, isStreaming: false, isCompacting: false, thinkingLevel: currentThinking,
       model: currentModel,
       serviceTier: 'priority', fastModeEnabled: true,
       contextUsage: { tokens: 999999, contextWindow: 272000, percent: 99 },
@@ -208,8 +210,7 @@ describe('pi RPC handshake', () => {
       await manager.stop(first.runtime.runtimeId)
       await expect(control.followUp(first.session.filePath, 'Summarize the implementor results.', 'queue')).resolves.toBe(true)
       await waitUntil(() => events.some((event) => event.type === 'fake_prompt'))
-      expect(events.find((event) => event.type === 'fake_prompt')?.message).toContain("this project's Chief of Staff")
-      expect(events.find((event) => event.type === 'fake_prompt')?.message).toContain('Summarize the implementor results.')
+      expect(events.find((event) => event.type === 'fake_prompt')?.message).toBe('Summarize the implementor results.')
       expect(manager.getForSession(first.session.filePath)?.runtimeId).not.toBe(first.runtime.runtimeId)
       const reopenedStore = new JsonStateStore(statePath)
       await reopenedStore.ready()

@@ -47,7 +47,7 @@ import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
-import { ActivityCoordinatorService } from "./collaboration/coordinator";
+import { ActivityCoordinatorService, COORDINATOR_INSTRUCTIONS } from "./collaboration/coordinator";
 import { BackgroundJobBridge } from "./background-jobs";
 import {
 	configureGooeyPiAgentMessageSigning,
@@ -1239,28 +1239,33 @@ async function bootstrap(): Promise<void> {
 		askUser: apexAskUserExtensionPath,
 	};
 	// Pi runtimes receive the capability extensions shipped in assets/extensions.
-	piManager.setRuntimeEnvironmentProvider((scope) => ({
-		...desktopLink?.editor.environmentFor(scope),
-		APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),
-		APEX_VISUAL_PREVIEW_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'visualPreview').filename, extensionPathContext),
-		...extensionRuntimeEnvironment(
-			piScheduleBridge.environmentFor(scope),
-			() => browserBridge.environmentFor(scope),
-			capabilityExtensionPaths,
-			stateStore.getSettings().askUserEnabled && scope.interactive,
-			stateStore.getSettings().browserEnabled,
-		),
-		...collaborationBridge.environmentFor({ ...scope, harness: "pi" }),
-		...jobsBridge.environmentFor(scope),
-		GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: piFastModeExtensionPath,
-		GOOEYPI_CUA_DRIVER_PATH: stateStore.getSettings().computerUseEnabled
-			? (cuaDriver.executable() ?? undefined)
-			: undefined,
-		GOOEYPI_COMPUTER_USE_SKILL_PATH:
-			stateStore.getSettings().computerUseEnabled && cuaDriver.executable()
-				? computerUseSkillPath
+	piManager.setRuntimeEnvironmentProvider((scope) => {
+		const sessionPath = scope.sessionPath;
+		const isCoordinator = sessionPath && Object.values(stateStore.getCoordinatorSessions()).some((path) => resolve(path) === resolve(sessionPath));
+		return {
+			...desktopLink?.editor.environmentFor(scope),
+			APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),
+			APEX_VISUAL_PREVIEW_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'visualPreview').filename, extensionPathContext),
+			...extensionRuntimeEnvironment(
+				piScheduleBridge.environmentFor(scope),
+				() => browserBridge.environmentFor(scope),
+				capabilityExtensionPaths,
+				stateStore.getSettings().askUserEnabled && scope.interactive,
+				stateStore.getSettings().browserEnabled,
+			),
+			...collaborationBridge.environmentFor({ ...scope, harness: "pi" }),
+			GOOEYPI_COORDINATOR_INSTRUCTIONS: isCoordinator ? COORDINATOR_INSTRUCTIONS : undefined,
+			...jobsBridge.environmentFor(scope),
+			GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: piFastModeExtensionPath,
+			GOOEYPI_CUA_DRIVER_PATH: stateStore.getSettings().computerUseEnabled
+				? (cuaDriver.executable() ?? undefined)
 				: undefined,
-	}));
+			GOOEYPI_COMPUTER_USE_SKILL_PATH:
+				stateStore.getSettings().computerUseEnabled && cuaDriver.executable()
+					? computerUseSkillPath
+					: undefined,
+		};
+	});
 	piManager.setRuntimeStartListener((environment, info) => {
 		desktopLink?.editor.bindRuntime(environment.APEX_EDITOR_TOKEN, info.runtimeId);
 		browserBridge.bindSession(

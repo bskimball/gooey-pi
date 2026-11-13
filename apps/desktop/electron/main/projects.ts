@@ -1016,6 +1016,7 @@ export class ProjectService {
         continue
       }
       const folders: string[] = []
+      let primaryGranted = false
       for (const folder of project.folders) {
         const { configured, canonical, verified } = await this.resolveFolderAuthorization(project, folder)
         if (!verified || await this.isBroadRoot(verified.path)) {
@@ -1025,8 +1026,12 @@ export class ProjectService {
         }
         if (this.rootRemovals.has(configured) || this.rootRemovals.has(verified.path) || this.pendingRemovalIds.has(inferredId(verified.path))) continue
         folders.push(verified.path)
+        if (configured === resolve(project.primaryFolder)) primaryGranted = true
       }
-      if (folders.some((folder) => isPathWithin(folder, cwd))) candidates.push({ projectId: project.id, folders: [...new Set(folders)] })
+      if (folders.some((folder) => isPathWithin(folder, cwd))) {
+        if (!primaryGranted) throw new TypeError('project primary folder is not currently granted')
+        candidates.push({ projectId: project.id, folders: [...new Set(folders)] })
+      }
     }
     if ([...this.rootRemovals.keys()].some((root) => isPathWithin(root, cwd)) || candidates.some(({ projectId }) => this.pendingRemovalIds.has(projectId))) {
       throw new TypeError('project is being removed')

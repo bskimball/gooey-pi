@@ -3,7 +3,7 @@ import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import type { PendingExtensionUi } from './useExtensionUi'
 import { parseExtensionUiRequest } from '@/lib/extension-ui'
 import { replayApexEvents } from '@/lib/events/reduce'
-import type { ApexApi, CoordinatorAttachment, PromptDeliveryIntent, TranscriptMessage } from '@/types/api'
+import type { ApexApi, ApexEventEnvelope, CoordinatorAttachment, PromptDeliveryIntent, TranscriptMessage } from '@/types/api'
 
 type CoordinatorState =
   | { phase: 'closed' }
@@ -35,8 +35,17 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
     let disposed = false
     let attachment: CoordinatorAttachment | undefined
     setState({ phase: 'opening', projectId })
-    const unsubscribe = bridge.agent.onEvent(({ runtimeId, event }) => {
-      if (!attachment || runtimeId !== attachment.runtime.runtimeId || disposed) return
+    const buffered: ApexEventEnvelope[] = []
+    let overflow = false
+    const receive = (envelope: ApexEventEnvelope) => {
+      if (disposed) return
+      if (!attachment) {
+        if (buffered.length < 2_000) buffered.push(envelope)
+        else overflow = true
+        return
+      }
+      const { runtimeId, event, sequence } = envelope
+      if (runtimeId !== attachment.runtime.runtimeId || (sequence !== undefined && sequence <= attachment.eventSequence)) return
       setState((current) => {
         if (current.phase !== 'ready' || current.attachment.attachmentId !== attachment?.attachmentId) return current
         const runtime = { ...current.attachment.runtime }
@@ -50,7 +59,7 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
         if (type === 'compaction_end') runtime.isCompacting = false
         let dialogs = current.dialogs
         if (parseExtensionUiRequest(event)) {
-          dialogs = [...dialogs.filter((dialog) => dialog.id !== event.id), { ...event, receivedAt: Date.now() }]
+          dialogs = [...dialogs.filter((dialog) => dialog.id !== event.id), { ...event, receivedAt: typeof event.receivedAt === 'number' ? event.receivedAt : Date.now() }]
         } else if (type === 'extension_ui_resolved') {
           dialogs = dialogs.filter((dialog) => dialog.id !== event.id)
         } else if (type === 'runtime_exit') dialogs = []
@@ -63,16 +72,23 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
         }
       })
       if (event.type === 'error' || event.type === 'transport_error' || event.type === 'extension_error') {
-        setActionError(typeof event.message === 'string' ? event.message : 'The coordinator reported an error.')
+        const error = event.error ?? event.message
+        setActionError(typeof error === 'string' ? error : 'The coordinator reported an error.')
       }
-    })
+    }
+    const unsubscribe = bridge.agent.onEvent(receive)
     void bridge.coordinator.open(projectId).then((opened) => {
       if (disposed) {
         void bridge.coordinator.close(opened.attachmentId).catch(() => undefined)
         return
       }
+      if (overflow) {
+        void bridge.coordinator.close(opened.attachmentId).catch(() => undefined)
+        throw new Error('Session activity changed too quickly while opening. Reconnect to get a fresh snapshot.')
+      }
       attachment = opened
       setState({ phase: 'ready', projectId, attachment: opened, messages: opened.messages, dialogs: opened.pendingDialogs, disconnected: false })
+      for (const envelope of buffered.splice(0)) receive(envelope)
     }).catch((error: unknown) => {
       if (!disposed) setState({ phase: 'error', projectId, error: errorText(error) })
     })

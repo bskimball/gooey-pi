@@ -298,6 +298,7 @@ export interface ApexModelCatalog {
 export interface ApexEventEnvelope {
   runtimeId: string
   event: Record<string, unknown>
+  sequence?: number
 }
 
 export interface SessionChangeEvent {
@@ -805,6 +806,7 @@ export interface AgentBrowserPointerEvent {
 
 export interface CoordinatorAttachment {
   attachmentId: string
+  eventSequence: number
   session: SessionRecord
   runtime: RuntimeInfo
   messages: TranscriptMessage[]

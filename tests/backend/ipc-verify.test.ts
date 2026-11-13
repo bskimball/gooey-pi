@@ -337,11 +337,13 @@ describe('registerIpc verify gate', () => {
     const closeForSession = vi.fn()
     const unbindSession = vi.fn()
     const followUp = vi.fn().mockResolvedValue(true)
-    stubs.coordinator = { followUp, dispose: vi.fn(), releaseOwner: vi.fn() }
+    const disposeCoordinator = vi.fn()
+    const releaseOwner = vi.fn()
+    stubs.coordinator = { followUp, dispose: disposeCoordinator, releaseOwner }
     stubs.projects = { authorizePath }
     stubs.sessions = { requireSessionPath, create, read, rename, archive }
     stubs.browser = { closeForSession }
-    stubs.terminals = { unbindSession }
+    stubs.terminals = { unbindSession, killOwner: vi.fn().mockResolvedValue(undefined) }
     await expect(handlers.get('sessions:create')!(event, '/repo')).resolves.toBe('created')
     expect(create).toHaveBeenCalledWith('/authorized')
     await expect(handlers.get('sessions:read')!(event, '/session')).resolves.toBe('transcript')
@@ -357,7 +359,10 @@ describe('registerIpc verify gate', () => {
     expect(archive).toHaveBeenCalledOnce()
     await expect(handlers.get('sessions:follow-up')!(event, '/denied', 'Do not deliver')).rejects.toThrow('denied')
     expect(followUp).toHaveBeenCalledOnce()
+    registration.revoke(event.sender.id)
+    expect(releaseOwner).toHaveBeenCalledWith(event.sender.id)
     registration.dispose()
+    expect(disposeCoordinator).toHaveBeenCalledOnce()
   })
 
   it('opens busy and idle authorized sessions alongside VS Code while retaining Desktop ownership', async () => {
