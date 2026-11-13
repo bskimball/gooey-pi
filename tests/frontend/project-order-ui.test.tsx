@@ -132,6 +132,12 @@ beforeEach(() => {
       preview: vi.fn(async (timing) => ({ timing, occurrences: [] })),
       onChanged: vi.fn(() => () => undefined),
     },
+    backgroundJobs: {
+      list: vi.fn(async () => []),
+      stop: vi.fn(async () => true),
+      dismiss: vi.fn(async () => true),
+      onEvent: vi.fn(() => () => undefined),
+    },
     settings: {
       get: vi.fn(async () => settings),
       update: vi.fn(async (patch) => {

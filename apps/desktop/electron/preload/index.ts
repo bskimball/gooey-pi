@@ -6,6 +6,7 @@ import type {
 	AgentBrowserState,
 	AppUpdateState,
 	ApexEventEnvelope,
+	BackgroundJobEvent,
 	ApexApi,
 	ScheduleChangeEvent,
 	SessionChangeEvent,
@@ -181,6 +182,13 @@ const api: ApexApi = {
 			subscribe<TerminalDataEvent>("terminal:data", callback),
 		onExit: (callback) =>
 			subscribe<TerminalExitEvent>("terminal:exit", callback),
+	},
+	backgroundJobs: {
+		list: () => invoke("background-jobs:list"),
+		stop: (key) => invoke("background-jobs:stop", key),
+		dismiss: (key) => invoke("background-jobs:dismiss", key),
+		onEvent: (callback) =>
+			subscribe<BackgroundJobEvent>("background-jobs:event", callback),
 	},
 	git: {
 		status: (cwd) => invoke("git:status", cwd),

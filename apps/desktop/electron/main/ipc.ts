@@ -28,6 +28,7 @@ import type { PetService } from "./pets";
 import type { PluginService } from "./plugins";
 import type { ProjectService } from "./projects";
 import type { AutomationService } from "./schedules/service";
+import type { BackgroundJobBridge } from "./background-jobs";
 import type { SessionHandoff } from "./session-handoff";
 import type { SessionService } from "./sessions";
 import type { SettingsService } from "./settings-schedules";
@@ -64,6 +65,7 @@ interface Services {
 	extensionPathContext: ExtensionPathContext;
 	agents: AgentRpcManager;
 	terminals: TerminalService;
+	backgroundJobs: Pick<BackgroundJobBridge, "list" | "stopJob" | "dismissJob">;
 	git: GitService;
 	plugins: PluginService;
 	catalog: ModelCatalogProvider;
@@ -608,6 +610,13 @@ export function registerIpc(
 	);
 	handle("terminal:kill", (event, terminalId) =>
 		services.terminals.kill(event.sender, terminalId),
+	);
+	handle("background-jobs:list", () => services.backgroundJobs.list());
+	handle("background-jobs:stop", (_event, key) =>
+		services.backgroundJobs.stopJob(key),
+	);
+	handle("background-jobs:dismiss", (_event, key) =>
+		services.backgroundJobs.dismissJob(key),
 	);
 
 	handle("git:status", (_event, cwd) => services.git.status(cwd));

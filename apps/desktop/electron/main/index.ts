@@ -47,6 +47,7 @@ import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import { BrowserDownloadGuard } from "./browser-downloads";
 import { CheckoutService } from "./checkouts";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
+import { BackgroundJobBridge } from "./background-jobs";
 import {
 	configureGooeyPiAgentMessageSigning,
 	loadOrCreateGooeyPiAgentMessageKey,
@@ -127,6 +128,7 @@ let agentBrowser: AgentBrowserService | null = null;
 let agentBrowserBridge: AgentBrowserBridge | null = null;
 let desktopLink: DesktopLinkServer | null = null;
 let agentCollaborationBridge: AgentCollaborationBridge | null = null;
+let backgroundJobBridge: BackgroundJobBridge | null = null;
 let backgroundMode: MacBackgroundController | null = null;
 const shutdown = createAppShutdown();
 let trustedRendererUrl = "";
@@ -1161,10 +1163,23 @@ async function bootstrap(): Promise<void> {
 		disabledProviders: { pi: piDisabledProviders },
 		disabledModels: { pi: piDisabledModels },
 	});
+	const jobsBridge = new BackgroundJobBridge((event) => {
+		const renderer = mainWindow?.webContents;
+		if (
+			!isShutdownStarted(shutdown) &&
+			renderer &&
+			!renderer.isDestroyed() &&
+			isTrustedRendererUrl(renderer.getURL(), trustedRendererUrl) &&
+			isTrustedRendererUrl(renderer.mainFrame.url, trustedRendererUrl)
+		)
+			renderer.send("background-jobs:event", event);
+	});
+	backgroundJobBridge = jobsBridge;
 	await Promise.all([
 		piScheduleBridge.start(),
 		browserBridge.start(),
 		collaborationBridge.start(),
+		jobsBridge.start(),
 	]);
 	agentScheduleBridges = [piScheduleBridge];
 	agentBrowserBridge = browserBridge;
@@ -1192,6 +1207,7 @@ async function bootstrap(): Promise<void> {
 				collaborationBridge,
 				environment.GOOEYPI_COLLABORATION_TOKEN,
 			],
+			["background jobs", jobsBridge, environment.APEX_BACKGROUND_JOBS_TOKEN],
 		];
 		for (const [name, bridge, token] of claims) {
 			try {
@@ -1228,6 +1244,7 @@ async function bootstrap(): Promise<void> {
 			stateStore.getSettings().browserEnabled,
 		),
 		...collaborationBridge.environmentFor({ ...scope, harness: "pi" }),
+		...jobsBridge.environmentFor(scope),
 		GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: piFastModeExtensionPath,
 		GOOEYPI_CUA_DRIVER_PATH: stateStore.getSettings().computerUseEnabled
 			? (cuaDriver.executable() ?? undefined)
@@ -1248,6 +1265,7 @@ async function bootstrap(): Promise<void> {
 			info.sessionFile,
 			info.runtimeId,
 		);
+		jobsBridge.bindSession(environment.APEX_BACKGROUND_JOBS_TOKEN, info.sessionFile);
 	});
 	piManager.setRuntimeEndListener((environment) =>
 		revokeRuntimeCapabilities(environment, piScheduleBridge),
@@ -1281,6 +1299,7 @@ async function bootstrap(): Promise<void> {
 			extensionPathContext,
 			agents: piManager,
 			terminals,
+			backgroundJobs: jobsBridge,
 			git,
 			plugins: piPlugins,
 			catalog: piCatalog,
@@ -1521,6 +1540,7 @@ app.on("before-quit", (event) => {
 		agentBrowserBridge?.stop() ?? Promise.resolve(),
 		extensionBrowserBridge?.stop() ?? Promise.resolve(),
 		agentCollaborationBridge?.stop() ?? Promise.resolve(),
+		backgroundJobBridge?.stop() ?? Promise.resolve(),
 		automation?.stop() ?? Promise.resolve(),
 		terminals?.killAll() ?? Promise.resolve(),
 		piAgents?.stopAll() ?? Promise.resolve(),

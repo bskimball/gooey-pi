@@ -464,6 +464,33 @@ export interface TerminalSelectionContext { tabId: string; label: string; text: 
 export interface TerminalPromptContext extends TerminalSelectionContext { cwd?: string }
 export interface TerminalActiveContext { label: string; content: string; truncated: boolean }
 
+/** An agent background job (bg_start) mirrored read-only into the terminal drawer. */
+export type BackgroundJobStatus = 'running' | 'completed' | 'failed' | 'killed'
+export interface BackgroundJob {
+  key: string
+  id: string
+  sessionFile: string
+  title: string
+  command: string
+  cwd: string
+  pid?: number
+  persistent: boolean
+  startedAt: number
+  endedAt?: number
+  status: BackgroundJobStatus
+  exitCode: number | null
+  signal: string | null
+  stopping: boolean
+  /** False while no agent runtime is attached to receive stop requests. */
+  connected: boolean
+}
+export interface BackgroundJobSnapshot extends BackgroundJob { output: string }
+export type BackgroundJobEvent =
+  | { type: 'started'; job: BackgroundJob; output: string }
+  | { type: 'updated'; job: BackgroundJob }
+  | { type: 'output'; key: string; data: string }
+  | { type: 'removed'; key: string }
+
 export type MessageEnterAction = 'queue' | 'steer'
 export type PromptDeliveryIntent = 'queue' | 'steer'
 
@@ -849,6 +876,12 @@ export interface ApexApi {
     kill(terminalId: string): Promise<boolean>
     onData(callback: (event: TerminalDataEvent) => void): () => void
     onExit(callback: (event: TerminalExitEvent) => void): () => void
+  }
+  backgroundJobs: {
+    list(): Promise<BackgroundJobSnapshot[]>
+    stop(key: string): Promise<boolean>
+    dismiss(key: string): Promise<boolean>
+    onEvent(callback: (event: BackgroundJobEvent) => void): () => void
   }
   git: { status(cwd: string): Promise<GitStatus>; diff(cwd: string, path?: string, staged?: boolean): Promise<GitDiff>; stage(cwd: string, paths: string[]): Promise<boolean>; unstage(cwd: string, paths: string[]): Promise<boolean>; restore(cwd: string, paths: string[]): Promise<boolean>; commit(cwd: string, message: string): Promise<ProcessOutcome> }
   plugins: {

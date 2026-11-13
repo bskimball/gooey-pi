@@ -1,15 +1,18 @@
-import { ArrowsInSimple, ArrowsOutSimple, Plus, Terminal as TerminalIcon, Trash, X } from './icons'
+import { ArrowsInSimple, ArrowsOutSimple, Lightning, Plus, Square, Terminal as TerminalIcon, Trash, X } from './icons'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { terminalViewMachine } from './terminalViewMachine'
-import { Terminal, type ITheme } from '@xterm/xterm'
+import { terminalTheme } from './terminalTheme'
+import { BackgroundJobView } from './BackgroundJobView'
+import type { BackgroundJobOutput } from '@/hooks/useBackgroundJobs'
+import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { boundTerminalText, TERMINAL_CONTEXT_MAX_CHARS, TERMINAL_SELECTION_MAX_CHARS } from '@/lib/terminal-context'
 import { openExternalUrl } from '@/lib/desktop-actions'
 import { terminalLinkOpensExternally } from '@/lib/terminal-links'
-import type { TerminalPromptContext } from '@/types/api'
+import type { BackgroundJob, TerminalPromptContext } from '@/types/api'
 import { IconButton } from './ui'
 import { ResizeHandle } from './ResizeHandle'
 
@@ -19,6 +22,12 @@ interface TerminalDrawerProps {
   sessionPath?: string
   shell?: string
   initialCommand?: { id: string; command: string; label: string; onExit(outcome: TerminalCommandOutcome): void }
+  /** Open without a shell tab; used when the drawer opens to show an agent background job. */
+  startEmpty?: boolean
+  jobs?: BackgroundJob[]
+  jobOutput?: BackgroundJobOutput
+  onStopJob?(key: string): void
+  onDismissJob?(key: string): void
   height: number
   minHeight: number
   maxHeight: number
@@ -71,33 +80,6 @@ export interface TerminalDrawerHandle {
 }
 
 const MAX_TERMINAL_TABS = 8
-
-const terminalTheme = (): ITheme => {
-  const computed = getComputedStyle(document.documentElement)
-  const read = (name: string, fallback: string) => computed.getPropertyValue(name).trim() || fallback
-  return {
-    background: read('--terminal-bg', '#ffffff'),
-    foreground: read('--terminal-text', '#20201e'),
-    cursor: read('--apex', '#6b55e8'),
-    selectionBackground: read('--terminal-selection', '#c8beff99'),
-    black: read('--terminal-black', '#242423'),
-    red: read('--terminal-red', '#b42318'),
-    green: read('--terminal-green', '#18794e'),
-    yellow: read('--terminal-yellow', '#8a5a00'),
-    blue: read('--terminal-blue', '#2768b4'),
-    magenta: read('--terminal-magenta', '#7b4bb7'),
-    cyan: read('--terminal-cyan', '#197a7d'),
-    white: read('--terminal-white', '#686863'),
-    brightBlack: read('--terminal-bright-black', '#8b8b83'),
-    brightRed: read('--terminal-bright-red', '#b42318'),
-    brightGreen: read('--terminal-bright-green', '#18794e'),
-    brightYellow: read('--terminal-bright-yellow', '#8a5a00'),
-    brightBlue: read('--terminal-bright-blue', '#2768b4'),
-    brightMagenta: read('--terminal-bright-magenta', '#7046a3'),
-    brightCyan: read('--terminal-bright-cyan', '#177f83'),
-    brightWhite: read('--terminal-bright-white', '#20201e'),
-  }
-}
 
 function readTerminalContent(terminal: Terminal): { content: string; contentTruncated: boolean } {
   const buffer = terminal.buffer.active
@@ -315,18 +297,37 @@ function createTab(number: number, shell?: string, command?: string, label?: str
     label,
   }
 }
-export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(function TerminalDrawer({ visible = true, cwd, sessionPath, shell, initialCommand, height, minHeight, maxHeight, defaultHeight, onHeightChange, onClose, onError, onInitialCommandConsumed, onOpenLink, onReady, onSelectionChange }, ref) {
-  const firstTabRef = useRef<TerminalTab | undefined>(undefined)
+export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(function TerminalDrawer({ visible = true, cwd, sessionPath, shell, initialCommand, startEmpty = false, jobs = [], jobOutput, onStopJob, onDismissJob, height, minHeight, maxHeight, defaultHeight, onHeightChange, onClose, onError, onInitialCommandConsumed, onOpenLink, onReady, onSelectionChange }, ref) {
+  const firstTabRef = useRef<TerminalTab | null | undefined>(undefined)
   const commandExitsRef = useRef(new Map<string, (outcome: TerminalCommandOutcome) => void>())
-  if (!firstTabRef.current) {
-    firstTabRef.current = createTab(1, shell, initialCommand?.command, initialCommand?.label, initialCommand?.id)
+  if (firstTabRef.current === undefined) {
+    firstTabRef.current = startEmpty && !initialCommand ? null : createTab(1, shell, initialCommand?.command, initialCommand?.label, initialCommand?.id)
     if (initialCommand) commandExitsRef.current.set(initialCommand.id, initialCommand.onExit)
   }
   const nextNumberRef = useRef(2)
   const viewRefs = useRef(new Map<string, TerminalViewHandle>())
-  const [tabs, setTabs] = useState<TerminalTab[]>(() => [firstTabRef.current!])
-  const [activeTabId, setActiveTabId] = useState(() => firstTabRef.current!.id)
+  const [tabs, setTabs] = useState<TerminalTab[]>(() => firstTabRef.current ? [firstTabRef.current] : [])
+  const [activeTabId, setActiveTabId] = useState(() => firstTabRef.current?.id ?? '')
   const [maximized, setMaximized] = useState(false)
+  const [hiddenJobKeys, setHiddenJobKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const knownJobKeysRef = useRef(new Set<string>())
+  const visibleJobs = jobs.filter((job) => !hiddenJobKeys.has(job.key))
+  const activeJob = visibleJobs.find((job) => job.key === activeTabId)
+
+  // Newly started jobs take focus; jobs that already existed when the drawer mounted do not.
+  useEffect(() => {
+    const fresh = jobs.filter((job) => !knownJobKeysRef.current.has(job.key))
+    for (const job of fresh) knownJobKeysRef.current.add(job.key)
+    const focus = fresh.filter((job) => job.status === 'running' && Date.now() - job.startedAt < 15_000).at(-1)
+    if (focus) setActiveTabId(focus.key)
+  }, [jobs])
+
+  // Keep a valid selection when the active job tab is removed or hidden.
+  useEffect(() => {
+    if (tabs.some((tab) => tab.id === activeTabId) || visibleJobs.some((job) => job.key === activeTabId)) return
+    const fallback = tabs.at(-1)?.id ?? visibleJobs.at(-1)?.key
+    if (fallback) setActiveTabId(fallback)
+  }, [activeTabId, tabs, visibleJobs])
   const tabsRef = useRef(tabs)
   const activeTabIdRef = useRef(activeTabId)
   const onSelectionChangeRef = useRef(onSelectionChange)
@@ -381,14 +382,21 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
     const index = tabs.findIndex((tab) => tab.id === tabId)
     if (index === -1) return
     finishCommand(tabId, { cancelled: true })
-    if (tabs.length === 1) {
+    if (tabs.length + visibleJobs.length === 1) {
       onClose()
       return
     }
     const nextTabs = tabs.filter((candidate) => candidate.id !== tabId)
     setTabs(nextTabs)
     viewRefs.current.delete(tabId)
-    if (activeTabId === tabId) setActiveTabId(nextTabs[Math.min(index, nextTabs.length - 1)].id)
+    if (activeTabId === tabId) setActiveTabId(nextTabs[Math.min(index, nextTabs.length - 1)]?.id ?? visibleJobs.at(-1)?.key ?? '')
+  }
+
+  // Closing a running job's tab only hides it; the agent still owns the process.
+  const closeJob = (job: BackgroundJob) => {
+    if (tabs.length + visibleJobs.length === 1) onClose()
+    if (job.status === 'running') setHiddenJobKeys((current) => new Set(current).add(job.key))
+    else onDismissJob?.(job.key)
   }
 
   const updateTab = (tabId: string, state: Pick<TerminalTab, 'shellName' | 'connected'>) => {
@@ -418,10 +426,21 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
               <button type="button" className="terminal-tab__close" aria-label={`Close tab ${tab.number}`} onClick={() => closeTerminal(tab.id)}><X size={11}/></button>
             </div>
           ))}
+          {visibleJobs.map((job) => (
+            <div className={`terminal-tab ${job.key === activeTabId ? 'is-active' : ''}`} key={job.key}>
+              <button type="button" role="tab" aria-selected={job.key === activeTabId} title={`${job.id} · ${job.command}`} onClick={() => setActiveTabId(job.key)}>
+                <Lightning size={14}/>
+                <span>{job.title}</span>
+                <span className={`terminal-live-dot ${job.status === 'running' ? 'is-connected' : ''}`}/>
+              </button>
+              <button type="button" className="terminal-tab__close" aria-label={job.status === 'running' ? `Hide ${job.id}` : `Dismiss ${job.id}`} onClick={() => closeJob(job)}><X size={11}/></button>
+            </div>
+          ))}
           <IconButton label="New terminal" size="small" disabled={tabs.length >= MAX_TERMINAL_TABS} onClick={addTerminal}><Plus size={14}/></IconButton>
         </div>
         <div className="terminal-actions">
           <span className="terminal-cwd" title={cwd}>{cwd?.split('/').at(-1) ?? 'No project'}</span>
+          {activeJob?.status === 'running' ? <IconButton label={activeJob.stopping ? `Stopping ${activeJob.id}` : `Stop ${activeJob.id}`} disabled={activeJob.stopping || !activeJob.connected} onClick={() => onStopJob?.(activeJob.key)}><Square size={12}/></IconButton> : null}
           <IconButton label="Clear terminal" onClick={() => viewRefs.current.get(activeTabId)?.clear()}><Trash size={13}/></IconButton>
           <IconButton label={maximized ? 'Restore terminal' : 'Maximize terminal'} onClick={() => setMaximized((value) => !value)}>{maximized ? <ArrowsInSimple size={13}/> : <ArrowsOutSimple size={13}/>}</IconButton>
           <IconButton label="Close terminal" onClick={onClose}><X size={14}/></IconButton>
@@ -448,6 +467,9 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
             onExit={(outcome) => finishCommand(tab.id, outcome)}
           />
         ))}
+        {jobOutput ? visibleJobs.map((job) => (
+          <BackgroundJobView key={job.key} job={job} output={jobOutput} visible={visible && job.key === activeTabId} onOpenLink={onOpenLink}/>
+        )) : null}
       </div>
     </section>
   )
