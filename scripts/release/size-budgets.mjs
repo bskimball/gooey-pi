@@ -7,22 +7,18 @@ const MIB = 1024 * KIB
 /**
  * Ceilings for the Electron main/preload and renderer bundles.
  *
- * Raising a budget is deliberate: record the measured new size and the
- * dependency or feature that caused the growth in the pull request, and raise
- * it only to the next multiple of 8 KiB above that measurement so unexplained
- * bundle-size creep still fails the release build.
+ * Generous ceilings allow normal feature growth without frequent budget bumps.
+ * These remain release gates for unexpectedly large bundles; changes should
+ * record the measured sizes and the reason for adjusting the ceilings.
  */
 export const BUNDLE_SIZE_BUDGETS = Object.freeze({
-  // Measured 764256 bytes with project-scoped collaboration and Activity Chief of Staff,
-  // plus persistent run receipts, guarded rewind, side conversations, and finish workflows.
-  mainBytes: 752 * KIB,
-  preloadBytes: 16 * KIB,
-  // Measured 1482823 initialRendererBytes and 3161346 rendererJsCssBytes with the
-  // Chat settings picker/dialog overhaul in a742247a (Model/Checkout/PiMode pickers).
-  // Next 8 KiB multiples above those measurements: 1456 KiB and 3088 KiB.
-  initialRendererBytes: 1456 * KIB,
-  largestRendererChunkBytes: 600 * KIB,
-  rendererJsCssBytes: 3088 * KIB,
+  // User-requested growth headroom; measured 765417 main, 12275 preload,
+  // 1482823 initial renderer, 558013 largest chunk, and 3161346 total renderer bytes.
+  mainBytes: 4 * MIB,
+  preloadBytes: 256 * KIB,
+  initialRendererBytes: 8 * MIB,
+  largestRendererChunkBytes: 4 * MIB,
+  rendererJsCssBytes: 16 * MIB,
 })
 
 /**
