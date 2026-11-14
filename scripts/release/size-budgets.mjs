@@ -17,11 +17,12 @@ export const BUNDLE_SIZE_BUDGETS = Object.freeze({
   // plus persistent run receipts, guarded rewind, side conversations, and finish workflows.
   mainBytes: 752 * KIB,
   preloadBytes: 16 * KIB,
-  // Measured 1434053 initialRendererBytes and 3139241 rendererJsCssBytes with the
-  // Activity Chief of Staff pane, contextual excerpts, and run/rewind/side/finish controls.
-  initialRendererBytes: 1408 * KIB,
+  // Measured 1482823 initialRendererBytes and 3161346 rendererJsCssBytes with the
+  // Chat settings picker/dialog overhaul in a742247a (Model/Checkout/PiMode pickers).
+  // Next 8 KiB multiples above those measurements: 1456 KiB and 3088 KiB.
+  initialRendererBytes: 1456 * KIB,
   largestRendererChunkBytes: 600 * KIB,
-  rendererJsCssBytes: 3072 * KIB,
+  rendererJsCssBytes: 3088 * KIB,
 })
 
 /**
