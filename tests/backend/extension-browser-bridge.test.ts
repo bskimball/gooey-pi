@@ -9,7 +9,7 @@ import {
 import {
 	ExtensionBrowserBridge,
 	type ExtensionCommand,
-} from "../../apps/desktop/electron/main/browser/extension-bridge";
+} from "apex-core/browser/extension-bridge";
 import { readPageScript } from "apex-core/browser/page-scripts";
 
 const sessionA = resolve("/sessions/a.jsonl");

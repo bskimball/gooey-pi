@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentCollaborationBridge } from '../../apps/desktop/electron/main/collaboration/agent-bridge'
-import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
+import { configureGooeyPiAgentMessageSigning, parseGooeyPiAgentMessage } from 'apex-core/collaboration/message-envelope'
 import type { AgentRpcManager } from '../../apps/desktop/electron/main/agent-rpc'
 import type { ApexEventEnvelope, HarnessId, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 

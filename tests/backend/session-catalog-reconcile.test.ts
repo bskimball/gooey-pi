@@ -17,9 +17,9 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createBucketedCatalogIo } from '../../apps/desktop/electron/main/sessions/bucketed'
-import { SessionMetadataCatalog, type SessionCatalogEntry, type SessionCatalogIo } from '../../apps/desktop/electron/main/sessions/catalog'
-import type { SessionMetadata } from '../../apps/desktop/electron/main/sessions/metadata'
+import { createBucketedCatalogIo } from 'apex-core/sessions/bucketed'
+import { SessionMetadataCatalog, type SessionCatalogEntry, type SessionCatalogIo } from 'apex-core/sessions/catalog'
+import type { SessionMetadata } from 'apex-core/sessions/metadata'
 
 const root = resolve('/sessions')
 const realDirectories: string[] = []

@@ -1,6 +1,6 @@
 {
 	"name": "gooeypi",
-	"version": "1.1.33",
+	"version": "1.1.34",
 	"private": true,
 	"workspaces": [
 		"apps/*",
@@ -19,14 +19,14 @@
 	"scripts": {
 		"dev": "node scripts/build-browser-agent.mjs && electron-vite dev",
 		"dev:inspect": "node scripts/build-browser-agent.mjs && electron-vite dev --remoteDebuggingPort 9222",
-		"build": "npm run typecheck && npm run build:bundle",
+		"build": "node scripts/run-parallel.mjs",
 		"build:apps": "npm run build",
 		"build:theme": "npm run package --workspace=packages/vscode-theme",
 		"build:vscode": "npm run package --workspace=packages/vscode",
 		"build:all": "npm run build:theme && npm run build:apps && npm run build:vscode",
-		"build:bundle": "electron-vite build && node scripts/build-browser-agent.mjs",
+		"build:bundle": "node scripts/run-parallel.mjs --bundle-only",
 		"preview": "electron-vite preview",
-		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.extensions.json && tsc --noEmit -p tsconfig.browser-agent.json && npm run typecheck --workspace=packages/vscode",
+		"typecheck": "node scripts/typecheck.mjs",
 		"lint": "oxlint -c .oxlintrc.json apps packages scripts tests electron.vite.config.ts playwright.config.ts vitest.config.ts",
 		"format": "oxfmt -c .oxfmtrc.json --write apps packages scripts tests electron.vite.config.ts playwright.config.ts vitest.config.ts",
 		"format:check": "oxfmt -c .oxfmtrc.json --check scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",

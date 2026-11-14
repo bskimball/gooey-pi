@@ -23,7 +23,7 @@
     "build:host": "vite build --config vite.host.config.ts && node scripts/copy-browser.mjs",
     "build:webview": "vite build",
     "build": "npm run build:host && npm run build:webview",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs --vscode-only",
     "package": "npm run build && node -e \"fs.mkdirSync('../../release', { recursive: true })\" && vsce package --no-dependencies --allow-missing-repository --skip-license --out ../../release"
   },
   "contributes": {

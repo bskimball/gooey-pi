@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readSessionMetadata } from '../../apps/desktop/electron/main/sessions/metadata'
-import { promptTitle, readTranscript } from '../../apps/desktop/electron/main/sessions/transcript'
-import { configureGooeyPiAgentMessageSigning, encodeGooeyPiAgentMessage, loadOrCreateGooeyPiAgentMessageKey, parseGooeyPiAgentMessage } from '../../apps/desktop/electron/main/collaboration/message-envelope'
+import { readSessionMetadata } from 'apex-core/sessions/metadata'
+import { promptTitle, readTranscript } from 'apex-core/sessions/transcript'
+import { configureGooeyPiAgentMessageSigning, encodeGooeyPiAgentMessage, loadOrCreateGooeyPiAgentMessageKey, parseGooeyPiAgentMessage } from 'apex-core/collaboration/message-envelope'
 
 const dirs: string[] = []
 configureGooeyPiAgentMessageSigning(Buffer.alloc(32, 7))

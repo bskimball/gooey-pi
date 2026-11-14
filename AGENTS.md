@@ -1,52 +1,64 @@
-# Repository engineering guidance
+# AGENTS.md
 
-## File size
+## Commands
 
-Keep handwritten production files at or below 750 lines when practical. Treat 750 lines as a review threshold, not a reason to create arbitrary wrapper modules or split cohesive logic.
+Run from repo root (Node `24.21.0` via `.nvmrc`; run `nvm use` if `node -v` differs):
 
-When changing an existing production file above the threshold, avoid increasing its size unless the change cannot be separated without weakening cohesion. Prefer extracting a complete responsibility with a narrow interface, and explain any intentional exception in the pull request.
-
-This threshold does not apply to tests, generated files, vendored code, lockfiles, fixtures, or data assets. Correctness, security boundaries, and maintainable ownership take precedence over line count.
-
-## Cloud Agent environment
-
-Cloud Agents provision this repo with [`.cursor/environment.json`](.cursor/environment.json),
-whose `install` step runs [`.cursor/install.sh`](.cursor/install.sh) on Cursor's
-default Ubuntu image. That script pins Node via `.nvmrc` (24.21.0) with `nvm`,
-installs the Electron/xvfb system libraries, bootstraps the repo-pinned npm, and
-runs `npm ci`. Canonical toolchain and check commands live in
-[`docs/validation.md`](docs/validation.md); do not restate versions here.
-
-`node`/`npm` come from `nvm`. A harness shell can be shadowed by another `node`
-on `PATH`, so select the pinned toolchain before running `node`/`npm` if `node
--v` is not `v24.21.0`:
-
-```
-export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use >/dev/null
+```bash
+npm run dev                  # build browser-agent + launch electron-vite dev
+npm run build                # build desktop app
+npm run build:all            # build vscode-theme, desktop, and vscode extension
+npm run typecheck            # project-wide TypeScript check
+npm run check                # oxlint + oxfmt check
+npm test                     # vitest unit/integration suite
+npm run test:e2e:hermetic    # Playwright Electron e2e (needs built app)
+npm run release:verify:package # preflight + vendor check + typecheck + check + coverage + bundle size
 ```
 
-Apex is a GUI Electron app with no background services, so there is nothing to
-auto-start. To run the app or the Playwright Electron e2e suite headlessly, wrap
-the command with a virtual display:
+On headless Linux, wrap GUI/e2e commands with `xvfb-run -a`. Authoritative CI/release gates live in [`docs/validation.md`](docs/validation.md).
 
-```
-xvfb-run -a npm run dev              # launch the desktop app
-xvfb-run -a npm run test:e2e:hermetic # build + hermetic Electron e2e
-```
+## Structure
 
-Some xterm/PTY-driven e2e cases in `tests/e2e/app.spec.ts` are timing-sensitive
-under headless `xvfb` and can fail where they pass on the macOS CI runner that
-owns the `hermetic-e2e` gate.
+- `apps/desktop/` — Electron app
+  - `electron/main/` — main-process services, IPC, Pi RPC manager, loopback brokers
+  - `electron/preload/` — frozen context-isolated preload bridge
+  - `src/` — React renderer (`app/`, `components/`, `hooks/`, `lib/`, `pages/`, `styles/`)
+  - `assets/extensions/` — bundled Pi capability extensions
+  - `browser-agent/` — Pi Durable browser sub-agent runtime
+- `packages/`
+  - `core/` (`apex-core`) — shared types, JSONL/session parsing, `effect/Schema` validation, collaboration/browser helpers
+  - `ui/` (`apex-ui`) — shared React components, Astryx theme setup, StyleX primitives, XState questionnaire machine
+  - `vscode/` & `vscode-theme/` — VS Code extension, webview, and theme
+  - `browser-extension/` — browser extension integration
+- `scripts/` — build, typecheck, and `scripts/release/` verification/packaging scripts
+- `tests/` — Vitest (`backend/`, `frontend/`, root gate tests) and Playwright (`e2e/`)
+
+Keep handwritten production files `<= 750` lines when practical; split by cohesive responsibility, not arbitrary wrappers.
+
+## Astryx (`@astryxdesign/core`)
+
+- Prefer `@astryxdesign/core` primitives (`Button`, `Badge`, `Banner`, `Dialog`, `TabList`, `TextInput`, `TextArea`, `Selector`, `EmptyState`).
+- Theme `apex` is defined/registered in `packages/ui/src/ui.tsx` (`data-astryx-theme="apex"`).
+- Import `@astryxdesign/core/astryx.css` before `apps/desktop/src/styles/astryx-tokens.css` (`layer(astryx-theme)`).
+
+## StyleX (`@stylexjs/stylex`)
+
+- Compiled via `stylex.vite({ runtimeInjection: false, ... })` in `electron.vite.config.ts`.
+- Cascade order in `apps/desktop/src/styles.css`:
+  `reset, apex-base, astryx-base, astryx-theme, apex, stylex, apex-overrides, apex-sidebar, apex-responsive`.
+- Author styles with `stylex.create(...)` and apply with `stylex.props(...)`; keep contextual/sidebar/responsive overrides in their higher layers rather than fighting StyleX specificity.
+
+## Effect (`effect`)
+
+- Used selectively for typed boundary validation (`effect/Schema` in `packages/core/src/validation.ts`) and cancellable async IPC (`effect/Effect` + `AbortController` in `apps/desktop/electron/main/effective-config-ipc.ts`).
+- Do not introduce Effect as a global app runtime; XState owns application lifecycle.
+
+## XState (`xstate`, `@xstate/react`)
+
+- v5 API: `setup`, `assign`, `initialTransition`, `transition`, `createActor`.
+- Use pure `initialTransition` / `transition` for deterministic state reducers (e.g. `apps/desktop/src/App.tsx`, `packages/core/src/browser/extension-bridge.ts`, `packages/vscode/src/pi-rpc.ts`).
+- Use `useMachine` / `useActorRef` / `useSelector` from `@xstate/react` for stateful UI/hooks.
 
 ## pstack
 
-This repository vendors [pstack](https://github.com/cursor/plugins/tree/main/pstack) under `.agents/skills/pstack/` so Cloud Agents can run `/poteto-mode` and the rest of the skill set. Subagents live in `.cursor/agents/`. Per-role model overrides live in `.cursor/rules/pstack-models.mdc`.
-
-pstack skills read `~/.cursor/rules/pstack-models.mdc`. Cloud Agents do not inherit that user-level path. If it is missing, copy the workspace rule before running a pstack skill:
-
-```
-mkdir -p ~/.cursor/rules
-cp .cursor/rules/pstack-models.mdc ~/.cursor/rules/pstack-models.mdc
-```
-
-Re-run `/setup-pstack` to change role models. Only write Task `model` slugs that are available in the current session.
+Vendored under `.agents/skills/pstack/` with rules in `.cursor/rules/pstack-models.mdc`. If `~/.cursor/rules/pstack-models.mdc` is missing, copy it there before running pstack skills.

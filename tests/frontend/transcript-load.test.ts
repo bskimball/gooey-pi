@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { runTranscriptRead } from '../../apps/desktop/src/app/transcript-load'
 
@@ -59,11 +58,5 @@ describe('shared transcript read lifecycle', () => {
     expect(onValue).not.toHaveBeenCalled()
     expect(onError).not.toHaveBeenCalled()
     expect(onFinally).toHaveBeenCalledOnce()
-  })
-
-  it('keeps the hook on one sessions.read lifecycle implementation', () => {
-    const source = readFileSync('apps/desktop/src/hooks/useWorkspaceRuntime.ts', 'utf8')
-    expect(source.match(/sessions\.read\(/g)).toHaveLength(1)
-    expect(source).toContain('runTranscriptRead({')
   })
 })

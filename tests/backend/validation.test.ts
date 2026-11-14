@@ -11,7 +11,7 @@ import {
   requireSelfHostedVoiceUrl,
   requireString,
   requireWebUrl,
-} from '../../apps/desktop/electron/main/validation'
+} from 'apex-core/validation'
 
 const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })

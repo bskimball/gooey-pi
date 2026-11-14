@@ -56,7 +56,7 @@ vi.mock('vscode', () => ({
 import * as vscode from 'vscode'
 import { ApexSession } from '../../packages/vscode/src/apex-session'
 import { editorContext, editorFileContext, editorRequest, scopedEditorRequest } from '../../packages/vscode/src/editor'
-import editorExtension from '../../packages/vscode/src/editor-extension'
+import editorExtension from '../../apps/desktop/assets/extensions/apex-editor'
 
 const directories: string[] = []
 afterEach(async () => {

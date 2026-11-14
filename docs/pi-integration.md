@@ -1,84 +1,59 @@
-# Pi (pi.dev) integration design
+# Pi integration
 
-> **Status:** Pi is now GooeyPi's only runtime; OMP and Prime Agent support has been removed. References below to Prime, OMP, the harness switcher, per-harness state describe the original multi-harness design and are historical. Shared extensions may keep `apex-*` filenames and APIs may keep `ApexApi`/`window.apex`/storage names.
-
-This document is the working spec for adding base Pi (`pi`, [pi.dev](https://pi.dev/), the pi-mono coding agent) as an agent harness. The shared transport, event, and UI machinery is reused wherever the protocols agree, and a per-harness adapter covers what differs. This document records pi-specific facts and decisions.
+Pi (`pi`, [pi.dev](https://pi.dev/)) is GooeyPi's agent runtime.
 
 ## Pi 1.5.0 compatibility
 
-The external CLI release is [Pi 1.5.0](https://github.com/earendil-works/pi/releases/tag/v1.5.0). Root dependencies `@earendil-works/chord`, `pi-ai`, `pi-durable`, and `pi-schema` are pinned to `1.5.0`. The browser sub-agent uses `pi-schema` builders because the upgraded libraries no longer supply its transitive `typebox` dependency. Injected extensions continue resolving schemas through Pi's host loader.
+- External CLI release: [Pi 1.5.0](https://github.com/earendil-works/pi/releases/tag/v1.5.0). Root dependencies `@earendil-works/chord`, `pi-ai`, `pi-durable`, and `pi-schema` are pinned to `1.5.0`.
+- `browser-agent/` uses `pi-schema` builders (the upgraded libraries no longer provide transitive `typebox`). Injected extensions resolve schemas via Pi's host loader.
+- `postinstall` applies a local, idempotent, version-scoped Pi Durable 1.5.0 submission-wait cancellation fix (checks for an aborted context before registering a `Session` read waiter).
+- Desktop and VS Code share `PiModeControl` (`apex-ui`). The mode parser accepts decorated labels (`Utopia · +Sidekick`, `Apex · Inline`). Utopia remains distinct under Hydra: it shows ordinary model/thinking controls and the Hydra tier selector (sending `/mode utopia` and `/mode hydra standard|high|max|off|sync`), not Fusion pair controls.
+- Session metadata stores Utopia as `behaviorMode: 'utopia:<tier>'` (or `'utopia'` without Hydra) and reads its model from `models.utopia`; the disposable metadata cache is invalidated so previously misparsed sessions rescan.
 
-`postinstall` applies a local, version-scoped Pi Durable 1.5.0 submission-wait cancellation fix. It checks for an aborted context before registering a waiter inside the Session read, preventing an already-rejected promise from being delivered late and reported as unhandled. The patch is idempotent, rejects unexpected 1.5.0 source, and leaves other versions untouched.
+## CLI flags and paths
 
-Desktop and VS Code reuse `PiModeControl` through `apex-ui`. The shared mode parser accepts decorated labels such as `Utopia · +Sidekick` and `Apex · Inline`. Utopia remains distinct when Hydra is active. It shows ordinary model/thinking controls and the Hydra tier selector, not Fusion pair controls, because its sidekick model is selected dynamically. Mode selection sends `/mode utopia`; Hydra controls send `/mode hydra standard|high|max|off|sync`.
+- **Executable**: `pi` (`pi.exe` on Windows; resolved via `$PI_BINARY`, `PATH`, bounded shared dirs, and `pi.cmd` -> `@earendil-works/pi-coding-agent/dist/cli.js`).
+- **Spawn (`pi --mode rpc`)**:
+  - **No `--cwd` flag**: the runtime manager spawns `pi` with the authorized working directory as the child process `cwd`.
+  - **Resume**: `--session <path>` (exact file path; never use interactive `--resume`).
+  - **Model / thinking**: `--provider <name> --model <id>` and `--thinking <off|minimal|low|medium|high|xhigh|max>`.
+  - **Extensions**: `--extension <path>` (`-e <path>`) per injected capability extension.
+  - **Model catalog probe**: `pi --mode rpc --no-session --offline` sending `get_available_models` (`--list-models` prints a table even under `--mode json`). Probe uses single-flight, TTL, byte-bounded stdout, kill-on-timeout, and sanitized env.
+- **Paths**:
+  - Agent dir: `~/.pi/agent/` (`settings.json`, `extensions/`, `skills/`, `models-store.json`, `auth.json`, `trust.json`).
+  - Sessions: `~/.pi/agent/sessions/--<cwd-with-slashes-as-dashes>--/<ISO-timestamp-dashes>_<uuidv7>.jsonl`.
+- **Session format (v3 JSONL)**:
+  - Header: `{"type":"session","version":3,"id":"<uuidv7>","timestamp":"<ISO>","cwd":"<abs path>"}`.
+  - Tree entries linked by `id`/`parentId` (`parentId: null` roots): `message`, `model_change` (split `provider` + `modelId`), `thinking_level_change`, `compaction`, `branch_summary`, `custom`, `custom_message`, `label`, and `session_info` (latest `name` wins).
+  - Session JSONL is read-only; offline rename is disabled.
 
-Session metadata retains Utopia as `behaviorMode: 'utopia:<tier>'`, or `'utopia'` without Hydra, and reads its model choice from `models.utopia`. The disposable metadata cache is invalidated so previously misparsed sessions are rescanned. Pi 1.5.0 retains the RPC commands used by the app and session JSONL v3. Credentials and trust decisions remain host-owned; the app does not read or write `auth.json` or `trust.json`.
+## RPC protocol
 
-The sections below preserve the original integration design and its older validation baseline.
+- **Transport**: JSONL request/response (`{type:'response', id, command, success, data|error}`). No startup `ready` frame, protocol negotiation, or chunked frames. Handshake is `get_state` -> `get_session_stats`.
+- **`get_state`**: returns `model`, `thinkingLevel`, `isStreaming`, `isCompacting`, `steeringMode`, `followUpMode`, `sessionId`, `autoCompactionEnabled`, `messageCount`, `pendingMessageCount`. Does not return `serviceTier`, `fastModeEnabled`, or `contextUsage` (`readState` returns `{}`).
+- **`get_session_stats`**: returns `contextUsage: {tokens, contextWindow, percent}`, `cost`, and `tokens: {input, output, cacheRead, cacheWrite, total}`, which map to `RuntimeInfo.sessionUsage` and `session_usage` events.
+- **Supported commands**: `get_state`, `get_available_models`, `get_session_stats`, `set_session_name` (also emits `session_info_changed`), `get_commands`, `fork`, `get_fork_messages`. Unknown commands return `success: false`.
+- **Fast mode**: `set_service_tier` maps to `/gooeypi-fast-mode default|priority` via prompt RPC. The bundled `pi-work-fast-mode.ts` extension updates runtime-local state and sets `service_tier` on supported OpenAI Codex requests in `before_provider_request`.
+- **Unsupported commands** (rejected with error): `send_message`, `set_heartbeat`, `update_heartbeat`, `manage_heartbeat`, `observe`, `unobserve`, `list_heartbeats`, `get_heartbeat`, `agent_messages_*` (`clone` semantics also differ). Approval-mode selection is unavailable (Pi has no permission prompt system).
 
-## Product behavior
+## Capability extensions
 
-- The sidebar brand switcher gains a third entry: **Pi Work** (π mark, `PiMark` in `src/components/ui.tsx`).
-- Each harness keeps its own granted projects, session catalog, model catalog, and runtimes; `settings.activeHarness` accepts `'pi'`.
-- All existing features work on pi where the harness supports them: streaming transcripts, steering/follow-ups, abort, model + thinking selection, compaction, session resume/switch/rename/fork, extension-UI dialogs, browser capability bridge, scheduled tasks (injected extension, same as OMP), git/terminal.
-- Fast mode is available for the same supported OpenAI Codex model families as Prime and OMP. Pi has no native service-tier RPC command, so GooeyPi injects `pi-work-fast-mode.ts`: a private slash command changes runtime-local state and a `before_provider_request` hook applies `service_tier` to supported requests. Approval mode remains unavailable (pi has no permission system; tool calls run unprompted, like a permanently-yolo OMP — the settings select is not shown), provider OAuth management is CLI-owned (`~/.pi/agent/auth.json` is never read or written), and daemon-socket follow-up remains Prime-only.
-- Pi credentials: `~/.pi/agent/auth.json` and `trust.json` are never touched. A `piDisabledProviders` desktop-state list controls picker visibility only, mirroring `ompDisabledProviders`.
+Injected extensions use Pi's `(pi) => void` / `pi.registerTool` API and live under `assets/extensions/`:
 
-## Pi facts (verified on this machine, pi 0.84.1)
+- `apex-browser.ts`: browser capability bridge.
+- `apex-browser-agent.ts`: injected with the browser capability; adds `browser_run` (batched role/name steps with expectations and page diff) and `browser_task` (delegated to a Pi Durable sub-agent). Lazily imports `APEX_BROWSER_AGENT_RUNTIME_PATH` (built from `browser-agent/` by `scripts/build-browser-agent.mjs`) and passes host `ctx.modelRegistry`. Model selection: tool `model` argument -> `APEX_BROWSER_AGENT_MODEL` -> session model.
+- `apex-schedules.ts`: scheduled tasks tool surface.
+- `apex-collaboration.ts`: app-owned top-level session collaboration tools (see `docs/session-collaboration.md`).
+- `apex-ask-user.ts`: injected only when **Ask user** is enabled (off by default on fresh installs).
 
-- Binary: `pi` (searched: `$PI_BINARY`, PATH, and GooeyPi's bounded shared executable directories, including npm/Bun/pnpm/mise/Volta/nvm/Homebrew locations). Installed here at `/opt/homebrew/bin/pi`.
-- Spawn for embedding: `pi --mode rpc` plus:
-  - **no `--cwd` flag exists** — the session bucket derives from the child's working directory, so the manager must spawn pi with the authorized cwd as the child process cwd.
-  - resume: `--session <path>` (exact file path; `--resume` is an *interactive selector* and must not be used).
-  - model: `--provider <name> --model <id>` (split flags, same shape as Prime; `--model` also accepts `provider/id` but we pass split flags for parity with the Prime adapter).
-  - thinking: `--thinking <off|minimal|low|medium|high|xhigh|max>`.
-  - extensions: `--extension/-e <path>` per injected capability extension; `--skill <path>` also exists but capability injection uses extensions for self-containment (same decision as OMP).
-  - `--no-session` exists (used by the model-catalog probe, never for user runtimes).
-- Paths: agent dir `~/.pi/agent/`; sessions `~/.pi/agent/sessions/--<cwd-with-slashes-as-dashes>--/<ISO-timestamp-dashes>_<uuidv7>.jsonl` (e.g. `--Users-am.will-Applications-prime--/2026-08-10T22-41-20-246Z_019fedd6….jsonl`); settings `~/.pi/agent/settings.json`; extensions `~/.pi/agent/extensions/`; skills `~/.pi/agent/skills/`; model catalog cache `models-store.json`; credentials `auth.json` + `trust.json` (never touched).
-- Sessions are **version 3** JSONL: header `{"type":"session","version":3,"id":"<uuidv7>","timestamp":"<ISO>","cwd":"<abs path>"}` then tree entries with short hex `id`/`parentId` (`parentId: null` roots). Entry types include `message`, `model_change` (split `provider` + `modelId` fields, unlike OMP's single string), `thinking_level_change`, `compaction`, `branch_summary`, `custom`, `custom_message`, `label`, `session_info` (carries the display `name`; the latest one wins). No 256-byte title slot (that is an OMP addition); offline rename stays disabled like OMP.
-- Model catalog: **no CLI JSON list** (`--list-models` prints a table even under `--mode json`). The catalog service does a short-lived RPC probe: spawn `pi --mode rpc --no-session --offline`, send `{"id":"1","type":"get_available_models"}`, read the single bounded response, terminate. Response shape: `{ models: [{ id, name, api, provider, baseUrl, reasoning, input, cost{input,output,cacheRead,cacheWrite}, contextWindow, maxTokens, thinkingLevelMap? }] }`. All output is untrusted input.
-- Target model for validation: `openai-codex/gpt-5.6-luna` (GPT-5.6 Luna, authenticated on this machine, 272K context).
+For packages, skills, and `pi-mcp-adapter` MCP integration, see `docs/capability-integrations.md`.
 
-## Protocol: Prime-shaped JSONL, no handshake extras
+## Security invariants
 
-Verified against pi 0.84.1 in `--mode rpc`:
+Same rules as `docs/security.md`:
 
-- Same request/response envelope as Prime (`id`, `{type:'response', id, command, success, data|error}`). **No `ready` frame is pushed at startup, no protocol negotiation, no chunked frames** — the Prime-style handshake (`get_state` → `updateFromState` → `get_session_stats`) applies unchanged.
-- `get_state` data: `model` (full descriptor), `thinkingLevel`, `isStreaming`, `isCompacting`, `steeringMode`, `followUpMode`, `sessionId`, `autoCompactionEnabled`, `messageCount`, `pendingMessageCount`. **No `serviceTier`, no `fastModeEnabled`, no `contextUsage`** — `readState` returns `{}`.
-- `get_session_stats` includes `contextUsage: {tokens, contextWindow, percent}` in the exact shape `parseContextUsage` expects — context usage flows through the shared stats path. The same response carries `cost` (USD summed from catalog pricing, `0` for models without pricing) and `tokens: {input, output, cacheRead, cacheWrite, total}`, which `parseSessionUsage` turns into `RuntimeInfo.sessionUsage` (missing `cost` becomes `null`) and the runtime forwards as a `session_usage` event for the composer dial tooltip and the inspector Cost row.
-- Verified commands: `get_state`, `get_available_models`, `get_session_stats`, `set_session_name` (also emits a `session_info_changed` event), `get_commands`. Unknown commands return clean `success:false` error responses.
-- Command vocabulary is Prime's: `fork`/`get_fork_messages` pass through untranslated (no `branch` rename). Events use the Prime names (`agent_start`, `turn_*`, `message_*`, `tool_execution_*`, `extension_ui_request`, `compaction_start/end`, …); `normalizeEvent` passes events through, and unknown types (`session_info_changed`, …) are forwarded for the reducer to ignore.
-- GooeyPi maps `set_service_tier` to `/gooeypi-fast-mode default|priority` through Pi's prompt RPC. The bundled extension owns that private command and adds `service_tier` only for supported OpenAI Codex requests. Unsupported by pi and rejected with a per-harness error: `send_message`; `clone` semantics differ — treat the Prime-only daemon/heartbeat family (`send_message`, `set_heartbeat`, `update_heartbeat`, `manage_heartbeat`, `observe`, `unobserve`, `list_heartbeats`, `get_heartbeat`, `agent_messages_*`) as unsupported, mirroring the OMP list.
-
-## Architecture deltas
-
-- `HARNESS_IDS` gains `'pi'`; `requireHarness`, `parseHarness`, store validation, and every `Record<HarnessId, …>` widen accordingly. The ~47 binary `harness === 'omp' ? a : b` branches become record lookups.
-- `HARNESSES.pi` descriptor: productName `Pi Work`, agentName `Pi`, executable `pi`/`pi.exe`, env `PI_BINARY`, no bundled resource dirs, posix candidates `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `windowsNpmShim` `pi.cmd` -> `@earendil-works/pi-coding-agent/dist/cli.js`, agent dir `~/.pi/agent`, session root `~/.pi/agent/sessions`.
-- `PI_RPC_ADAPTER` in `agent-rpc/harness-adapter.ts`: argv per the facts above; identity `translateCommand` except the unsupported set; identity `normalizeEvent`; `readState` returns `{}`; `buildServiceTierCommand` invokes the private bundled fast-mode command. Because pi has no `--cwd`, the adapter declares that the runtime must set the child working directory (`spawnsInCwd`), and the manager honors it without changing how Prime or OMP spawn.
-- `sessions/pi.ts` mirrors `sessions/omp.ts`: one bucket level deep, ordering from the filename ISO-timestamp prefix, v3 tree walk on `id`/`parentId`, title from the latest `session_info` entry, `model_change` from split `provider`/`modelId`. JSONL is read-only; catalog constructed with a null executable (no live-CLI overlay).
-- `providers-pi.ts`: `PiModelCatalogService` satisfies `ModelCatalogProvider` via the RPC probe (single-flight, TTL, byte-bounded stdout, kill-on-timeout, sanitized env), mapping to the existing `ApexModelCatalog` types.
-- Plugins: a pi `PluginService` scopes discovery to `~/.pi/agent/extensions`, `~/.pi/agent/skills`, project `.pi/` roots, and shared `.agents/skills`; installs go through `pi install <source>` (project scope `-l`). MCP: pi core has no native MCP. GooeyPi explicitly supports the third-party `pi-mcp-adapter` extension (`pi install npm:pi-mcp-adapter`, listed on pi.dev's package registry), which reads the standard `mcpServers` schema from `~/.pi/agent/mcp.json` (global) and project `.pi/mcp.json` (its highest-precedence override). The UI offers adapter installation first; only the canonical npm source, optionally at an exact semantic version, satisfies admission. Scoped/Git/local lookalikes remain ordinary packages. Adapter transitions and MCP writes serialize through one agent-level cross-instance lock, and the service re-checks enabled state under that lock before the hardened writer creates or changes local stdio entries. HTTP/SSE entries remain externally managed and read-only. Other Pi MCP extensions use different schemas and remain CLI-managed rather than being silently treated as compatible.
-- Capability extensions: pi's extension API is the ancestor of OMP's (`(pi) => void`, `pi.registerTool`), so `assets/extensions/apex-browser.ts`, `apex-schedules.ts`, `apex-collaboration.ts`, and `apex-ask-user.ts` are shared as-is for pi runtimes. The collaboration extension provides app-owned bounded list/models/create/read/send/wait tools for same-harness, same-working-directory top-level sessions; model-selectable creation and optional fast-mode negotiation use pi's normal catalog and RPC manager, never `switch_session` or JSONL mutation. The ask-user extension is injected only when the universal **Ask user** capability is enabled; fresh installs default it off. `apex-browser-agent.ts` is injected whenever the browser capability is, and adds `browser_run` (a batch of role/name-targeted steps with expectations and a page diff, one tool call) and `browser_task` (a goal delegated to a fast Pi Durable sub-agent). The shim stays self-contained; it lazily imports the bundled runtime from `APEX_BROWSER_AGENT_RUNTIME_PATH` (built from `browser-agent/` by `scripts/build-browser-agent.mjs`) and passes it the host `ctx.modelRegistry` for model and classifier transport. The sub-agent model is the tool's `model` argument, else `APEX_BROWSER_AGENT_MODEL`, else the session model. Any API drift found during live validation is fixed in the shared extension, not forked.
-- Schedules: records already carry their harness; `'pi'` routes to the pi RPC manager and catalog through the same executor.
-- Renderer: third switcher entry, `HARNESS_*_NAMES.pi`, fast-mode controls on supported models, and a pi settings card without the approval-mode control.
-
-## Security invariants (unchanged)
-
-Same rules as `docs/security.md`, applied to the third harness: argv arrays only, sanitized child env, path canonicalization + containment for the pi session root, session JSONL read-only, all transport/event limits identical, `~/.pi/agent/auth.json` and `trust.json` never read, IPC allowlist fixed with `harness` validated as the strict three-value enum, Prime byte-for-byte parity preserved when settings are untouched.
-
-## Phase plan
-
-1. Design doc (this file).
-2. Foundation: `HARNESS_IDS`/store/descriptor/`PI_RPC_ADAPTER`/manager cwd support + adapter tests.
-3. Parallel: pi session reader + tests; pi model catalog + tests; renderer switcher/settings + tests; pi plugin surface.
-4. Wiring: third service set in `index.ts`, `ipc.ts` record lookups, schedules/voice routing, preload/api threading.
-5. Live validation against pi 0.84.1 with `openai-codex/gpt-5.6-luna`; fixes.
-
-## Non-goals (v1)
-
-- A GooeyPi-owned Pi credential store or app-driven MCP OAuth; silently installing an MCP adapter;
-  offline session rename; importing sessions across harnesses; host tools and
-  native pi collab surfaces. GooeyPi-owned top-level session collaboration is
-  documented in `docs/session-collaboration.md`. HTTP/SSE definitions remain
-  direct adapter operations outside GooeyPi; the app intercepts rather than
-  forwards `/mcp-auth`, so authentication must be run through Pi itself.
+- Spawn commands use fixed executables and argv arrays only (no shell interpolation) with sanitized child environments.
+- Pi session root paths are canonicalized and containment-checked; session JSONL files are never mutated.
+- All RPC, stdout, and event limits are bounded.
+- `~/.pi/agent/auth.json` and `trust.json` are never read or written (`piDisabledProviders` controls picker visibility only).
+- IPC allowlists are fixed; all Pi CLI/RPC output is treated as untrusted input.

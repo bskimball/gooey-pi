@@ -272,6 +272,7 @@ export class RpcRuntime {
     // Compaction and user `!` commands legitimately outlast an ordinary RPC round trip.
     const timeout = command.type === 'compact' || command.type === 'bash' ? 10 * 60_000 : 60_000
     const response = await this.request(command, timeout)
+    if (command.type === 'abort' && response.success === true) this.activity.send({ type: 'CANCEL' })
     if (command.type === 'get_state') this.updateFromState(response.data)
     if (response.success === true && ['set_model', 'cycle_model', 'set_thinking_level', 'cycle_thinking_level'].includes(String(command.type))) {
       const state = await this.request({ type: 'get_state' }, 60_000)

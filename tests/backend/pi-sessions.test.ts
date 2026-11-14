@@ -5,14 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionService } from '../../apps/desktop/electron/main/sessions'
-import { METADATA_VERIFY_TAIL_BYTES } from '../../apps/desktop/electron/main/sessions/metadata'
+import { METADATA_VERIFY_TAIL_BYTES } from 'apex-core/sessions/metadata'
 import {
   appendPiSessionInfo,
   createPiSessionMetadataReader,
   isPiSessionPath,
   piSessionServiceOptions,
   piTimestampFromSessionName,
-} from '../../apps/desktop/electron/main/sessions/pi'
+} from 'apex-core/sessions/pi'
 import { JsonStateStore } from '../../apps/desktop/electron/main/store'
 import { acquireRuntimeSession, RuntimeSessionClaims, assertSessionNotOwnedElsewhere, publishRuntimeOwner, readRuntimeOwners, readSessionReleaseRequests, removeRuntimeOwner, requestSessionRelease, runtimeOwnerOf, runtimeOwnersDir, RUNTIME_OWNER_STALE_MS, SESSION_RELEASE_REQUEST_TTL_MS } from 'apex-core/sessions/runtime-owners'
 

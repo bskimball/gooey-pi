@@ -120,7 +120,6 @@ const api: ApexApi = {
 		read: (filePath) => invoke("sessions:read", filePath),
 		reviewFinish: (runtimeId, filePath) => invoke("sessions:finish-review", runtimeId, filePath),
 		finishTask: (runtimeId, filePath, token, confirmation) => invoke("sessions:finish-confirm", runtimeId, filePath, token, confirmation),
-		getFinishedTask: (filePath) => invoke("sessions:finished-get", filePath),
 		listFinishedTasks: () => invoke("sessions:finished-list"),
 		createSideConversation: (parentSession, options) => invoke("sessions:side-create", parentSession, options),
 		listSideConversations: (parentSession) => invoke("sessions:side-list", parentSession),
@@ -209,7 +208,6 @@ const api: ApexApi = {
 	},
 	git: {
 		status: (cwd) => invoke("git:status", cwd),
-		reviewIntegration: (cwd) => invoke("git:review-integration", cwd),
 		diff: (cwd, path, staged) => invoke("git:diff", cwd, path, staged),
 		stage: (cwd, paths) => invoke("git:stage", cwd, paths),
 		unstage: (cwd, paths) => invoke("git:unstage", cwd, paths),
@@ -230,7 +228,6 @@ const api: ApexApi = {
 			invoke("plugins:set-mcp-enabled", input, harness),
 		mutateCapability: (input, harness) =>
 			invoke("plugins:mutate-capability", input, harness),
-		refresh: (harness) => invoke("plugins:refresh", harness),
 	},
 	settings: {
 		get: () => invoke("settings:get"),
@@ -292,7 +289,6 @@ const api: ApexApi = {
 	},
 	schedules: {
 		list: (harness) => invoke("schedules:list", harness),
-		get: (id) => invoke("schedules:get", id),
 		preview: (timing, count) => invoke("schedules:preview", timing, count),
 		create: (input, harness) => invoke("schedules:create", input, harness),
 		update: (id, patch) => invoke("schedules:update", id, patch),

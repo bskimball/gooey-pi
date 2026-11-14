@@ -17,7 +17,7 @@ const electronMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 
-import { registerIpc } from '../../apps/desktop/electron/main/ipc'
+import { isTrustedRendererUrl, registerIpc } from '../../apps/desktop/electron/main/ipc'
 
 function serviceStub(): Record<string, unknown> {
   return new Proxy({}, { get: () => vi.fn(async () => undefined) })
@@ -358,5 +358,16 @@ describe('IPC registration lifecycle', () => {
     expect(firstUnsubscribe).toHaveBeenCalledTimes(1)
     second.dispose()
     warn.mockRestore()
+  })
+})
+
+describe('renderer URL trust', () => {
+  it('allows only in-document fragments on the exact renderer URL', () => {
+    const expected = 'prime-work://app/'
+    expect(isTrustedRendererUrl(expected, expected)).toBe(true)
+    expect(isTrustedRendererUrl(`${expected}#result`, expected)).toBe(true)
+    expect(isTrustedRendererUrl('prime-work://app/other', expected)).toBe(false)
+    expect(isTrustedRendererUrl('prime-work://app/?debug=true', expected)).toBe(false)
+    expect(isTrustedRendererUrl('https://example.com/#result', expected)).toBe(false)
   })
 })

@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import { AgentBrowserService } from "../../apps/desktop/electron/main/browser/agent-service";
-import { ExtensionBrowserBridge } from "../../apps/desktop/electron/main/browser/extension-bridge";
+import { ExtensionBrowserBridge } from "apex-core/browser/extension-bridge";
 import type {
 	AgentBrowserPointerEvent,
 	AgentBrowserState,

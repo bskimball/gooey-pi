@@ -46,12 +46,6 @@ export class FinishTaskService {
     for (const [token, reservation] of this.reservations) if (reservation.session === key) this.reservations.delete(token)
     rmSync(this.path(session), { force: true })
   }
-  async get(sessionValue: unknown): Promise<FinishedTask | null> {
-    const session = await this.requireSession(sessionValue)
-    const result = this.read(this.path(session))
-    if (result && canonicalSessionPath(result.sessionFile) !== canonicalSessionPath(session)) throw new Error('Finished task metadata does not match the session')
-    return result
-  }
   async list(): Promise<FinishedTask[]> {
     return readdirSync(this.directory).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).map((name) => this.read(join(this.directory, name))).filter((item): item is FinishedTask => item !== null)
   }

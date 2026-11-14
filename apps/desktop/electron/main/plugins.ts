@@ -92,7 +92,6 @@ export function beginPluginDiscoveryShutdown(): void {
 }
 
 export class PluginService {
-  private lastProjectPath: string | undefined
   private readonly knownPathsByOwner = new Map<string, Set<string>>()
   private settingsMutation = Promise.resolve()
   private readonly discoveryInFlight = createSingleFlight<string, PluginCatalog>()
@@ -134,7 +133,6 @@ export class PluginService {
   }
 
   private async discover(safeProjectPath: string | undefined, ownerKey: string): Promise<PluginCatalog> {
-    if (safeProjectPath) this.lastProjectPath = safeProjectPath
     const result = await this.discoverCatalog(this.agentDir, safeProjectPath, resolveExecutable(this.agentPath), this.harness)
     const builtInSkills = await this.builtInSkills()
     const piMcpState = this.harness === 'pi' ? await this.piMcpAdapterState() : undefined
@@ -206,7 +204,6 @@ export class PluginService {
     const safeProjectPath = input.scope === 'project'
       ? await this.authorizeProject(input.projectPath!)
       : undefined
-    if (safeProjectPath) this.lastProjectPath = safeProjectPath
 
     const agentPath = resolveExecutable(this.agentPath)
     if (!agentPath) return { ok: false, reason: 'blocked', output: `${HARNESSES.pi.agentName} executable was not found` }
@@ -262,7 +259,6 @@ export class PluginService {
     let settingsTarget: string | ProjectSettingsPath
     if (input.scope === 'project') {
       const projectPath = await this.authorizeProject(requireString(input.projectPath, 'projectPath', { min: 1, max: 4096 }))
-      this.lastProjectPath = projectPath
       settingsTarget = await prepareProjectSettingsPath(projectPath, {
         segments: ['.pi'], filename: 'mcp.json',
       })
@@ -302,7 +298,6 @@ export class PluginService {
     let settingsTarget: string | ProjectSettingsPath
     if (input.scope === 'project') {
       const projectPath = await this.authorizeProject(requireString(input.projectPath, 'projectPath', { min: 1, max: 4096 }))
-      this.lastProjectPath = projectPath
       settingsTarget = await prepareProjectSettingsPath(projectPath, {
         segments: ['.pi'], filename: 'mcp.json',
       })
@@ -338,7 +333,6 @@ export class PluginService {
     const safeProjectPath = input.scope === 'project'
       ? await this.authorizeProject(requireString(input.projectPath, 'projectPath', { min: 1, max: 4096 }))
       : undefined
-    if (safeProjectPath) this.lastProjectPath = safeProjectPath
     const projectSettings = safeProjectPath
       ? await prepareProjectSettingsPath(safeProjectPath, { segments: ['.pi'], filename: input.kind === 'mcp' ? 'mcp.json' : 'settings.json' })
       : undefined
@@ -403,23 +397,6 @@ export class PluginService {
     if (this.harness !== 'pi') return await operation()
     const release = await acquireSettingsLock(join(this.agentDir, PI_MCP_ADMISSION_LOCK))
     try { return await operation() } finally { await release() }
-  }
-
-  refresh(): Promise<PluginCatalog> {
-    const projectPath = this.lastProjectPath
-    if (!projectPath) return this.listCanonical()
-    // Re-authorize on every refresh: the remembered project may have been
-    // removed (or replaced) since the scope was last used.
-    return this.authorizeProject(projectPath).then(
-      (safeProjectPath) => this.listCanonical(safeProjectPath),
-      (error) => {
-        // Surface the failure once, then forget the stale scope so later
-        // refreshes fall back to the user catalog.
-        if (this.lastProjectPath === projectPath) this.lastProjectPath = undefined
-        this.knownPathsByOwner.delete(`project:${projectPath}`)
-        throw error
-      },
-    )
   }
 
   /** Revokes a removed project's revealable paths. */

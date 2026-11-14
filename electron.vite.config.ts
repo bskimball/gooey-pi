@@ -9,13 +9,14 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     // Fully minify production code: Electron never consumes readable output,
     // and less source is faster for V8 to read, parse, and compile at startup.
-    build: { lib: { entry: 'apps/desktop/electron/main/index.ts' }, minify: 'esbuild' },
+    build: { lib: { entry: 'apps/desktop/electron/main/index.ts' }, minify: 'esbuild', reportCompressedSize: false },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
       lib: { entry: 'apps/desktop/electron/preload/index.ts', formats: ['cjs'] },
       rollupOptions: { output: { format: 'cjs', entryFileNames: 'index.js' } },
+      reportCompressedSize: false,
     },
   },
   renderer: {
@@ -40,6 +41,7 @@ export default defineConfig({
     esbuild: { keepNames: true },
     build: {
       minify: 'esbuild',
+      reportCompressedSize: false,
       outDir: resolve('out/renderer'),
       rollupOptions: {
         input: resolve('apps/desktop/index.html'),

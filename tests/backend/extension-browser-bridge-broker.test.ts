@@ -1,8 +1,8 @@
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentBrowserService } from '../../apps/desktop/electron/main/browser/agent-service'
-import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
-import { callMethod, probeBroker } from '../../apps/desktop/electron/main/browser/extension-bridge-client'
+import { ExtensionBrowserBridge } from 'apex-core/browser/extension-bridge'
+import { callMethod, probeBroker } from 'apex-core/browser/extension-bridge-client'
 
 const bridges: ExtensionBrowserBridge[] = []
 afterEach(async () => { await Promise.all(bridges.splice(0).map(bridge => bridge.stop())) })

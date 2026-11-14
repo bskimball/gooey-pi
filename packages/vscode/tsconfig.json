@@ -7,7 +7,9 @@
     "types": ["node", "vscode"],
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "../../node_modules/.cache/tsc/vscode.tsbuildinfo"
   },
   "include": ["src/**/*.ts"]
 }

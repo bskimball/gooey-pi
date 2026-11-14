@@ -1,95 +1,35 @@
 # Packages, extensions, skills, and MCP
 
-GooeyPi presents one capability directory for Pi. This document defines the
-product contract for that surface.
+GooeyPi exposes one **Capabilities** directory for Pi packages, extensions, skills, and MCP servers.
 
-## Shared vocabulary
+## Vocabulary
 
-- A **package** is a distribution container. Pi packages can
-  contain extensions, skills, prompts, and themes.
-- An **extension** is executable JavaScript or TypeScript loaded into the agent
-  host. Installing an extension means installing its package or placing its
-  file in a Pi extension directory.
-- A **skill** is model-facing guidance.
-- An **MCP server** is a connection definition. It is not itself a package,
-  extension, or skill, although a package may provide one or more of those
-  resources and may declare MCP servers.
+- **Package**: distribution container that can include extensions, skills, prompts, and themes.
+- **Extension**: executable JS/TS loaded into the Pi host (installed via a package or placed in a Pi extension directory).
+- **Skill**: model-facing guidance.
+- **MCP server**: connection definition (`mcpServers` schema), distinct from packages, extensions, and skills.
 
-## Pi contract
+## Pi capability and MCP contract
 
-| Harness | Installable bundle | Standalone extension | MCP runtime | MCP actions available in GooeyPi | Network MCP and authentication |
-| --- | --- | --- | --- | --- | --- |
-| Pi | `pi install <source>` | Local file through `pi install`; `-l` for project scope | `pi-mcp-adapter` extension package | With the adapter enabled, create/enable/disable local stdio definitions; bounded definition removal remains available for cleanup | Configure HTTP/SSE and authenticate through the adapter outside GooeyPi |
+| Surface | Contract |
+| --- | --- |
+| Packages | Installed via `pi install <source>` (`-l` for project scope). |
+| Standalone extensions | Absolute local `.js`/`.ts` file installed via `pi install` (`-l` for project scope). |
+| MCP runtime | `pi-mcp-adapter` extension (`pi install npm:pi-mcp-adapter`), reading `~/.pi/agent/mcp.json` (global) and `.pi/mcp.json` (project). |
+| MCP UI actions | **Add MCP** is disabled until **Pi MCP Adapter** is enabled. When enabled, GooeyPi can create, enable, or disable local stdio entries only. |
+| Network MCP and auth | HTTP/SSE and URL-bearing entries (including loopback) are rejected on write. Externally configured network entries are visible but read-only; bounded definition-only removal remains available for cleanup (even when the adapter is disabled). `/mcp-auth` is never launched or forwarded. |
 
-The app labels this surface **Capabilities**. Its Add button
-first opens a capability-type chooser, then a type-specific form: **Add MCP**,
-**Add Package**, and **Add Extension**. The MCP choice remains visible but
-disabled until the **Pi MCP Adapter** toggle is enabled. Adapter-enabled Pi
-offers only local stdio input fields. The initial Add chooser warns that third-party code may use CLI-only
-APIs and links directly to GooeyPi's GitHub issue form for failures; the base
-Capabilities screen and the follow-up forms do not repeat that notice.
-
-## Product behavior
-
-### Pi
-
-Pi core has no MCP client. GooeyPi shows **Pi MCP Adapter** as a real
-toggle whose state is derived from Pi's installed packages. Enabling it runs
-`pi install npm:pi-mcp-adapter`; disabling preserves the installed package and
-records its Pi package filters as disabled. Disabling does not delete MCP definitions or credentials, so a
-later re-enable restores the connections without silently losing user data.
-
-Only while the adapter is enabled may GooeyPi create or change local stdio
-entries in its supported `mcp.json` schema; definition-only removal remains
-available while disabled. It rejects HTTP, SSE, and any URL-bearing
-definition, including loopback URLs, and never launches `/mcp-auth`. Network
-configuration and authentication must be run through the adapter outside
-GooeyPi; GooeyPi does not forward `/mcp-auth` prompts.
-Externally configured network entries remain visible but are read-only in the
-app; bounded definition-only removal remains available for cleanup.
-Only the canonical `npm:pi-mcp-adapter` source (optionally followed by an exact
-semantic version) satisfies this prerequisite. Scoped, Git, local-path, and
-same-name package sources do not authorize MCP writes.
-Adapter-enabled local definitions with keys outside GooeyPi's bounded state
-API remain visible but non-actionable, with direct-harness management detail.
+- **Adapter toggle**: state is derived from Pi's installed packages. Enabling runs `pi install npm:pi-mcp-adapter`; disabling disables its package filters without deleting `mcp.json` definitions or credentials.
+- **Canonical source rule**: only `npm:pi-mcp-adapter` (optionally with an exact semantic version) authorizes MCP writes; scoped, Git, local-path, and same-name packages do not.
+- **Unsupported keys**: local definitions with keys outside GooeyPi's bounded state API remain visible but non-actionable.
 
 ## Security boundaries
 
-- Every install/remove command uses the detected fixed harness executable and
-  an argv array; no shell interpolation is permitted.
-- Package, plugin, server, command, and argument inputs are bounded and
-  validated in the main process.
-- Standalone extensions must be absolute local JavaScript or TypeScript files.
-  Project installs are re-authorized and their destination directories remain
-  pinned against symlink replacement; existing extension files are never
-  overwritten.
-- Network MCP definitions fail closed at the service admission and settings
-  writer boundaries. State mutation also rejects externally configured network
-  entries. The local stdio settings path uses GooeyPi's cooperative lock,
-  fingerprint-based conflict retries, project-directory pinning, atomic
-  replacement, and rollback protections; definition removal re-verifies the
-  project directory immediately before and after reading each update snapshot.
-  This is not a filesystem compare-and-swap: a same-user writer that ignores the
-  lock can replace the file after the final fingerprint check and race GooeyPi's
-  rename, so that writer's update may be overwritten.
-- The main-process RPC manager rejects harness authentication commands for
-  prompt, steer, and follow-up delivery. Scheduled prompts are
-  checked at create, update, resume, and run-now admission before project
-  validation or queuing; startup blocks forbidden persisted active schedules
-  before missed-run recovery and timer arming, while paused records remain
-  available for cleanup and are checked if resumed. The executor repeats the
-  check as defense in depth. Voice task launch,
-  collaboration creation, and peer delivery preflight the same shared policy
-  before queuing, wake-up, delivery, or runtime start.
-- MCP rows use an independent 2,500-definition-per-settings-file discovery
-  budget. Unrelated catalog records cannot consume it, and exceeding it emits
-  an explicit scope-and-path warning.
-- Pi adapter transitions and non-removal MCP writes share an agent-level
-  admission lock across service instances. Adapter state is re-checked while
-  that lock is held, immediately before the settings mutation.
-- GooeyPi never requests or mutates `mcp:*` credentials in Pi auth storage.
-  Definition removal does not inspect or change
-  authorization.
-- GooeyPi does not claim to prevent a harness from loading network MCP entries
-  configured outside the app. Its guarantee is narrower: GooeyPi does not
-  create, enable, disable, mutate, or authenticate those entries.
+- **No shell interpolation**: every install/remove command invokes the detected fixed `pi` executable with an argv array.
+- **Input validation**: package, plugin, server, command, and argument inputs are bounded and validated in the main process.
+- **Extension path safety**: standalone extensions must be absolute local `.js`/`.ts` paths. Project installs are re-authorized, destination directories are pinned against symlink replacement, and existing extension files are never overwritten.
+- **Fail-closed network MCP & atomic stdio writes**: network MCP definitions fail closed at service admission and settings writer boundaries. Local stdio writes use GooeyPi's cooperative lock, fingerprint conflict retries, project-directory pinning, atomic replacement, and rollback (definition removal re-verifies the project directory before and after reading each snapshot; lock-ignoring same-user writers can still race the rename).
+- **Auth command rejection**: the main-process RPC manager rejects harness auth commands on prompt, steer, and follow-up delivery. Schedules check at create, update, resume, run-now, startup (blocking forbidden persisted active schedules while keeping paused records removable), and execution. Voice task launch, collaboration creation, and peer delivery enforce the same policy.
+- **Discovery budget**: MCP rows have an independent 2,500-definition-per-settings-file budget; overflow emits an explicit scope-and-path warning.
+- **Cross-instance serialization**: adapter transitions and non-removal MCP writes share an agent-level admission lock; adapter state is re-checked under that lock immediately before mutating `mcp.json`.
+- **Credential isolation**: GooeyPi never requests or mutates `mcp:*` credentials in Pi auth storage; definition removal neither inspects nor changes authorization. GooeyPi does not prevent Pi from loading externally configured network MCP entries, but never creates, enables, disables, mutates, or authenticates them.

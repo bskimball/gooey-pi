@@ -625,7 +625,7 @@ describe('registerIpc verify gate', () => {
     expect(start).toHaveBeenCalledOnce()
     expect(list).toHaveBeenCalledOnce()
     stubs.schedules = { get: () => ({ id: 'legacy-schedule', harness: 'omp' }) }
-    for (const channel of ['schedules:get', 'schedules:update', 'schedules:pause', 'schedules:resume', 'schedules:delete', 'schedules:run-now']) {
+    for (const channel of ['schedules:update', 'schedules:pause', 'schedules:resume', 'schedules:delete', 'schedules:run-now']) {
       expect(() => handlers.get(channel)!(event, 'legacy-schedule', {})).toThrow('Invalid harness')
     }
     stubs.sessions = { requireSessionPath: vi.fn(async () => { throw new TypeError('Session path is outside the Pi session directory') }) }

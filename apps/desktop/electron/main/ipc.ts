@@ -418,7 +418,6 @@ export function registerIpc(
 	);
 	handle("sessions:finish-review", (_event, runtimeId, filePath) => services.finishTask.review(runtimeId, filePath));
 	handle("sessions:finish-confirm", (_event, runtimeId, filePath, token, confirmation) => services.finishTask.finish(runtimeId, filePath, token, confirmation));
-	handle("sessions:finished-get", (_event, filePath) => services.finishTask.get(filePath));
 	handle("sessions:finished-list", () => services.finishTask.list());
 	handle("sessions:side-create", (_event, parentSession, options) => services.sideConversations.create(parentSession, options));
 	handle("sessions:side-list", (_event, parentSession) => services.sideConversations.list(parentSession));
@@ -654,7 +653,6 @@ export function registerIpc(
 	);
 
 	handle("git:status", (_event, cwd) => services.git.status(cwd));
-	handle("git:review-integration", (_event, cwd) => services.git.reviewIntegration(cwd));
 	handle("git:diff", (_event, cwd, path, staged) =>
 		services.git.diff(cwd, path, staged),
 	);
@@ -689,9 +687,6 @@ export function registerIpc(
 	);
 	handle("plugins:mutate-capability", (_event, input, harness) =>
 		pluginsFor(requireHarness(harness)).mutateCapability(input),
-	);
-	handle("plugins:refresh", (_event, harness) =>
-		pluginsFor(requireHarness(harness)).refresh(),
 	);
 
 	handle("settings:get", () => services.settings.get());
@@ -809,7 +804,6 @@ export function registerIpc(
 		requireHarness(task.harness);
 		return task.id;
 	};
-	handle("schedules:get", (_event, id) => services.schedules.get(requirePiScheduleId(id)));
 	handle("schedules:preview", (_event, timing, count) =>
 		services.schedules.preview(timing, count),
 	);

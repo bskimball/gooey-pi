@@ -93,7 +93,7 @@ const statePath = process.argv.at(-1)
 const lockPath = statePath + '.lock'
 const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2)
 const update = (delta) => {
-  while (true) { try { fs.mkdirSync(lockPath); break } catch (error) { if (error.code !== 'EEXIST') throw error; pause() } }
+  while (true) { try { fs.mkdirSync(lockPath); break } catch (error) { if (!['EEXIST', 'EPERM', 'EACCES'].includes(error.code)) throw error; pause() } }
   try {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
     state.active += delta

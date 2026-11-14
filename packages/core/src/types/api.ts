@@ -917,7 +917,6 @@ export interface ApexApi {
     read(filePath: string): Promise<TranscriptMessage[]>
     reviewFinish(runtimeId: string, filePath: string): Promise<FinishReview>
     finishTask(runtimeId: string, filePath: string, token: string, confirmation: 'finish'): Promise<FinishedTask>
-    getFinishedTask(filePath: string): Promise<FinishedTask | null>
     listFinishedTasks(): Promise<FinishedTask[]>
     createSideConversation(parentSession: string, options?: { excerpt?: string; harness?: HarnessId }): Promise<SideConversation>
     listSideConversations(parentSession: string): Promise<SideConversation[]>
@@ -983,7 +982,7 @@ export interface ApexApi {
     dismiss(key: string): Promise<boolean>
     onEvent(callback: (event: BackgroundJobEvent) => void): () => void
   }
-  git: { status(cwd: string): Promise<GitStatus>; reviewIntegration(cwd: string): Promise<GitIntegrationReview>; diff(cwd: string, path?: string, staged?: boolean): Promise<GitDiff>; stage(cwd: string, paths: string[]): Promise<boolean>; unstage(cwd: string, paths: string[]): Promise<boolean>; restore(cwd: string, paths: string[]): Promise<boolean>; commit(cwd: string, message: string): Promise<ProcessOutcome> }
+  git: { status(cwd: string): Promise<GitStatus>; diff(cwd: string, path?: string, staged?: boolean): Promise<GitDiff>; stage(cwd: string, paths: string[]): Promise<boolean>; unstage(cwd: string, paths: string[]): Promise<boolean>; restore(cwd: string, paths: string[]): Promise<boolean>; commit(cwd: string, message: string): Promise<ProcessOutcome> }
   plugins: {
     list(projectPath?: string, harness?: HarnessId): Promise<PluginCatalog>
     install(source: string, harness?: HarnessId): Promise<ProcessOutcome>
@@ -992,7 +991,6 @@ export interface ApexApi {
     connectMcp(input: McpConnectionInput, harness?: HarnessId): Promise<ProcessOutcome>
     setMcpEnabled(input: McpStateInput, harness?: HarnessId): Promise<ProcessOutcome>
     mutateCapability(input: CapabilityMutationInput, harness?: HarnessId): Promise<ProcessOutcome>
-    refresh(harness?: HarnessId): Promise<PluginCatalog>
   }
   settings: { get(): Promise<AppSettings>; update(patch: Partial<AppSettings>): Promise<AppSettings>; resetBrowserData(): Promise<boolean> }
   browser: {
@@ -1018,7 +1016,6 @@ export interface ApexApi {
   }
   schedules: {
     list(harness?: HarnessId): Promise<AutomationScheduleRecord[]>
-    get(id: string): Promise<AutomationScheduleRecord>
     preview(timing: ScheduleTiming, count?: number): Promise<SchedulePreview>
     create(input: ScheduleInput, harness?: HarnessId): Promise<AutomationScheduleRecord>
     update(id: string, patch: SchedulePatch): Promise<AutomationScheduleRecord>

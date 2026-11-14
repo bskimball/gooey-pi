@@ -54,7 +54,7 @@ describe('PluginService discovery', () => {
 
     expect((await service.list()).skills[0].enabled).toBe(true)
     enabled = false
-    expect((await service.refresh()).skills[0].enabled).toBe(false)
+    expect((await service.list()).skills[0].enabled).toBe(false)
   })
 
   it('coalesces duplicate refreshes while discovery is in flight', async () => {
@@ -64,7 +64,7 @@ describe('PluginService discovery', () => {
     const service = new PluginService(null, async (path) => resolve(path), { agentDir })
 
     const first = service.list()
-    const duplicate = service.refresh()
+    const duplicate = service.list()
 
     expect(duplicate).toBe(first)
     await expect(first).resolves.toEqual({ skills: expect.any(Array), warnings: [] })
@@ -494,7 +494,7 @@ describe('PluginService discovery', () => {
     expect(service.authorizeReveal(projectPrompt)).toBe(realpathSync(projectPrompt))
 
     expect(await projectsService.remove('project')).toBe(true)
-    await expect(service.refresh()).rejects.toThrow(/not inside an added Pi Work project/)
+    await expect(service.list(project)).rejects.toThrow(/not inside an added Pi Work project/)
     expect(() => service.authorizeReveal(projectPrompt)).toThrow('plugin path was not discovered')
   })
 

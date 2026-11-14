@@ -1,7 +1,7 @@
 import { connect } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { initialTransition, transition } from 'xstate'
-import { ExtensionBrowserBridge } from '../../apps/desktop/electron/main/browser/extension-bridge'
+import { ExtensionBrowserBridge } from 'apex-core/browser/extension-bridge'
 import {
   extensionBridgeMachine,
   isBridgeConnected,
