@@ -79,7 +79,15 @@ import {
 	X,
 } from "./icons";
 import { ModelPicker } from "./ModelPicker";
-import { PiModeFields, PiModeStatus, usePiModeController } from "./PiModeControl";
+import {
+	ChatSettings,
+	ChatSettingsField,
+	ChatSettingsSection,
+	chatSettingsStyles,
+	PiModeFields,
+	PiModeStatus,
+	usePiModeController,
+} from "./PiModeControl";
 import { Banner } from "@astryxdesign/core/Banner";
 import { ApexButton, IconButton, Modal, SelectControl } from "./ui";
 
@@ -268,27 +276,32 @@ export const Composer = memo(function Composer({
 	};
 	const modelControls = (
 		<>
-			<div className="chat-settings__field"><span>Model</span><ModelPicker
-				value={model}
-				modelsByProvider={modelsByProvider}
-				providers={providers}
-				onChange={onModelChange}
-			/></div>
-			<div className="chat-settings__field"><span>Thinking</span><SelectControl
-				label="Reasoning effort"
-				compact
-				icon={<Gauge size={12} />}
-				value={effort}
-				onChange={(event) =>
-					onEffortChange(event.target.value as ApexThinkingLevel)
-				}
-			>
-				{reasoningLevels.map((level) => (
-					<option key={level} value={level}>
-						{reasoningLabels[level]}
-					</option>
-				))}
-			</SelectControl></div>
+			<ChatSettingsField label="Model">
+				<ModelPicker
+					value={model}
+					modelsByProvider={modelsByProvider}
+					providers={providers}
+					onChange={onModelChange}
+				/>
+			</ChatSettingsField>
+			<ChatSettingsField label="Thinking">
+				<SelectControl
+					label="Reasoning effort"
+					compact
+					fullWidth
+					icon={<Gauge size={12} />}
+					value={effort}
+					onChange={(event) =>
+						onEffortChange(event.target.value as ApexThinkingLevel)
+					}
+				>
+					{reasoningLevels.map((level) => (
+						<option key={level} value={level}>
+							{reasoningLabels[level]}
+						</option>
+					))}
+				</SelectControl>
+			</ChatSettingsField>
 		</>
 	);
 	const [value, setValue] = useState(
@@ -1051,33 +1064,64 @@ export const Composer = memo(function Composer({
 						<ExecutingModelChip executingModel={executingModel ?? undefined} />
 						{harness === "pi" && !conversationOnly ? <PiModeStatus controller={modeController} /> : null}
 					</div>
-					{settingsOpen ? <Modal title="Chat settings" onClose={closeSettings}>
-						<div className="chat-settings">
-							{harness === "pi" && !conversationOnly ? <PiModeFields controller={modeController} modelsByProvider={modelsByProvider} providers={providers}>{modelControls}</PiModeFields> : <section className="chat-settings__section"><div className="chat-settings__fields">{modelControls}</div></section>}
-							{!conversationOnly || fastSupported ? <section className="chat-settings__section chat-settings__section--execution"><div className="chat-settings__fields">
-								{!conversationOnly ? <div className="chat-settings__field"><span>Checkout</span><CheckoutPickerFields controller={checkoutController} catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} disabled={busy || admitting} onExecute={onExecuteCheckout} /></div> : null}
-						{fastSupported ? (
-							<div className="chat-settings__field"><span>Service tier</span><ApexButton
-								variant="quiet"
-								compact
-								label="Fast"
-								className={`fast-mode-toggle ${fast ? "is-active" : ""}`}
-								aria-pressed={fast}
-								disabled={!fastAvailable}
-								title={
-									fastAvailable
-										? `Use ${agentName} priority service tier`
-										: `The installed ${agentName} RPC runtime does not expose fast mode`
-								}
-								onClick={() => onFastChange(!fast)}
-							>
-								<Lightning size={12} />{" "}
-								<span className="fast-mode-toggle__label">Fast</span>
-							</ApexButton></div>
-						) : null}
-							</div></section> : null}
-						</div>
-					</Modal> : null}
+					{settingsOpen ? (
+						<Modal title="Chat settings" onClose={closeSettings}>
+							<ChatSettings>
+								{harness === "pi" && !conversationOnly ? (
+									<PiModeFields
+										controller={modeController}
+										modelsByProvider={modelsByProvider}
+										providers={providers}
+									>
+										{modelControls}
+									</PiModeFields>
+								) : (
+									<ChatSettingsSection>{modelControls}</ChatSettingsSection>
+								)}
+								{!conversationOnly || fastSupported ? (
+									<ChatSettingsSection divider>
+										{!conversationOnly ? (
+											<ChatSettingsField label="Checkout">
+												<CheckoutPickerFields
+													controller={checkoutController}
+													catalog={checkoutCatalog}
+													fallbackLabel={checkoutLabel}
+													loading={checkoutsLoading}
+													disabled={busy || admitting}
+													onExecute={onExecuteCheckout}
+												/>
+											</ChatSettingsField>
+										) : null}
+										{fastSupported ? (
+											<ChatSettingsField label="Service tier">
+												<ApexButton
+													variant="quiet"
+													compact
+													icon={<Lightning size={12} />}
+													label="Fast"
+													className={`fast-mode-toggle ${fast ? "is-active" : ""}`}
+													xstyle={[
+														chatSettingsStyles.fastToggle,
+														fast && chatSettingsStyles.fastToggleActive,
+													]}
+													aria-pressed={fast}
+													disabled={!fastAvailable}
+													title={
+														fastAvailable
+															? `Use ${agentName} priority service tier`
+															: `The installed ${agentName} RPC runtime does not expose fast mode`
+													}
+													onClick={() => onFastChange(!fast)}
+												>
+													<span className="fast-mode-toggle__label">Fast</span>
+												</ApexButton>
+											</ChatSettingsField>
+										) : null}
+									</ChatSettingsSection>
+								) : null}
+							</ChatSettings>
+						</Modal>
+					) : null}
 					<div className="composer__actions">
 						{dictation.state === "connecting" ||
 						dictation.state === "recording" ? (

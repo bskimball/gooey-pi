@@ -219,6 +219,15 @@ describe('archived activity cleanup', () => {
     expect(window.sessionStorage.getItem('prime-work.composer-draft')).toBe('normal draft')
     window.sessionStorage.clear()
   })
+  it('shows the styled loading state while the chief is opening', async () => {
+    const bridge = { coordinator: { open: vi.fn(() => new Promise(() => {})), close: vi.fn().mockResolvedValue(true) }, agent: { onEvent: vi.fn(() => () => {}), command: vi.fn(), list: vi.fn().mockResolvedValue([]) }, providers: { catalog: vi.fn().mockResolvedValue({ models: [], providers: [] }) } } as unknown as ApexApi
+    await act(async () => root.render(<ActivityPage bridge={bridge} sessions={[activeSession]} projects={[project]} clearedActivity={{}} onOpen={vi.fn()} onClear={vi.fn()} />))
+    const loading = container.querySelector('.activity-coordinator__loading')
+    expect(loading).not.toBeNull()
+    expect(loading?.getAttribute('role')).toBe('status')
+    expect(loading?.textContent).toContain('Opening Chief of Staff…')
+    expect(loading?.querySelector('svg')).not.toBeNull()
+  })
   it('filters the feed and review actions to the selected project, including its worktrees', async () => {
     const otherProject: ProjectRecord = { ...project, id: 'other', name: 'Other', path: '/other', primaryFolder: '/other', folders: ['/other', '/other-worktree'] }
     const otherSession: SessionRecord = { ...activeSession, id: 'other-session', title: 'Other worktree run', filePath: '/sessions/other.jsonl', projectPath: '/other-worktree' }

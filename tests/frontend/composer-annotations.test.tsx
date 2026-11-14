@@ -1345,6 +1345,21 @@ describe("Composer sendSignal", () => {
 			container.querySelector<HTMLButtonElement>(".fast-mode-toggle")!.click();
 		});
 		expect(onFastChange).toHaveBeenCalledWith(true);
+
+		const modelTrigger = container.querySelector<HTMLButtonElement>('[aria-label="Model: Vision"]')!;
+		await act(async () => {
+			modelTrigger.click();
+		});
+		expect(container.querySelector('.model-picker__popover')).not.toBeNull();
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		});
+		expect(container.querySelector('.model-picker__popover')).toBeNull();
+		expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		});
+		expect(container.querySelector('[role="dialog"]')).toBeNull();
 	});
 
 	it("edits both Fusion roles through queued commands and waits for reported values", async () => {

@@ -9,6 +9,7 @@ import { useProviderCatalog } from '@/hooks/useProviderCatalog'
 import { EMPTY_GIT_STATUS } from '@/lib/workspace'
 import type { ActivityControls } from '@/hooks/useActivityControls'
 import type { ApexApi } from '@/types/api'
+import { CircleNotch } from '@/components/icons'
 import { ActivityQuestionCard } from './ActivityQuestionCard'
 
 interface ActivityCoordinatorProps {
@@ -50,7 +51,7 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
     </div></header>
     <main className="conversation-pane activity-coordinator__conversation">
       {!bridge ? <p role="status">Chief of Staff requires the desktop app.</p> : null}
-      {state.phase === 'opening' ? <p role="status">Opening Chief of Staff…</p> : null}
+      {state.phase === 'opening' ? <div className="activity-coordinator__loading" role="status"><CircleNotch className="spin" size={16} aria-hidden="true" />Opening Chief of Staff…</div> : null}
       {state.phase === 'error' ? <div role="alert"><p>{state.error}</p><ApexButton onClick={coordinator.reconnect}>Try again</ApexButton></div> : null}
       {ready && state.disconnected ? <div role="status"><p>The coordinator runtime has stopped. Its conversation is saved.</p><ApexButton onClick={coordinator.reconnect}>Reconnect</ApexButton></div> : null}
       {ready ? <div className={`activity-coordinator__transcript ${state.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`}>

@@ -591,26 +591,13 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: 'Close expanded image' }).click()
   })
 
-  test('collapses composer selectors and keeps the checkout menu inside a narrow conversation pane', async () => {
+  test('keeps composer footer compact and renders Chat settings popovers unclipped in top layer', async () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
     await page.locator('.conversation-column').evaluate((node) => {
-      node.style.flex = '0 0 560px'
+      node.style.flex = '0 0 300px'
       const pane = node.querySelector<HTMLElement>('.conversation-pane')
       if (pane) pane.style.minWidth = '0'
     })
-
-    const model = page.locator('.model-picker')
-    const modelTrigger = model.locator('.model-picker__trigger')
-    const reasoning = page.locator('.select-control').filter({ has: page.getByRole('combobox', { name: 'Reasoning effort' }) })
-    await expect(modelTrigger.locator('span').last()).toHaveCSS('display', 'block')
-    await expect(reasoning.locator('.select-control__chevron')).toHaveCSS('display', 'none')
-    await expect(reasoning.getByRole('combobox')).toHaveCSS('opacity', '1')
-
-    await page.locator('.conversation-column').evaluate((node) => { node.style.flex = '0 0 300px' })
-    await expect(modelTrigger.locator('span').last()).toHaveCSS('display', 'none')
-    await expect(modelTrigger.locator('svg').first()).not.toHaveCSS('display', 'none')
-    await expect(reasoning.getByRole('combobox')).toHaveCSS('opacity', '0')
-    await expect(reasoning.locator('.select-control__icon')).not.toHaveCSS('display', 'none')
 
     const controlBounds = await page.locator('.composer__footer').evaluate((footer) => {
       const controls = footer.querySelector<HTMLElement>('.composer__controls')!
@@ -621,38 +608,108 @@ test.describe('Prime Work desktop smoke', () => {
     })
     expect(controlBounds.controlsRight).toBeLessThanOrEqual(controlBounds.actionsLeft)
 
-    await page.getByRole('button', { name: /^Checkout:/ }).click()
-    const menuBounds = await page.getByRole('menu', { name: 'Git worktrees' }).evaluate((menu) => {
-      const menuRect = menu.getBoundingClientRect()
-      const footerRect = menu.closest('.composer__footer')!.getBoundingClientRect()
-      return { menuLeft: menuRect.left, menuRight: menuRect.right, footerLeft: footerRect.left, footerRight: footerRect.right }
-    })
-    expect(menuBounds.menuLeft).toBeGreaterThanOrEqual(menuBounds.footerLeft - 0.5)
-    expect(menuBounds.menuRight).toBeLessThanOrEqual(menuBounds.footerRight + 0.5)
-    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Chat settings' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Chat settings' })
+    await expect(dialog).toBeVisible()
 
-    await reasoning.getByRole('combobox', { name: 'Reasoning effort' }).click({ force: true })
+    const fieldMetrics = await dialog.evaluate((el) => {
+      const triggers = [
+        el.querySelector<HTMLElement>('.model-picker__trigger'),
+        el.querySelector<HTMLElement>('.select-control[title="Reasoning effort"]'),
+        el.querySelector<HTMLElement>('.select-control[title="Reasoning effort"] [role="combobox"]'),
+        el.querySelector<HTMLElement>('.worktree-picker__trigger'),
+      ]
+      return {
+        dialogWidth: el.getBoundingClientRect().width,
+        widths: triggers.map((node) => Math.round(node?.getBoundingClientRect().width ?? 0)),
+        heights: triggers.map((node) => Math.round(node?.getBoundingClientRect().height ?? 0)),
+      }
+    })
+    for (const width of fieldMetrics.widths) expect(width).toBeGreaterThanOrEqual(260)
+    expect(fieldMetrics.heights[0]).toBe(32)
+    expect(fieldMetrics.heights[1]).toBe(32)
+    expect(fieldMetrics.heights[3]).toBe(32)
+
+    const modelTrigger = dialog.locator('.model-picker__trigger')
+    await modelTrigger.click()
+    const modelBounds = await dialog.locator('.model-picker__popover').evaluate((popover) => {
+      const rect = popover.getBoundingClientRect()
+      const dialogRect = popover.closest('dialog')!.getBoundingClientRect()
+      const probeX = Math.round(rect.left + Math.min(rect.width / 2, 120))
+      const probeY = Math.round(rect.bottom - 8)
+      const hit = document.elementFromPoint(probeX, probeY)
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        dialogBottom: dialogRect.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        inTopLayer: popover.closest('[popover]')?.matches(':popover-open') ?? false,
+        hitInsidePopover: Boolean(hit && popover.contains(hit)),
+      }
+    })
+    expect(modelBounds.inTopLayer).toBe(true)
+    expect(modelBounds.hitInsidePopover).toBe(true)
+    expect(modelBounds.left).toBeGreaterThanOrEqual(0)
+    expect(modelBounds.right).toBeLessThanOrEqual(modelBounds.viewportWidth + 0.5)
+    expect(modelBounds.top).toBeGreaterThanOrEqual(0)
+    expect(modelBounds.bottom).toBeLessThanOrEqual(modelBounds.viewportHeight + 0.5)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+
+    await dialog.getByRole('button', { name: /^Checkout:/ }).click()
+    const menuBounds = await dialog.getByRole('menu', { name: 'Git worktrees' }).evaluate((menu) => {
+      const menuRect = menu.getBoundingClientRect()
+      const dialogRect = menu.closest('dialog')!.getBoundingClientRect()
+      const probeX = Math.round(menuRect.left + Math.min(menuRect.width / 2, 120))
+      const probeY = Math.round(menuRect.bottom - 8)
+      const hit = document.elementFromPoint(probeX, probeY)
+      return {
+        menuLeft: menuRect.left,
+        menuRight: menuRect.right,
+        menuBottom: menuRect.bottom,
+        dialogBottom: dialogRect.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        inTopLayer: menu.closest('[popover]')?.matches(':popover-open') ?? false,
+        extendsPastDialog: menuRect.bottom > dialogRect.bottom,
+        hitInsideMenu: Boolean(hit && menu.contains(hit)),
+      }
+    })
+    expect(menuBounds.inTopLayer).toBe(true)
+    expect(menuBounds.extendsPastDialog).toBe(true)
+    expect(menuBounds.hitInsideMenu).toBe(true)
+    expect(menuBounds.menuLeft).toBeGreaterThanOrEqual(0)
+    expect(menuBounds.menuRight).toBeLessThanOrEqual(menuBounds.viewportWidth + 0.5)
+    expect(menuBounds.menuBottom).toBeLessThanOrEqual(menuBounds.viewportHeight + 0.5)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+
+    const reasoning = dialog.locator('.select-control').filter({ has: page.getByRole('combobox', { name: 'Reasoning effort' }) })
+    await reasoning.getByRole('combobox', { name: 'Reasoning effort' }).click()
     const selectBounds = await page.getByRole('listbox', { name: 'Reasoning effort' }).evaluate(async (listbox) => {
       const popup = listbox.closest<HTMLElement>('.astryx-selector-popup') ?? listbox
       const layer = listbox.closest<HTMLElement>('[data-astryx-layer-root]') ?? popup
       await Promise.all([...popup.getAnimations(), ...layer.getAnimations()].map((anim) => anim.finished.catch(() => undefined)))
       const popupRect = popup.getBoundingClientRect()
-      const paneRect = document.querySelector<HTMLElement>('.conversation-pane')!.getBoundingClientRect()
-      const triggerRect = document.querySelector<HTMLElement>('.select-control[title="Reasoning effort"]')!.getBoundingClientRect()
       return {
         popupLeft: popupRect.left,
         popupRight: popupRect.right,
         popupWidth: popupRect.width,
         popupBottom: popupRect.bottom,
-        triggerTop: triggerRect.top,
-        paneLeft: paneRect.left,
-        paneRight: paneRect.right,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
       }
     })
     expect(selectBounds.popupWidth).toBeLessThanOrEqual(320.5)
-    expect(selectBounds.popupBottom).toBeLessThanOrEqual(selectBounds.triggerTop + 0.5)
-    expect(selectBounds.popupLeft).toBeGreaterThanOrEqual(selectBounds.paneLeft - 0.5)
-    expect(selectBounds.popupRight).toBeLessThanOrEqual(selectBounds.paneRight + 0.5)
+    expect(selectBounds.popupLeft).toBeGreaterThanOrEqual(0)
+    expect(selectBounds.popupRight).toBeLessThanOrEqual(selectBounds.viewportWidth + 0.5)
+    expect(selectBounds.popupBottom).toBeLessThanOrEqual(selectBounds.viewportHeight + 0.5)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
   })
 
   test('loads the sandboxed preload bridge and hermetic service data', async () => {
@@ -728,10 +785,13 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('option', { name: 'Branches', exact: true }).click()
     await page.getByRole('button', { name: 'Back to session' }).click()
 
+    await page.getByRole('button', { name: 'Chat settings' }).click()
     await page.getByRole('button', { name: /^Checkout:/ }).click()
     const branchMenu = page.getByRole('menu', { name: 'Git branches' })
     await expect(branchMenu).toBeVisible()
     await expect(branchMenu.getByRole('menuitemradio').filter({ hasText: 'feature/e2e' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
   })
 
   test('returns from settings with its back button, New session, Escape, and Ctrl+W', async () => {
@@ -868,6 +928,7 @@ test.describe('Prime Work desktop smoke', () => {
   test('searches and filters the custom model picker by provider', async () => {
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
 
+    await page.getByRole('button', { name: 'Chat settings' }).click()
     const picker = page.locator('.model-picker')
     await picker.locator('.model-picker__trigger').click()
     const search = picker.getByRole('combobox', { name: 'Search models' })
@@ -880,6 +941,8 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(picker.getByText('No models match this search.')).toBeVisible()
     await picker.locator('.model-picker__providers').getByRole('button', { name: 'All', exact: true }).click()
     await expect(picker.getByRole('option', { name: /GPT Fixture/ })).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
   })
 
   test('persists a desktop-only Pi provider toggle and removes its models from the picker', async () => {
@@ -896,10 +959,13 @@ test.describe('Prime Work desktop smoke', () => {
     expect(voiceModelsAfter.models.map((model) => model.name)).toEqual(['GPT Fixture'])
 
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
+    await page.getByRole('button', { name: 'Chat settings' }).click()
     const modelPicker = page.locator('.model-picker')
     await modelPicker.locator('.model-picker__trigger').click()
     await expect(modelPicker.getByRole('option', { name: /GPT Fixture/ })).toHaveCount(1)
     await expect(modelPicker.getByRole('option', { name: /Claude Fixture/ })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
   })
 
   test('persists a Pi model toggle and removes only that model from every picker', async () => {
@@ -931,10 +997,13 @@ test.describe('Prime Work desktop smoke', () => {
     const voiceModels = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModels.models.map((model) => model.name)).toEqual(['Claude Fixture'])
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
+    await page.getByRole('button', { name: 'Chat settings' }).click()
     const modelPicker = page.locator('.model-picker')
     await modelPicker.locator('.model-picker__trigger').click()
     await expect(modelPicker.getByRole('option', { name: /GPT Fixture/ })).toHaveCount(0)
     await expect(modelPicker.getByRole('option', { name: /Claude Fixture/ })).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
 
     await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()

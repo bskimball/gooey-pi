@@ -1,23 +1,10 @@
 @container (max-width: 620px) {
-  .permissions-chip:not(.worktree-picker__trigger, .model-picker__trigger) { display: none; }
-  .worktree-picker__trigger, .model-picker__trigger { display: inline-flex; max-width: 112px; }
+  .permissions-chip { display: none; }
   .composer__controls { min-width: 0; }
-  .select-control select, .select-control [role="combobox"] { max-width: 92px; }
-  .select-control__chevron, .select-control .astryx-selector-indicator-icon, .worktree-picker__chevron, .model-picker__trigger > svg:last-child { display: none; }
 }
 
 @container (max-width: 490px) {
   .composer__controls { flex-wrap: wrap; }
-  .worktree-picker, .model-picker { position: static; }
-  .worktree-picker__menu, .model-picker__popover { max-width: 100%; }
-  .select-control { position: relative; width: 28px; flex: 0 0 28px; justify-content: center; gap: 0; padding-inline: 0; }
-  .select-control select, .select-control [role="combobox"] { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; opacity: 0; cursor: pointer; }
-  .select-control:has([role="combobox"]:focus-visible, select:focus-visible) { color: var(--text); border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 1px; }
-  .select-control__icon { pointer-events: none; }
-  .fast-mode-toggle { width: 28px; justify-content: center; padding-inline: 0; }
-  .fast-mode-toggle__label, .worktree-picker__label, .model-picker__trigger > span { display: none; }
-  .worktree-picker, .worktree-picker__trigger, .model-picker, .model-picker__trigger { width: 28px; max-width: 28px; flex: 0 0 28px; }
-  .worktree-picker__trigger, .model-picker__trigger { justify-content: center; padding-inline: 0; }
 }
 
 @media (max-width: 720px) {
@@ -28,8 +15,7 @@
   .conversation-pane { min-width: 360px; }
   .changes-body { grid-template-columns: 155px minmax(0, 1fr); }
   .file-changes small { display: none; }
-  .permissions-chip:not(.worktree-picker__trigger, .model-picker__trigger) { display: none; }
-  .worktree-picker__trigger, .model-picker__trigger { display: inline-flex; max-width: 112px; }
+  .permissions-chip { display: none; }
 }
 
 @media (max-width: 980px) {
@@ -83,12 +69,8 @@
   .composer { min-height: 118px; }
   .composer__footer { align-items: flex-end; }
   .composer__controls { flex-wrap: wrap; }
-  .select-control { min-height: 28px; }
-  .select-control select, .select-control [role="combobox"] { max-width: 91px; }
   .composer__controls > .icon-button { width: 32px; height: 32px; }
   .composer__actions .icon-button { display: none; }
-  .worktree-picker__menu, .model-picker__popover { position: fixed; right: 9px; bottom: 58px; left: 9px; width: auto; }
-  .chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { position: absolute; right: auto; bottom: calc(100% + 7px); left: 0; width: min(340px, calc(100vw - 48px)); }
   .terminal-drawer { height: var(--terminal-height, 46vh); flex-basis: var(--terminal-height, 46vh); }
   .terminal-toolbar .icon-button { width: 32px; height: 32px; }
   .terminal-actions .icon-button:nth-of-type(-n+2), .terminal-cwd { display: none; }
@@ -180,25 +162,4 @@
   .schedule-fast-toggle { grid-column: auto; }
   .schedule-preview ol { grid-template-columns: 1fr; }
   .schedule-preview li { min-height: 44px; align-content: center; }
-}
-
-/* Settings controls are rows, not the compact composer toolbar chips. */
-.modal:has(.chat-settings) { max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: visible; }
-.modal:has(.chat-settings) .modal__body { overflow: visible; }
-.chat-settings__field .model-picker, .chat-settings__field .worktree-picker { position: relative; width: 100%; max-width: none; }
-.chat-settings__field .model-picker__trigger, .chat-settings__field .worktree-picker__trigger,
-.chat-settings__field .select-control, .chat-settings__field .fast-mode-toggle {
-  width: 100%; max-width: none; min-width: 0; height: 32px; min-height: 32px;
-  justify-content: flex-start; gap: 6px; padding: 0 9px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  color: var(--text-secondary); background: var(--surface-subtle); font-size: var(--fs-ui); font-weight: 550;
-}
-.chat-settings__field .select-control > * { flex: 1 1 auto; min-width: 0; }
-.chat-settings__field .select-control [role="combobox"] { width: 100%; max-width: none; }
-.chat-settings__field .model-picker__trigger > span, .chat-settings__field .worktree-picker__trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-settings__field .model-picker__trigger > :last-child, .chat-settings__field .worktree-picker__trigger > :last-child { margin-left: auto; }
-.chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { max-height: min(50dvh, 400px); overflow-y: auto; }
-@media (max-height: 540px) {
-  .modal:has(.chat-settings) .modal__body { max-height: calc(100dvh - 72px); overflow-y: auto; }
-  .chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { position: fixed; top: 12px; right: auto; bottom: auto; left: 50%; width: min(340px, calc(100vw - 48px)); max-height: calc(100dvh - 24px); transform: translateX(-50%); }
 }

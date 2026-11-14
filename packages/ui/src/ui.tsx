@@ -147,6 +147,15 @@ const styles = stylex.create({
     height: 26,
     borderRadius: 999,
   },
+  selectRootFullWidth: {
+    width: '100%',
+    height: 32,
+    gap: 6,
+    paddingInline: 9,
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--fs-ui)',
+    fontWeight: 550,
+  },
   selectorField: {
     position: 'static',
     display: 'inline-flex',
@@ -155,6 +164,10 @@ const styles = stylex.create({
     flex: '0 1 auto',
     minWidth: 0,
     height: '100%',
+  },
+  selectorFieldFullWidth: {
+    flex: '1 1 auto',
+    width: '100%',
   },
   selectorControl: {
     position: 'static',
@@ -171,6 +184,11 @@ const styles = stylex.create({
     backgroundImage: 'none',
     boxShadow: 'none',
     outlineStyle: 'none',
+  },
+  selectorControlFullWidth: {
+    width: '100%',
+    maxWidth: 'none',
+    justifyContent: 'space-between',
   },
   segmentedGroup: {
     height: 28,
@@ -275,6 +293,7 @@ interface ApexButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode
   endIcon?: ReactNode
   label?: string
+  xstyle?: stylex.StyleXStyles
   ref?: Ref<HTMLButtonElement>
 }
 
@@ -284,6 +303,7 @@ export function ApexButton({
   icon,
   endIcon,
   label,
+  xstyle,
   className = '',
   disabled,
   title,
@@ -330,6 +350,7 @@ export function ApexButton({
         variant === 'primary' && styles.buttonPrimary,
         variant === 'danger' && styles.buttonDanger,
         variant === 'quiet' && styles.buttonQuiet,
+        xstyle,
       ]}
     >
       {children}
@@ -344,10 +365,13 @@ export function BrowserGlobe({ size = 18 }: { size?: number }) {
 interface SelectControlProps extends SelectHTMLAttributes<HTMLSelectElement> {
   icon?: ReactNode
   compact?: boolean
+  fullWidth?: boolean
+  placement?: 'above' | 'below'
+  xstyle?: stylex.StyleXStyles
   label: string
 }
 
-export function SelectControl({ icon, compact, className = '', label, value, disabled, onChange, children }: SelectControlProps) {
+export function SelectControl({ icon, compact, fullWidth = false, placement = 'below', xstyle, className = '', label, value, disabled, onChange, children }: SelectControlProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
@@ -372,8 +396,10 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
     popup.style.width = `${maxWidth}px`
     popup.style.maxWidth = `${maxWidth}px`
     const triggerRect = root.getBoundingClientRect()
-    const availableAbove = Math.max(100, Math.floor(triggerRect.top - paneRect.top - 16))
-    popup.style.maxHeight = `${Math.min(420, availableAbove)}px`
+    const availableBlock = placement === 'above'
+      ? triggerRect.top - paneRect.top - 16
+      : paneRect.bottom - triggerRect.bottom - 16
+    popup.style.maxHeight = `${Math.min(420, Math.max(100, Math.floor(availableBlock)))}px`
     popup.style.translate = '0px 0px'
     const popupRect = popup.getBoundingClientRect()
     let shiftX = 0
@@ -382,7 +408,7 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
     if (popupRect.right > rightLimit) shiftX = rightLimit - popupRect.right
     if (popupRect.left + shiftX < leftLimit) shiftX = leftLimit - popupRect.left
     if (shiftX !== 0) popup.style.translate = `${Math.round(shiftX)}px 0px`
-  }, [])
+  }, [placement])
 
   useEffect(() => {
     const trigger = triggerRef.current
@@ -427,12 +453,17 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
     [children],
   )
   const selectedValue = String(value ?? options[0]?.value ?? '')
-  const rootStylex = stylex.props(styles.selectRoot, compact && styles.selectRootCompact)
+  const rootStylex = stylex.props(
+    styles.selectRoot,
+    compact && styles.selectRootCompact,
+    fullWidth && styles.selectRootFullWidth,
+    xstyle,
+  )
 
   return (
     <div
       ref={rootRef}
-      className={`select-control ${compact ? 'select-control--compact' : ''} ${className} ${rootStylex.className ?? ''}`.trim()}
+      className={`select-control ${compact ? 'select-control--compact' : ''} ${fullWidth ? 'select-control--full-width' : ''} ${className} ${rootStylex.className ?? ''}`.trim()}
       style={rootStylex.style}
       title={label}
     >
@@ -443,7 +474,8 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
         isLabelHidden
         variant="ghost"
         size="sm"
-        placement="above"
+        width={fullWidth ? '100%' : undefined}
+        placement={placement}
         presentation="popover"
         isDisabled={disabled}
         value={selectedValue}
@@ -452,9 +484,9 @@ export function SelectControl({ icon, compact, className = '', label, value, dis
         onChange={(nextValue) => {
           onChange?.({ target: { value: nextValue }, currentTarget: { value: nextValue } } as ChangeEvent<HTMLSelectElement>)
         }}
-        containerXstyle={styles.selectorField}
+        containerXstyle={[styles.selectorField, fullWidth && styles.selectorFieldFullWidth]}
         controlClassName="select-control__box"
-        controlXstyle={styles.selectorControl}
+        controlXstyle={[styles.selectorControl, fullWidth && styles.selectorControlFullWidth]}
       />
     </div>
   )

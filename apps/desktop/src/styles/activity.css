@@ -248,3 +248,4 @@
 .activity-coordinator__transcript .transcript { flex: 1 1 auto; min-height: 0; }
 .activity-coordinator__transcript--empty .session-welcome { display: none; }
 .activity-coordinator__empty { margin: 24px auto 0; padding: 0 18px; }
+.activity-coordinator__loading { min-height: 0; flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 40px 18px; color: var(--text-tertiary); font-size: var(--fs-ui); text-align: center; }

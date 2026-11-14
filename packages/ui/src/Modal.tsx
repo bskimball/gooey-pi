@@ -22,6 +22,7 @@ const styles = stylex.create({
     },
   },
   modalHeader: {
+    flexShrink: 0,
     height: 48,
     display: 'flex',
     alignItems: 'center',
@@ -41,12 +42,15 @@ const styles = stylex.create({
     color: 'var(--text)',
   },
   modalBody: {
+    flex: '1 1 auto',
+    minHeight: 0,
     padding: 16,
     color: 'var(--text-secondary)',
     fontSize: 'var(--fs-ui)',
     overflowY: 'auto',
   },
   modalFooter: {
+    flexShrink: 0,
     minHeight: 53,
     display: 'flex',
     alignItems: 'center',
