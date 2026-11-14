@@ -5,7 +5,7 @@ const requestMachine = setup({
   types: {
     context: {} as { runtimeId: string; id: string; timeout?: number },
     input: {} as { runtimeId: string; id: string; timeout?: number },
-    events: {} as { type: 'ANSWER' | 'CANCEL' },
+    events: {} as { type: 'ANSWER' | 'CANCEL' } | { type: 'SHORTEN'; timeout: number },
   },
   guards: { timed: ({ context }) => context.timeout !== undefined },
   delays: { timeout: ({ context }) => context.timeout ?? 0 },
@@ -18,7 +18,10 @@ const requestMachine = setup({
       on: { ANSWER: 'answered', CANCEL: 'cancelled' },
       states: {
         initializing: { always: [{ guard: 'timed', target: 'timed' }, { target: 'untimed' }] },
-        timed: { after: { timeout: { target: '#extensionRequest.timedOut' } } },
+        timed: {
+          after: { timeout: { target: '#extensionRequest.timedOut' } },
+          on: { SHORTEN: { target: 'timed', reenter: true, actions: assign({ timeout: ({ event }) => event.timeout }) } },
+        },
         untimed: {},
       },
     },
@@ -78,22 +81,33 @@ export const extensionUiMachine = setup({
     listening: {
       on: {
         UPSERT: {
-          actions: assign(({ context, event, spawn }) => {
-            const { pending } = event
-            const actors = new Map(context.actors)
-            if (!actors.has(pending.runtimeId)) {
-              actors.set(pending.runtimeId, spawn('request', { input: {
-                runtimeId: pending.runtimeId,
-                id: pending.request.id,
-                timeout: 'timeout' in pending.request ? pending.request.timeout : undefined,
-              } }))
-            }
-            return {
-              actors,
-              pendingByRuntime: new Map(context.pendingByRuntime).set(pending.runtimeId, pending),
-              visible: event.show ? pending : context.visible,
-            }
-          }),
+          actions: [
+            enqueueActions(({ context, event, enqueue }) => {
+              const previous = context.pendingByRuntime.get(event.pending.runtimeId)
+              const actor = context.actors.get(event.pending.runtimeId)
+              if (actor && previous?.request.id === event.pending.request.id
+                && previous.deadline !== undefined && event.pending.deadline !== undefined
+                && event.pending.deadline < previous.deadline) {
+                enqueue.sendTo(actor, { type: 'SHORTEN', timeout: Math.max(0, event.pending.deadline - Date.now()) })
+              }
+            }),
+            assign(({ context, event, spawn }) => {
+              const { pending } = event
+              const actors = new Map(context.actors)
+              if (!actors.has(pending.runtimeId)) {
+                actors.set(pending.runtimeId, spawn('request', { input: {
+                  runtimeId: pending.runtimeId,
+                  id: pending.request.id,
+                  timeout: 'timeout' in pending.request ? pending.request.timeout : undefined,
+                } }))
+              }
+              return {
+                actors,
+                pendingByRuntime: new Map(context.pendingByRuntime).set(pending.runtimeId, pending),
+                visible: event.show ? pending : context.visible,
+              }
+            }),
+          ],
         },
         SELECT: { actions: assign({ visible: ({ context, event }) => event.runtimeId ? context.pendingByRuntime.get(event.runtimeId) ?? null : null }) },
         CLEAR: { actions: 'remove' },

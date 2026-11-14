@@ -430,7 +430,7 @@ export function ScheduledPage({
     <Modal title={editorMode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
       <>
         <span className="schedule-editor__save-status" aria-live="polite">{saving ? 'Saving without closing your draft…' : ''}</span>
-        <ApexButton disabled={saving} onClick={closeEditor}>Cancel</ApexButton>
+        <ApexButton variant="quiet" disabled={saving} onClick={closeEditor}>Cancel</ApexButton>
         <ApexButton variant="primary" type="submit" form="schedule-editor-form" disabled={saving}>
           {saving ? 'Saving…' : editorMode === 'create' ? 'Create schedule' : 'Save changes'}
         </ApexButton>

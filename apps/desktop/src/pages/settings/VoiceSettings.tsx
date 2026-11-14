@@ -292,7 +292,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
         </div>
       </section>
 
-      {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
+      {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton variant="quiet" disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
         <p className="modal-intro">{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
         {failure ? <Banner status="error" role="alert" className="settings-error" title={failure} /> : null}
         <TextInput

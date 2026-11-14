@@ -1175,6 +1175,8 @@ async function bootstrap(): Promise<void> {
 		skillPath: browserSkillPath,
 	});
 	const collaborationBridge = new AgentCollaborationBridge({
+		globalCoordinatorPath: () => stateStore.snapshot().globalCoordinatorSession,
+		authorizedProjects: () => stateStore.getProjects(),
 		extensionPath: collaborationExtensionPath,
 		projects: piProjects,
 		sessions: { pi: piSessions },
@@ -1254,7 +1256,8 @@ async function bootstrap(): Promise<void> {
 	// Pi runtimes receive the capability extensions shipped in assets/extensions.
 	piManager.setRuntimeEnvironmentProvider((scope) => {
 		const sessionPath = scope.sessionPath;
-		const isCoordinator = sessionPath && Object.values(stateStore.getCoordinatorSessions()).some((path) => resolve(path) === resolve(sessionPath));
+		const globalCoordinator = stateStore.snapshot().globalCoordinatorSession;
+		const isCoordinator = sessionPath && globalCoordinator && resolve(globalCoordinator) === resolve(sessionPath);
 		return {
 			...desktopLink?.editor.environmentFor(scope),
 			APEX_EDITOR_EXTENSION_PATH: resolveExtensionPath(extensionInjection('pi', 'editor').filename, extensionPathContext),

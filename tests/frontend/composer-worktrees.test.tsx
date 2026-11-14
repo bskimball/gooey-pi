@@ -60,10 +60,15 @@ describe('composer worktree picker', () => {
     window.sessionStorage.clear()
   })
 
+  function openSettings() {
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!.click())
+    return document.body
+  }
+
   it('does not expose an automatic model choice before the catalog loads', () => {
     act(() => root.render(<Composer {...props()} />))
 
-    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="Model: No model available"]')
+    const trigger = openSettings().querySelector<HTMLButtonElement>('button[aria-label="Model: No model available"]')
     expect(trigger?.textContent).toContain('No model available')
     expect(trigger?.disabled).toBe(true)
   })
@@ -71,7 +76,7 @@ describe('composer worktree picker', () => {
   it('shows the checkout name instead of a generic Workspace label before the catalog loads', () => {
     act(() => root.render(<Composer {...props(statusBarProps({ checkoutCatalog: undefined, checkoutLabel: 'feature/current' }))} />))
 
-    const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: feature/current"]')
+    const trigger = openSettings().querySelector<HTMLButtonElement>('[aria-label="Checkout: feature/current"]')
     expect(trigger?.textContent).toContain('feature/current')
     expect(trigger?.textContent).not.toBe('Workspace')
   })
@@ -80,12 +85,13 @@ describe('composer worktree picker', () => {
     const onExecuteCheckout = vi.fn()
     act(() => root.render(<Composer {...props(statusBarProps({ onExecuteCheckout }))} />))
 
-    const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')
+    const dialog = openSettings()
+    const trigger = dialog.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')
     expect(trigger).not.toBeNull()
     expect(container.textContent).not.toContain('Local')
     act(() => trigger?.click())
 
-    const options = container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+    const options = dialog.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
     expect(options).toHaveLength(2)
     expect(options[0].getAttribute('aria-checked')).toBe('true')
     expect(options[1].textContent).toContain('feature/picker')
@@ -93,19 +99,20 @@ describe('composer worktree picker', () => {
 
     await act(async () => options[1].click())
     expect(onExecuteCheckout).toHaveBeenCalledWith({ strategy: 'worktree', operation: 'open', path: '/repo-feature' })
-    expect(container.querySelector('[role="menu"]')).toBeNull()
+    expect(dialog.querySelector('[role="menu"]')).toBeNull()
   })
 
   it('returns focus to the checkout trigger on Escape, but not on outside dismissal', async () => {
     vi.useFakeTimers()
     try {
       act(() => root.render(<Composer {...props(statusBarProps())} />))
-      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')!
+      const dialog = openSettings()
+      const trigger = dialog.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')!
       act(() => trigger.click())
-      const input = container.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
+      const input = dialog.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
       act(() => { input.focus(); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
       act(() => vi.runAllTimers())
-      expect(container.querySelector('[role="menu"]')).toBeNull()
+      expect(dialog.querySelector('[role="menu"]')).toBeNull()
       expect(document.activeElement).toBe(trigger)
 
       act(() => trigger.click())
@@ -119,9 +126,10 @@ describe('composer worktree picker', () => {
   it('creates a worktree from an inline branch form', async () => {
     const onExecuteCheckout = vi.fn().mockResolvedValue(undefined)
     act(() => root.render(<Composer {...props(statusBarProps({ onExecuteCheckout }))} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
+    const dialog = openSettings()
+    act(() => dialog.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
-    const input = container.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
+    const input = dialog.querySelector<HTMLInputElement>('[placeholder="New branch name"]')!
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
       setter?.call(input, 'feature/new-picker')
@@ -131,7 +139,7 @@ describe('composer worktree picker', () => {
     await act(async () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
 
     expect(onExecuteCheckout).toHaveBeenCalledWith({ strategy: 'worktree', operation: 'create', branch: 'feature/new-picker' })
-    expect(container.querySelector('[role="menu"]')).toBeNull()
+    expect(dialog.querySelector('[role="menu"]')).toBeNull()
   })
 
   it('switches local branches without showing checkout folders', () => {
@@ -142,18 +150,54 @@ describe('composer worktree picker', () => {
       checkouts: [{ name: 'main', current: true }, { name: 'feature/local', current: false }],
     }
     act(() => root.render(<Composer {...props(statusBarProps({ checkoutCatalog, onExecuteCheckout }))} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
+    const dialog = openSettings()
+    act(() => dialog.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.click())
 
-    expect(container.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Git branches')
-    expect(container.textContent).not.toContain('/repo')
-    const options = container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+    expect(dialog.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Git branches')
+    expect(dialog.textContent).not.toContain('/repo')
+    const options = dialog.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
     act(() => options[1].click())
     expect(onExecuteCheckout).toHaveBeenCalledWith({ strategy: 'branch', operation: 'switch', branch: 'feature/local' })
   })
 
+  it('closes a busy checkout menu on Escape without closing settings or repeating the operation', async () => {
+    let resolve!: () => void
+    const onExecuteCheckout = vi.fn(() => new Promise<void>((done) => { resolve = done }))
+    act(() => root.render(<Composer {...props(statusBarProps({ onExecuteCheckout }))} />))
+    const page = openSettings()
+    const trigger = page.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')!
+    act(() => trigger.click())
+    await act(async () => page.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1].click())
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    act(() => { trigger.focus(); trigger.dispatchEvent(escape) })
+    expect(escape.defaultPrevented).toBe(true)
+    expect(page.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(page.querySelector('[role="menu"]')).toBeNull()
+    act(() => trigger.click())
+    await act(async () => page.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1].click())
+    expect(onExecuteCheckout).toHaveBeenCalledTimes(1)
+    await act(async () => resolve())
+  })
+
+  it('keeps checkout operations single-flight across closing and reopening settings', async () => {
+    let resolve!: () => void
+    const onExecuteCheckout = vi.fn(() => new Promise<void>((done) => { resolve = done }))
+    act(() => root.render(<Composer {...props(statusBarProps({ onExecuteCheckout }))} />))
+    const dialog = openSettings()
+    act(() => dialog.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')!.click())
+    await act(async () => dialog.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1].click())
+    expect(onExecuteCheckout).toHaveBeenCalledTimes(1)
+    act(() => dialog.querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="Close"]')!.click())
+    openSettings()
+    await act(async () => dialog.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')[1].click())
+    expect(onExecuteCheckout).toHaveBeenCalledTimes(1)
+    await act(async () => resolve())
+    expect(dialog.querySelector('[role="menu"]')).toBeNull()
+  })
+
   it('locks checkout switching while a run is in flight', () => {
     act(() => root.render(<Composer {...props(statusBarProps({ busy: true }))} />))
-    expect(container.querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.disabled).toBe(true)
+    expect(openSettings().querySelector<HTMLButtonElement>('[aria-label="Checkout: main"]')?.disabled).toBe(true)
   })
 
   it('restores an unsent draft and model after the composer remounts', async () => {

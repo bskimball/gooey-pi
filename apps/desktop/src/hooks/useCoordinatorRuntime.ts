@@ -3,7 +3,7 @@ import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import type { PendingExtensionUi } from './useExtensionUi'
 import { parseExtensionUiRequest } from '@/lib/extension-ui'
 import { replayApexEvents } from '@/lib/events/reduce'
-import type { ApexApi, ApexEventEnvelope, CoordinatorAttachment, PromptDeliveryIntent, TranscriptMessage } from '@/types/api'
+import type { ApexApi, ApexEventEnvelope, CoordinatorAttachment, PromptDeliveryIntent, PromptImage, TranscriptMessage } from '@/types/api'
 
 type CoordinatorState =
   | { phase: 'closed' }
@@ -15,20 +15,23 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string | undefined) {
+export function useCoordinatorRuntime(bridge: ApexApi | null, onRecoverQuestion?: (runtimeId: string, event: Record<string, unknown>) => void) {
+  const projectId = 'global-chief'
   const [state, setState] = useState<CoordinatorState>({ phase: 'closed' })
   const [revision, setRevision] = useState(0)
   const [sending, setSending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const generationRef = useRef(0)
   const stateRef = useRef(state)
+  const recoverQuestionRef = useRef(onRecoverQuestion)
   stateRef.current = state
+  recoverQuestionRef.current = onRecoverQuestion
 
   useEffect(() => {
     const generation = ++generationRef.current
     setActionError(null)
     setSending(false)
-    if (!bridge || !projectId) {
+    if (!bridge) {
       setState({ phase: 'closed' })
       return
     }
@@ -46,6 +49,8 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
       }
       const { runtimeId, event, sequence } = envelope
       if (runtimeId !== attachment.runtime.runtimeId || (sequence !== undefined && sequence <= attachment.eventSequence)) return
+      const parsed = parseExtensionUiRequest(event)
+      if (parsed?.method === 'select' && parsed.questionnaire) recoverQuestionRef.current?.(runtimeId, event)
       setState((current) => {
         if (current.phase !== 'ready' || current.attachment.attachmentId !== attachment?.attachmentId) return current
         const runtime = { ...current.attachment.runtime }
@@ -77,7 +82,7 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
       }
     }
     const unsubscribe = bridge.agent.onEvent(receive)
-    void bridge.coordinator.open(projectId).then((opened) => {
+    void bridge.coordinator.open().then((opened) => {
       if (disposed) {
         void bridge.coordinator.close(opened.attachmentId).catch(() => undefined)
         return
@@ -87,6 +92,10 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
         throw new Error('Session activity changed too quickly while opening. Reconnect to get a fresh snapshot.')
       }
       attachment = opened
+      for (const dialog of opened.pendingDialogs) {
+        const request = parseExtensionUiRequest(dialog)
+        if (request?.method === 'select' && request.questionnaire) recoverQuestionRef.current?.(opened.runtime.runtimeId, dialog)
+      }
       setState({ phase: 'ready', projectId, attachment: opened, messages: opened.messages, dialogs: opened.pendingDialogs, disconnected: false })
       for (const envelope of buffered.splice(0)) receive(envelope)
     }).catch((error: unknown) => {
@@ -100,35 +109,47 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
     }
   }, [bridge, projectId, revision])
 
-  const send = useCallback(async (message: string, intent: PromptDeliveryIntent = 'queue') => {
+  const send = useCallback(async (message: string, images: PromptImage[], intent: PromptDeliveryIntent = 'queue') => {
     const current = stateRef.current
-    if (!bridge || current.phase !== 'ready' || current.projectId !== projectId || current.disconnected || sending) return false
+    if (!bridge || current.phase !== 'ready' || current.projectId !== projectId || current.disconnected || sending) throw new Error('Chief of Staff is not ready to receive messages.')
     const generation = generationRef.current
     setSending(true)
     setActionError(null)
     try {
-      const accepted = await bridge.sessions.followUp(current.attachment.session.filePath, message, intent)
-      if (!accepted) throw new Error('The coordinator did not accept the message.')
-      return true
+      const response = await bridge.agent.command(current.attachment.runtime.runtimeId, {
+        type: 'attached_prompt', intent, message,
+        ...(images.length ? { images } : {}),
+      })
+      if (response.success === false) throw new Error(typeof response.error === 'string' && response.error ? response.error : 'Chief of Staff rejected the message.')
     } catch (error) {
       if (generationRef.current === generation) setActionError(errorText(error))
-      return false
+      throw error
     } finally {
       if (generationRef.current === generation) setSending(false)
     }
   }, [bridge, projectId, sending])
 
+  const syncRuntime = useCallback(async (runtimeId: string) => {
+    if (!bridge) return
+    const runtime = (await bridge.agent.list()).find((item) => item.runtimeId === runtimeId)
+    if (!runtime) return
+    setState((current) => current.phase === 'ready' && current.attachment.runtime.runtimeId === runtimeId
+      ? { ...current, attachment: { ...current.attachment, runtime } } : current)
+  }, [bridge])
+
   const stop = useCallback(async () => {
     const current = stateRef.current
     if (!bridge || current.phase !== 'ready' || current.projectId !== projectId) return
     try {
-      await bridge.agent.command(current.attachment.runtime.runtimeId, { type: 'abort' })
+      setActionError(null)
+      const response = await bridge.agent.command(current.attachment.runtime.runtimeId, { type: 'abort' })
+      if (response.success === false) throw new Error(typeof response.error === 'string' && response.error ? response.error : 'Chief of Staff could not stop the run.')
     } catch (error) { setActionError(errorText(error)) }
   }, [bridge, projectId])
 
   const pending = state.phase === 'ready' ? state.dialogs.flatMap((dialog): PendingExtensionUi[] => {
     const request = parseExtensionUiRequest(dialog)
-    if (!request) return []
+    if (!request || (recoverQuestionRef.current && request.method === 'select' && request.questionnaire)) return []
     const deadline = typeof dialog.deadline === 'number' ? dialog.deadline
       : typeof dialog.receivedAt === 'number' && 'timeout' in request && request.timeout
         ? dialog.receivedAt + request.timeout : undefined
@@ -145,5 +166,5 @@ export function useCoordinatorRuntime(bridge: ApexApi | null, projectId: string 
     } catch (error) { setActionError(errorText(error)) }
   }, [bridge, pending, projectId])
 
-  return { state, sending, error: actionError, pending, send, stop, respond, reconnect: () => setRevision((value) => value + 1) }
+  return { state, sending, error: actionError, pending, send, stop, respond, syncRuntime, reconnect: () => setRevision((value) => value + 1) }
 }

@@ -1,35 +1,40 @@
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
-import { MarkdownText } from '@/components/MarkdownText'
+import { useCallback, useEffect, useState } from 'react'
+import { Composer } from '@/components/Composer'
+import { Transcript } from '@/components/Transcript'
 import { ExtensionUiModal } from '@/components/ExtensionUiModal'
 import { ApexButton } from '@/components/ui'
 import { questionFromPendingExtensionUi } from '@/app/session-live'
-import type { ActivityControls } from '@/hooks/useActivityControls'
 import { useCoordinatorRuntime } from '@/hooks/useCoordinatorRuntime'
-import type { ApexApi, ProjectRecord } from '@/types/api'
+import { useProviderCatalog } from '@/hooks/useProviderCatalog'
+import { EMPTY_GIT_STATUS } from '@/lib/workspace'
+import type { ActivityControls } from '@/hooks/useActivityControls'
+import type { ApexApi } from '@/types/api'
 import { ActivityQuestionCard } from './ActivityQuestionCard'
 
 interface ActivityCoordinatorProps {
   bridge: ApexApi | null
-  project?: ProjectRecord
   controls?: ActivityControls
-  textareaRef: RefObject<HTMLTextAreaElement | null>
+  showReasoning?: boolean
+  showTools?: boolean
 }
 
-export function ActivityCoordinator({ bridge, project, controls, textareaRef }: ActivityCoordinatorProps) {
-  const coordinator = useCoordinatorRuntime(bridge, project?.id)
+// Transcript requires both callbacks. Its welcome suggestions are hidden in this view,
+// and EMPTY_GIT_STATUS prevents it from rendering any changes action.
+const unreachableTranscriptAction = () => undefined
+
+export function ActivityCoordinator({ bridge, controls, showReasoning, showTools }: ActivityCoordinatorProps) {
+  const coordinator = useCoordinatorRuntime(bridge, controls?.onRecoverQuestion)
   const { state } = coordinator
-  const [draft, setDraft] = useState('')
-  const [intent, setIntent] = useState<'queue' | 'steer'>('queue')
+  const ready = state.phase === 'ready'
+  const runtime = ready ? state.attachment.runtime : null
+  const reportError = useCallback((error: unknown) => controls?.reportError?.(error), [controls])
+  const provider = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession: ready ? state.attachment.session : undefined, syncRuntime: coordinator.syncRuntime, reportError })
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const stickToBottomRef = useRef(true)
-  const ready = state.phase === 'ready' && state.projectId === project?.id
-  const runtimeId = ready ? state.attachment.runtime.runtimeId : undefined
-  const livePending = runtimeId ? controls?.pendingByRuntime?.get(runtimeId) : undefined
+  const livePending = runtime ? controls?.pendingByRuntime?.get(runtime.runtimeId) : undefined
   const pending = livePending ?? coordinator.pending
-  const busy = ready && (state.attachment.runtime.isStreaming || state.attachment.runtime.isCompacting)
   const respond = livePending && controls?.onRespondQuestion ? controls.onRespondQuestion : coordinator.respond
+  const busy = Boolean(runtime?.isStreaming || runtime?.isCompacting)
 
   useEffect(() => {
     if (!pending?.deadline) return
@@ -38,72 +43,27 @@ export function ActivityCoordinator({ bridge, project, controls, textareaRef }: 
     return () => window.clearInterval(timer)
   }, [pending?.deadline])
 
-  useEffect(() => {
-    if (stickToBottomRef.current && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [state])
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const message = draft.trim()
-    if (!message || !ready || coordinator.sending) return
-    if (await coordinator.send(message, intent)) setDraft('')
-  }
-
-  return (
-    <section className="activity-coordinator" aria-label="Chief of Staff">
-      <header className="activity-peek__header">
-        <div className="activity-peek__identity">
-          <h2 className="activity-peek__title">Chief of Staff</h2>
-          <span className="activity-coordinator__scope">{project?.name ?? 'Choose a project to coordinate'}</span>
-        </div>
-        {busy ? <ApexButton compact onClick={() => void coordinator.stop()}>Stop coordinator</ApexButton> : null}
-      </header>
-      <p className="activity-coordinator__boundary">Creates and monitors sessions in this project. Questions and permissions stay with you.</p>
-      <div className="activity-coordinator__messages scroll-area" ref={scrollRef} onScroll={() => {
-        const element = scrollRef.current
-        if (element) stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48
-      }}>
-        {!project ? <p className="activity-coordinator__empty">Select a granted project using the project filter. Each project has its own Chief of Staff conversation.</p>
-          : !bridge ? <p className="activity-coordinator__empty">Chief of Staff requires the desktop app.</p>
-          : state.phase === 'opening' ? <p role="status">Opening this project's coordinator…</p>
-          : state.phase === 'error' ? <div role="alert"><p>{state.error}</p><ApexButton onClick={coordinator.reconnect}>Try again</ApexButton></div>
-          : ready ? <>
-            {state.messages.length === 0 ? <div className="activity-coordinator__empty"><p>What needs doing in {project.name}?</p><p>Ask to split a task into implementor sessions, check their progress, or synthesize their results.</p></div> : null}
-            {state.messages.map((message) => {
-              const text = message.parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n\n')
-              const tools = message.parts.filter((part) => part.type === 'toolCall').map((part) => part.name)
-              if (!text && !tools.length) return null
-              return <article className={`activity-coordinator__message activity-coordinator__message--${message.role}`} key={message.id}>
-                <span className="activity-tail-role">{message.role === 'user' ? 'You' : 'Chief of Staff'}</span>
-                {text ? <MarkdownText text={text} streaming={message.streaming} /> : null}
-                {tools.length ? <p className="activity-coordinator__tools">{tools.join(' · ')}</p> : null}
-              </article>
-            })}
-            {busy ? <p className="activity-coordinator__status" role="status">{pending ? 'Waiting for your decision' : 'Coordinating…'}</p> : null}
-            {state.disconnected ? <div role="status"><p>The coordinator runtime has stopped. Its conversation is saved.</p><ApexButton onClick={coordinator.reconnect}>Reconnect</ApexButton></div> : null}
-          </> : null}
+  return <section className="activity-coordinator" aria-label="Chief of Staff">
+    <header className="activity-peek__header"><div className="activity-peek__identity">
+      <h2 className="activity-peek__title">Chief of Staff</h2>
+      <span className="activity-coordinator__scope">All authorized projects</span>
+    </div></header>
+    <main className="conversation-pane activity-coordinator__conversation">
+      {!bridge ? <p role="status">Chief of Staff requires the desktop app.</p> : null}
+      {state.phase === 'opening' ? <p role="status">Opening Chief of Staff…</p> : null}
+      {state.phase === 'error' ? <div role="alert"><p>{state.error}</p><ApexButton onClick={coordinator.reconnect}>Try again</ApexButton></div> : null}
+      {ready && state.disconnected ? <div role="status"><p>The coordinator runtime has stopped. Its conversation is saved.</p><ApexButton onClick={coordinator.reconnect}>Reconnect</ApexButton></div> : null}
+      {ready ? <div className={`activity-coordinator__transcript ${state.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`}>
+        {state.messages.length === 0 ? <div className="activity-coordinator__empty">Ask Chief of Staff to check progress, direct a session, or launch work in a project.</div> : null}
+        <Transcript messages={state.messages} git={EMPTY_GIT_STATUS} cwd={runtime?.cwd} harness="pi" active={busy} showReasoning={showReasoning} showTools={showTools} onOpenChanges={unreachableTranscriptAction} onSuggestion={unreachableTranscriptAction} showPinnedChanges={false} />
+      </div> : null}
+      {pending && pending.request.method !== 'questionnaire' ? <ActivityQuestionCard question={questionFromPendingExtensionUi(pending)} pendingUi={pending} now={now} onRespond={respond} onOpenModal={() => setShowQuestionModal(true)} /> : null}
+      {showQuestionModal && pending && pending.request.method !== 'questionnaire' ? <ExtensionUiModal request={pending.request} deadline={pending.deadline} onRespond={(response) => { setShowQuestionModal(false); void respond(pending.runtimeId, response) }} /> : null}
+      <div className="conversation-bottom-dock">
+        {pending?.request.method === 'questionnaire' ? <ExtensionUiModal presentation="inline" request={pending.request} deadline={pending.deadline} onRespond={(response) => void respond(pending.runtimeId, response)} /> : null}
+        <Composer draftKey="activity:global-chief" isolatedDraft conversationOnly busy={busy} admitting={coordinator.sending} disabled={!ready || state.disconnected} model={provider.model} effort={provider.effort} modelsByProvider={provider.modelsByProvider} providers={provider.catalog?.providers ?? []} reasoningLevels={provider.reasoningLevels} fast={provider.fast} fastSupported={false} fastAvailable={runtime?.fastModeAvailable !== false} agentName="Chief of Staff" shortName="Chief of Staff" harness="pi" imageInputSupported={runtime?.imageInputSupported ?? Boolean(provider.selectedModel?.input.includes('image'))} skills={[]} taskExcerpts={[]} onModelChange={provider.changeModel} onEffortChange={provider.changeEffort} onFastChange={provider.changeFast} onSend={coordinator.send} onStop={coordinator.stop} />
+        {coordinator.error ? <p role="alert">{coordinator.error}</p> : null}
       </div>
-      {pending ? <ActivityQuestionCard question={questionFromPendingExtensionUi(pending)} pendingUi={pending} now={now} onRespond={respond} onOpenModal={() => setShowQuestionModal(true)} /> : null}
-      {showQuestionModal && pending ? <ExtensionUiModal request={pending.request} deadline={pending.deadline} onRespond={(response) => {
-        setShowQuestionModal(false)
-        void respond(pending.runtimeId, response)
-      }} /> : null}
-      <form className="activity-reply" onSubmit={(event) => void submit(event)}>
-        <label className="sr-only" htmlFor="activity-coordinator-message">Message Chief of Staff</label>
-        <div className="activity-reply__box">
-          <textarea id="activity-coordinator-message" ref={textareaRef} className="activity-reply__input" rows={3} value={draft} placeholder={project ? 'Delegate a task or ask for a status update…' : 'Select a project first'} disabled={!ready || state.disconnected || coordinator.sending} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault()
-              event.currentTarget.form?.requestSubmit()
-            }
-          }} />
-          <ApexButton type="submit" compact variant="primary" disabled={!ready || state.disconnected || coordinator.sending || !draft.trim()}>{coordinator.sending ? 'Sending…' : 'Send'}</ApexButton>
-        </div>
-        <div className="activity-reply__footer">
-          {busy ? <label className="activity-coordinator__delivery">Delivery <select aria-label="Coordinator message delivery" value={intent} onChange={(event) => setIntent(event.target.value === 'steer' ? 'steer' : 'queue')}><option value="queue">Follow-up</option><option value="steer">Steer now</option></select></label> : <span className="activity-reply__hint">Enter to send · Shift+Enter for a new line</span>}
-        </div>
-        {coordinator.error ? <p className="activity-reply__status activity-reply__status--error" role="alert">{coordinator.error}</p> : null}
-      </form>
-    </section>
-  )
+    </main>
+  </section>
 }

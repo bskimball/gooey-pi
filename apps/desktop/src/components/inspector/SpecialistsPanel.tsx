@@ -328,15 +328,16 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
             if (isAssistant) assistantTurnCount += 1
             const reportIndex = report?.messageId === message.id ? report.partIndex : -1
             const reportPart = message.parts[reportIndex]
+            const streaming = Boolean(message.streaming && isLiveSpecialist(active.status))
             return (
               <article key={message.id} className="specialist-turn specialist-turn--assistant">
                 {isAssistant && assistantTurnCount > 1 ? <div className="specialist-turn__divider"><span>Turn {assistantTurnCount}</span></div> : null}
                 {message.errorMessage ? <div className="specialist-header__error" role="alert">{message.errorMessage}</div> : null}
                 <div className="specialist-turn__content">
-                  {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, Boolean(matchedDiskTranscript && message.streaming))}
-                  {reportPart?.type === 'text' ? <section className="specialist-result" ref={resultRef}><h3>Result</h3><MarkdownText text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true)}</section> : null}
+                  {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, streaming, true)}
+                  {reportPart?.type === 'text' ? <section className="specialist-result" ref={resultRef}><h3>Result</h3><MarkdownText text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true, streaming, true)}</section> : null}
                 </div>
-                {message.streaming && !message.parts.length ? (
+                {streaming && !message.parts.length ? (
                   <div className="specialist-turn__working">
                     <StatusMark state="running" size={13} />
                     <span>Awaiting a recorded update…</span>

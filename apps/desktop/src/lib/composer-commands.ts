@@ -27,6 +27,11 @@ export const BUILTIN_COMPOSER_COMMANDS: readonly ComposerCommand[] = [
   { name: 'logout', description: 'Remove provider authentication', source: 'builtin' },
 ]
 
+const PI_TASK_COMMANDS: readonly ComposerCommand[] = [
+  { name: 'btw', description: 'Open a side thread, optionally asking a question', argumentHint: '[question]', source: 'builtin' },
+  { name: 'finish', description: 'Review and finish the saved task', source: 'builtin' },
+]
+
 /** Apex's modes extension commands, listed before a runtime has reported its own commands. */
 const PI_MODE_COMMANDS: readonly ComposerCommand[] = [
   { name: 'mode', description: 'Switch Pi, Apex, Apex Orchestrate, Fusion, Utopia, Hydra, or Work', source: 'extension' },
@@ -134,7 +139,7 @@ export function availableCommands(harness: HarnessId, runtimeCommands: readonly 
   const sourceOrder: Record<ComposerCommandSource, number> = { builtin: 0, prompt: 1, extension: 2, skill: 3 }
   const listed = [...(runtimeCommands ?? fallback)].sort((left, right) => sourceOrder[left.source] - sourceOrder[right.source])
   const seen = new Set<string>()
-  return [...BUILTIN_COMPOSER_COMMANDS, ...listed].filter((command) => {
+  return [...BUILTIN_COMPOSER_COMMANDS, ...(harness === 'pi' ? PI_TASK_COMMANDS : []), ...listed].filter((command) => {
     if (seen.has(command.name)) return false
     seen.add(command.name)
     return true

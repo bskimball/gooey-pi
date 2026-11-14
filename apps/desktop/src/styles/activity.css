@@ -1,7 +1,8 @@
 /* Activity triage & live peek surface */
 .page--activity { overflow: hidden; display: flex; flex-direction: column; }
-.page-container.activity-page, .activity-page { width: 100%; max-width: none; height: 100%; min-height: 0; flex: 1 1 auto; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(380px, 46%) minmax(0, 1fr); overflow: hidden; }
-.page-container.activity-page--compact, .activity-page--compact { grid-template-columns: minmax(0, 1fr); }
+.page-container.activity-page, .activity-page { width: 100%; max-width: none; height: 100%; min-height: 0; flex: 1 1 auto; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(260px, 32%) minmax(0, 1fr); overflow: hidden; }
+.page-container.activity-page--compact, .activity-page--compact { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 40%) minmax(0, 1fr); }
+.page-container.activity-page--compact.activity-page--coordinator { grid-template-rows: minmax(0, 1fr); }
 .activity-feed { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--canvas); overflow: hidden; container-type: inline-size; }
 .activity-page--compact .activity-feed { border-right: 0; }
 .activity-feed__top { flex: 0 0 auto; padding: 20px 14px 0; }
@@ -87,10 +88,10 @@
 .activity-view-tools { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--canvas); }
 .activity-project-filter { min-width: 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: var(--fs-ui); }
 .activity-project-filter select, .activity-coordinator__delivery select { min-width: 0; max-width: 240px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); background: var(--surface-raised); font: inherit; }
+.activity-project-filter select { border-radius: 999px; padding-inline: 12px; }
 .activity-project-filter select:focus-visible, .activity-coordinator__delivery select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.activity-detail-tabs { display: flex; gap: 4px; }
-.activity-detail-tabs button { min-height: 40px; }
-.activity-detail-tabs button[aria-pressed="true"] { color: var(--apex); background: var(--apex-soft); }
+.activity-detail-tabs { min-width: 0; }
+.activity-detail-tabs [role="tab"] { min-height: 40px; }
 .activity-coordinator { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-subtle); }
 .activity-coordinator__scope { color: var(--text-secondary); font-size: var(--fs-ui); overflow-wrap: anywhere; }
 .activity-coordinator__boundary { flex: 0 0 auto; margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--border); color: var(--text-tertiary); font-size: var(--fs-meta); line-height: 1.5; }
@@ -225,9 +226,9 @@
 }
 
 @media (max-width: 980px) {
-  .page-container.activity-page, .activity-page { grid-template-columns: minmax(0, 1fr); }
+  .page-container.activity-page, .activity-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 40%) minmax(0, 1fr); }
+  .page-container.activity-page--coordinator, .activity-page--coordinator { grid-template-rows: minmax(0, 1fr); }
   .activity-feed { border-right: 0; }
-  .activity-peek { display: none; }
   .activity-page--coordinator .activity-feed { display: none; }
 }
 
@@ -239,3 +240,11 @@
   .activity-row:not(.activity-row--running) .activity-row__actions { position: static; padding-right: 8px; pointer-events: auto; }
   .activity-row__clear { opacity: 1; pointer-events: auto; }
 }
+
+.activity-chief-slot, .activity-peek-slot { min-width: 0; min-height: 0; overflow: hidden; }
+.activity-chief-slot[hidden], .activity-peek-slot[hidden] { display: none; }
+.activity-coordinator__conversation { min-height: 0; flex: 1 1 auto; }
+.activity-coordinator__transcript { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+.activity-coordinator__transcript .transcript { flex: 1 1 auto; min-height: 0; }
+.activity-coordinator__transcript--empty .session-welcome { display: none; }
+.activity-coordinator__empty { margin: 24px auto 0; padding: 0 18px; }

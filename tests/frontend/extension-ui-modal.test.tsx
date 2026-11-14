@@ -162,6 +162,116 @@ describe('extension questionnaire wizard', () => {
   })
 })
 
+describe('inline extension questionnaire', () => {
+  it('preserves outside draft focus on arrival and refresh, while supporting keyboard answers inside', async () => {
+    const draft = document.createElement('textarea')
+    document.body.append(draft)
+    const onRespond = vi.fn()
+    try {
+      draft.focus()
+      const partial = { ...request, complete: false, questions: [request.questions[0]] }
+      await act(async () => { root.render(<ExtensionUiModal request={partial} presentation="inline" onRespond={onRespond} />) })
+      expect(document.activeElement).toBe(draft)
+      await act(async () => { root.render(<ExtensionUiModal request={request} presentation="inline" onRespond={onRespond} />) })
+      expect(document.activeElement).toBe(draft)
+      expect(pressKey(draft, { key: '1' }).defaultPrevented).toBe(false)
+      expect(pressKey(draft, { key: 'Enter' }).defaultPrevented).toBe(false)
+      expect(onRespond).not.toHaveBeenCalled()
+      const option = container.querySelector<HTMLButtonElement>('[role="option"]')!
+      option.focus()
+      pressKey(option, { key: '2' })
+      pressKey(option, { key: 'Enter' })
+      expect(container.textContent).toContain('Pick a language')
+      const next = container.querySelector<HTMLButtonElement>('[role="option"]')!
+      expect(document.activeElement).toBe(next)
+      pressKey(next, { key: 'Enter' })
+      expect(container.querySelector('.extension-questionnaire__submit')).not.toBeNull()
+      expect(container.querySelector('.extension-questionnaire__progress button:last-child')).toBe(document.activeElement)
+      pressKey(document.activeElement as HTMLElement, { key: 'Enter' })
+      expect(onRespond).toHaveBeenCalledWith({ values: {
+        q1: JSON.stringify({ answer: 'Vue', answerSource: 'option' }),
+        q2: JSON.stringify({ answer: 'TypeScript', answerSource: 'option' }),
+      } })
+    } finally { draft.remove() }
+  })
+
+  it('renders in place and collects option, context, and Other answers', async () => {
+    const onRespond = vi.fn()
+    const inlineRequest = { ...request, questions: [request.questions[0], { ...request.questions[1], options: ['TypeScript', 'Other (type your own answer)'] }] }
+    await act(async () => { root.render(<ExtensionUiModal request={inlineRequest} presentation="inline" onRespond={onRespond} />) })
+    expect(container.querySelector('section[aria-label="Project setup"]')).not.toBeNull()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(container.querySelectorAll('[role="option"]')).toHaveLength(2)
+    expect(container.textContent).toContain('Pick a framework')
+    const context = container.querySelector<HTMLInputElement>('input[aria-label="Additional context"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(context, 'with hooks')
+      context.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
+    expect(container.textContent).toContain('Pick a language')
+    await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
+    const other = container.querySelector<HTMLInputElement>('input[aria-label="Additional context"]')!
+    expect(document.activeElement).toBe(other)
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(other, 'Rust')
+      other.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
+    const submit = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Submit answers')!
+    await clickButton(submit)
+    expect(onRespond).toHaveBeenCalledOnce()
+    expect(onRespond).toHaveBeenCalledWith({ values: {
+      q1: JSON.stringify({ answer: 'Vue', answerSource: 'option', context: 'with hooks' }),
+      q2: JSON.stringify({ answer: 'Rust', answerSource: 'freeform' }),
+    } })
+  })
+
+  it('retains answers on same-id refresh and never submits a partial group', async () => {
+    const onRespond = vi.fn()
+    await act(async () => { root.render(<ExtensionUiModal request={request} presentation="inline" onRespond={onRespond} />) })
+    await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
+    const partial = { ...request, complete: false, questions: [request.questions[0]] }
+    await act(async () => { root.render(<ExtensionUiModal request={partial} presentation="inline" onRespond={onRespond} />) })
+    expect(container.textContent).toContain('Preparing questions')
+    expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Submit answers')?.disabled).toBe(true)
+    await act(async () => { root.render(<ExtensionUiModal request={{ ...request }} presentation="inline" onRespond={onRespond} />) })
+    await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[0])
+    await clickButton([...container.querySelectorAll('button')].find((button) => button.textContent === 'Submit answers')!)
+    expect(onRespond).toHaveBeenCalledWith({ values: {
+      q1: JSON.stringify({ answer: 'Vue', answerSource: 'option' }),
+      q2: JSON.stringify({ answer: 'TypeScript', answerSource: 'option' }),
+    } })
+  })
+
+  it('shows the host deadline and cancels through the normal callback', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      const onRespond = vi.fn()
+      await act(async () => { root.render(<ExtensionUiModal request={request} presentation="inline" deadline={Date.now() + 2_000} onRespond={onRespond} />) })
+      expect(container.querySelector('[role="timer"]')?.textContent).toContain('2s')
+      await act(async () => { vi.advanceTimersByTime(2_000) })
+      expect(container.querySelector('[role="timer"]')?.textContent).toContain('0s')
+      await clickButton([...container.querySelectorAll('button')].find((button) => button.textContent === 'Cancel')!)
+      expect(onRespond).toHaveBeenCalledWith({ cancelled: true })
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps select, confirm, input and editor requests modal even with inline requested', async () => {
+    const requests: ExtensionUiRequest[] = [
+      { method: 'select', id: 's', title: 'Select', options: ['One', 'Two'] },
+      { method: 'confirm', id: 'c', title: 'Confirm', message: 'Proceed?' },
+      { method: 'input', id: 'i', title: 'Input' },
+      { method: 'editor', id: 'e', title: 'Editor' },
+    ]
+    for (const item of requests) {
+      await act(async () => { root.render(<ExtensionUiModal request={item} presentation="inline" onRespond={vi.fn()} />) })
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+      expect(container.querySelector('section.extension-questionnaire-inline')).toBeNull()
+    }
+  })
+})
+
 describe('extension select search', () => {
   const models = Array.from({ length: 40 }, (_, index) => `${index % 2 ? 'openai' : 'claude-bridge'}/model-${index}`)
   const selectRequest: ExtensionUiRequest = { method: 'select', id: 'lead', title: 'Fusion lead model', options: ['openai/gpt-6-astra', ...models] }

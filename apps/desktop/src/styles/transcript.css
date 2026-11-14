@@ -22,9 +22,7 @@
 .prompt-suggestions button:active { transform: scale(.97); }
 .message { width: 100%; margin-bottom: 32px; }
 /* Each sent prompt is a tinted block with a muted apex edge, so your side of a long session stays
-   easy to find while scanning the agent's output. The edge sits on the axis the assistant mark and
-   running work rail share (11px into the 38px gutter), the text starts in the reply column, and the
-   block stays square so the rule reads as a straight margin line. */
+   easy to find while scanning the agent's output. */
 .message--user { width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; margin: 0 0 16px; padding: 10px 10px 10px 14px; border-left: 1.5px solid color-mix(in srgb, var(--apex) 50%, var(--border-strong)); background: var(--surface-subtle); }
 .message--user > * { grid-column: 1; min-width: 0; }
 .message--user > .message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
@@ -54,10 +52,8 @@
 .user-annotations > summary:hover { background: color-mix(in srgb, var(--annotation) 14%, transparent); }
 .user-annotations[open] > summary { margin-bottom: 5px; }
 .user-annotations > pre { max-height: 220px; margin: 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* Replies share the user turn's single left bar and inset, so prompt text, prose, and tool icons
-   start on one line. A live turn colours the bar; there is no second rail inside it. */
-.message--assistant { display: block; padding-left: 14px; border-left: 1.5px solid var(--border); }
-.message--assistant.message--streaming { border-left-color: var(--apex); }
+/* Assistant prose and work rows start at the transcript's left content edge. */
+.message--assistant { display: block; }
 /* A live turn that ends the transcript sits directly above the composer, whose clearance the
    transcript's bottom padding already reserves, so it drops the margins that space later rows. */
 .message--assistant:has(.work-disclosure.is-running, .streaming-state):not(:has(~ .message)),
@@ -133,7 +129,7 @@
 .activity-line__kind { flex: 0 0 auto; color: var(--text-secondary); font-weight: 550; white-space: nowrap; }
 .activity-line--tool, .activity-line--agent { border-radius: 0; }
 .activity-line--tool:hover, .activity-line--agent:hover { background: var(--surface-subtle); }
-/* Same left/right edges as the other chat rows: full reading column, without the 38px activity indent. */
+/* Compaction uses the full reading column like other chat rows. */
 .activity-line--compaction { width: 100%; margin: 4px 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-raised); }
 .message--activity:has(.activity-line--compaction) { width: auto; margin-inline: 0; }
 .activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }
@@ -193,7 +189,7 @@
 .activity-thought__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .activity-thought__summary .activity-line__kind { color: inherit; font-weight: 550; }
 .activity-thought__summary[aria-expanded='true'] .disclosure-caret { transform: rotate(90deg); }
-.activity-thought__body { margin: 4px 6px 6px 6px; padding: 0 0 0 8px; border-left: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.65; }
+.activity-thought__body { margin: 4px 6px 6px 0; color: var(--text-secondary); font-size: var(--chat-code); line-height: 1.65; }
 .activity-tool__details-toolbar { display: flex; justify-content: flex-end; padding: 3px 4px 0; }
 .activity-tool__copy { min-height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); }
 .activity-tool__copy:hover { color: var(--text-secondary); background: var(--surface-hover); }
@@ -286,7 +282,7 @@
 .image-lightbox__close { position: absolute; z-index: 1; top: 9px; right: 9px; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.22); border-radius: var(--radius-md); color: #fff; background: rgba(10,10,10,.68); box-shadow: 0 2px 8px rgba(0,0,0,.28); backdrop-filter: blur(6px); }
 .image-lightbox__close:hover, .image-lightbox__close:focus-visible { background: rgba(10,10,10,.9); }
 .image-lightbox__close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.message--activity { width: auto; margin: 3px 0 18px 38px; }
+.message--activity { width: auto; margin: 3px 0 18px; }
 .message--activity .work-timeline { padding: 0; }
 .changes-card { width: 100%; min-height: 57px; display: flex; align-items: center; gap: 7px; margin: 12px 0 9px; padding: 9px 7px 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text); background: var(--surface-raised); text-align: left; }
 .changes-card__open { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; padding: 0; color: inherit; background: transparent; text-align: left; }

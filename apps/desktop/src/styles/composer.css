@@ -423,6 +423,13 @@
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+.chat-settings { display: grid; gap: 10px; }
+.chat-settings__fields { display: grid; gap: 10px; }
+.chat-settings__field { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; color: var(--text-secondary); font-size: var(--fs-ui); }
+.chat-settings__section--execution { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 2px; }
+.chat-settings .pi-fusion-pair { display: contents; }
+@media (max-width: 380px) { .chat-settings__field { grid-template-columns: minmax(0, 1fr); gap: 5px; } }
+
 .composer__footer {
 	position: relative;
 	display: grid;

@@ -12,7 +12,7 @@ import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, IconButton } from './ui'
 import { ActivityStatusPill } from './activity/ActivityStatusPill'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 
 const WindowsAppMenu = lazy(() => import('./WindowsAppMenu'))
 
@@ -55,10 +55,12 @@ interface TitleToolbarProps {
   liveBySession?: SessionLiveMap
   clearedActivity?: Readonly<Record<string, string>>
   onOpenActivity?(): void
+  /** Subtle session status shown before the browser/inspector toggles. */
+  sessionActions?: ReactNode
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, sessionActions, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
@@ -79,6 +81,7 @@ export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', s
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
           ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} setupError={projectSetupError} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}
+        {view === 'session' ? sessionActions : null}
         {view === 'session' ? <IconButton className="title-toolbar__optional" label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
         {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>

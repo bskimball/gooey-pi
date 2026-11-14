@@ -116,8 +116,17 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
 
   const resultCount = visibleModels.length
   return (
-    <div className="model-picker" ref={rootRef}>
-      <button
+    <div className="model-picker" ref={rootRef} onKeyDown={(event) => {
+      if (event.key !== 'Escape' || !open) return
+      event.preventDefault()
+      event.stopPropagation()
+      close(true)
+    }}>
+      <ApexButton
+        compact
+        icon={<Brain size={14} />}
+        endIcon={<CaretDown size={11} aria-hidden="true" />}
+        label={`${label === 'Model' ? '' : `${label}: `}${selected?.name ?? unavailableLabel}`}
         ref={triggerRef}
         type="button"
         className="permissions-chip model-picker__trigger"
@@ -135,18 +144,10 @@ export const ModelPicker = memo(function ModelPicker({ value, modelsByProvider, 
           }
         }}
       >
-        <Brain size={14} />
-        <span>{label === 'Model' ? '' : `${label}: `}{selected?.name ?? unavailableLabel}</span>
-        <CaretDown size={11} aria-hidden="true" />
-      </button>
+      </ApexButton>
       {open && !disabled ? (
         <div
           className="model-picker__popover"
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return
-            event.preventDefault()
-            close(true)
-          }}
           onBlur={(event) => {
             // Tabbing past the filters must dismiss like the native select did.
             // A null relatedTarget means focus left the document entirely (app

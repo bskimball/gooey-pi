@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, normalize } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { RunReceipts } from '../../apps/desktop/electron/main/run-receipts'
+import { DesktopSessionProjection } from '../../apps/desktop/electron/main/desktop-link-projection'
 import { SideConversations } from '../../apps/desktop/electron/main/side-conversations'
 import { FinishTaskService } from '../../apps/desktop/electron/main/finish-task'
 import { GitService } from '../../apps/desktop/electron/main/git'
@@ -28,6 +29,28 @@ const managers: AgentRpcManager[] = []
 afterEach(async () => {
   await Promise.all(managers.splice(0).map((manager) => manager.stopAll()))
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+describe('desktop pending dialog projection', () => {
+  it('retains actual receipt and finite expiry times without modifying events', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(10_000)
+    try {
+      const projection = new DesktopSessionProjection([])
+      const timed = { type: 'extension_ui_request', method: 'select', id: 'timed', title: 'Pick', options: ['a'], timeout: 5_000 }
+      const untimed = { type: 'extension_ui_request', method: 'select', id: 'untimed', title: 'Pick', options: ['b'] }
+      const resolved = { type: 'extension_ui_request', method: 'confirm', id: 'resolved', title: 'Confirm', message: 'Sure?' }
+      projection.apply(timed)
+      projection.apply(untimed)
+      projection.apply(resolved)
+      projection.apply({ type: 'extension_ui_resolved', id: 'resolved' })
+      clock.mockReturnValue(12_000)
+      expect(projection.pendingDialogs()).toEqual([{ ...timed, receivedAt: 10_000, deadline: 15_000 }, { ...untimed, receivedAt: 10_000 }])
+      expect(timed).not.toHaveProperty('receivedAt')
+      expect(timed).not.toHaveProperty('deadline')
+      clock.mockReturnValue(15_000)
+      expect(projection.pendingDialogs()).toEqual([{ ...untimed, receivedAt: 10_000 }])
+    } finally { clock.mockRestore() }
+  })
 })
 
 interface FakePiOptions {
@@ -653,7 +676,7 @@ describe('pi RPC adapter argv', () => {
 })
 
 describe('pi RPC handshake', () => {
-  it('owns a durable project coordinator separately, pins each attachment, and wakes background follow-ups only in granted projects', async () => {
+  it('persists one global coordinator, preserves legacy coordinator history, and enforces grants and attachment ownership', async () => {
     const fake = fakePiAgent()
     const cwd = realpathSync(fake.cwd)
     const statePath = join(cwd, 'coordinator-state.json')
@@ -672,13 +695,16 @@ describe('pi RPC handshake', () => {
     const events: Record<string, unknown>[] = []
     const unsubscribe = manager.subscribe(({ event }) => events.push(event))
     try {
-      await expect(control.open(1, 'not-granted')).rejects.toThrow('explicitly granted')
-      const [first, second] = await Promise.all([control.open(1, 'project'), control.open(2, 'project')])
+      const legacy = await sessions.create(cwd)
+      await store.update((draft) => { draft.coordinatorSessions = { project: legacy.filePath } })
+      const [first, second] = await Promise.all([control.open(1), control.open(2)])
       expect(first.session.filePath).toBe(second.session.filePath)
       expect(first.runtime.runtimeId).toBe(second.runtime.runtimeId)
       expect(first.attachmentId).not.toBe(second.attachmentId)
       expect(first.pendingDialogs).toEqual([])
-      expect((await sessions.list()).filter((session) => session.role === 'coordinator')).toHaveLength(1)
+      const coordinators = (await sessions.list()).filter((session) => session.role === 'coordinator')
+      expect(coordinators.map((session) => session.filePath)).toEqual(expect.arrayContaining([first.session.filePath, legacy.filePath]))
+      expect(coordinators).toHaveLength(2)
       expect(events.some((event) => event.type === 'fake_prompt')).toBe(false)
       expect(control.close(2, first.attachmentId)).toBe(false)
       expect(control.close(1, first.attachmentId)).toBe(true)
@@ -696,11 +722,38 @@ describe('pi RPC handshake', () => {
       expect(manager.getForSession(first.session.filePath)?.runtimeId).not.toBe(first.runtime.runtimeId)
       const reopenedStore = new JsonStateStore(statePath)
       await reopenedStore.ready()
-      expect(reopenedStore.getCoordinatorSessions().project).toBe(first.session.filePath)
-      await reopenedStore.beginShutdown()
+      expect(reopenedStore.snapshot().globalCoordinatorSession).toBe(first.session.filePath)
+      expect(reopenedStore.getCoordinatorSessions().project).toBe(legacy.filePath)
+      const reopenedProjects = new ProjectService(reopenedStore, () => null)
+      const reopenedSessions = new SessionService(reopenedStore, () => null, 5000, piSessionServiceOptions(join(cwd, 'sessions')))
+      const reopenedControl = new ActivityCoordinatorService(reopenedStore, reopenedProjects, reopenedSessions, manager)
+      try {
+        const reopened = await reopenedControl.open(3)
+        expect(reopened.session.filePath).toBe(first.session.filePath)
+        expect(reopened.runtime.runtimeId).toBe(manager.getForSession(first.session.filePath)?.runtimeId)
+        reopenedControl.releaseOwner(3)
+        expect(reopenedControl.close(3, reopened.attachmentId)).toBe(false)
+        expect((await reopenedSessions.list()).find((session) => session.filePath === legacy.filePath)?.role).toBe('coordinator')
+      } finally {
+        reopenedControl.dispose()
+        await reopenedStore.beginShutdown()
+      }
+      await expect(control.followUp(legacy.filePath, 'Legacy follow-up', 'queue')).resolves.toBe(true)
+      await store.update((draft) => { draft.coordinatorSessions = { other: legacy.filePath } })
+      await expect(control.followUp(legacy.filePath, 'Wrong project', 'queue')).rejects.toThrow('coordinator project grant is no longer valid')
+      await store.update((draft) => {
+        draft.coordinatorSessions = { project: legacy.filePath }
+        draft.projects[0].folderIdentities = { [cwd]: { dev: 'invalid', ino: 'invalid' } }
+      })
+      await expect(control.open(1)).rejects.toThrow()
+      await expect(control.followUp(first.session.filePath, 'Invalid grant', 'queue')).rejects.toThrow()
+      expect(store.snapshot().globalCoordinatorSession).toBe(first.session.filePath)
       await store.update((draft) => { draft.projects = [] })
       await expect(control.followUp(first.session.filePath, 'Should be denied', 'queue')).rejects.toThrow()
-      await expect(control.open(1, 'project')).rejects.toThrow('explicitly granted')
+      await expect(control.followUp(legacy.filePath, 'Should be denied', 'queue')).rejects.toThrow()
+      await expect(control.open(1)).rejects.toThrow('explicitly granted')
+      expect(store.snapshot().globalCoordinatorSession).toBe(first.session.filePath)
+      expect(store.getCoordinatorSessions().project).toBe(legacy.filePath)
     } finally {
       unsubscribe()
       control.dispose()

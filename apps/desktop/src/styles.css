@@ -26,5 +26,6 @@
 @import './styles/plugins.css' layer(apex);
 @import './styles/settings.css' layer(apex);
 @import './styles/overlays.css' layer(apex);
+@import './components/task-workflows.css' layer(apex);
 @import './styles/control-overrides.css' layer(apex-overrides);
 @import './styles/responsive.css' layer(apex-responsive);

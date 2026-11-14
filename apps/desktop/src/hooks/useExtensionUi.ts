@@ -331,13 +331,16 @@ export function useExtensionUi({
         .sort((a, b) => a.index - b.index)
       const total = request.questionnaire.total
       const now = Date.now()
-      const timeout = previous?.request.method === 'questionnaire'
-        ? previous.request.timeout
-        : request.timeout ?? ASK_USER_TIMEOUT_MS
-      const receivedAt = sameQuestionnaire && previous?.receivedAt !== undefined ? previous.receivedAt : now
+      const originalTimeout = request.timeout ?? ASK_USER_TIMEOUT_MS
+      const recoveredAt = typeof rawEvent.receivedAt === 'number' && Number.isFinite(rawEvent.receivedAt)
+        ? Math.min(now, rawEvent.receivedAt) : now
+      const recoveredDeadline = typeof rawEvent.deadline === 'number' && Number.isFinite(rawEvent.deadline)
+        ? rawEvent.deadline : recoveredAt + originalTimeout
+      const receivedAt = sameQuestionnaire && previous?.receivedAt !== undefined ? previous.receivedAt : recoveredAt
       const deadline = sameQuestionnaire && previous?.deadline !== undefined
-        ? previous.deadline
-        : timeout !== undefined ? receivedAt + timeout : undefined
+        ? Math.min(previous.deadline, recoveredDeadline) : recoveredDeadline
+      // The actor starts or reschedules against the earliest known absolute deadline.
+      const timeout = Math.max(0, deadline - now)
       const pending: PendingExtensionUi = {
         runtimeId,
         request: {

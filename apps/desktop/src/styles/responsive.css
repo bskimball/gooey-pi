@@ -76,7 +76,6 @@
   .transcript { padding-top: 20px; }
   .transcript__inner { padding-inline: 15px; }
   .message--user { column-gap: 9px; }
-  .message--activity { margin-left: 33px; }
   .transcript { --chat-body: 13.5px; --chat-code: 12.5px; }
   .activity-tool__summary, .work-disclosure__button, .agent-message__summary, .goal-message__summary { min-height: 44px; }
   .activity-tool__state { display: none; }
@@ -89,6 +88,7 @@
   .composer__controls > .icon-button { width: 32px; height: 32px; }
   .composer__actions .icon-button { display: none; }
   .worktree-picker__menu, .model-picker__popover { position: fixed; right: 9px; bottom: 58px; left: 9px; width: auto; }
+  .chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { position: absolute; right: auto; bottom: calc(100% + 7px); left: 0; width: min(340px, calc(100vw - 48px)); }
   .terminal-drawer { height: var(--terminal-height, 46vh); flex-basis: var(--terminal-height, 46vh); }
   .terminal-toolbar .icon-button { width: 32px; height: 32px; }
   .terminal-actions .icon-button:nth-of-type(-n+2), .terminal-cwd { display: none; }
@@ -180,4 +180,25 @@
   .schedule-fast-toggle { grid-column: auto; }
   .schedule-preview ol { grid-template-columns: 1fr; }
   .schedule-preview li { min-height: 44px; align-content: center; }
+}
+
+/* Settings controls are rows, not the compact composer toolbar chips. */
+.modal:has(.chat-settings) { max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: visible; }
+.modal:has(.chat-settings) .modal__body { overflow: visible; }
+.chat-settings__field .model-picker, .chat-settings__field .worktree-picker { position: relative; width: 100%; max-width: none; }
+.chat-settings__field .model-picker__trigger, .chat-settings__field .worktree-picker__trigger,
+.chat-settings__field .select-control, .chat-settings__field .fast-mode-toggle {
+  width: 100%; max-width: none; min-width: 0; height: 32px; min-height: 32px;
+  justify-content: flex-start; gap: 6px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-secondary); background: var(--surface-subtle); font-size: var(--fs-ui); font-weight: 550;
+}
+.chat-settings__field .select-control > * { flex: 1 1 auto; min-width: 0; }
+.chat-settings__field .select-control [role="combobox"] { width: 100%; max-width: none; }
+.chat-settings__field .model-picker__trigger > span, .chat-settings__field .worktree-picker__trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-settings__field .model-picker__trigger > :last-child, .chat-settings__field .worktree-picker__trigger > :last-child { margin-left: auto; }
+.chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { max-height: min(50dvh, 400px); overflow-y: auto; }
+@media (max-height: 540px) {
+  .modal:has(.chat-settings) .modal__body { max-height: calc(100dvh - 72px); overflow-y: auto; }
+  .chat-settings .worktree-picker__menu, .chat-settings .model-picker__popover { position: fixed; top: 12px; right: auto; bottom: auto; left: 50%; width: min(340px, calc(100vw - 48px)); max-height: calc(100dvh - 24px); transform: translateX(-50%); }
 }

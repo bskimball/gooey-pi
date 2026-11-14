@@ -33,7 +33,7 @@ const thinkingLabels: Record<ApexThinkingLevel, string> = {
 }
 
 /** Pi mode followed by either ordinary controls or the runtime-reported Fusion pair. */
-export function PiModeControl({ disabled, modelsByProvider, providers, children, onCommand }: PiModeControlProps) {
+export function usePiModeController(onCommand: PiModeControlProps['onCommand'], disabled: boolean) {
   const [snapshot, send, actor] = useMachine(piModeControlMachine)
   const { mode, hydraTier, pair, pendingCommand: pending } = snapshot.context
 
@@ -81,23 +81,36 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
     sendCommand(`/mode ${nextValue}`)
   }
 
+  return { mode, hydraTier, pair, pending, controlsDisabled, sendCommand, handleModeSelect }
+}
+
+type PiModeController = ReturnType<typeof usePiModeController>
+
+export function PiModeStatus({ controller }: { controller: PiModeController }) {
+  const { mode, pair, pending } = controller
+  return <><span className="pi-mode-status" role="status">{pending === '/mode configure' ? 'Opening Fusion setup…' : pending === '/mode hydra sync' ? 'Syncing Hydra metrics…' : pending ? 'Updating Pi mode…' : ''}</span>
+    {mode === 'fusion' && !pair && <span className="pi-fusion-unreported" role="status">Pair not reported</span>}</>
+}
+
+export function PiModeFields({ controller, modelsByProvider, providers, children }: Pick<PiModeControlProps, 'modelsByProvider' | 'providers' | 'children'> & { controller: PiModeController }) {
+  const { mode, hydraTier, pair, controlsDisabled, sendCommand, handleModeSelect } = controller
   return (
     <>
-      <SelectControl label="Behavior mode" compact icon={<Command size={12} />} value={mode} disabled={controlsDisabled} onChange={(event) => handleModeSelect(event.target.value)}>
+      <section className="chat-settings__section"><div className="chat-settings__fields">
+      <div className="chat-settings__field"><span>Behavior mode</span><SelectControl label="Behavior mode" compact icon={<Command size={12} />} value={mode} disabled={controlsDisabled} onChange={(event) => handleModeSelect(event.target.value)}>
         {PI_BEHAVIOR_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
         <option value="configure" title="Choose lead and sidekick models">Configure Fusion…</option>
-      </SelectControl>
+      </SelectControl></div>
       {mode === 'hydra' || mode === 'utopia' ? (
-        <SelectControl label="Hydra tier" compact icon={<Gauge size={12} />} value={hydraTier} disabled={controlsDisabled} onChange={(event) => sendCommand(`/mode hydra ${event.target.value}`)}>
+        <div className="chat-settings__field"><span>Hydra tier</span><SelectControl label="Hydra tier" compact icon={<Gauge size={12} />} value={hydraTier} disabled={controlsDisabled} onChange={(event) => sendCommand(`/mode hydra ${event.target.value}`)}>
           {PI_HYDRA_TIER_OPTIONS.map((option) => <option key={option.value} value={option.value} title={option.detail}>{option.label}</option>)}
           <option value="sync" title="Refresh Artificial Analysis metrics and quota snapshot">Sync metrics…</option>
           <option value="off" title="Disable automatic stats routing">{mode === 'utopia' ? 'Hydra: Off' : 'Turn off Hydra'}</option>
-        </SelectControl>
+        </SelectControl></div>
       ) : null}
-      <span className="pi-mode-status" role="status">{pending === '/mode configure' ? 'Opening Fusion setup…' : pending === '/mode hydra sync' ? 'Syncing Hydra metrics…' : pending ? 'Updating Pi mode…' : ''}</span>
-      {mode === 'fusion' && !pair && <span className="pi-fusion-unreported" role="status">Pair not reported</span>}
+      </div></section>
+      <section className="chat-settings__section"><div className="chat-settings__fields">
       {mode === 'fusion' && pair && (
-        // Flatten the old full-row readout so these controls follow mode in the footer's flex order.
         <div className="pi-fusion-pair" aria-label="Fusion pair" role="group" style={{ display: 'contents' }}>
           {(['lead', 'sidekick'] as const).map((role) => {
             const label = role === 'lead' ? 'Lead' : 'Sidekick'
@@ -108,23 +121,29 @@ export function PiModeControl({ disabled, modelsByProvider, providers, children,
             const levels = model?.available ? model.availableThinkingLevels : []
             return (
               <Fragment key={role}>
-                <ModelPicker label={`${label} model`} value={model?.key ?? identity} unavailableLabel={`${identity} (unavailable)`} modelsByProvider={modelsByProvider} providers={providers} disabled={controlsDisabled} onChange={(key) => {
+                <div className="chat-settings__field"><span>{label} model</span><ModelPicker label={`${label} model`} value={model?.key ?? identity} unavailableLabel={`${identity} (unavailable)`} modelsByProvider={modelsByProvider} providers={providers} disabled={controlsDisabled} onChange={(key) => {
                   const next = [...modelsByProvider.values()].flat().find((candidate) => candidate.key === key)
                   if (next?.available) sendCommand(`/mode fusion-set ${role} model ${next.provider}/${next.id}`)
-                }} />
-                <SelectControl label={`${label} thinking`} compact icon={<Gauge size={12} />} value={choice.thinking} disabled={controlsDisabled || !levels.length} onChange={(event) => {
+                }} /></div>
+                <div className="chat-settings__field"><span>{label} thinking</span><SelectControl label={`${label} thinking`} compact icon={<Gauge size={12} />} value={choice.thinking} disabled={controlsDisabled || !levels.length} onChange={(event) => {
                   const level = levels.find((candidate) => candidate === event.target.value)
                   if (level) sendCommand(`/mode fusion-set ${role} thinking ${level}`)
                 }}>
                   {!levels.includes(choice.thinking) ? <option value={choice.thinking} disabled>{`${label}: ${thinkingLabels[choice.thinking]} (unavailable)`}</option> : null}
                   {levels.map((level) => <option key={level} value={level}>{`${label}: ${thinkingLabels[level]}`}</option>)}
-                </SelectControl>
+                </SelectControl></div>
               </Fragment>
             )
           })}
         </div>
       )}
       {mode !== 'fusion' && children}
+      </div></section>
     </>
   )
+}
+
+export function PiModeControl({ disabled, onCommand, ...props }: PiModeControlProps) {
+  const controller = usePiModeController(onCommand, disabled)
+  return <><PiModeFields controller={controller} {...props} /><PiModeStatus controller={controller} /></>
 }

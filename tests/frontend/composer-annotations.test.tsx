@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "../../apps/desktop/src/components/Composer";
+import { TaskWorkflowContext, type TaskWorkflowContextValue } from "../../apps/desktop/src/lib/task-context";
 import { groupModelsByProvider } from "../../apps/desktop/src/hooks/useProviderCatalog";
 import {
 	appendCapabilityRouting,
@@ -101,6 +102,7 @@ afterEach(async () => {
 });
 
 interface RenderOptions {
+	workflow?: TaskWorkflowContextValue | null;
 	composerProps?: Partial<ComponentProps<typeof Composer>>;
 	annotations?: BrowserAnnotation[];
 	sendSignal?: number;
@@ -120,6 +122,7 @@ interface RenderOptions {
 }
 
 function renderComposer({
+	workflow = null,
 	annotations = [],
 	sendSignal = 0,
 	onSend = vi.fn(async () => undefined),
@@ -133,6 +136,7 @@ function renderComposer({
 }: RenderOptions = {}) {
 	act(() =>
 		root.render(
+			<TaskWorkflowContext.Provider value={workflow}>
 			<Composer
 				busy={false}
 				model="provider/vision"
@@ -159,7 +163,8 @@ function renderComposer({
 				onClearAnnotations={onClearAnnotations}
 				onClearTerminalSelection={onClearTerminalSelection}
 				{...composerProps}
-			/>,
+			/>
+			</TaskWorkflowContext.Provider>,
 		),
 	);
 	return {
@@ -192,6 +197,13 @@ const clickSend = async () => {
 		await Promise.resolve();
 	});
 };
+
+const workflowContext = (overrides: Partial<TaskWorkflowContextValue> = {}): TaskWorkflowContextValue => ({
+	sessionFile: '/sessions/saved.jsonl', excerpts: [], attach: vi.fn(), remove: vi.fn(),
+	receipts: [], persistedUserIds: new Set(), idle: true, pending: false,
+	edit: vi.fn(), review: vi.fn(), createSide: vi.fn(), bringBack: vi.fn(),
+	isSide: false, finished: new Set(), ...overrides,
+});
 
 const skillRecord = (
 	name: string,
@@ -586,6 +598,81 @@ describe("Composer skill mentions", () => {
 		);
 		// The session chosen from the @ menu wins over the same-named @ capability.
 		expect(prompt).not.toContain('"ownership-mcp"');
+	});
+
+	it("runs task commands locally through completion, Enter and Send", async () => {
+		const onCreateSide = vi.fn();
+		const onReviewFinish = vi.fn();
+		const workflow = workflowContext();
+		const { onSend } = renderComposer({ workflow, composerProps: {
+			onCreateSide, onReviewFinish, runtimeCommands: [
+				{ name: 'btw', source: 'extension', description: 'runtime btw' },
+				{ name: 'finish', source: 'prompt', description: 'runtime finish' },
+			],
+		} });
+		await setDraft('/btw');
+		expect(optionLabels().filter((label) => label === '/btw')).toHaveLength(1);
+		expect(container.querySelector('[role="option"]')?.textContent).toContain('Open a side thread');
+		await pressKey('Enter');
+		expect(composerTextarea().value).toBe('/btw ');
+		await setDraft('/btw  why now?  ');
+		await pressKey('Enter');
+		expect(onCreateSide).toHaveBeenCalledWith('why now?');
+		expect(composerTextarea().value).toBe('');
+		await setDraft('/btw ');
+		await clickSend();
+		expect(onCreateSide).toHaveBeenLastCalledWith(undefined);
+		await setDraft('/finish');
+		expect(optionLabels().filter((label) => label === '/finish')).toHaveLength(1);
+		await clickSend();
+		expect(onReviewFinish).toHaveBeenCalledTimes(1);
+		expect(workflow.createSide).not.toHaveBeenCalled();
+		expect(onSend).not.toHaveBeenCalled();
+		expect(composerTextarea().value).toBe('');
+	});
+
+	it.each([
+		{ name: 'missing context', workflow: null, harness: 'pi' as const, busy: false, draft: '/btw question' },
+		{ name: 'unsaved', workflow: workflowContext({ sessionFile: undefined }), harness: 'pi' as const, busy: false, draft: '/finish' },
+		{ name: 'non-Pi', workflow: workflowContext(), harness: 'claude' as ComponentProps<typeof Composer>['harness'], busy: false, draft: '/btw question' },
+		{ name: 'pending side', workflow: workflowContext({ pending: true }), harness: 'pi' as const, busy: false, draft: '/btw question' },
+		{ name: 'pending finish', workflow: workflowContext({ pending: true }), harness: 'pi' as const, busy: false, draft: '/finish' },
+		{ name: 'busy finish', workflow: workflowContext({ idle: false }), harness: 'pi' as const, busy: true, draft: '/finish' },
+		{ name: 'finish args', workflow: workflowContext(), harness: 'pi' as const, busy: false, draft: '/finish now' },
+	])('retains $name task commands without runtime fallback', async ({ workflow, harness, busy, draft }) => {
+		const onCreateSide = vi.fn();
+		const onReviewFinish = vi.fn();
+		const { onSend } = renderComposer({ workflow, composerProps: { harness, busy, onCreateSide, onReviewFinish, runtimeCommands: [{ name: 'btw', source: 'extension' }, { name: 'finish', source: 'extension' }] } });
+		await setDraft(draft);
+		await pressKey('Enter', { ctrlKey: true });
+		expect(composerTextarea().value).toBe(draft);
+		expect(container.querySelector('[role="alert"]')).not.toBeNull();
+		expect(onCreateSide).not.toHaveBeenCalled();
+		expect(onReviewFinish).not.toHaveBeenCalled();
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it('does not fall through when a task callback is missing', async () => {
+		const { onSend } = renderComposer({ workflow: workflowContext(), composerProps: { runtimeCommands: [{ name: 'btw', source: 'extension' }, { name: 'finish', source: 'extension' }] } });
+		for (const draft of ['/btw question', '/finish']) {
+			await setDraft(draft);
+			await clickSend();
+			expect(composerTextarea().value).toBe(draft);
+			expect(container.querySelector('[role="alert"]')).not.toBeNull();
+		}
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it('allows a side conversation while busy without consuming attachments', async () => {
+		const onCreateSide = vi.fn();
+		const workflow = workflowContext({ idle: false, excerpts: [{ id: 'x', source: 'selection', text: 'unrelated' }] });
+		const { onSend } = renderComposer({ workflow, composerProps: { busy: true, onCreateSide } });
+		await setDraft('/btw question');
+		await pressKey('Enter', { ctrlKey: true });
+		expect(onCreateSide).toHaveBeenCalledWith('question');
+		expect(workflow.remove).not.toHaveBeenCalled();
+		expect(container.querySelector('[aria-label="Selected context attachments"]')).not.toBeNull();
+		expect(onSend).not.toHaveBeenCalled();
 	});
 
 	it("completes slash commands with Tab", async () => {
@@ -1163,6 +1250,45 @@ describe("Composer sendSignal", () => {
 		expect(onSend).not.toHaveBeenCalled();
 	});
 
+	it('keeps settings separate from composer actions and restores focus after nested model Escape', async () => {
+		renderComposer({ composerProps: { conversationOnly: true } });
+		const settings = container.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!;
+		settings.focus();
+		await act(async () => settings.click());
+		const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+		expect(dialog.textContent).toContain('Chat settings');
+		expect(dialog.querySelector('[aria-label="Behavior mode"]')).toBeNull();
+		expect(dialog.querySelector('[aria-label^="Checkout:"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Send message"]')).not.toBeNull();
+		await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="Model: Vision"]')!.click());
+		const search = dialog.querySelector<HTMLInputElement>('[aria-label="Search models"]')!;
+		await act(async () => search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+		expect(dialog.querySelector('[aria-label="Search models"]')).toBeNull();
+		expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+		await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+		await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		expect(document.activeElement).toBe(settings);
+	});
+
+	it('keeps a pending mode command locked and visible across settings close and reopen', async () => {
+		let resolve!: () => void;
+		const onSend = vi.fn(() => new Promise<void>((done) => { resolve = done; }));
+		renderComposer({ onSend });
+		const settings = container.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!;
+		await act(async () => settings.click());
+		await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Behavior mode"]')!.click());
+		const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent?.includes('Configure Fusion'))!;
+		await act(async () => option.click());
+		expect(onSend).toHaveBeenCalledWith('/mode configure', [], 'queue');
+		await act(async () => document.querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="Close"]')!.click());
+		expect(container.querySelector('.pi-mode-status')?.textContent).toBe('Opening Fusion setup…');
+		await act(async () => settings.click());
+		expect(document.querySelector<HTMLButtonElement>('[aria-label="Behavior mode"]')!.disabled).toBe(true);
+		await act(async () => resolve());
+		expect(document.querySelector<HTMLButtonElement>('[aria-label="Behavior mode"]')!.disabled).toBe(false);
+	});
+
 	it("orders ordinary dropdowns before other controls and retains non-Pi callbacks", async () => {
 		const onModelChange = vi.fn();
 		const onEffortChange = vi.fn();
@@ -1176,13 +1302,15 @@ describe("Composer sendSignal", () => {
 			reasoningLevels: ["low", "medium"],
 		} satisfies Partial<ComponentProps<typeof Composer>>;
 		renderComposer({ composerProps });
+		expect([...document.querySelectorAll('.composer__controls button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Add context', 'Chat settings']);
+		act(() => document.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!.click());
+		const container = document.body;
 		const labels = () =>
-			[...container.querySelectorAll(".composer__controls button")].map(
+			[...container.querySelectorAll(".chat-settings button")].map(
 				(button) =>
 					button.getAttribute("aria-label") ?? button.textContent?.trim(),
 			);
 		expect(labels()).toEqual([
-			"Add context",
 			"Behavior mode",
 			"Model: Vision",
 			"Reasoning effort",
@@ -1257,6 +1385,8 @@ describe("Composer sendSignal", () => {
 			fastSupported: true,
 		};
 		renderComposer({ onSend, composerProps });
+		act(() => document.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!.click());
+		const container = document.body;
 		const trigger = (label: string) =>
 			container.querySelector<HTMLButtonElement>(
 				`button[aria-label="${label}"]`,
@@ -1282,12 +1412,11 @@ describe("Composer sendSignal", () => {
 			});
 		};
 		expect(
-			[...container.querySelectorAll(".composer__controls button")].map(
+			[...container.querySelectorAll(".chat-settings button")].map(
 				(button) =>
 					button.getAttribute("aria-label") ?? button.textContent?.trim(),
 			),
 		).toEqual([
-			"Add context",
 			"Behavior mode",
 			"Lead model: Lead Model",
 			"Lead thinking",
@@ -1447,8 +1576,9 @@ describe("Composer sendSignal", () => {
 			),
 		);
 
+		act(() => container.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!.click());
 		const modeControl = [
-			...container.querySelectorAll<HTMLElement>(".select-control"),
+			...document.body.querySelectorAll<HTMLElement>(".select-control"),
 		].find((el) => el.getAttribute("title") === "Behavior mode")!;
 		const modeTrigger =
 			modeControl.querySelector<HTMLButtonElement>('[role="combobox"]')!;

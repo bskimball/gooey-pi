@@ -1,7 +1,8 @@
 import { Bell, MagnifyingGlass } from '@/components/icons'
 import * as stylex from '@stylexjs/stylex'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ActivityPeek } from '@/components/activity/ActivityPeek'
 import { ActivityCoordinator } from '@/components/activity/ActivityCoordinator'
 import { ActivityQuestionCard } from '@/components/activity/ActivityQuestionCard'
@@ -54,6 +55,8 @@ export interface ActivityPageProps {
   liveBySession?: SessionLiveMap
   selectedSessionId?: string
   controls?: ActivityControls
+  showReasoning?: boolean
+  showTools?: boolean
   onOpen(session: SessionRecord): void
   onClear(sessions: SessionRecord[]): void
   onStop?(session: SessionRecord, runtimeId?: string): void
@@ -83,6 +86,8 @@ export function ActivityPage({
   liveBySession = EMPTY_LIVE,
   selectedSessionId,
   controls,
+  showReasoning,
+  showTools,
   onOpen,
   onClear,
   onStop,
@@ -97,13 +102,11 @@ export function ActivityPage({
   const [stopConfirmSignal, setStopConfirmSignal] = useState(0)
   const [cancelConfirmSignal, setCancelConfirmSignal] = useState(0)
   const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const coordinatorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [projectId, setProjectId] = useState('all')
-  const [detailMode, setDetailMode] = useState<'peek' | 'coordinator'>('peek')
+  const [detailMode, setDetailMode] = useState<'peek' | 'coordinator'>('coordinator')
+  const detailId = useId()
   const [focusReply, setFocusReply] = useState(false)
   const selectedProject = projects.find((project) => project.id === projectId)
-  const coordinatorProject = selectedProject?.harness === 'pi' && !selectedProject.inferred && !selectedProject.readOnly
-    ? selectedProject : undefined
   const scopedSessions = useMemo(() => sessions.filter((session) => session.role !== 'coordinator'
     && (!selectedProject || [selectedProject.path, selectedProject.primaryFolder, ...selectedProject.folders].includes(session.projectPath))), [sessions, selectedProject])
 
@@ -254,12 +257,12 @@ export function ActivityPage({
       if (event.key === 'c') {
         event.preventDefault()
         setDetailMode('coordinator')
-        window.requestAnimationFrame(() => coordinatorTextareaRef.current?.focus())
+        window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('.activity-coordinator .composer textarea')?.focus())
         return
       }
 
       if (event.key === 'r') {
-        if (!selectedEntry || compactLayout) return
+        if (!selectedEntry) return
         if (detailMode !== 'peek') {
           event.preventDefault()
           setDetailMode('peek')
@@ -307,10 +310,10 @@ export function ActivityPage({
             {projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.inferred || project.readOnly ? ' (read-only)' : ''}</option>)}
           </select>
         </label>
-        <div className="activity-detail-tabs" role="group" aria-label="Activity detail view">
-          <ApexButton compact aria-pressed={detailMode === 'peek'} onClick={() => setDetailMode('peek')}>Peek</ApexButton>
-          <ApexButton compact aria-pressed={detailMode === 'coordinator'} onClick={() => setDetailMode('coordinator')}>Chief of Staff</ApexButton>
-        </div>
+        <TabList value={detailMode} onChange={(value) => { if (value === 'peek' || value === 'coordinator') setDetailMode(value) }} role="tablist" aria-label="Activity detail view" size="sm" className="activity-detail-tabs">
+          <Tab value="peek" label="Peek" id={`${detailId}-peek-tab`} panelId={`${detailId}-peek-panel`} />
+          <Tab value="coordinator" label="Chief of Staff" id={`${detailId}-coordinator-tab`} panelId={`${detailId}-coordinator-panel`} />
+        </TabList>
       </div>
       <div className={`page-container activity-page ${compactLayout ? 'activity-page--compact' : ''} ${detailMode === 'coordinator' ? 'activity-page--coordinator' : ''}`}>
         <div className="activity-feed">
@@ -374,7 +377,7 @@ export function ActivityPage({
                           selected={resolvedSelectedId === item.session.id}
                           stopConfirmSignal={compactLayout ? stopConfirmSignal : 0}
                           cancelConfirmSignal={cancelConfirmSignal}
-                          onSelect={compactLayout ? undefined : (session) => setSelectedId(session.id)}
+                          onSelect={(session) => setSelectedId(session.id)}
                           onOpen={onOpen}
                           onClear={onClear}
                           onStop={onStop}
@@ -418,7 +421,9 @@ export function ActivityPage({
           </footer>
         </div>
 
-        {detailMode === 'coordinator' ? <ActivityCoordinator key={coordinatorProject?.id ?? 'unscoped'} bridge={bridge} project={coordinatorProject} controls={controls} textareaRef={coordinatorTextareaRef} /> : !compactLayout ? (
+        <div className="activity-chief-slot" role="tabpanel" id={`${detailId}-coordinator-panel`} aria-labelledby={`${detailId}-coordinator-tab`} hidden={detailMode !== 'coordinator'}><ActivityCoordinator bridge={bridge} controls={controls} showReasoning={showReasoning} showTools={showTools} /></div>
+        <div className="activity-peek-slot" role="tabpanel" id={`${detailId}-peek-panel`} aria-labelledby={`${detailId}-peek-tab`} hidden={detailMode !== 'peek'}>
+        {detailMode === 'peek' ? (
           <ActivityPeek
             item={selectedEntry?.item ?? null}
             section={selectedEntry?.section ?? null}
@@ -455,6 +460,7 @@ export function ActivityPage({
             }
           />
         ) : null}
+        </div>
       </div>
     </div>
   )

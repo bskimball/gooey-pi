@@ -52,10 +52,11 @@ export function ContextExcerpt({ children, source, path, range, text, plainText 
     setSelected(''); setManual(false); setAttached(true)
   }
   if (!workflow) return children
+  const active = Boolean(manual || selected || attached || error)
   return <div className="context-excerpt">
     <div ref={region} onMouseUp={capture} onKeyUp={capture}>{children}</div>
-    {workflow ? <div className="context-excerpt__actions">
-      {!selected && !manual ? <ApexButton compact variant="quiet" onClick={() => setManual(true)}>Select excerpt…</ApexButton> : null}
+    {!selected && !manual ? <span className="context-excerpt__reveal"><ApexButton compact variant="quiet" onClick={() => { setAttached(false); setManual(true) }}>Select excerpt…</ApexButton></span> : null}
+    {active ? <div className="context-excerpt__actions">
       {manual ? <label className="field"><span>Select text with the keyboard, or enter an exact excerpt</span><textarea autoFocus aria-label="Exact excerpt" maxLength={EXCERPT_LIMIT} value={selected} onChange={(event) => { const value = event.target.value; if (!value || text.includes(value)) { setSelected(value); setSelectedRange(undefined); setError('') } else setError('Use an exact excerpt from this content.') }} /></label> : null}
       {selected ? <><ApexButton compact onMouseDown={(event) => event.preventDefault()} onClick={() => attach('Ask about this')}>Ask about this</ApexButton><ApexButton compact onClick={() => attach('Request a change')}>Request a change</ApexButton>{source.startsWith('Assistant') ? <><ApexButton compact disabled={workflow.pending} onClick={() => workflow.createSide(selected)}>Side conversation</ApexButton>{workflow.isSide ? <ApexButton compact disabled={workflow.pending} onClick={() => workflow.bringBack(selected)}>Bring back</ApexButton> : null}</> : null}</> : null}
       {manual || selected ? <ApexButton compact variant="quiet" onClick={() => { setManual(false); setSelected(''); setError('') }}>Cancel selection</ApexButton> : null}

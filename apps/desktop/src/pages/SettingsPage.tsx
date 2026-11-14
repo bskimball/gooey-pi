@@ -162,7 +162,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           onClose={() => { if (!resetting) setConfirmReset(false) }}
           footer={(
             <>
-              <ApexButton disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</ApexButton>
+              <ApexButton variant="quiet" disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</ApexButton>
               <ApexButton variant="danger" disabled={resetting} onClick={() => { void resetBrowser() }}>{resetting ? 'Clearing…' : 'Clear browsing data'}</ApexButton>
             </>
           )}

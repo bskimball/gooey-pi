@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { activityNotificationSignature, sessionAttentionSignature, sessionCompanionNotificationSignature } from '../../apps/desktop/src/app/session-attention'
@@ -9,7 +9,9 @@ import { type SessionLiveMap } from '../../apps/desktop/src/app/session-live'
 import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/desktop/src/hooks/useWorkspaceActions'
 import { ActivityStatusPill } from '../../apps/desktop/src/components/activity/ActivityStatusPill'
 import { ActivityPage } from '../../apps/desktop/src/pages/ActivityPage'
-import type { ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import { useExtensionUi } from '../../apps/desktop/src/hooks/useExtensionUi'
+import type { AgentTurnHandle } from '../../apps/desktop/src/app/agentTurnMachine'
+import type { ApexApi, ApexEventEnvelope, ProjectRecord, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -46,6 +48,177 @@ afterEach(async () => {
 })
 
 describe('archived activity cleanup', () => {
+  it('preserves recovered deadlines, shortens the owner timer, and guards stale expiries and cancellation', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(100_000)
+    const command = vi.fn().mockResolvedValue({ success: true })
+    const stop = vi.fn().mockRejectedValue(new Error('stop failed'))
+    const bridge = { agent: { command, stop } } as unknown as ApexApi
+    let owner: ReturnType<typeof useExtensionUi>
+    function Harness() {
+      const runtimeSessionsRef = useRef(new Map<string, string>())
+      owner = useExtensionUi({ bridge, runtimeSessionsRef, setSessions: () => {}, setRuntime: () => {}, agentTurn: { send: () => {} } as unknown as AgentTurnHandle, reportError: () => {} })
+      return null
+    }
+    try {
+      await act(async () => root.render(<Harness />))
+      const untimed = { type: 'extension_ui_request', method: 'select', id: 'old', title: 'Old', options: ['__apex_ask_user__oldgroup:0:1', 'A'], receivedAt: -19_900 }
+      await act(async () => owner.showExtensionUi('other', untimed))
+      expect(owner!.pendingByRuntime.get('other')?.deadline).toBe(100_100)
+      await act(async () => vi.advanceTimersByTime(100))
+      expect(command).toHaveBeenCalledWith('other', { type: 'extension_ui_response', id: 'old', cancelled: true })
+      command.mockClear()
+      vi.setSystemTime(100_000)
+      const first = { type: 'extension_ui_request', method: 'select', id: 'q0', title: 'First', options: ['__apex_ask_user__group:0:2', 'A'], receivedAt: 90_000, deadline: 110_000 }
+      const second = { ...first, id: 'q1', title: 'Second', options: ['__apex_ask_user__group:1:2', 'B'], deadline: 105_000 }
+      await act(async () => { owner.showExtensionUi('chief', first); owner.showExtensionUi('chief', second); owner.showExtensionUi('chief', first) })
+      expect(owner!.pendingByRuntime.get('chief')?.deadline).toBe(105_000)
+      await act(async () => vi.advanceTimersByTime(4_999))
+      expect(command).not.toHaveBeenCalled()
+      await act(async () => vi.advanceTimersByTime(1))
+      expect(command).toHaveBeenCalledWith('chief', { type: 'extension_ui_response', id: 'q0', cancelled: true })
+      expect(command).toHaveBeenCalledWith('chief', { type: 'extension_ui_response', id: 'q1', cancelled: true })
+      await act(async () => owner.showExtensionUi('chief', second))
+      expect(command).toHaveBeenCalledTimes(3)
+      const replacement = { ...first, id: 'new', options: ['__apex_ask_user__newgroup:0:2', 'C'], receivedAt: 105_000, deadline: 125_000 }
+      const replacementSecond = { ...replacement, id: 'new2', options: ['__apex_ask_user__newgroup:1:2', 'D'] }
+      await act(async () => { owner.showExtensionUi('chief', replacement); owner.showExtensionUi('chief', replacementSecond) })
+      await act(async () => vi.advanceTimersByTime(5_000))
+      expect(owner!.pendingByRuntime.get('chief')?.request.id).toBe('newgroup')
+      await act(async () => owner.respondForRuntime('chief', { cancelled: true }))
+      expect(stop).toHaveBeenCalledWith('chief')
+      expect(command).toHaveBeenCalledWith('chief', { type: 'extension_ui_response', id: 'new', cancelled: true })
+      expect(command).toHaveBeenCalledWith('chief', { type: 'extension_ui_response', id: 'new2', cancelled: true })
+      expect(owner!.pendingByRuntime.has('chief')).toBe(false)
+      stop.mockResolvedValueOnce(true)
+      command.mockClear()
+      await act(async () => owner.showExtensionUi('chief', { ...replacement, id: 'last', options: ['__apex_ask_user__lastgroup:0:1', 'E'] }))
+      await act(async () => owner.respondForRuntime('chief', { cancelled: true }))
+      expect(stop).toHaveBeenCalledTimes(2)
+      expect(command).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+  it('recovers chief questionnaires into the shared owner and answers every request from the dock', async () => {
+    window.sessionStorage.setItem('prime-work.composer-draft', 'normal draft')
+    const runtime = { runtimeId: 'chief-runtime', harness: 'pi', cwd: '/chief', isStreaming: false }
+    const dialogs = [0, 1].map((index) => ({ type: 'extension_ui_request', method: 'select', id: `q${index}`, title: `Question ${index + 1}`, options: [`__apex_ask_user__group:${index}:2`, `Choice ${index}`, 'Other (type your own answer)'] }))
+    const command = vi.fn().mockResolvedValue({ success: true })
+    const bridge = { coordinator: { open: vi.fn().mockResolvedValue({ attachmentId: 'chief', eventSequence: 0, session: { ...activeSession, role: 'coordinator' }, runtime, messages: [], pendingDialogs: dialogs }), close: vi.fn().mockResolvedValue(true) }, agent: { onEvent: vi.fn(() => () => {}), command, stop: vi.fn().mockResolvedValue(true), list: vi.fn().mockResolvedValue([runtime]) }, providers: { catalog: vi.fn().mockResolvedValue({ models: [], providers: [] }) } } as unknown as ApexApi
+    function Harness() {
+      const runtimeSessionsRef = useRef(new Map<string, string>())
+      const extension = useExtensionUi({ bridge, runtimeSessionsRef, setSessions: () => {}, setRuntime: () => {}, agentTurn: { send: () => {} } as unknown as AgentTurnHandle, reportError: () => {} })
+      return <ActivityPage bridge={bridge} sessions={[activeSession]} projects={[project]} clearedActivity={{}} onOpen={vi.fn()} onClear={vi.fn()} controls={{ pendingByRuntime: extension.pendingByRuntime, onRecoverQuestion: extension.showExtensionUi, onRespondQuestion: extension.respondForRuntime }} />
+    }
+    await act(async () => root.render(<Harness />))
+    const dock = container.querySelector('.activity-coordinator .conversation-bottom-dock')!
+    expect(dock.querySelector('.extension-questionnaire')).not.toBeNull()
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    expect(dock.textContent).toContain('Question 1')
+    await act(async () => dock.querySelector<HTMLButtonElement>('.extension-question__options button')!.click())
+    expect(dock.textContent).toContain('Question 2')
+    await act(async () => dock.querySelector<HTMLButtonElement>('.extension-question__options button')!.click())
+    await act(async () => Array.from(dock.querySelectorAll('button')).find((button) => button.textContent === 'Submit answers')!.click())
+    expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'extension_ui_response', id: 'q0', value: JSON.stringify({ answer: 'Choice 0', answerSource: 'option' }) })
+    expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'extension_ui_response', id: 'q1', value: JSON.stringify({ answer: 'Choice 1', answerSource: 'option' }) })
+    expect(window.sessionStorage.getItem('prime-work.composer-draft')).toBe('normal draft')
+    window.sessionStorage.clear()
+  })
+  it('keeps the chief attached while filtering the roster and restores failed composer sends', async () => {
+    window.sessionStorage.setItem('prime-work.composer-draft', 'normal draft')
+    let runtime = { runtimeId: 'chief-runtime', harness: 'pi', cwd: '/chief', isStreaming: false, imageInputSupported: true, model: { provider: 'test', id: 'model' }, thinkingLevel: 'medium' }
+    let promptAttempts = 0
+    const onEvent = vi.fn((_receive: (event: ApexEventEnvelope) => void) => () => {})
+    const command = vi.fn().mockImplementation(async (_id, request) => {
+      if (request.type === 'attached_prompt') {
+        if (++promptAttempts === 1) throw new Error('not admitted')
+        return { success: false, error: 'image rejected' }
+      }
+      if (request.type === 'abort') return { success: false, error: 'stop rejected' }
+      if (request.type === 'set_model') runtime = { ...runtime, model: { provider: request.provider, id: request.modelId } }
+      if (request.type === 'set_thinking_level') runtime = { ...runtime, thinkingLevel: request.level }
+      return {}
+    })
+    const model = { key: 'test/model', provider: 'test', id: 'model', name: 'Model One', reasoning: true, input: ['text'], contextWindow: 1000, maxTokens: 100, availableThinkingLevels: ['medium', 'high'], fastModeSupported: false, available: true }
+    const otherModel = { ...model, key: 'test/other', id: 'other', name: 'Model Two' }
+    const open = vi.fn().mockResolvedValue({ attachmentId: 'chief-attachment', eventSequence: 0, session: { ...activeSession, id: 'chief', role: 'coordinator' }, runtime, messages: [{ id: 'm', role: 'assistant', timestamp: Date.now(), parts: [{ type: 'text', text: 'Chief is ready' }] }], pendingDialogs: [] })
+    const bridge = { coordinator: { open, close: vi.fn().mockResolvedValue(true) }, agent: { onEvent, command, list: vi.fn().mockImplementation(async () => [runtime]) }, providers: { catalog: vi.fn().mockResolvedValue({ models: [model, otherModel], providers: [{ id: 'test', name: 'Test', configured: true, enabled: true }] }) } } as unknown as ApexApi
+    await act(async () => root.render(<ActivityPage bridge={bridge} sessions={[activeSession]} projects={[project]} clearedActivity={{}} onOpen={vi.fn()} onClear={vi.fn()} />))
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.transcript')?.textContent).toContain('Chief is ready')
+    const input = container.querySelector<HTMLTextAreaElement>('[aria-label="Message Chief of Staff"]')!
+    expect(input.value).toBe('')
+    const tabs = container.querySelector('[role="tablist"][aria-label="Activity detail view"]')!
+    const peekTab = tabs.querySelector<HTMLButtonElement>('[role="tab"][data-tab-value="peek"]')!
+    const chiefTab = tabs.querySelector<HTMLButtonElement>('[role="tab"][data-tab-value="coordinator"]')!
+    const peekPanel = document.getElementById(peekTab.getAttribute('aria-controls')!)!
+    const chiefPanel = document.getElementById(chiefTab.getAttribute('aria-controls')!)!
+    expect(chiefTab.getAttribute('aria-selected')).toBe('true')
+    expect(peekTab.getAttribute('aria-selected')).toBe('false')
+    expect(chiefPanel.getAttribute('aria-labelledby')).toBe(chiefTab.id)
+    expect(peekPanel.getAttribute('aria-labelledby')).toBe(peekTab.id)
+    expect(peekPanel.hidden).toBe(true)
+    await act(async () => peekTab.click())
+    expect(peekTab.getAttribute('aria-selected')).toBe('true')
+    expect(chiefPanel.hidden).toBe(true)
+    expect(peekPanel.hidden).toBe(false)
+    expect(container.querySelector('[aria-label="Message Chief of Staff"]')).toBe(input)
+    await act(async () => chiefTab.click())
+    expect(chiefTab.getAttribute('aria-selected')).toBe('true')
+    expect(chiefPanel.hidden).toBe(false)
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[aria-label="Message Chief of Staff"]')).toBe(input)
+    await act(async () => {
+      chiefTab.focus()
+      chiefTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))
+    })
+    expect(document.activeElement).toBe(peekTab)
+    await act(async () => peekTab.click())
+    expect(peekTab.getAttribute('aria-selected')).toBe('true')
+    await act(async () => chiefTab.click())
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[aria-label="Message Chief of Staff"]')).toBe(input)
+    await act(async () => {
+      const filter = container.querySelector<HTMLSelectElement>('[aria-label="Activity project"]')!
+      filter.value = 'project'
+      filter.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[aria-label="Message Chief of Staff"]')).toBe(input)
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Chat settings"]')!.click())
+    await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Model: Model One"]')!.click())
+    await act(async () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.textContent?.includes('Model Two'))!.click())
+    expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'set_model', provider: 'test', modelId: 'other' })
+    await act(async () => {
+      await vi.waitFor(() => expect(runtime.model.id).toBe('other'))
+      await vi.waitFor(() => expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'set_thinking_level', level: 'medium' }))
+    })
+    await act(async () => document.body.querySelector<HTMLButtonElement>('[aria-label="Reasoning effort"]')!.click())
+    await act(async () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.textContent?.trim() === 'High')!.click())
+    await vi.waitFor(() => expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'set_thinking_level', level: 'high' }))
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(input, 'Check progress')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click())
+    expect(command).toHaveBeenCalledWith('chief-runtime', expect.objectContaining({ type: 'attached_prompt', message: 'Check progress', intent: 'queue' }))
+    expect(input.value).toBe('Check progress')
+    const file = new File([new Uint8Array([1, 2, 3])], 'test.png', { type: 'image/png' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1, 2, 3]).buffer })
+    const fileInput = container.querySelector<HTMLInputElement>('[aria-label="Choose files to attach"]')!
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] })
+    await act(async () => fileInput.dispatchEvent(new Event('change', { bubbles: true })))
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click())
+    expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'attached_prompt', message: 'Check progress', intent: 'queue', images: [{ type: 'image', mimeType: 'image/png', data: 'AQID' }] })
+    expect(input.value).toBe('Check progress')
+    expect(container.querySelector('[aria-label="Remove test.png"]')).not.toBeNull()
+    expect(container.textContent).toContain('image rejected')
+    await act(async () => onEvent.mock.calls[0][0]({ runtimeId: 'chief-runtime', event: { type: 'agent_start' }, sequence: 1 }))
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Stop Pi"]')!.click())
+    expect(command).toHaveBeenCalledWith('chief-runtime', { type: 'abort' })
+    expect(container.textContent).toContain('stop rejected')
+    expect(window.sessionStorage.getItem('prime-work.composer-draft')).toBe('normal draft')
+    window.sessionStorage.clear()
+  })
   it('filters the feed and review actions to the selected project, including its worktrees', async () => {
     const otherProject: ProjectRecord = { ...project, id: 'other', name: 'Other', path: '/other', primaryFolder: '/other', folders: ['/other', '/other-worktree'] }
     const otherSession: SessionRecord = { ...activeSession, id: 'other-session', title: 'Other worktree run', filePath: '/sessions/other.jsonl', projectPath: '/other-worktree' }
@@ -64,12 +237,13 @@ describe('archived activity cleanup', () => {
     expect(onClear).toHaveBeenCalledWith([otherSession])
   })
 
-  it('opens project-scoped coordination without taking over reply and Escape shortcuts', async () => {
+  it('opens global coordination by default without taking over reply and Escape shortcuts', async () => {
     await act(async () => root.render(<ActivityPage sessions={[activeSession]} projects={[project]} clearedActivity={{}} controls={{ canFollowUpSession: () => true, onSendReply: vi.fn() }} onOpen={vi.fn()} onClear={vi.fn()} />))
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true })))
-    expect(container.querySelector('[aria-label="Chief of Staff"]')?.textContent).toContain('Select a granted project')
+    expect(container.querySelector('[aria-label="Chief of Staff"]')?.textContent).toContain('All authorized projects')
     expect(container.querySelector('.activity-peek')).toBeNull()
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })))
+    expect(container.querySelector('[role="tab"][data-tab-value="peek"]')?.getAttribute('aria-selected')).toBe('true')
     const reply = container.querySelector<HTMLTextAreaElement>('.activity-reply__input')!
     expect(document.activeElement).toBe(reply)
     await act(async () => reply.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
@@ -101,6 +275,7 @@ describe('archived activity cleanup', () => {
     expect(container.textContent).not.toContain('Archived chat')
     expect(container.querySelector('[aria-label="Activity filter"]')).toBeNull()
 
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="tab"][data-tab-value="peek"]')!.click())
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[aria-label="Open Active chat"]')!.click()
     })
@@ -446,7 +621,8 @@ describe('archived activity cleanup', () => {
       )
     })
 
-    // Default selection picks first of Needs you
+    // Peek selection picks first of Needs you
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="tab"][data-tab-value="peek"]')!.click())
     const peek = container.querySelector('.activity-peek')!
     expect(peek.getAttribute('data-session-id')).toBe(questionSession.id)
     expect(peek.textContent).toContain('Proceed with staging deploy?')

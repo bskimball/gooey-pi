@@ -195,6 +195,100 @@ describe('useBrowserAnnotations identity', () => {
 })
 
 describe('SpecialistsPanel transcript scoping and loading', () => {
+  it('condenses live parent-recorded activity without timestamps and keeps its history available', async () => {
+    const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { activities: [
+        { tool: 'bash', summary: 'first command', status: 'completed' },
+        { tool: 'bash', summary: 'second command', status: 'running' },
+      ] } } },
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    const group = container.querySelector('.work-group.is-live')!
+    expect(group).not.toBeNull()
+    expect(group.querySelector('.work-group__current')?.textContent).toContain('second command')
+    expect(group.querySelector('.work-group__current')?.textContent).not.toContain('first command')
+    await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('first command')
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('second command')
+  })
+
+  it('replaces live disk thinking and tool steps, then folds settled activity with expandable history', async () => {
+    let disk: TranscriptMessage[] = [{ id: 'disk', role: 'assistant', streaming: true, parts: [
+      { type: 'thinking', text: 'First thought' },
+    ] }]
+    Object.defineProperty(window, 'apex', { configurable: true, value: { sessions: { read: async () => disk } } })
+    const parent = (settled: boolean): TranscriptMessage[] => [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { sessionFile: '/worker.jsonl' } } },
+      ...(settled ? [
+        { type: 'toolCall' as const, name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult' as const, name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nFinal report' },
+      ] : []),
+    ] }]
+    const render = async (settled = false) => act(async () => root.render(<SpecialistsPanel messages={parent(settled)} selectedId="task_1" onSelect={vi.fn()} />))
+    await render()
+    expect(container.querySelector('.work-group__current')?.textContent).toContain('First thought')
+    disk = [{ id: 'disk', role: 'assistant', streaming: true, parts: [
+      { type: 'thinking', text: 'First thought' },
+      { type: 'toolCall', id: 'one', name: 'bash', args: { command: 'first command' } },
+      { type: 'toolResult', name: 'bash', text: 'first result' },
+    ] }]
+    // The live panel polls the worker transcript.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1250)) })
+    expect(container.querySelector('.work-group__current')?.textContent).toContain('first command')
+    expect(container.querySelector('.work-group__current')?.textContent).not.toContain('First thought')
+    disk = [{ ...disk[0], parts: [...disk[0].parts,
+      { type: 'toolCall', id: 'two', name: 'bash', args: { command: 'second command' } },
+      { type: 'toolResult', name: 'bash', text: 'second result' },
+      { type: 'thinking', text: 'Latest thought' },
+    ] }]
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1250)) })
+    let group = container.querySelector('.work-group.is-live')!
+    expect(group.querySelector('.work-group__current')?.textContent).toContain('Latest thought')
+    expect(group.querySelector('.work-group__current')?.textContent).not.toContain('first command')
+    expect(group.querySelector('.work-group__summary')?.textContent).toContain('2 commands')
+    await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('First thought')
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('first command')
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('second command')
+    disk = [{ ...disk[0], streaming: false, parts: [...disk[0].parts, { type: 'text', text: 'Final report' },
+      { type: 'toolCall', id: 'after', name: 'bash', args: { command: 'after report' } },
+      { type: 'toolResult', name: 'bash', text: 'after result' },
+    ] }]
+    await render(true)
+    group = container.querySelector('.work-group')!
+    expect(group.classList.contains('is-live')).toBe(false)
+    expect(container.querySelector('.specialist-result')?.textContent).toContain('Final report')
+    expect(container.querySelector('.specialist-result .work-group__summary')?.textContent).toContain('1 command')
+    await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+    expect(group.querySelector('.work-group__summary')?.getAttribute('aria-expanded')).toBe('false')
+    expect(group.querySelector('.work-group__summary')?.textContent).toContain('2 commands')
+    expect(group.querySelector('.work-group__body')).toBeNull()
+    await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('first command')
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('second command')
+  })
+
+  it.each([
+    ['waiting', 'Waiting for input'], ['stopped', 'Stopped'], ['error', 'Failed'], ['closed', 'Closed'],
+  ])('preserves %s specialist status without a success receipt', async (status, label) => {
+    const details = status === 'waiting' ? { worker: { waiting_ui_requests: [{ id: 'question' }] } } : undefined
+    const lifecycle = status === 'stopped' ? 'aborted' : status === 'error' ? 'failed' : status
+    const messages: TranscriptMessage[] = [{ id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task_start', args: { agent: 'scout', prompt: 'Inspect' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details },
+      ...(status === 'waiting' ? [] : [
+        { type: 'toolCall' as const, name: 'task_wait', args: { id: 'task_1' } },
+        { type: 'toolResult' as const, name: 'task_wait', text: `lifecycle: ${lifecycle}${status === 'error' ? '\nkill_reason: Worker failed' : ''}`, ...(status === 'error' ? { isError: true } : {}) },
+      ]),
+    ] }]
+    await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    expect(container.querySelector('.specialist-header summary')?.textContent).toContain(label)
+    expect(container.querySelector('.turn-receipt')).toBeNull()
+    if (status === 'error') expect(container.querySelector('.specialist-header__error')?.textContent).toContain('Worker failed')
+  })
+
   it.each([false, true])('keeps the initial report landing through delayed disk hydration unless the reader scrolls (scrolled: %s)', async (scrolled) => {
     let finishRead: ((messages: TranscriptMessage[]) => void) | undefined
     Object.defineProperty(window, 'apex', { configurable: true, value: { sessions: { read: () => new Promise<TranscriptMessage[]>((resolve) => { finishRead = resolve }) } } })
@@ -264,6 +358,7 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
       { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nFinal report' },
     ] }]
     await act(async () => root.render(<SpecialistsPanel messages={messages} selectedId="task_1" onSelect={vi.fn()} />))
+    await act(async () => container.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
     const text = container.querySelector('.specialist-transcript')!.textContent!
     expect(text.indexOf('First commentary')).toBeLessThan(text.indexOf('echo inspected'))
     expect(text.indexOf('echo inspected')).toBeLessThan(text.indexOf('Second commentary'))

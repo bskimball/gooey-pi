@@ -26,6 +26,7 @@ interface ExtensionUiModalProps {
   request: ExtensionUiRequest
   onRespond(response: ExtensionUiResponse): void
   platform?: NodeJS.Platform
+  presentation?: 'modal' | 'inline'
   /** Host-owned expiry timestamp (epoch ms). Without it, the modal starts a countdown when this request first shows. */
   deadline?: number
 }
@@ -53,7 +54,7 @@ function useRemainingMs(deadline: number | undefined): number | undefined {
   return deadline === undefined ? undefined : Math.max(0, deadline - now)
 }
 
-export function ExtensionUiModal({ request, onRespond, platform = 'darwin', deadline }: ExtensionUiModalProps) {
+export function ExtensionUiModal({ request, onRespond, platform = 'darwin', deadline, presentation = 'modal' }: ExtensionUiModalProps) {
   const prefill = request.method === 'editor' ? request.prefill : undefined
   const questionnaireTimeout = request.method === 'questionnaire' ? request.timeout : undefined
   const fallbackDeadline = useMemo(
@@ -70,6 +71,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   const questionIndex = wizardContext.index
   const contextInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const questionnaireRef = useRef<HTMLDivElement | null>(null)
+  const inlineFocusIntent = useRef<{ requestId: string; index: number } | null>(null)
   const selectOptionRefs = useRef<Record<number, HTMLButtonElement | null>>({})
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const selectListId = useId()
@@ -145,13 +147,16 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   }, [questionnaire])
 
   useEffect(() => {
+    const intent = inlineFocusIntent.current
+    inlineFocusIntent.current = null
     if (!questionnaire?.complete) return
     const container = questionnaireRef.current
     if (!container || container.contains(document.activeElement)) return
+    if (presentation === 'inline' && (intent?.requestId !== request.id || intent.index !== questionIndex || document.activeElement !== document.body)) return
     const focusTarget = container.querySelector<HTMLElement>('.extension-question__options button')
       ?? container.querySelector<HTMLElement>('.extension-questionnaire__progress button.is-active')
     focusTarget?.focus()
-  }, [request.id, questionnaire?.complete, questionIndex])
+  }, [request.id, questionnaire?.complete, questionIndex, presentation])
 
   const cancel = () => onRespond({ cancelled: true })
 
@@ -165,8 +170,17 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
     if (activeQuestion) dispatchWizard({ type: 'SELECT', index })
   }
 
+  const rememberInlineFocus = (index: number) => {
+    if (presentation === 'inline' && index !== questionIndex && questionnaireRef.current?.contains(document.activeElement)) {
+      inlineFocusIntent.current = { requestId: request.id, index }
+    }
+  }
+
   const navigateQuestion = (index: number) => {
-    if (questionnaire) dispatchWizard({ type: 'NAVIGATE', index })
+    if (questionnaire) {
+      rememberInlineFocus(Math.max(0, Math.min(questionnaire.questions.length, index)))
+      dispatchWizard({ type: 'NAVIGATE', index })
+    }
   }
 
   const commitQuestion = (index = activeSelected) => {
@@ -174,6 +188,8 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
     const bounded = Math.max(0, Math.min(activeQuestion.options.length - 1, index))
     if (!questionnaireAnswer(activeQuestion, bounded, wizardContext.contexts)) {
       contextInputRefs.current[activeQuestion.id]?.focus()
+    } else {
+      rememberInlineFocus(questionIndex + 1)
     }
     dispatchWizard({ type: 'COMMIT', index: bounded })
   }
@@ -239,17 +255,18 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
 
   const remainingSeconds = remainingMs === undefined ? undefined : Math.max(0, Math.ceil(remainingMs / 1_000))
 
-  return (
-    <Modal title={request.title} onClose={cancel} footer={(
-      <>
-        <ApexButton onClick={cancel}>Cancel</ApexButton>
-        {request.method === 'confirm' ? <ApexButton variant="primary" onClick={() => onRespond({ confirmed: true })}>Confirm</ApexButton> : null}
-        {request.method === 'input' || request.method === 'editor' ? <ApexButton variant="primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</ApexButton> : null}
-        {questionnaire ? <ApexButton variant="primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</ApexButton> : null}
-      </>
-    )}>
-      {questionnaire ? (
+  const inline = presentation === 'inline' && Boolean(questionnaire)
+  const footer = (
+    <>
+      <ApexButton variant="quiet" onClick={cancel}>Cancel</ApexButton>
+      {request.method === 'confirm' ? <ApexButton variant="primary" onClick={() => onRespond({ confirmed: true })}>Confirm</ApexButton> : null}
+      {request.method === 'input' || request.method === 'editor' ? <ApexButton variant="primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</ApexButton> : null}
+      {questionnaire ? <ApexButton variant="primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</ApexButton> : null}
+    </>
+  )
+  const questionnaireContent = questionnaire ? (
         <div ref={questionnaireRef} className="extension-questionnaire" onKeyDown={handleQuestionnaireKeyDown}>
+          {inline ? <h2 className="extension-questionnaire__inline-title">{activeQuestion?.title ?? request.title}</h2> : null}
           {!questionnaire.complete ? <p className="modal-intro">Preparing questions…</p> : null}
           {questionnaire.complete ? (
             <>
@@ -272,7 +289,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
               {activeQuestion ? (
                 <div className="extension-questionnaire__question">
                   <p className="modal-intro">Question {questionIndex + 1} of {questionnaire.questions.length}</p>
-                  <h3>{activeQuestion.title}</h3>
+                  {inline ? null : <h3>{activeQuestion.title}</h3>}
                   <div className="extension-question__options" role="listbox" aria-label={activeQuestion.title}>
                     {activeQuestion.options.map((option, index) => {
                       const isSelected = activeSelected === index
@@ -312,7 +329,18 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
             </>
           ) : null}
         </div>
-      ) : null}
+  ) : null
+
+  if (inline) {
+    return <section className="extension-questionnaire-inline" aria-label={request.title}>
+      {questionnaireContent}
+      <div className="extension-questionnaire-inline__footer">{footer}</div>
+    </section>
+  }
+
+  return (
+    <Modal title={request.title} onClose={cancel} footer={footer}>
+      {questionnaireContent}
       {selectRequest ? (
         <div className="extension-question">
           <p className="modal-intro">Choose an option to let the agent continue.</p>

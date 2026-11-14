@@ -129,6 +129,7 @@ async function fixture(
   targetTranscript: TranscriptMessage[] = defaultTargetTranscript,
   waitClock?: FakeCollaborationWaitClock,
   projects?: ConstructorParameters<typeof AgentCollaborationBridge>[0]['projects'],
+  global = false,
 ) {
   const records = [source, target, foreign, child, archived]
   const apexSessions = service(records, {
@@ -140,6 +141,7 @@ async function fixture(
   const apexManager = manager(targetRuntime, () => records.push(created))
   const bridge = new AgentCollaborationBridge({
     extensionPath: '/app/extensions/apex-collaboration.ts',
+    ...(global ? { globalCoordinatorPath: () => source.filePath, authorizedProjects: () => [{ id: 'a', name: 'A', primaryFolder: '/project' }, { id: 'b', name: 'B', primaryFolder: '/other' }] } : {}),
     sessions: { pi: apexSessions },
     agents: { pi: apexManager as unknown as AgentRpcManager },
     catalogs: {
@@ -182,6 +184,42 @@ async function fixture(
 }
 
 describe('AgentCollaborationBridge', () => {
+  it('limits global operations to currently granted projects while ordinary agents remain project scoped', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'chief-project-'))
+    const canonical = realpathSync(folder)
+    let revoked = false
+    const projects = { collaborationScope: vi.fn(async (cwd: string) => {
+      if (cwd === '/project') return { projectId: 'a', folders: ['/project'] }
+      if (!revoked && (cwd === '/other' || cwd === folder || cwd === canonical)) return { projectId: 'b', folders: [canonical] }
+      throw new Error('not granted')
+    }) }
+    try {
+      const chief = await fixture(true, defaultTargetTranscript, undefined, projects, true)
+      const otherRuntime = chief.bridge.environmentFor({ cwd: '/project', sessionPath: target.filePath, harness: 'pi' })
+      expect((await chief.call('projects', {}, otherRuntime.GOOEYPI_COLLABORATION_TOKEN)).status).not.toBe(200)
+      const peers = await chief.call('list')
+      expect(peers.body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: foreign.id, project_id: 'b', cwd: '/other' })]))
+      expect((await chief.call('projects')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'b' })]))
+      expect((await chief.call('read', { target_session_id: foreign.id })).status).toBe(200)
+      expect((await chief.call('send', { target_session_id: foreign.id, message: 'work' })).status).toBe(200)
+      expect((await chief.call('create', { prompt: 'work' })).status).toBe(400)
+      expect((await chief.call('create', { prompt: 'work', cwd: folder })).status).toBe(200)
+      expect(chief.apexManager.start).toHaveBeenCalledWith({ cwd: canonical })
+      const ordinary = await fixture(true, defaultTargetTranscript, undefined, projects)
+      expect((await ordinary.call('list')).body.result).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: foreign.id })]))
+      expect((await ordinary.call('projects')).status).not.toBe(200)
+      expect((await ordinary.call('read', { target_session_id: foreign.id })).status).not.toBe(200)
+      expect((await ordinary.call('send', { target_session_id: foreign.id, message: 'no' })).status).not.toBe(200)
+      expect((await ordinary.call('create', { prompt: 'no', cwd: folder })).status).not.toBe(200)
+      expect((await chief.call('create', { prompt: 'no', cwd: tmpdir() })).status).not.toBe(200)
+      revoked = true
+      expect((await chief.call('read', { target_session_id: foreign.id })).status).not.toBe(200)
+      expect((await chief.call('send', { target_session_id: foreign.id, message: 'no' })).status).not.toBe(200)
+      expect((await chief.call('projects')).body.result).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'b' })]))
+      expect((await chief.call('create', { prompt: 'work', cwd: folder })).status).not.toBe(200)
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
   it('serializes three concurrent HTTP creates', async () => {
     const { call, apexManager } = await fixture()
     let release!: () => void

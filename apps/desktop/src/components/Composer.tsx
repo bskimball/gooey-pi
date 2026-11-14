@@ -58,7 +58,7 @@ import type {
 	TerminalPromptContext,
 	VoiceTranscriptionProvider,
 } from "@/types/api";
-import { CheckoutPicker } from "./CheckoutPicker";
+import { CheckoutPickerFields, useCheckoutPickerController } from "./CheckoutPicker";
 import { ComposerQueue } from "./ComposerQueue";
 import { ContextUsageRing } from "./ContextUsageRing";
 import { ExecutingModelChip } from "./ExecutingModelChip";
@@ -68,6 +68,7 @@ import {
 	CaretDown,
 	CircleNotch,
 	Gauge,
+	Gear,
 	Image as ImageIcon,
 	Lightning,
 	Microphone,
@@ -78,9 +79,9 @@ import {
 	X,
 } from "./icons";
 import { ModelPicker } from "./ModelPicker";
-import { PiModeControl } from "./PiModeControl";
+import { PiModeFields, PiModeStatus, usePiModeController } from "./PiModeControl";
 import { Banner } from "@astryxdesign/core/Banner";
-import { ApexButton, IconButton, SelectControl } from "./ui";
+import { ApexButton, IconButton, Modal, SelectControl } from "./ui";
 
 interface ComposerProps {
 	busy: boolean;
@@ -151,12 +152,18 @@ interface ComposerProps {
 	onClearTerminalSelection?(): void;
 	/** Stable per-workspace key; without it the composer keeps no draft of its own. */
 	draftKey?: string;
+	/** Keep this draft independent of the legacy shared crash snapshot. */
+	isolatedDraft?: boolean;
+	/** Hide workspace-only mode and checkout controls for non-workspace conversations. */
+	conversationOnly?: boolean;
 	/** Working directory searched by `@` file completion and used to relativize dropped files. */
 	fileRoot?: string;
 	/** Commands the runtime reported via `get_commands`; undefined until known. */
 	runtimeCommands?: readonly ComposerCommand[];
 	/** Runs app-level slash commands such as `/new` or `/name`. */
 	onCommand?(action: ComposerCommandAction): void;
+	onCreateSide?(question?: string): void;
+	onReviewFinish?(): void;
 	/** A new `id` appends `text` to the draft without sending it. */
 	insertDraft?: { id: number; text: string };
 	onDraftInserted?(id: number): void;
@@ -235,24 +242,39 @@ export const Composer = memo(function Composer({
 	onClearAnnotations = noop,
 	onClearTerminalSelection = noop,
 	draftKey,
+	isolatedDraft = false,
+	conversationOnly = false,
 	fileRoot,
 	runtimeCommands,
 	onCommand,
+	onCreateSide,
+	onReviewFinish,
 	insertDraft,
 	onDraftInserted,
 }: ComposerProps) {
 	const taskWorkflow = useTaskWorkflowContext();
 	const excerpts = taskExcerpts ?? taskWorkflow?.excerpts ?? [];
 	const removeExcerpts = onRemoveTaskExcerpts ?? taskWorkflow?.remove;
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const settingsTriggerRef = useRef<HTMLButtonElement>(null);
+	const modeController = usePiModeController(
+		(command) => onSend(command, [], "queue"),
+		Boolean(disabled || loading || busy || admitting),
+	);
+	const checkoutController = useCheckoutPickerController();
+	const closeSettings = () => {
+		setSettingsOpen(false);
+		requestAnimationFrame(() => settingsTriggerRef.current?.focus());
+	};
 	const modelControls = (
 		<>
-			<ModelPicker
+			<div className="chat-settings__field"><span>Model</span><ModelPicker
 				value={model}
 				modelsByProvider={modelsByProvider}
 				providers={providers}
 				onChange={onModelChange}
-			/>
-			<SelectControl
+			/></div>
+			<div className="chat-settings__field"><span>Thinking</span><SelectControl
 				label="Reasoning effort"
 				compact
 				icon={<Gauge size={12} />}
@@ -266,13 +288,13 @@ export const Composer = memo(function Composer({
 						{reasoningLabels[level]}
 					</option>
 				))}
-			</SelectControl>
+			</SelectControl></div>
 		</>
 	);
 	const [value, setValue] = useState(
 		() =>
-			(draftKey ? readComposerDraft(draftKey)?.text : undefined) ??
-			takeComposerDraft(),
+			(draftKey ? readComposerDraft(draftKey, isolatedDraft)?.text : undefined) ??
+			(isolatedDraft ? "" : takeComposerDraft()),
 	);
 	const [caret, setCaret] = useState(() => value.length);
 	const [sessionReferenceIds, setSessionReferenceIds] = useState<
@@ -337,7 +359,7 @@ export const Composer = memo(function Composer({
 	useEffect(() => {
 		if (!draftKey || restoredDraftRef.current) return;
 		restoredDraftRef.current = true;
-		const draft = readComposerDraft(draftKey);
+		const draft = readComposerDraft(draftKey, isolatedDraft);
 		if (!draft) return;
 		if (draft.model && draft.model !== model) onModelChange(draft.model);
 		if (draft.effort && draft.effort !== effort)
@@ -356,10 +378,10 @@ export const Composer = memo(function Composer({
 
 	useEffect(() => {
 		if (draftKeyRef.current && draftKeyRef.current !== draftKey)
-			clearComposerDraft(draftKeyRef.current);
+			clearComposerDraft(draftKeyRef.current, isolatedDraft);
 		draftKeyRef.current = draftKey;
 		if (draftKey)
-			saveComposerDraft(draftKey, { text: value, model, effort, fast });
+			saveComposerDraft(draftKey, { text: value, model, effort, fast }, isolatedDraft);
 	}, [draftKey, effort, fast, model, value]);
 
 	useEffect(() => {
@@ -540,6 +562,21 @@ export const Composer = memo(function Composer({
 			return;
 		}
 		const slash = parseSlashCommand(draftValue);
+		if (slash && (slash.name === "btw" || slash.name === "finish")) {
+			if (harness !== "pi" || !taskWorkflow?.sessionFile || (slash.name === "btw" ? !onCreateSide : !onReviewFinish))
+				return setAttachmentError(`/${slash.name} is not available here.`);
+			if (taskWorkflow.pending)
+				return setAttachmentError("Wait for the current task action to finish.");
+			if (slash.name === "finish" && !taskWorkflow.idle)
+				return setAttachmentError("Finish is available when this saved Pi session is idle.");
+			if (slash.name === "finish" && slash.args)
+				return setAttachmentError("Usage: /finish");
+			if (slash.name === "btw") onCreateSide?.(slash.args || undefined);
+			else onReviewFinish?.();
+			setAttachmentError("");
+			setDraft("");
+			return;
+		}
 		if (slash && isLocalCommand(slash.name)) {
 			const outcome = resolveLocalCommand(slash.name, slash.args, {
 				models: selectableModels(modelsByProvider, providers),
@@ -656,13 +693,13 @@ export const Composer = memo(function Composer({
 		try {
 			await onSend(promptWithContext, submittedImages, intent);
 			if (sharedSelection && !commandDraft) consumeSharedSelection();
-			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current);
+			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current, isolatedDraft);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (sentAnnotations.length > 0) onClearAnnotations();
 			if (currentExcerpts.length) removeExcerpts?.(currentExcerpts.map((excerpt) => excerpt.id));
 		} catch (error) {
 			if (!mountedRef.current && draftKeyRef.current) {
-				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast });
+				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast }, isolatedDraft);
 			}
 			if (mountedRef.current) {
 				setValue((current) => current.trim() ? `${submittedValue}\n\n${current}` : submittedValue);
@@ -826,6 +863,7 @@ export const Composer = memo(function Composer({
 				) : null}
 				<div className="composer-input">
 					<textarea
+						data-isolated-draft={isolatedDraft || undefined}
 						ref={textareaRef}
 						value={value}
 						disabled={disabled || loading}
@@ -1009,28 +1047,17 @@ export const Composer = memo(function Composer({
 								void imageAttachments.ingest(files);
 							}}
 						/>
-						{harness === "pi" ? (
-							<PiModeControl
-								disabled={Boolean(disabled || loading || busy || admitting)}
-								modelsByProvider={modelsByProvider}
-								providers={providers}
-								onCommand={(command) => onSend(command, [], "queue")}
-							>
-								{modelControls}
-							</PiModeControl>
-						) : (
-							modelControls
-						)}
-						<CheckoutPicker
-							catalog={checkoutCatalog}
-							fallbackLabel={checkoutLabel}
-							loading={checkoutsLoading}
-							disabled={busy || admitting}
-							onExecute={onExecuteCheckout}
-						/>
+						<IconButton ref={settingsTriggerRef} label="Chat settings" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => { setMenu(null); setSettingsOpen(true); }}><Gear size={16} /></IconButton>
 						<ExecutingModelChip executingModel={executingModel ?? undefined} />
+						{harness === "pi" && !conversationOnly ? <PiModeStatus controller={modeController} /> : null}
+					</div>
+					{settingsOpen ? <Modal title="Chat settings" onClose={closeSettings}>
+						<div className="chat-settings">
+							{harness === "pi" && !conversationOnly ? <PiModeFields controller={modeController} modelsByProvider={modelsByProvider} providers={providers}>{modelControls}</PiModeFields> : <section className="chat-settings__section"><div className="chat-settings__fields">{modelControls}</div></section>}
+							{!conversationOnly || fastSupported ? <section className="chat-settings__section chat-settings__section--execution"><div className="chat-settings__fields">
+								{!conversationOnly ? <div className="chat-settings__field"><span>Checkout</span><CheckoutPickerFields controller={checkoutController} catalog={checkoutCatalog} fallbackLabel={checkoutLabel} loading={checkoutsLoading} disabled={busy || admitting} onExecute={onExecuteCheckout} /></div> : null}
 						{fastSupported ? (
-							<ApexButton
+							<div className="chat-settings__field"><span>Service tier</span><ApexButton
 								variant="quiet"
 								compact
 								label="Fast"
@@ -1046,9 +1073,11 @@ export const Composer = memo(function Composer({
 							>
 								<Lightning size={12} />{" "}
 								<span className="fast-mode-toggle__label">Fast</span>
-							</ApexButton>
+							</ApexButton></div>
 						) : null}
-					</div>
+							</div></section> : null}
+						</div>
+					</Modal> : null}
 					<div className="composer__actions">
 						{dictation.state === "connecting" ||
 						dictation.state === "recording" ? (

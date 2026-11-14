@@ -5,6 +5,7 @@ import {
   CaretDown,
   CaretRight,
   Check,
+  ChatCircleDots,
   Code,
   Copy,
   DotsThree,
@@ -22,7 +23,7 @@ import {
   Waveform,
 } from './icons'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type WorkspaceView } from '@/types/api'
+import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type SideConversation, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
 import { sortProjects } from '@/lib/project-order'
@@ -67,6 +68,8 @@ export interface SidebarProps {
   /** Sessions held by another live Apex app, keyed by session file path. */
   runtimeOwners?: ReadonlyMap<string, RuntimeOwnerView>
   onContinueInVsCode?(session: SessionRecord): void
+  sideConversations?: readonly SideConversation[]
+  onOpenSideConversation?(sessionFile: string): void
   terminalOpen?: boolean
   voiceOpen?: boolean
   onToggleTerminal?(): void
@@ -170,7 +173,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, terminalOpen = false, voiceOpen = false, onToggleTerminal, onToggleVoice, onOpenInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, terminalOpen = false, voiceOpen = false, onToggleTerminal, onToggleVoice, onOpenInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const workflow = useTaskWorkflowContext()
   const [query, setQuery] = useState('')
@@ -393,6 +396,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                                 title={isRunning(session) || isSessionWaiting(session) ? 'Stop the current run before continuing in VS Code.' : 'Move this session to VS Code. You can close Desktop afterward.'}
                                 onClick={() => { setSessionMenu(null); onContinueInVsCode(session) }}
                               ><Code size={12}/> Continue in VS Code</button> : null}
+                              {workflow?.sessionFile === session.filePath && onOpenSideConversation ? sideConversations?.map((side, index) => <button key={side.sessionFile} type="button" disabled={workflow.pending} onClick={() => { setSessionMenu(null); onOpenSideConversation(side.sessionFile) }}><ChatCircleDots size={12} /> Open side conversation {index + 1}</button>) : null}
                             </div> : null}
                           </div>
                         )
@@ -415,8 +419,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         {onOpenInVsCode ? <IconButton label={activeProject ? `Open ${activeProject.name} in VS Code` : 'Open in VS Code'} disabled={!activeProject} onClick={() => { if (activeProject) onOpenInVsCode(activeProject.path) }}><Code size={16} /></IconButton> : null}
       </div>
 
-      {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
-      {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
+      {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
+      {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
     </aside>
   )
 }
@@ -445,6 +449,8 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onArchiveSession === next.onArchiveSession
     && previous.runtimeOwners === next.runtimeOwners
     && previous.onContinueInVsCode === next.onContinueInVsCode
+    && previous.sideConversations === next.sideConversations
+    && previous.onOpenSideConversation === next.onOpenSideConversation
     && previous.terminalOpen === next.terminalOpen
     && previous.voiceOpen === next.voiceOpen
     && previous.onToggleTerminal === next.onToggleTerminal

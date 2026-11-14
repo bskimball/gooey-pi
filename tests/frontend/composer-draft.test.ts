@@ -15,6 +15,17 @@ afterEach(() => {
 })
 
 describe('composer draft storage', () => {
+  it('isolates chief drafts from the normal crash snapshot in both directions', () => {
+    saveComposerDraft('normal', { text: 'normal draft' })
+    expect(readComposerDraft('chief', true)).toBeNull()
+    saveComposerDraft('chief', { text: 'chief draft' }, true)
+    expect(readComposerDraft('chief', true)?.text).toBe('chief draft')
+    expect(readComposerDraft('other')?.text).toBe('normal draft')
+    clearComposerDraft('chief', true)
+    restoreComposerDraft('chief', { text: 'retry chief' }, true)
+    expect(readComposerDraft('chief', true)?.text).toBe('retry chief')
+    expect(readComposerDraft('other')?.text).toBe('normal draft')
+  })
   it('restores a failed submission only when its scoped slot has no newer draft', () => {
     saveComposerDraft('project:new', { text: 'Newer prompt B' })
     restoreComposerDraft('project:new', { text: 'Failed older prompt A' })

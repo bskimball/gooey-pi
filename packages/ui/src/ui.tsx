@@ -106,6 +106,8 @@ const styles = stylex.create({
     },
   },
   buttonDanger: {
+    borderRadius: 999,
+    paddingInline: 14,
     color: '#ffffff',
     backgroundColor: 'var(--danger)',
     borderColor: 'var(--danger)',

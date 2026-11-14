@@ -431,8 +431,8 @@ export function registerIpc(
 		await sessionsForPath(filePath);
 		return services.coordinator.followUp(filePath, message, intent);
 	});
-	handle("coordinator:open", async (event, projectId) => {
-		const attachment = await services.coordinator.open(event.sender.id, projectId);
+	handle("coordinator:open", async (event) => {
+		const attachment = await services.coordinator.open(event.sender.id);
 		try {
 			verify(event);
 			return attachment;

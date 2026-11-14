@@ -270,8 +270,8 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
           })}</div>
         ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
 
-        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
-        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
+        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
+        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
 
         {addOpen ? (
           <Modal
@@ -279,7 +279,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
             onClose={() => sendAdd({ type: 'CLOSE' })}
             footer={addDraft.kind
               ? <><ApexButton onClick={() => sendAdd({ type: 'BACK' })}><ArrowLeft size={13}/> Back</ApexButton><ApexButton variant="primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</ApexButton></>
-              : <ApexButton onClick={() => sendAdd({ type: 'CLOSE' })}>Cancel</ApexButton>}
+              : <ApexButton variant="quiet" onClick={() => sendAdd({ type: 'CLOSE' })}>Cancel</ApexButton>}
           >
             {addDraft.kind === null ? (
               <div className="capability-choice-list">

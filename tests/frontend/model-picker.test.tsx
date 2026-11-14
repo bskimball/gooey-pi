@@ -132,6 +132,24 @@ describe('ModelPicker', () => {
     expect(chips.find((chip) => chip.textContent === 'All Hands')?.getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('consumes Escape on the focused trigger before an enclosing dialog can handle it', async () => {
+    const onEscape = vi.fn()
+    await act(async () => {
+      root.render(<div role="dialog" onKeyDown={onEscape}><ModelPicker value="openai/gpt-5.6-sol" modelsByProvider={modelsByProvider} providers={providers} onChange={vi.fn()} /></div>)
+    })
+    await openPicker()
+    const trigger = container.querySelector<HTMLButtonElement>('.model-picker__trigger')!
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    await act(async () => { trigger.focus(); trigger.dispatchEvent(escape) })
+    expect(escape.defaultPrevented).toBe(true)
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(container.querySelector('.model-picker__popover')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+    expect(onEscape).not.toHaveBeenCalled()
+    await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(onEscape).toHaveBeenCalledOnce()
+  })
+
   it('dismisses with Escape from the provider filters, not just the search field', async () => {
     await renderPicker()
     await openPicker()

@@ -7,7 +7,7 @@ import { blockingExtensionUiRequestId } from '../../src/lib/extension-ui'
 /** Updated synchronously before subscribers see a frame. Never rereads a live file. */
 export class DesktopSessionProjection {
   messages: TranscriptMessage[]
-  readonly dialogs = new Map<string, { event: Record<string, unknown>; expiresAt: number }>()
+  readonly dialogs = new Map<string, { event: Record<string, unknown>; receivedAt: number; expiresAt: number }>()
   readonly statuses: Record<string, string> = Object.create(null)
   readonly answering = new Set<string>()
 
@@ -15,7 +15,10 @@ export class DesktopSessionProjection {
 
   apply(event: Record<string, unknown>): Record<string, unknown> | undefined {
     const id = blockingExtensionUiRequestId(event)
-    if (id) this.dialogs.set(id, { event, expiresAt: typeof event.timeout === 'number' && event.timeout > 0 ? Date.now() + event.timeout : Infinity })
+    if (id) {
+      const receivedAt = Date.now()
+      this.dialogs.set(id, { event, receivedAt, expiresAt: typeof event.timeout === 'number' && Number.isFinite(event.timeout) && event.timeout > 0 ? receivedAt + event.timeout : Infinity })
+    }
     if (event.type === 'extension_ui_resolved' && typeof event.id === 'string') this.dialogs.delete(event.id)
     if (event.type === 'extension_ui_request' && event.method === 'setStatus' && typeof event.statusKey === 'string') {
       if (typeof event.statusText === 'string') this.statuses[event.statusKey] = event.statusText
@@ -42,7 +45,9 @@ export class DesktopSessionProjection {
   pendingDialogs(): Record<string, unknown>[] {
     const now = Date.now()
     for (const [id, dialog] of this.dialogs) if (dialog.expiresAt <= now) this.dialogs.delete(id)
-    return [...this.dialogs.values()].map(({ event }) => event)
+    return [...this.dialogs.values()].map(({ event, receivedAt, expiresAt }) => ({
+      ...event, receivedAt, ...(Number.isFinite(expiresAt) ? { deadline: expiresAt } : {}),
+    }))
   }
 
   beginAnswer(id: string): void {

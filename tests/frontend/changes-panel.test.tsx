@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, useState } from 'react'
-import { useTaskWorkflows } from '../../apps/desktop/src/hooks/useTaskWorkflows'
+import { act, StrictMode, useRef, useState } from 'react'
+import { Composer } from '../../apps/desktop/src/components/Composer'
+import { useTaskWorkflowCommands } from '../../apps/desktop/src/hooks/useTaskWorkflowCommands'
 import { TaskWorkflowContext } from '../../apps/desktop/src/lib/task-context'
-import { TaskWorkflowDialogs, TaskWorkflowToolbar } from '../../apps/desktop/src/components/TaskWorkflowDialogs'
+import { TaskWorkflowDialogs } from '../../apps/desktop/src/components/TaskWorkflowDialogs'
+import { TaskWorkflowFinished, TaskWorkflowNotice } from '../../apps/desktop/src/components/TaskWorkflowChrome'
 import { ContextExcerpt } from '../../apps/desktop/src/components/ContextExcerpt'
 import { UserMessage } from '../../apps/desktop/src/components/transcript/messages'
 import type { ApexApi, ApexEventEnvelope, FinishedTask, FinishReview, RewindPreview, RewindResult, RunReceipt, RuntimeInfo, SessionChangeEvent, SessionRecord, SideConversation } from '../../apps/desktop/src/types/api'
@@ -66,32 +68,113 @@ function workflowBridge() {
   Object.defineProperty(window, 'apex', { configurable: true, value: { sessions, agent } })
   return { sessions, agent }
 }
-function WorkflowHarness({ busy = false, resident = true }: { busy?: boolean; resident?: boolean }) {
+const noop = () => undefined
+const noSend = async () => undefined
+function WorkflowHarness({ busy = false, resident = true, onSend = noSend, selectDelay }: { busy?: boolean; resident?: boolean; onSend?(prompt: string, sessionFile?: string): Promise<void>; selectDelay?: Promise<void> }) {
   const [session, setSession] = useState(parentSession)
   const [, setSessions] = useState<SessionRecord[]>([])
-  const workflow = useTaskWorkflows({ bridge: window.apex, session, runtime: resident ? { runtimeId: `runtime-${session.id}`, harness: 'pi', sessionFile: session.filePath, cwd: '/project', isStreaming: busy } : null, busy, setSessions, selectSession: async (next) => setSession(next), reportError: () => undefined })
+  const workspaceRef = useRef({ generation: 0, sessionFile: parentSession.filePath })
+  const navigate = (next: SessionRecord) => {
+    workspaceRef.current = { generation: workspaceRef.current.generation + 1, sessionFile: next.filePath }
+    setSession(next)
+  }
+  const send = (prompt: string) => onSend(prompt, workspaceRef.current.sessionFile)
+  const workflow = useTaskWorkflowCommands({ bridge: window.apex, session, runtime: resident ? { runtimeId: `runtime-${session.id}`, harness: 'pi', sessionFile: session.filePath, cwd: '/project', isStreaming: busy } : null, busy, setSessions, selectSession: async (next) => { navigate(next); await selectDelay }, reportError: noop, workspaceRef, onSend: send })
   return <TaskWorkflowContext.Provider value={workflow.context}>
-    <TaskWorkflowToolbar workflow={workflow} />
-    <button type="button" onClick={() => setSession(forkSession)}>Select other session</button>
-    <button type="button" onClick={() => setSession(parentSession)}>Select original session</button>
+    <TaskWorkflowFinished workflow={workflow} /><TaskWorkflowNotice workflow={workflow} />
+    <button type="button" onClick={() => navigate(forkSession)}>Select other session</button>
+    <button type="button" onClick={() => navigate(parentSession)}>Select original session</button>
     <output aria-label="Current session">{session.id}</output><output aria-label="Recovered draft">{workflow.insertDraft?.text}</output>
     <output aria-label="Attached excerpts">{JSON.stringify(workflow.context.excerpts)}</output>
     <UserMessage message={{ id: 'saved-queued', role: 'user', parts: [{ type: 'text', text: 'Queued prompt' }] }} />
     <UserMessage message={{ id: 'desktop-user-temporary', role: 'user', parts: [{ type: 'text', text: 'Unsaved prompt' }] }} />
     <ContextExcerpt source="Assistant narrative" text="Only selected answer"><p>Only selected answer</p></ContextExcerpt>
     <p>Private thought and tool transcript</p>
+    <Composer busy={busy} model="" effort="medium" modelsByProvider={new Map()} providers={[]} reasoningLevels={['medium']} fast={false} fastSupported={false} fastAvailable={false} imageInputSupported={false} skills={[]} onModelChange={noop} onEffortChange={noop} onFastChange={noop} onSend={send} onStop={noop} onCreateSide={workflow.createSideWithQuestion} onReviewFinish={workflow.reviewFinish} insertDraft={workflow.insertDraft} onDraftInserted={workflow.draftInserted} />
     <TaskWorkflowDialogs workflow={workflow} />
   </TaskWorkflowContext.Provider>
 }
-const workflowButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === label)!
-const clickWorkflow = async (label: string) => { await act(async () => { workflowButton(label).click(); await Promise.resolve() }) }
+const findButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === label)
+const workflowButton = (label: string) => findButton(label)!
+const submitWorkflowCommand = async (command: string) => {
+  const input = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, command)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const send = container.querySelector<HTMLButtonElement>('button[aria-label="Send message"], button[aria-label="Steer this run"]')!
+  await act(async () => { send.click(); await Promise.resolve() })
+}
+const clickWorkflow = async (label: string) => {
+  if (label === 'Finish task') return submitWorkflowCommand('/finish')
+  if (label === 'Side conversation') return submitWorkflowCommand('/btw')
+  const button = workflowButton(label)
+  await act(async () => { button.click(); await Promise.resolve() })
+}
 
 describe('Task review workflows', () => {
+  it('submits an explicit /btw question once, only in its created side conversation with parent context', async () => {
+    const { sessions, agent } = workflowBridge()
+    const onSend = vi.fn(async () => undefined)
+    await act(async () => root.render(<StrictMode><WorkflowHarness onSend={onSend} /></StrictMode>))
+    expect(document.querySelector('button[aria-label="Task actions"]')).toBeNull()
+    await submitWorkflowCommand('/btw Why is the sky blue?')
+    expect(sessions.createSideConversation).toHaveBeenCalledExactlyOnceWith(parentSession.filePath, { excerpt: undefined, harness: 'pi' })
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('Why is the sky blue?\n\n===== BEGIN TASK CONTEXT ====='), sideSession.filePath)
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('Selected parent context'), sideSession.filePath)
+    expect(container.querySelector('[aria-label="Attached excerpts"]')?.textContent).toBe('[]')
+    expect(agent.stop).not.toHaveBeenCalled()
+  })
+  it('restores the /btw question when creation fails without sending anywhere', async () => {
+    const { sessions } = workflowBridge()
+    sessions.createSideConversation.mockRejectedValueOnce(new Error('Side creation failed'))
+    const onSend = vi.fn(async () => undefined)
+    await act(async () => root.render(<WorkflowHarness onSend={onSend} />))
+    await submitWorkflowCommand('/btw Keep this question')
+    expect(onSend).not.toHaveBeenCalled()
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')?.value).toContain('/btw Keep this question')
+    expect(document.body.textContent).toContain('Side creation failed')
+  })
+  it('does not send a delayed /btw question after the user leaves its parent', async () => {
+    const { sessions } = workflowBridge()
+    let resolveSide!: (value: SideConversation) => void
+    sessions.createSideConversation.mockReturnValueOnce(new Promise<SideConversation>((resolve) => { resolveSide = resolve }))
+    const onSend = vi.fn(async () => undefined)
+    await act(async () => root.render(<WorkflowHarness onSend={onSend} />))
+    await submitWorkflowCommand('/btw Do not send after navigation')
+    await clickWorkflow('Select other session')
+    await act(async () => resolveSide({ parentSession: parentSession.filePath, sessionFile: sideSession.filePath, cwd: '/project', policy: 'read-only-tools', createdAt: '2026-01-01' }))
+    expect(onSend).not.toHaveBeenCalled()
+    await clickWorkflow('Select original session')
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')?.value).toContain('/btw Do not send after navigation')
+  })
+  it('does not send a /btw question if navigation changes while its side is loading', async () => {
+    workflowBridge()
+    let resolveSelection!: () => void
+    const selectDelay = new Promise<void>((resolve) => { resolveSelection = resolve })
+    const onSend = vi.fn(async () => undefined)
+    await act(async () => root.render(<WorkflowHarness onSend={onSend} selectDelay={selectDelay} />))
+    await submitWorkflowCommand('/btw Do not send to another chat')
+    expect(container.querySelector('[aria-label="Current session"]')?.textContent).toBe('side')
+    await clickWorkflow('Select other session')
+    await act(async () => resolveSelection())
+    expect(onSend).not.toHaveBeenCalled()
+  })
+  it('keeps an unsent question and its parent context available after a side send fails', async () => {
+    workflowBridge()
+    const onSend = vi.fn(async () => { throw new Error('Send failed') })
+    await act(async () => root.render(<WorkflowHarness onSend={onSend} />))
+    await submitWorkflowCommand('/btw Retry this question')
+    expect(onSend).toHaveBeenCalledTimes(1)
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')?.value).toBe('Retry this question')
+    expect(container.querySelector('[aria-label="Attached excerpts"]')?.textContent).toContain('Selected parent context')
+  })
   it.each(['Edit from here', 'Finish task'])('resumes an absent saved runtime without a prompt for %s and confirms on its returned owner', async (action) => {
     const { agent, sessions } = workflowBridge()
     agent.list.mockResolvedValueOnce([])
     await act(async () => root.render(<WorkflowHarness resident={false} />))
-    expect(workflowButton(action).disabled).toBe(false)
+    if (action === 'Edit from here') expect(workflowButton(action).disabled).toBe(false)
     await clickWorkflow(action)
     expect(agent.start).toHaveBeenCalledExactlyOnceWith({ cwd: parentSession.projectPath, sessionPath: parentSession.filePath, harness: 'pi' })
     // Even a stale resident runtime prop must not replace the dialog's owner.
@@ -193,7 +276,7 @@ describe('Task review workflows', () => {
     await clickWorkflow('Fork and keep files')
     expect(sessions.rewind).toHaveBeenCalledWith('runtime-parent', parentSession.filePath, 'preview-token', { restoreFiles: false })
     expect(container.querySelector('[aria-label="Current session"]')?.textContent).toBe('fork')
-    expect(container.querySelector('[aria-label="Recovered draft"]')?.textContent).toBe('Run starting prompt')
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')?.value).toBe('Run starting prompt')
     expect(agent.command).not.toHaveBeenCalled()
   })
   it('requires explicit restore confirmation and follows the actual fork on a partial failure', async () => {
@@ -250,10 +333,10 @@ describe('Task review workflows', () => {
     const { sessions, agent } = workflowBridge()
     sessions.listFinishedTasks.mockResolvedValue([{ status: 'finished', sessionFile: parentSession.filePath, finishedAt: '2026-01-01', review: finishReview }])
     await act(async () => root.render(<WorkflowHarness />))
-    expect(document.body.textContent).toContain('Task finished')
+    expect(document.body.textContent).toContain('Finished')
     sessions.listFinishedTasks.mockResolvedValue([])
     await act(async () => agent.onEvent.mock.calls.at(-1)![0]({ runtimeId: 'runtime-parent', event: { type: 'session_action_update' } }))
-    expect(document.body.textContent).not.toContain('Task finished')
+    expect(document.body.textContent).not.toContain('Finished')
   })
   it('offers a keyboard excerpt fallback without quoting adjacent thoughts or tools', async () => {
     workflowBridge()
@@ -287,7 +370,10 @@ describe('Task review workflows', () => {
     await clickWorkflow('Cancel')
     await act(async () => root.render(<WorkflowHarness busy />))
     expect(workflowButton('Edit from here').disabled).toBe(true)
-    expect(workflowButton('Finish task').disabled).toBe(true)
+    await submitWorkflowCommand('/finish')
+    expect(document.querySelector('dialog')).toBeNull()
+    expect(document.body.textContent).toContain('idle')
+    expect(sessions.reviewFinish).not.toHaveBeenCalled()
   })
   it('shows finish evidence and persists only on explicit confirmation', async () => {
     const { sessions, agent } = workflowBridge()
@@ -299,7 +385,7 @@ describe('Task review workflows', () => {
     expect(sessions.finishTask).not.toHaveBeenCalled()
     await clickWorkflow('Confirm finish task')
     expect(sessions.finishTask).toHaveBeenCalledWith('runtime-parent', parentSession.filePath, 'finish-token', 'finish')
-    expect(document.body.textContent).toContain('Task finished')
+    expect(document.body.textContent).toContain('Finished')
     expect(agent.stop).not.toHaveBeenCalled(); expect(agent.command).not.toHaveBeenCalled()
   })
 })

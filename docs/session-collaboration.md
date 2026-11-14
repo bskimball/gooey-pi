@@ -9,11 +9,12 @@ GooeyPi lets top-level sessions in an explicitly granted Pi project coordinate a
 
 ## App-owned collaboration tools (`gooeypi_session_*`)
 
-Every Pi runtime receives eight tools:
+Every Pi runtime receives nine tools; project discovery is restricted to the Activity Chief:
 
-- `gooeypi_session_list`: list accessible peer titles, UUIDs, status, and liveness.
+- `gooeypi_session_list`: list accessible peer titles, UUIDs, project IDs, working directories, status, and liveness. Ordinary sessions see only their project; the Chief sees authorized projects.
+- `gooeypi_session_projects`: Chief-only discovery of currently authorized writable projects as `{ id, name, cwd }`.
 - `gooeypi_session_models`: list available models (exact key and reasoning levels) from currently active providers in GooeyPi.
-- `gooeypi_session_create`: create and prompt a new readable top-level session in the caller's project (`cwd` must resolve to the same verified project grant). Accepts optional `model`, `reasoning`, `title`, and `fast`; revalidates exact selection in the runtime manager and enables fast mode only when supported. Returns the new UUID and applied fast-mode state.
+- `gooeypi_session_create`: create and prompt a new readable top-level session. Ordinary callers are limited to their verified project; the Chief must specify a cwd in a currently authorized writable project. Accepts optional `model`, `reasoning`, `title`, and `fast`; revalidates exact selection in the runtime manager and enables fast mode only when supported. Returns the new UUID and applied fast-mode state.
 - `gooeypi_session_read`: read a bounded snapshot and cursor without mutating the peer (user/assistant/agent/thinking text plus bounded recent tool/todo summaries; compaction internals omitted; `waiting_for_user` exposes only method, title, count, deadline; `last_error` is bounded diagnostic text).
 - `gooeypi_session_send`: deliver an attributed prompt or follow-up with `from_session_id` and `reply_with: "gooeypi_session_send"`. Starts an offline peer's normal RPC runtime first after revalidating project and session paths.
 - `gooeypi_session_steer`: send a signed steering message to a live peer's current turn, or prompt it if idle.
@@ -22,16 +23,16 @@ Every Pi runtime receives eight tools:
 
 ## Activity Chief of Staff (`c`)
 
-- Select a writable, explicitly granted project in Activity and choose **Chief of Staff** (`c`) to open that project's coordinator conversation (**Peek** / `r` remains implementor triage).
-- One persisted coordinator session per project. Opening attaches/pins its runtime without starting a turn; coordinator duties are injected via Pi's `before_agent_start` system-context hook on user messages. Closing/switching releases the attachment while a running session continues.
+- Activity opens **Chief of Staff** by default (`c`). Its conversation covers all authorized projects; the project filter affects only the roster. **Peek** / `r` opens implementor triage.
+- One persisted global coordinator session across authorized projects. Opening attaches/pins its runtime without starting a turn; coordinator duties are injected via Pi's `before_agent_start` system-context hook on user messages. Closing/switching releases the attachment while a running session continues.
 - Independent of foreground workspace controller, selected session, terminal, browser, and git context. Omitted from implementor Activity rows, sidebar sessions, unread counts, and completion notifications.
 - Human questions and permissions remain user-owned (survive reattachment; implementor metadata carries no dialog response ID or answer capability). Transcript and tool-summary text is untrusted evidence.
 
 ## Trust and lifecycle boundaries
 
-- **Project containment**: same-harness, same persisted project grant, excluding the caller. Canonicalizes paths and checks directory identities; rejects inferred/read-only projects, stale grants, identity drift, symlink escapes, ambiguous membership, and unrelated projects. A bare broker without a project resolver enforces strict same-cwd.
+- **Project containment**: same harness and, for ordinary sessions, the same persisted project grant, excluding the caller. The persisted global Chief may access currently authorized writable projects and must provide an explicit authorized cwd for creation. Canonicalizes paths and checks directory identities; rejects inferred/read-only projects, stale grants, identity drift, symlink escapes, ambiguous membership, and unrelated projects. A bare broker without a project resolver enforces strict same-cwd.
 - **Token isolation**: each runtime gets a random bearer token bound to its immutable harness/session claim; tokens stay in the child env and never cross renderer IPC.
-- **UUID and model validation**: target UUIDs are exact and validated (titles are display-only). Creation cannot cross harnesses/projects, excludes hidden/disabled/unavailable models, and validates cwd/model/reasoning before accepting a prompt.
+- **UUID and model validation**: target UUIDs are exact and validated (titles are display-only). Creation cannot cross harnesses and crosses projects only for the global Chief; it excludes hidden/disabled/unavailable models, and validates cwd/model/reasoning before accepting a prompt.
 - **Read-only JSONL**: reads go through `SessionService`; sends go through the owning live RPC manager.
 - **Budgets and rate limits**:
   - `gooeypi_session_read`: max 40 recent messages, 30,000 estimated tokens (4 chars/token), and 10 recent tool/todo summaries within 6,000 content chars (truncation reported independently). Wait-many divides the 30,000-token and 6,000-char budgets across targets.

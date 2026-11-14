@@ -44,6 +44,7 @@ interface CollaborationSessionService {
 interface CollaborationTarget {
   cwd: string
   projectId?: string
+  globalCoordinator?: boolean
   session: SessionRecord
   service: CollaborationSessionService
   manager: AgentRpcManager
@@ -58,6 +59,8 @@ export interface AgentCollaborationBridgeOptions {
   disabledModels: Record<'pi', () => ReadonlySet<string>>
   waitClock?: CollaborationWaitClock
   projects?: Pick<ProjectService, 'collaborationScope'>
+  globalCoordinatorPath?: () => string | undefined
+  authorizedProjects?: () => Array<{ id: string; name: string; primaryFolder: string; readOnly?: boolean }>
 }
 
 interface CollaborationMessage {
@@ -255,9 +258,15 @@ export class AgentCollaborationBridge extends CapabilityBridge {
 
   protected async dispatch(method: string, params: Record<string, unknown>, claim: CapabilityClaim, signal?: AbortSignal): Promise<unknown> {
     const source = await this.sourceFor(claim)
-    if (method === 'list') return this.listPeers(source)
+    if (method === 'list' || method === 'projects') {
+      const wasGlobal = source.globalCoordinator
+      const result = method === 'list' ? await this.listPeers(source) : await this.listProjects(source)
+      await this.sourceFor(claim)
+      if (wasGlobal !== source.globalCoordinator) throw new Error('The collaboration authority changed')
+      return result
+    }
     if (method === 'models') return this.listModels(source, params.query)
-    if (method === 'create') return this.withCreationAdmission(claim, () => this.create(source, params, claim))
+    if (method === 'create') return this.withCreationAdmission(claim, async () => this.create(await this.sourceFor(claim), params, claim))
     if (method === 'wait') {
       const many = params.target_session_ids !== undefined
       if (many && (params.target_session_id !== undefined || params.after_cursor !== undefined)) throw new TypeError('Use either target_session_ids or a single target_session_id with after_cursor')
@@ -316,6 +325,8 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       throw new Error('The session does not belong to its runtime working directory')
     }
     if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
+    const globalPath = this.options.globalCoordinatorPath?.()
+    source.globalCoordinator = Boolean(globalPath && resolve(globalPath) === resolve(claim.sessionPath))
     this.sourcesByToken.set(claim.token, source)
     return source
   }
@@ -336,7 +347,9 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       if (scope && this.options.projects) {
         try {
           const peerScope = await this.options.projects.collaborationScope(session.projectPath)
-          if (peerScope.projectId !== scope.projectId) continue
+          if (!source.globalCoordinator && peerScope.projectId !== scope.projectId) continue
+          peers.push({ cwd: session.projectPath, projectId: peerScope.projectId, session, service, manager: this.options.agents[harness] })
+          continue
         } catch { continue }
       } else if (resolve(session.projectPath) !== resolve(source.session.projectPath)) continue
       peers.push({ cwd: session.projectPath, session, service, manager: this.options.agents[harness] })
@@ -345,8 +358,10 @@ export class AgentCollaborationBridge extends CapabilityBridge {
   }
 
   private async listPeers(source: CollaborationTarget): Promise<Array<Record<string, unknown>>> {
-    return (await this.peersFor(source)).filter(({ session }) => !('role' in session && session.role === 'coordinator')).slice(0, MAX_LISTED_SESSIONS).map(({ session, manager }) => ({
+    return (await this.peersFor(source)).filter(({ session }) => !('role' in session && session.role === 'coordinator')).slice(0, MAX_LISTED_SESSIONS).map(({ session, manager, projectId, cwd }) => ({
       id: session.id,
+      project_id: projectId,
+      cwd,
       harness: session.harness,
       title: session.title,
       status: waitingForUser(manager, manager.getForSession(session.filePath)) ? 'waiting' : session.status,
@@ -355,6 +370,19 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       waiting_for_user: waitingForUser(manager, manager.getForSession(session.filePath)),
       last_error: this.lastErrors.get(resolve(session.filePath)),
     }))
+  }
+
+  private async listProjects(source: CollaborationTarget): Promise<Array<{ id: string; name: string; cwd: string }>> {
+    if (!source.globalCoordinator || !this.options.projects) throw new Error('Project listing is available only to the Activity coordinator')
+    const projects: Array<{ id: string; name: string; cwd: string }> = []
+    for (const project of this.options.authorizedProjects?.() ?? []) {
+      if (project.readOnly) continue
+      try {
+        const scope = await this.options.projects.collaborationScope(project.primaryFolder)
+        if (scope.projectId === project.id) projects.push({ id: project.id, name: project.name, cwd: project.primaryFolder })
+      } catch { /* Exclude revoked or ambiguous grants. */ }
+    }
+    return projects
   }
 
   private async modelsFor(source: CollaborationTarget): Promise<ApexModelDescriptor[]> {
@@ -387,16 +415,19 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const selectedReasoning = selectedModel && reasoningQuery
       ? resolveReasoning(reasoningQuery, selectedModel.availableThinkingLevels)
       : undefined
+    if (source.globalCoordinator && params.cwd === undefined) throw new TypeError('cwd is required for the Activity coordinator')
     const requestedCwd = params.cwd === undefined ? source.cwd : requireString(params.cwd, 'cwd', { min: 1, max: 4096, trim: true })
     let cwd = source.cwd
+    let targetProjectId: string | undefined
     if (this.options.projects) {
       const sourceScope = await this.options.projects.collaborationScope(source.cwd)
       const targetScope = await this.options.projects.collaborationScope(requestedCwd)
-      if (sourceScope.projectId !== targetScope.projectId) throw new TypeError('cwd must belong to the source project')
+      targetProjectId = targetScope.projectId
+      if (!source.globalCoordinator && sourceScope.projectId !== targetScope.projectId) throw new TypeError('cwd must belong to the source project')
       // Resolve the exact cwd only after checking its project identity.
       cwd = await requireExistingDirectory(requestedCwd, 'cwd')
       const finalScope = await this.options.projects.collaborationScope(cwd)
-      if (sourceScope.projectId !== finalScope.projectId) throw new TypeError('cwd must belong to the source project')
+      if (targetScope.projectId !== finalScope.projectId) throw new TypeError('cwd project grant changed')
     } else if (resolve(requestedCwd) !== resolve(source.cwd)) {
       throw new TypeError('cwd must match the source working directory')
     }
@@ -414,7 +445,10 @@ export class AgentCollaborationBridge extends CapabilityBridge {
         await manager.command(runtime.runtimeId, { type: 'set_thinking_level', level: appliedReasoning })
       }
       await this.sourceFor(claim)
-      if (this.options.projects && (await this.options.projects.collaborationScope(cwd)).projectId !== source.projectId) throw new Error('The collaboration project grant changed')
+      if (this.options.projects) {
+        const finalScope = await this.options.projects.collaborationScope(cwd)
+        if (finalScope.projectId !== targetProjectId || (!source.globalCoordinator && finalScope.projectId !== source.projectId)) throw new Error('The collaboration project grant changed')
+      }
       if (this.claimForToken(claim.token) !== claim || claim.expiresAt <= Date.now()) throw new Error('Capability expired')
       await manager.command(runtime.runtimeId, {
         type: 'prompt',

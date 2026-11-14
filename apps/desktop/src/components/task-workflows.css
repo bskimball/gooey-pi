@@ -1,26 +1,27 @@
-.task-workflow-toolbar { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
-.task-workflow-toolbar__actions, .context-excerpt__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.task-workflow-toolbar p { margin: 6px 0; }
-.task-workflow-toolbar details { position: relative; }
+/* Imported from styles.css into layer(apex); component styles for new chrome live in StyleX. */
 .task-review { display: grid; gap: 12px; min-width: 0; }
 .task-review p, .task-review h3, .task-review h4, .task-review ul { margin: 0; }
 .task-review pre, .task-context-tray pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
 .task-review code { overflow-wrap: anywhere; }
 .task-review__checkbox { display: flex; align-items: center; gap: 8px; min-height: 40px; }
-.task-history-code { text-align: left; tab-size: 4; }
-.context-excerpt__actions { font-size: 12px; margin-block: 4px; }
-.context-excerpt__actions:empty { display: none; }
+.task-review [role="alert"], .context-excerpt [role="alert"] { color: var(--danger); }
+.task-history-code { padding: 12px; text-align: left; tab-size: 4; background: var(--surface-subtle); border-radius: var(--radius-sm); }
+
+.context-excerpt { position: relative; }
+.context-excerpt .diff-line > i { user-select: none; }
+.context-excerpt__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-block: 4px; font-size: 12px; }
 .context-excerpt__actions .field { width: 100%; }
 .context-excerpt__actions textarea { width: 100%; min-height: 64px; color: inherit; background: transparent; border: 1px solid var(--border); border-radius: 4px; }
+/* Manual-excerpt fallback: invisible until the region is hovered or keyboard focus enters it. */
+.context-excerpt__reveal { position: absolute; top: 0; right: 0; z-index: 1; border-radius: var(--radius-sm); background: var(--canvas); box-shadow: 0 0 0 1px var(--border-subtle); opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+.context-excerpt:hover > .context-excerpt__reveal { opacity: 1; pointer-events: auto; transition-delay: 350ms; }
+.context-excerpt:focus-within > .context-excerpt__reveal { opacity: 1; pointer-events: auto; transition-delay: 0ms; }
+@media (prefers-reduced-motion: reduce) { .context-excerpt__reveal { transition: none; } }
+
 .task-context-tray { padding: 8px 12px; font-size: 12px; }
 .task-context-tray__item { display: flex; align-items: flex-start; gap: 8px; }
 .task-context-tray details { flex: 1; min-width: 0; }
-.task-context-tray summary { cursor: pointer; overflow-wrap: anywhere; }
-.task-finished-badge { font-size: 10px; margin-inline-start: 6px; }
+.task-context-tray summary { min-height: 32px; padding-block: 6px; cursor: pointer; overflow-wrap: anywhere; }
+.task-context-tray summary:focus-visible { outline: 2px solid var(--apex); outline-offset: 2px; }
+.task-finished-badge { margin-inline-start: 6px; padding: 0 5px; border-radius: 999px; color: var(--text-tertiary); background: var(--surface-subtle); font-size: 10px; font-weight: 500; vertical-align: 1px; }
 .message--user > .task-message-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.task-context-tray summary, .task-workflow-toolbar summary { min-height: 32px; padding-block: 6px; }
-.task-context-tray summary:focus-visible, .task-workflow-toolbar summary:focus-visible { outline: 2px solid var(--apex); outline-offset: 2px; }
-.task-workflow-toolbar [role="alert"], .task-review [role="alert"], .context-excerpt [role="alert"] { color: var(--danger); }
-.task-review h3 { font-size: var(--chat-body); }
-.task-history-code { padding: 12px; background: var(--surface-subtle); border-radius: var(--radius-sm); }
-.context-excerpt .diff-line > i { user-select: none; }

@@ -20,15 +20,15 @@ function emptyDraft(snapshot: ComposerDraftSnapshot): boolean {
 /** Snapshot the composer's current DOM value so a crash-and-reload keeps the draft. */
 export function saveComposerDraftFromDom(): void {
   try {
-    const textarea = document.querySelector<HTMLTextAreaElement>('.composer textarea')
+    const textarea = document.querySelector<HTMLTextAreaElement>('.composer textarea:not([data-isolated-draft])')
     if (textarea?.value) window.sessionStorage.setItem(LEGACY_COMPOSER_DRAFT_KEY, textarea.value)
   } catch { /* storage unavailable */ }
 }
 
-export function saveComposerDraft(scope: string, snapshot: ComposerDraftSnapshot): void {
+export function saveComposerDraft(scope: string, snapshot: ComposerDraftSnapshot, isolated = false): void {
   try {
     const key = composerDraftStorageKey(scope)
-    const previous = readComposerDraft(scope)
+    const previous = readComposerDraft(scope, isolated)
     const next: ComposerDraftSnapshot = {
       text: snapshot.text,
       model: snapshot.model || previous?.model,
@@ -37,22 +37,22 @@ export function saveComposerDraft(scope: string, snapshot: ComposerDraftSnapshot
     }
     if (emptyDraft(next)) {
       window.sessionStorage.removeItem(key)
-      window.sessionStorage.removeItem(LEGACY_COMPOSER_DRAFT_KEY)
+      if (!isolated) window.sessionStorage.removeItem(LEGACY_COMPOSER_DRAFT_KEY)
       return
     }
     window.sessionStorage.setItem(key, JSON.stringify(next))
-    window.sessionStorage.setItem(LEGACY_COMPOSER_DRAFT_KEY, next.text)
+    if (!isolated) window.sessionStorage.setItem(LEGACY_COMPOSER_DRAFT_KEY, next.text)
   } catch { /* storage unavailable */ }
 }
 
 /** A late failed submission must not replace text typed in a newer composer. */
-export function restoreComposerDraft(scope: string, snapshot: ComposerDraftSnapshot): void {
+export function restoreComposerDraft(scope: string, snapshot: ComposerDraftSnapshot, isolated = false): void {
   try {
-    if (!window.sessionStorage.getItem(composerDraftStorageKey(scope))) saveComposerDraft(scope, snapshot)
+    if (!window.sessionStorage.getItem(composerDraftStorageKey(scope))) saveComposerDraft(scope, snapshot, isolated)
   } catch { /* storage unavailable */ }
 }
 
-export function readComposerDraft(scope: string): ComposerDraftSnapshot | null {
+export function readComposerDraft(scope: string, isolated = false): ComposerDraftSnapshot | null {
   try {
     const raw = window.sessionStorage.getItem(composerDraftStorageKey(scope))
     if (raw) {
@@ -61,6 +61,7 @@ export function readComposerDraft(scope: string): ComposerDraftSnapshot | null {
         return parsed as ComposerDraftSnapshot
       }
     }
+    if (isolated) return null
     const legacy = window.sessionStorage.getItem(LEGACY_COMPOSER_DRAFT_KEY)
     return legacy ? { text: legacy } : null
   } catch {
@@ -68,10 +69,10 @@ export function readComposerDraft(scope: string): ComposerDraftSnapshot | null {
   }
 }
 
-export function clearComposerDraft(scope: string): void {
+export function clearComposerDraft(scope: string, isolated = false): void {
   try {
     window.sessionStorage.removeItem(composerDraftStorageKey(scope))
-    window.sessionStorage.removeItem(LEGACY_COMPOSER_DRAFT_KEY)
+    if (!isolated) window.sessionStorage.removeItem(LEGACY_COMPOSER_DRAFT_KEY)
   } catch { /* storage unavailable */ }
 }
 

@@ -43,6 +43,8 @@ export function isPiSchedule(task: StoredSchedule): task is AutomationScheduleRe
   return task.harness === 'pi'
 }
 
+export const GLOBAL_COORDINATOR_KEY = 'activity-global'
+
 export interface DesktopState {
   version: 4
   projects: StoredProject[]
@@ -51,6 +53,7 @@ export interface DesktopState {
   dismissedProjectPaths: string[]
   schedules: StoredSchedule[]
   coordinatorSessions?: Record<string, string>
+  globalCoordinatorSession?: string
 }
 
 export const CURRENT_DESKTOP_STATE_FILENAME = 'prime-work-state-v4.json'
@@ -462,6 +465,7 @@ function parseState(value: unknown, statePath: string): { sourceVersion: Support
     settings: parseSettings(value.settings),
     coordinatorSessions: isRecord(value.coordinatorSessions) ? Object.fromEntries(Object.entries(value.coordinatorSessions)
       .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 200 && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 4096).slice(0, 500)) : {},
+    globalCoordinatorSession: typeof value.globalCoordinatorSession === 'string' && value.globalCoordinatorSession.length > 0 && value.globalCoordinatorSession.length <= 4096 ? value.globalCoordinatorSession : undefined,
     archivedSessions: Array.isArray(value.archivedSessions) ? value.archivedSessions.filter((item): item is string => typeof item === 'string') : [],
     dismissedProjectPaths: Array.isArray(value.dismissedProjectPaths) ? value.dismissedProjectPaths.filter((item): item is string => typeof item === 'string') : [],
     schedules:
@@ -587,7 +591,7 @@ export class JsonStateStore {
 
   getCoordinatorSessions(): Record<string, string> {
     this.assertCompatible()
-    return { ...this.state.coordinatorSessions }
+    return { ...this.state.coordinatorSessions, ...(this.state.globalCoordinatorSession ? { [GLOBAL_COORDINATOR_KEY]: this.state.globalCoordinatorSession } : {}) }
   }
 
   getProjects(): PersistedProject[] {

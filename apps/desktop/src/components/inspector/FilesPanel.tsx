@@ -17,7 +17,6 @@ import type { ApexApi, GitStatus, HarnessId, ProjectFileEntry, ProjectRecord } f
 import { Banner } from '@astryxdesign/core/Banner'
 import { ApexButton, EmptyState, IconButton, Modal } from '../ui'
 import { ContextExcerpt } from '../ContextExcerpt'
-import '../task-workflows.css'
 
 function fileManagerName(platform?: NodeJS.Platform): string {
   if (platform === 'darwin') return 'Finder'

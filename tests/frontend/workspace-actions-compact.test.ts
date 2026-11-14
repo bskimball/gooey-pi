@@ -4,9 +4,20 @@ import { createWorkspaceActions, type WorkspaceActionsDeps } from '../../apps/de
 import type { ApexApi, RuntimeInfo, SessionRecord, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 import { runBashCommand, runExtensionCommandNow } from '../../apps/desktop/src/lib/runtime-commands'
-import { parseRuntimeCommands } from '../../apps/desktop/src/lib/composer-commands'
+import { availableCommands, parseRuntimeCommands } from '../../apps/desktop/src/lib/composer-commands'
 
 describe('runtime command response contracts', () => {
+  it('prioritizes Pi task suggestions over runtime collisions without changing other runtime commands', () => {
+    const commands = availableCommands('pi', [{ name: 'btw', source: 'extension' }, { name: 'finish', source: 'prompt' }, { name: 'deploy', source: 'extension' }], [])
+    expect(commands.filter((command) => command.name === 'btw')).toEqual([{ name: 'btw', description: 'Open a side thread, optionally asking a question', argumentHint: '[question]', source: 'builtin' }])
+    expect(commands.filter((command) => command.name === 'finish')).toEqual([{ name: 'finish', description: 'Review and finish the saved task', source: 'builtin' }])
+    expect(commands).toContainEqual({ name: 'deploy', source: 'extension' })
+    // Simulate a future non-Pi harness: runtime entries must remain unchanged.
+    const other = availableCommands('other' as Parameters<typeof availableCommands>[0], [{ name: 'btw', source: 'extension' }], [])
+    expect(other.filter((command) => command.name === 'btw')).toEqual([{ name: 'btw', source: 'extension' }])
+    expect(other.some((command) => command.name === 'finish')).toBe(false)
+  })
+
   it('validates runtime command listings at the bridge boundary', () => {
     for (const value of [null, undefined, 1, {}, { data: null }, { data: { commands: {} } }]) expect(parseRuntimeCommands(value)).toEqual([])
     expect(parseRuntimeCommands({ data: { commands: [null, 1, {}, { name: '' }, { name: 'two words', source: 'extension' }, { name: 'x', source: 1 }, { name: 'x', source: 'unknown' }, { name: 'deploy', source: 'extension', description: 'Deploy' }, { name: 'template', source: 'prompt', description: '' }, { name: 'skill:review', source: 'skill', description: 1 }] } })).toEqual([

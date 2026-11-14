@@ -1,7 +1,7 @@
 import { useMachine } from '@xstate/react'
 import { CaretDown, Check, FolderSimpleStar } from './icons'
 import { ApexButton } from './ui'
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CheckoutAction, CheckoutCatalog } from '@/types/api'
 import { checkoutPickerMachine } from './checkoutPickerMachine'
 
@@ -21,10 +21,20 @@ function checkoutLabel(catalog: CheckoutCatalog | undefined, fallback: string | 
   return active?.branch ?? active?.name ?? fallback ?? 'Checkout'
 }
 
-export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabled = false, onExecute }: CheckoutPickerProps) {
-  const [snapshot, send, actor] = useMachine(checkoutPickerMachine)
-  const open = snapshot.matches('open')
+export function useCheckoutPickerController() {
+  return useMachine(checkoutPickerMachine)
+}
+
+export function CheckoutPicker(props: CheckoutPickerProps) {
+  const controller = useCheckoutPickerController()
+  return <CheckoutPickerFields {...props} controller={controller} />
+}
+
+export function CheckoutPickerFields({ catalog, fallbackLabel, loading = false, disabled = false, onExecute, controller }: CheckoutPickerProps & { controller: ReturnType<typeof useCheckoutPickerController> }) {
+  const [snapshot, send, actor] = controller
+  const [menuVisible, setMenuVisible] = useState(true)
   const busy = snapshot.matches({ open: 'busy' })
+  const open = snapshot.matches('open') && menuVisible
   const creating = busy && snapshot.context.busyKind === 'create'
   const branch = snapshot.context.branch
   const error = snapshot.matches({ open: 'error' }) ? snapshot.context.error : ''
@@ -36,9 +46,13 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) send({ type: 'CLOSE' })
+      if (!(event.target instanceof Node) || !rootRef.current?.contains(event.target)) {
+        if (busy) setMenuVisible(false)
+        else send({ type: 'CLOSE' })
+      }
     }
     const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && busy) return
       if (event.key === 'Escape' && rootRef.current?.contains(document.activeElement)) {
         event.preventDefault()
         send({ type: 'CLOSE' })
@@ -51,7 +65,7 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', onEscape)
     }
-  }, [open, send])
+  }, [open, busy, send])
 
   const runAction = async (action: CheckoutAction, eventType: 'SWITCH' | 'CREATE'): Promise<void> => {
     if (!onExecute || actor.getSnapshot().matches({ open: 'busy' })) return
@@ -73,8 +87,19 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
   const enabled = Boolean(!disabled && onExecute && catalog && (catalog.checkouts.length > 0 || strategy === 'branch'))
   const label = checkoutLabel(catalog, fallbackLabel)
   return (
-    <div className="worktree-picker" ref={rootRef}>
-      <button
+    <div className="worktree-picker" ref={rootRef} onKeyDown={(event) => {
+      if (event.key !== 'Escape' || !open) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (busy) setMenuVisible(false)
+      else send({ type: 'CLOSE' })
+      requestAnimationFrame(() => triggerRef.current?.focus())
+    }}>
+      <ApexButton
+        compact
+        icon={<FolderSimpleStar size={12} />}
+        endIcon={<CaretDown className="worktree-picker__chevron" size={11} />}
+        label={label}
         type="button"
         ref={triggerRef}
         className="permissions-chip worktree-picker__trigger"
@@ -82,12 +107,9 @@ export function CheckoutPicker({ catalog, fallbackLabel, loading = false, disabl
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         disabled={!enabled}
-        onClick={() => send({ type: 'TOGGLE' })}
+        onClick={() => { if (busy) setMenuVisible((visible) => !visible); else { setMenuVisible(true); send({ type: 'TOGGLE' }) } }}
       >
-        <FolderSimpleStar size={12} />
-        <span className="worktree-picker__label">{label}</span>
-        <CaretDown className="worktree-picker__chevron" size={11} />
-      </button>
+      </ApexButton>
       {open && catalog ? (
         <div className="worktree-picker__menu" id={menuId} role="menu" aria-label={strategy === 'worktree' ? 'Git worktrees' : 'Git branches'}>
           <div className="worktree-picker__heading">Checkouts</div>

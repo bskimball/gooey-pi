@@ -886,7 +886,7 @@ export interface CoordinatorAttachment {
 
 export interface ApexApi {
   coordinator: {
-    open(projectId: string): Promise<CoordinatorAttachment>
+    open(): Promise<CoordinatorAttachment>
     close(attachmentId: string): Promise<boolean>
   }
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }

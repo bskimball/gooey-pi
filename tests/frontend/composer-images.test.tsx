@@ -598,13 +598,18 @@ describe('Composer fallback indicator', () => {
       isFallback: true,
     }
     renderComposer(vi.fn(), true, false, 'queue')
-    expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
     expect(container.querySelector('.model-fallback-chip')).toBeNull()
+    const settingsButton = container.querySelector<HTMLButtonElement>('button[aria-label="Chat settings"]')
+    expect(settingsButton).not.toBeNull()
+    act(() => settingsButton?.click())
+    expect(document.body.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
 
     renderComposer(vi.fn(), true, false, 'queue', { executingModel })
-    expect(container.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
-    expect(container.querySelector('.model-fallback-chip')?.textContent).toContain('Running on anthropic/claude-sonnet')
-    expect(container.querySelector('.model-fallback-chip')?.getAttribute('title')).toContain('Provider fallback')
+    expect(document.body.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
+    const fallback = container.querySelector('.model-fallback-chip')
+    expect(fallback?.textContent).toContain('Running on anthropic/claude-sonnet')
+    expect(fallback?.getAttribute('title')).toContain('Provider fallback')
+    expect(fallback?.closest('[role="dialog"]')).toBeNull()
   })
 })
 
@@ -655,6 +660,9 @@ describe('Composer memoization', () => {
     // memo(Composer) bails out for identical props: no further renders.
     expect(renderProbes).toBe(initialRenders)
 
-    expect(container.querySelector('.model-picker__trigger')?.textContent).toContain('Vision')
+    const settingsButton = container.querySelector<HTMLButtonElement>('button[aria-label="Chat settings"]')
+    expect(settingsButton).not.toBeNull()
+    act(() => settingsButton?.click())
+    expect(document.body.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
   })
 })

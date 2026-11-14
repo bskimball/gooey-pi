@@ -17,6 +17,7 @@ export interface ActivityControls {
   canFollowUpSession?(session: SessionRecord): boolean
   onRespondQuestion?(runtimeId: string, response: ExtensionUiResponse): Promise<void> | void
   onOpenQuestionModal?(runtimeId: string): void
+  onRecoverQuestion?(runtimeId: string, event: Record<string, unknown>): void
   onSendReply?(session: SessionRecord, text: string, mode: 'steer' | 'follow-up', runtimeId?: string): Promise<void>
   reportError?(error: unknown): void
 }
@@ -28,6 +29,7 @@ export interface UseActivityControlsOptions {
   pendingByRuntime: ReadonlyMap<string, PendingExtensionUi>
   respondForRuntime(runtimeId: string, response: ExtensionUiResponse): Promise<void>
   openForRuntime(runtimeId: string): void
+  showExtensionUi(runtimeId: string, event: Record<string, unknown>): void
   sendPrompt(prompt: string, images?: PromptImage[], intent?: PromptDeliveryIntent): Promise<void>
   setSessions: React.Dispatch<React.SetStateAction<SessionRecord[]>>
   reportError(error: unknown): void
@@ -40,6 +42,7 @@ export function useActivityControls({
   pendingByRuntime,
   respondForRuntime,
   openForRuntime,
+  showExtensionUi,
   sendPrompt,
   setSessions,
   reportError,
@@ -95,6 +98,7 @@ export function useActivityControls({
     canFollowUpSession,
     onRespondQuestion: respondForRuntime,
     onOpenQuestionModal: openForRuntime,
+    onRecoverQuestion: showExtensionUi,
     onSendReply,
     reportError,
   }), [
@@ -106,5 +110,6 @@ export function useActivityControls({
     readTranscript,
     reportError,
     respondForRuntime,
+    showExtensionUi,
   ])
 }
