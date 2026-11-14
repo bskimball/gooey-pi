@@ -3,7 +3,6 @@ import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { useTaskWorkflowCommands } from '@/hooks/useTaskWorkflowCommands'
 import { TaskWorkflowContext } from '@/lib/task-context'
-import { TaskWorkflowDialogs } from '@/components/TaskWorkflowDialogs'
 import { TaskWorkflowFinished, TaskWorkflowNotice } from '@/components/TaskWorkflowChrome'
 import { TitleToolbar } from '@/components/TitleToolbar'
 import type { ProjectScriptKind } from '@/components/ProjectRunControl'
@@ -52,6 +51,7 @@ import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import { useWorkspaceRuntime } from '@/hooks/useWorkspaceRuntime'
 import { HARNESS_IDS, type CheckoutAction, type CheckoutCatalog, type GitStatus, type HarnessId, type InspectorTab, type ApexModelDescriptor, type ApexProviderDescriptor, type ProjectRecord, type AutomationScheduleRecord, type QueuedPrompt, type ScheduleTiming, type SessionRecord, type TerminalPromptContext, type TranscriptMessage, type VoiceTaskStarted, type WorkspaceView } from '@/types/api'
 
+const TaskWorkflowDialogs = lazy(() => import('@/components/TaskWorkflowDialogs').then((module) => ({ default: module.TaskWorkflowDialogs })))
 const Transcript = lazy(() => import('@/components/Transcript').then((module) => ({ default: module.Transcript })))
 const Inspector = lazy(() => import('@/components/Inspector').then((module) => ({ default: module.Inspector })))
 const TerminalDrawer = lazy(() => import('@/components/TerminalDrawer').then((module) => ({ default: module.TerminalDrawer })))
@@ -760,6 +760,6 @@ export default function App() {
     ) : null}
     {toast ? <AppToast message={toast} onDismiss={() => setToast(null)} /> : null}
     {bridge ? <AgentBrowserLayer tabs={agentBrowser.tabs} visibleTabId={agentTabVisible ? activeAgentTabId : null} rect={agentTabVisible ? agentSlotRect : null} pointerEvent={agentBrowser.pointerEvent} onAttach={agentBrowser.attach} /> : null}
-    <TaskWorkflowDialogs workflow={taskWorkflow} />
+    {taskWorkflow.dialog ? <Suspense fallback={<LoadingPanel label="task review" />}><TaskWorkflowDialogs workflow={taskWorkflow} /></Suspense> : null}
   </div></TaskWorkflowContext.Provider></I18nProvider>
 }
