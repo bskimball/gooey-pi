@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { CaretRight, FileCode, X } from './icons'
 import type { GitStatus } from '@/types/api'
 
@@ -5,6 +6,13 @@ interface ChangesCardProps {
   git: GitStatus
   onOpenChanges(): void
   onClose?(): void
+}
+
+export function WorkspaceChangesCard({ git, cwd, enabled, onOpenChanges }: Omit<ChangesCardProps, 'onClose'> & { cwd?: string; enabled: boolean }) {
+  const [dismissed, setDismissed] = useState<string | null>(null)
+  const signature = JSON.stringify([cwd, git.files])
+  if (!enabled || !git.files.length || dismissed === signature) return null
+  return <ChangesCard git={git} onOpenChanges={onOpenChanges} onClose={() => setDismissed(signature)} />
 }
 
 export function ChangesCard({ git, onOpenChanges, onClose }: ChangesCardProps) {

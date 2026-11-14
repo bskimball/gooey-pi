@@ -14,6 +14,7 @@ let currentFixture: ReturnType<typeof createHermeticFixture> | undefined
 let actionableErrors: string[] = []
 
 const ISSUE_131_LONG_TOKEN = 'ReProductSkuController.getProductPoolDetail,ReProductSkuController.getProductPoolPriceWave'
+const fixtureShell = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : '/bin/sh'
 
 const instrumentedPages = new WeakSet<Page>()
 
@@ -186,7 +187,7 @@ function createHermeticFixture(): { userData: string; home: string; project: str
       pinned: false, createdAt: '2025-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z',
       folderIdentities: { [canonicalProject]: identity(canonicalProject), [canonicalSecondary]: identity(canonicalSecondary) },
     }],
-    settings: { activeHarness: 'pi', browserHome: 'about:blank', telemetry: true, locale: 'en' },
+    settings: { activeHarness: 'pi', browserHome: 'about:blank', telemetry: true, locale: 'en', inspectorOpen: true },
     archivedSessions: [],
     dismissedProjectPaths: [],
   }))
@@ -393,7 +394,12 @@ function hermeticEnvironment(home: string, piExecutable: string, cuaExecutable: 
   if (restrictPath) {
     const bin = join(fixtureRoot, 'bin')
     mkdirSync(bin, { recursive: true })
-    symlinkSync(process.execPath, join(bin, 'node'))
+    if (process.platform === 'win32') {
+      const executable = join(bin, 'node.exe')
+      try { linkSync(process.execPath, executable) } catch { copyFileSync(process.execPath, executable) }
+    } else {
+      symlinkSync(process.execPath, join(bin, 'node'))
+    }
     path = bin
   }
   const env: NodeJS.ProcessEnv = {
@@ -405,7 +411,7 @@ function hermeticEnvironment(home: string, piExecutable: string, cuaExecutable: 
     TMPDIR: fixtureRoot,
     TEMP: fixtureRoot,
     TMP: fixtureRoot,
-    SHELL: '/bin/sh',
+    SHELL: fixtureShell,
     LANG: 'C',
     LC_ALL: 'C',
     NO_COLOR: '1',
@@ -651,12 +657,12 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('loads the sandboxed preload bridge and hermetic service data', async () => {
     const bridge = await page.evaluate(() => {
-      const prime = (window as typeof window & { prime?: Record<string, unknown> }).prime
-      const voice = prime?.voice
-      return { type: typeof prime, groups: prime ? Object.keys(prime).sort() : [], voiceMethods: voice && typeof voice === 'object' ? Object.keys(voice).sort() : [] }
+      const bridge = window.apex
+      const voice = bridge.voice
+      return { type: typeof bridge, groups: Object.keys(bridge).sort(), voiceMethods: Object.keys(voice).sort() }
     })
     expect(bridge.type).toBe('object')
-    expect(bridge.groups).toEqual(['agent', 'app', 'browser', 'git', 'pets', 'plugins', 'projects', 'providers', 'schedules', 'sessions', 'settings', 'terminal', 'updates', 'voice'])
+    expect(bridge.groups).toEqual(['agent', 'app', 'backgroundJobs', 'browser', 'coordinator', 'git', 'pets', 'plugins', 'projects', 'providers', 'runtime', 'schedules', 'sessions', 'settings', 'terminal', 'updates', 'voice'])
     expect(bridge.voiceMethods).toContain('testSelfHosted')
     const updateMenu = await app!.evaluate(({ Menu }) => {
       const parents = Menu.getApplicationMenu()?.items ?? []
@@ -883,7 +889,7 @@ test.describe('Prime Work desktop smoke', () => {
     expect(voiceModelsBefore.models.map((model) => model.name).sort()).toEqual(['Claude Fixture', 'GPT Fixture'])
     const anthropic = page.getByRole('checkbox', { name: 'Show anthropic provider' })
     await expect(anthropic).toBeChecked()
-    await page.getByTitle('Hide provider in Pi').filter({ has: anthropic }).click()
+    await anthropic.click()
     await expect(anthropic).not.toBeChecked()
     await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.piDisabledProviders).toEqual(['anthropic'])
     const voiceModelsAfter = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
@@ -1278,9 +1284,10 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
     expect(await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).toBe(guestId)
 
-    await sessionRow.getByTitle('Archive Hermetic desktop fixture').focus()
+    if (!await page.locator('.sidebar').isVisible()) await page.getByRole('button', { name: /^Show sidebar/ }).click()
+    await sessionRow.getByRole('button', { name: 'Archive Hermetic desktop fixture', exact: true }).focus()
     await page.keyboard.press('Enter')
-    await sessionRow.getByTitle('Confirm archive Hermetic desktop fixture').press('Enter')
+    await sessionRow.getByRole('button', { name: 'Confirm archive Hermetic desktop fixture', exact: true }).press('Enter')
 
     await expect(sessionRow).toHaveCount(0)
     await expect.poll(() => app!.evaluate(({ webContents }, id) => {
@@ -1340,7 +1347,7 @@ test.describe('Prime Work desktop smoke', () => {
     const subframe = page.frame({ name: 'untrusted-subframe' })
     expect(subframe).not.toBeNull()
     await subframe!.waitForLoadState()
-    expect(await subframe!.evaluate(() => typeof (window as Window & { prime?: unknown }).prime)).toBe('undefined')
+    expect(await subframe!.evaluate(() => typeof window.apex)).toBe('undefined')
 
     const deniedUrl = 'data:text/html,<title>Untrusted renderer</title><main>untrusted</main>'
     await app!.evaluate(async ({ BrowserWindow }, url) => {
@@ -1350,10 +1357,10 @@ test.describe('Prime Work desktop smoke', () => {
     }, deniedUrl)
     await expect(page).toHaveURL(/^data:text\/html,/)
     const deniedAccess = await page.evaluate(async () => {
-      const prime = (window as Window & { prime?: typeof window.apex }).prime
-      if (!prime) return { bridge: 'undefined', result: 'unavailable' }
+      const bridge = window.apex
+      if (!bridge) return { bridge: 'undefined', result: 'unavailable' }
       try {
-        await prime.app.getMeta()
+        await bridge.app.getMeta()
         return { bridge: 'object', result: 'resolved' }
       } catch (error) {
         return { bridge: 'object', result: error instanceof Error ? error.message : String(error) }
@@ -1405,8 +1412,9 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(selectedSession).toHaveCount(1)
   })
 
-  test('keeps session options visible and starts a new session from a hovered project', async () => {
+  test('reveals session options on focus and starts a new session from a hovered project', async () => {
     const sessionOptions = page.locator('.session-row__more').first()
+    await sessionOptions.focus()
     await expect(sessionOptions).toBeVisible()
     await expect.poll(() => sessionOptions.evaluate((node) => getComputedStyle(node).opacity)).toBe('1')
 
@@ -1703,19 +1711,19 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => JSON.parse(readFileSync(settingsPath, 'utf8')).packages).toContain('npm:pi-mcp-adapter')
   })
 
-  test('keeps transcript text from showing through the composer disclaimer', async () => {
+  test('keeps transcript text from showing through the composer surface', async () => {
     if (await page.locator('.inspector').isVisible()) await page.getByRole('button', { name: 'Toggle inspector' }).click()
-    await expect(page.locator('.composer-note')).toBeVisible()
-    const colors = await page.locator('.composer-note').evaluate((node) => {
+    await expect(page.locator('.composer')).toBeVisible()
+    const colors = await page.locator('.composer').evaluate((node) => {
       const probe = document.createElement('div')
-      probe.style.background = 'var(--canvas)'
+      probe.style.background = 'var(--surface-raised)'
       document.body.append(probe)
-      const canvas = getComputedStyle(probe).backgroundColor
+      const surface = getComputedStyle(probe).backgroundColor
       probe.remove()
-      return { note: getComputedStyle(node).backgroundColor, canvas }
+      return { composer: getComputedStyle(node).backgroundColor, surface }
     })
-    expect(colors.note).toBe(colors.canvas)
-    expect(colors.note).not.toContain('rgba')
+    expect(colors.composer).toBe(colors.surface)
+    expect(colors.composer).not.toContain('rgba')
   })
 
   test('applies themed native select colors and restores system appearance', async () => {
@@ -1753,10 +1761,10 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     expect(await nativeSelectTheme()).toMatchObject({
       scheme: 'dark',
-      optionColor: 'rgb(241, 245, 249)',
-      optionBackground: 'rgb(20, 23, 27)',
-      themeColor: '#f1f5f9',
-      themeBackground: '#14171b',
+      optionColor: 'rgb(237, 241, 248)',
+      optionBackground: 'rgb(16, 22, 36)',
+      themeColor: '#edf1f8',
+      themeBackground: '#101624',
     })
     await page.getByRole('button', { name: /System/ }).click()
   })
@@ -1824,7 +1832,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.work-disclosure.is-running')).toBeVisible()
     const workStatus = page.locator('.work-disclosure__status')
     await expect(workStatus).toHaveAttribute('role', 'status')
-    await expect(workStatus.locator('.sr-only')).toHaveText('Working')
+    await expect(workStatus).toContainText('Waiting for your answer')
     // The pending question is the live step; the reasoning before it folds into the summary row.
     await expect(page.locator('.work-group.is-live .work-group__summary')).toContainText('Thought')
     await expect(page.locator('.work-group__current .activity-line--question')).toBeVisible()
@@ -1888,7 +1896,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
     const shell = page.getByLabel('Shell executable')
     const rejectedDraft = '/definitely/not-an-executable'
-    await expect(shell).toHaveValue('/bin/sh')
+    await expect(shell).toHaveValue(fixtureShell)
     await shell.fill(rejectedDraft)
     await expect(shell).toHaveValue(rejectedDraft)
     await expect(page.getByRole('alert')).toHaveCount(0)
@@ -1902,11 +1910,11 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.toast')).toContainText(/shell is not executable/i)
     await expect(shell).toHaveValue(rejectedDraft)
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
-    await expect.poll(() => page.evaluate(() => window.apex.settings.get().then((settings) => settings.terminalShell))).toBe('/bin/sh')
+    await expect.poll(() => page.evaluate(() => window.apex.settings.get().then((settings) => settings.terminalShell))).toBe(fixtureShell)
 
     await page.getByRole('button', { name: 'General', exact: true }).click()
     await page.getByRole('button', { name: 'Terminal', exact: true }).first().click()
-    await expect(page.locator('.settings-content input.mono')).toHaveValue('/bin/sh')
+    await expect(shell).toHaveValue(fixtureShell)
   })
 
   test('uses overlay panels at the compact desktop breakpoint', async () => {
@@ -2092,7 +2100,7 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('resizes the inspector horizontally and terminal vertically', async () => {
     await page.getByRole('button', { name: /^New session/ }).first().click()
-    await page.getByRole('tab', { name: 'Summary' }).click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
 
     const inspector = page.locator('.inspector')
     const inspectorHandle = page.getByRole('separator', { name: 'Resize inspector' })
@@ -2167,9 +2175,9 @@ test.describe('Prime Work desktop smoke', () => {
     const primaryInput = primaryDrawer.locator('.xterm-helper-textarea')
     await expect(primaryInput).toBeVisible()
     await primaryInput.click()
-    await page.keyboard.type('pwd')
+    await page.keyboard.type(process.platform === 'win32' ? 'cd' : 'pwd')
     await page.keyboard.press('Enter')
-    await expect(primaryDrawer.locator('.xterm-rows')).toContainText(/apex-e2e-[^/]+\/project/, { timeout: 8_000 })
+    await expect(primaryDrawer.locator('.xterm-rows')).toContainText(/apex-e2e-[^/\\]+[/\\]project/, { timeout: 8_000 })
     await expect(primaryDrawer.locator('.xterm-rows')).not.toContainText('secondary-session-state')
 
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
@@ -2177,7 +2185,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Ownership peer fixture' }).locator('.session-row').click()
     await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText('secondary-session-state')
     await page.locator('.session-row').filter({ hasText: 'Primary workspace fixture' }).click()
-    await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText(/apex-e2e-[^/]+\/project/)
+    await expect(page.locator('.terminal-drawer:not([hidden]) .xterm-rows')).toContainText(/apex-e2e-[^/\\]+[/\\]project/)
     await page.locator('.terminal-drawer:not([hidden])').getByLabel('Close terminal', { exact: true }).click()
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
     await page.locator('.terminal-drawer:not([hidden])').getByLabel('Close terminal', { exact: true }).click()
@@ -2191,7 +2199,7 @@ test.describe('Prime Work desktop smoke', () => {
       return selected.inferred ? window.apex.projects.grantInferred(selected.primaryFolder) : selected
     })
     expect(project).not.toBeNull()
-    await page.getByRole('tab', { name: 'Summary' }).click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByLabel(/Toggle terminal/).click()
     await expect(page.locator('.terminal-drawer .xterm')).toBeVisible()
     await expect(page.locator('.terminal-live-dot.is-connected')).toBeVisible()
@@ -2214,7 +2222,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.keyboard.press('Enter')
     await expect(page.locator('.terminal-surface:not([hidden]) .xterm-rows')).toContainText('second-terminal')
 
-    await page.getByRole('tab', { name: /sh 1/ }).click()
+    await page.getByRole('tablist', { name: 'Terminal tabs' }).getByRole('tab').first().click()
     await expect(page.locator('.terminal-surface:not([hidden]) .xterm-rows')).toContainText('first-terminal')
     await expect(page.locator('.terminal-surface:not([hidden]) .xterm-rows')).not.toContainText('second-terminal')
 
@@ -2227,7 +2235,7 @@ test.describe('Prime Work desktop smoke', () => {
 
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
     await expect(page.getByRole('tablist', { name: 'Terminal tabs' }).getByRole('tab')).toHaveCount(2)
-    await page.getByRole('tab', { name: /sh 1/ }).click()
+    await page.getByRole('tablist', { name: 'Terminal tabs' }).getByRole('tab').first().click()
     await expect(page.locator('.terminal-surface:not([hidden]) .xterm-rows')).toContainText('first-terminal')
 
     const geometry = await page.evaluate(() => {
@@ -2258,11 +2266,11 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('attaches and removes active terminal selection context', async () => {
-    await page.getByRole('tab', { name: 'Summary' }).click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
     await page.getByLabel(/Toggle terminal/).click()
     const input = page.locator('.terminal-surface:not([hidden]) .xterm-helper-textarea')
     await input.click()
-    await page.keyboard.type("printf 'terminal-selection-marker\\n'")
+    await page.keyboard.type('echo terminal-selection-marker')
     await page.keyboard.press('Enter')
     const outputLine = page.locator('.terminal-surface:not([hidden]) .xterm-rows > div').filter({ hasText: 'terminal-selection-marker' }).last()
     await expect(outputLine).toBeVisible()

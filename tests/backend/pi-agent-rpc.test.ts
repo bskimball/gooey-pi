@@ -264,7 +264,7 @@ describe('read-only side conversations', () => {
 })
 
 describe('finish task', () => {
-  it('rechecks fresh observations, retains files and refs, and persists explicit completion', async () => {
+  const finishFixture = () => {
     const fake = fakePiAgent({ receipts: true })
     const checkout = join(fake.cwd, 'checkout'); mkdirSync(checkout)
     const sessionRoot = join(fake.cwd, 'sessions'); mkdirSync(sessionRoot)
@@ -277,18 +277,22 @@ describe('finish task', () => {
     writeFileSync(join(checkout, 'tracked.txt'), 'base\n')
     git('add', 'tracked.txt'); git('commit', '-qm', 'base')
     const target = git('branch', '--show-current')
+    const sessions = new SessionService(new JsonStateStore(join(fake.cwd, 'state.json')), null, undefined, piSessionServiceOptions(sessionRoot))
+    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path)); managers.push(manager)
+    const gate = new RepositoryUseGate()
+    manager.setWorkspaceUseProvider((cwd, owner, retire) => gate.beginWorkspaceUse(cwd, owner, retire))
+    return { fake, checkout, git, target, sessions, manager, gate, storage: join(fake.cwd, 'finished') }
+  }
+
+  it('rechecks fresh observations, retains files and refs, and persists explicit completion', async () => {
+    const { fake, checkout, git, target, sessions, manager, gate, storage } = finishFixture()
     git('checkout', '-qb', 'finish-feature')
     writeFileSync(join(checkout, 'tracked.txt'), 'committed\n')
     git('commit', '-qam', 'feature')
     git('config', 'branch.finish-feature.remote', '.'); git('config', 'branch.finish-feature.merge', `refs/heads/${target}`)
     writeFileSync(join(checkout, 'dirty.txt'), 'user work')
-    const sessions = new SessionService(new JsonStateStore(join(fake.cwd, 'state.json')), null, undefined, piSessionServiceOptions(sessionRoot))
-    const manager = new AgentRpcManager(fake.executable, async (cwd) => cwd, (path) => sessions.requireSessionPath(path)); managers.push(manager)
-    const gate = new RepositoryUseGate()
-    manager.setWorkspaceUseProvider((cwd, owner, retire) => gate.beginWorkspaceUse(cwd, owner, retire))
     const session = await sessions.create(checkout)
     const runtime = await manager.start({ cwd: checkout, sessionPath: session.filePath })
-    const storage = join(fake.cwd, 'finished')
     const service = () => new FinishTaskService(storage, manager, new GitService(async (cwd) => cwd), gate, (path) => sessions.requireSessionPath(path), () => sessions.list(undefined, true, true), async () => [])
     const finish = service()
     manager.setPromptAcceptedListener((path) => finish.clearForAcceptedPrompt(path))
@@ -348,7 +352,10 @@ describe('finish task', () => {
     await manager.command(resumed.runtimeId, { type: 'prompt', message: 'work resumed' })
     expect(await service().get(session.filePath)).toBeNull()
     expect(await service().list()).toEqual([])
+  })
 
+  it('rechecks linked worktree integration, provenance, and repository use before completion', async () => {
+    const { fake, checkout, git, sessions, manager, gate, storage } = finishFixture()
     const linked = join(fake.cwd, 'linked')
     git('worktree', 'add', '-qb', 'finish-linked', linked)
     git('remote', 'add', 'origin', checkout)
