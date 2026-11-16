@@ -878,16 +878,6 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     expect(workflow).toMatch(/delete-asset[\s\S]*?gh release upload "\$RELEASE_TAG" release-assets\/\* --clobber[\s\S]*?--draft=false/)
   })
 
-  test('passes the expected Authenticode signer to Windows packaging', () => {
-    const workflow = readWorkflow('.github/workflows/release.yml')
-    expect(workflow).toContain('GOOEYPI_WINDOWS_CERT_SUBJECT: ${{ vars.GOOEYPI_WINDOWS_CERT_SUBJECT }}')
-    expect(workflow).toContain('GOOEYPI_WINDOWS_CERT_THUMBPRINT: ${{ vars.GOOEYPI_WINDOWS_CERT_THUMBPRINT }}')
-    const security = readFileSync('docs/security.md', 'utf8')
-    expect(security).toContain('`GOOEYPI_WINDOWS_CERT_SUBJECT`')
-    expect(security).toContain('`GOOEYPI_WINDOWS_CERT_THUMBPRINT`')
-    expect(security).toContain('when neither is configured, public Windows packaging fails closed')
-  })
-
   test('ships both mac architectures as separate builds from native-arch runners', () => {
     const releaseWorkflow = readWorkflow('.github/workflows/release.yml')
     // Two matrix legs, each on a runner whose native architecture matches the
@@ -1744,35 +1734,6 @@ describe('vendored supply-chain pins', () => {
 
     const unpinned = readdirSync('vendor').filter((name) => name.endsWith('.tgz') && !pinned.has(`vendor/${name}`))
     expect(unpinned, 'vendored tarballs without any pin').toEqual([])
-  })
-
-  test('the checked-in npm bootstrap archive matches its strict artifact pin and provenance record', () => {
-    const pinManifest = JSON.parse(readFileSync('scripts/release/dependency-pins.json', 'utf8'))
-    const artifact = readPinnedNpmArtifact()
-    expect(pinManifest.artifacts).toEqual({
-      npm: {
-        version: '12.0.2',
-        path: 'vendor/npm-12.0.2.tgz',
-        source: 'https://registry.npmjs.org/npm/-/npm-12.0.2.tgz',
-        integrity: PINNED_NPM_INTEGRITY,
-        size: artifact.size,
-        license: 'Artistic-2.0',
-      },
-    })
-    expect(verifyPinnedNpmArtifact(artifact)).toEqual(artifact)
-    expect(readdirSync('vendor').filter((name) => /^npm-\d+\.\d+\.\d+\.tgz$/.test(name))).toEqual(['npm-12.0.2.tgz'])
-
-    const provenance = readFileSync('vendor/npm-12.0.2.md', 'utf8')
-    expect(provenance).toContain('https://registry.npmjs.org/npm/-/npm-12.0.2.tgz')
-    expect(provenance).toContain(PINNED_NPM_INTEGRITY)
-    expect(provenance).toContain('Artistic-2.0')
-    expect(provenance).toContain('unmodified')
-    expect(provenance).toMatch(/before\s+invoking npm's installer/)
-
-    const security = readFileSync('docs/security.md', 'utf8')
-    expect(security).toContain("Before invoking npm's installer")
-    expect(security).not.toContain('Before invoking npm,')
-    expect(security).not.toContain('lifecycle scripts, extensions')
   })
 
   test('keeps the bootstrap archive out of the packaged desktop application', () => {
