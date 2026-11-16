@@ -15,6 +15,8 @@ npm run release:verify:package # preflight + vendor check + typecheck + check + 
 
 On headless Linux, wrap GUI/e2e commands with `xvfb-run -a`. Authoritative CI/release gates live in [`docs/validation.md`](docs/validation.md).
 
+For temporary or throw-away files use the tmp folder
+
 ## Structure
 
 - `apps/desktop/` — Electron app
