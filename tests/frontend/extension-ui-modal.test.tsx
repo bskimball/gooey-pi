@@ -211,7 +211,8 @@ describe('inline extension questionnaire', () => {
     await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
     expect(container.textContent).toContain('Pick a language')
     await clickButton(container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1])
-    const other = container.querySelector<HTMLInputElement>('input[aria-label="Additional context"]')!
+    const other = container.querySelector<HTMLInputElement>('input[aria-label="Your answer"]')!
+    expect(other.placeholder).toBe('Write your own answer')
     expect(document.activeElement).toBe(other)
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(other, 'Rust')

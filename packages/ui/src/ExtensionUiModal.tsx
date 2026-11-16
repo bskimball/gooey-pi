@@ -2,11 +2,13 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as overlaysStyles } from './styles/overlays.stylex'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
+import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import type { ExtensionUiRequest } from '@/lib/extension-ui'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { ApexButton, Modal } from './ui'
 import {
+  OTHER_OPTION,
   initialQuestionnaireSnapshot,
   questionnaireAnswer,
   questionnaireRequestEvent,
@@ -57,6 +59,8 @@ function useRemainingMs(deadline: number | undefined): number | undefined {
 }
 
 export function ExtensionUiModal({ request, onRespond, platform = 'darwin', deadline, presentation = 'modal' }: ExtensionUiModalProps) {
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
   const prefill = request.method === 'editor' ? request.prefill : undefined
   const questionnaireTimeout = request.method === 'questionnaire' ? request.timeout : undefined
   const fallbackDeadline = useMemo(
@@ -166,6 +170,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
     ? questionnaire.questions[questionIndex]
     : undefined
   const activeSelected = activeQuestion ? wizardContext.selectedByQuestion[activeQuestion.id] ?? 0 : 0
+  const writingAnswer = activeQuestion?.options[activeSelected] === OTHER_OPTION
   const canSubmit = (wizard.matches('answering') || wizard.matches('reviewing')) && selectQuestionnaireComplete(wizardContext)
 
   const selectQuestionOption = (index: number) => {
@@ -309,12 +314,12 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                     })}
                   </div>
                   <label className={`field extension-questionnaire__context ${stylex.props(overlaysStyles.field, overlaysStyles.extensionQuestionnaireContext).className ?? ""}`}>
-                    <span>Type to add context</span>
+                    <span>{writingAnswer ? 'Your answer' : 'Add context (optional)'}</span>
                     <input
                       ref={(element) => { contextInputRefs.current[activeQuestion.id] = element }}
                       value={wizardContext.contexts[activeQuestion.id] ?? ''}
-                      placeholder="Type to add context"
-                      aria-label="Additional context"
+                      placeholder={writingAnswer ? 'Write your own answer' : 'Type to add context'}
+                      aria-label={writingAnswer ? 'Your answer' : 'Additional context'}
                       onChange={(event) => dispatchWizard({ type: 'TYPE_CONTEXT', text: event.target.value })}
                     />
                   </label>
@@ -334,10 +339,17 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   ) : null
 
   if (inline) {
-    return <section className={`extension-questionnaire-inline ${stylex.props(overlaysStyles.extensionQuestionnaireInline).className ?? ""}`} aria-label={request.title}>
+    return <motion.section
+      key={request.id}
+      className={`extension-questionnaire-inline ${stylex.props(overlaysStyles.extensionQuestionnaireInline).className ?? ""}`}
+      aria-label={request.title}
+      initial={instant ? false : { opacity: 0, transform: 'translateY(16px)' }}
+      animate={{ opacity: 1, transform: 'translateY(0)' }}
+      transition={{ duration: instant ? 0 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+    >
       {questionnaireContent}
       <div className={`extension-questionnaire-inline__footer ${stylex.props(overlaysStyles.extensionQuestionnaireInlineFooter).className ?? ""}`}>{footer}</div>
-    </section>
+    </motion.section>
   }
 
   return (

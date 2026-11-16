@@ -197,7 +197,7 @@ function registerTools(pi: ApexExtensionApi, Type: ApexTypebox): void {
   pi.registerTool<{ questions: AskQuestion[] }>({
     name: 'ask_user',
     label: 'Ask user',
-    description: 'Ask one to five focused multiple-choice questions in one questionnaire. Use this when the user must choose among concrete options before work can continue. The user can add context or provide a free-form answer.',
+    description: 'Ask the user to make a decision in an interactive panel above the composer. When work needs a user choice or clarification, use this tool instead of listing questions or options in chat. Ask one to five focused questions with concrete options. The panel always lets the user write a different answer or add context. Wait for their response; never choose on their behalf.',
     parameters: Type.Object({
       questions: Type.Array(question, {
         description: 'One to five questions to ask in a single questionnaire',

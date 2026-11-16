@@ -72,16 +72,16 @@ function expectLegacyRetired(path: string): void {
 }
 
 describe('JsonStateStore', () => {
-  it('keeps ask_user off on a fresh install and preserves an explicit opt-in', async () => {
+  it('enables ask_user on a fresh install and preserves an explicit opt-out', async () => {
     const dir = makeDirectory()
     const path = join(dir, 'state.json')
     const store = new JsonStateStore(path)
-    expect(store.getSettings().askUserEnabled).toBe(false)
+    expect(store.getSettings().askUserEnabled).toBe(true)
 
-    await store.update((state) => { state.settings.askUserEnabled = true })
+    await store.update((state) => { state.settings.askUserEnabled = false })
     await store.beginShutdown()
 
-    expect(new JsonStateStore(path).getSettings().askUserEnabled).toBe(true)
+    expect(new JsonStateStore(path).getSettings().askUserEnabled).toBe(false)
   })
 
   it('defaults, persists, and validates the locale preference', async () => {
@@ -494,7 +494,7 @@ describe('JsonStateStore', () => {
     expect(state.projects.map((project) => project.harness)).toEqual(['prime'])
     expect(state.settings.activeHarness).toBe('pi')
     expect(state.settings).not.toHaveProperty('ompApprovalMode')
-    expect(state.settings.askUserEnabled).toBe(false)
+    expect(state.settings.askUserEnabled).toBe(true)
   })
 
   it('keeps valid harness fields and drops projects with hostile harnesses', () => {

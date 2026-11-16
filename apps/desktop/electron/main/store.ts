@@ -166,7 +166,7 @@ export function defaultSettings(): AppSettings {
     runtimePaths: { pi: '' },
     enabledHarnesses: ['pi'],
     telemetry: false,
-    askUserEnabled: false,
+    askUserEnabled: true,
     browserEnabled: true,
     computerUseEnabled: false,
     piDisabledProviders: [],

@@ -1671,9 +1671,6 @@ test.describe('Prime Work desktop smoke', () => {
       if (destination === 'Capabilities') {
         await expect(page.locator('.feature-strip')).toHaveCount(0)
         await expect(page.locator('.directory-tools')).toBeVisible()
-        const askUserToggle = page.getByRole('button', { name: 'Enable Ask user' })
-        await expect(askUserToggle).toHaveAttribute('aria-pressed', 'false')
-        await askUserToggle.click()
         await expect(page.getByRole('button', { name: 'Disable Ask user' })).toHaveAttribute('aria-pressed', 'true')
         await page.getByRole('button', { name: 'Disable Ask user' }).click()
         const askUserConfirmation = page.getByRole('dialog', { name: 'Disable Ask user?' })
@@ -1883,8 +1880,10 @@ test.describe('Prime Work desktop smoke', () => {
     await composer.fill('Ask me two questions')
     await composer.press('Enter')
 
-    const dialog = page.getByRole('dialog', { name: 'Answer 2 questions' })
+    const dialog = page.getByRole('region', { name: 'Answer 2 questions' })
     await expect(dialog).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'Answer 2 questions' })).toHaveCount(0)
+    await expect(page.locator('.conversation-bottom-dock')).toContainText('Question 1 of 2')
     await expect(page.locator('.work-disclosure.is-running')).toBeVisible()
     const workStatus = page.locator('.work-disclosure__status')
     await expect(workStatus).toHaveAttribute('role', 'status')
@@ -1914,7 +1913,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(dialog).toContainText('Question 2 of 2')
 
     await dialog.getByRole('option', { name: 'Other (type your own answer)' }).click()
-    await dialog.getByRole('textbox', { name: 'Additional context' }).fill('A custom priority')
+    await dialog.getByRole('textbox', { name: 'Your answer' }).fill('A custom priority')
     await page.keyboard.press('Enter')
     await expect(dialog).toContainText('Submit answers')
     await dialog.getByRole('button', { name: 'Submit answers', exact: true }).click()
