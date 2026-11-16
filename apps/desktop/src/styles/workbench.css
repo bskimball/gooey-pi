@@ -18,6 +18,14 @@
 .project-run-menu textarea { width: 100%; min-height: 52px; resize: vertical; padding: 7px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); outline: 0; color: var(--text); background: var(--canvas); font-size: var(--fs-meta); line-height: 1.45; }
 .project-run-menu textarea:focus { border-color: var(--focus); box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 24%, transparent); }
 .project-run-menu > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 1px; }
+.project-run-menu--scripts { width: min(300px, calc(100vw - 24px)); padding: 4px; gap: 2px; max-height: 320px; overflow-y: auto; }
+.project-run-menu__item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; transition: background-color 120ms ease-out; }
+.project-run-menu__item:hover, .project-run-menu__item:focus-visible { background: var(--surface-hover); outline: 0; }
+.project-run-menu__item.is-selected { background: var(--surface-selected); }
+.project-run-menu__item-text { min-width: 0; display: grid; gap: 1px; }
+.project-run-menu__item-text strong { font-size: var(--fs-meta); font-weight: 550; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-run-menu__item-text code { font-size: var(--fs-micro); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-run-menu__item-check { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--apex); width: 14px; justify-content: center; }
 .runtime-owner-notice svg { flex: 0 0 auto; color: var(--accent); }
 .runtime-owner-notice strong { color: var(--text); font-weight: 550; }
 .resize-handle > span { position: absolute; display: block; background: var(--edge); transition: background var(--fast), box-shadow 130ms ease-out; }

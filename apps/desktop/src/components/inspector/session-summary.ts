@@ -1,5 +1,5 @@
 import type { MessagePart, TranscriptMessage } from '@/types/api'
-import { parseSpecialistRecords, type PiSpecialistSummary } from '@/lib/specialist-records'
+import { extractStaticToolCalls, pairToolCalls, parseSpecialistRecords, type PiSpecialistSummary } from '@/lib/specialist-records'
 
 export type { PiSpecialistSummary } from '@/lib/specialist-records'
 
@@ -19,33 +19,68 @@ export function extractPiSessionWidgets(messages: TranscriptMessage[]): {
   todos: PiTodoItemSummary[]
   specialists: PiSpecialistSummary[]
 } {
-  return extractWidgetsFromParts(messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []))
+  return extractWidgetsFromParts(messages.flatMap((message) => (Array.isArray(message.parts) ? message.parts : [])))
+}
+
+const CODEMODE_TODO_TOOLS = new Set(['todo_write'])
+
+function applyTodoWriteArgs(current: PiTodoItemSummary[], args: Record<string, unknown> | undefined): PiTodoItemSummary[] {
+  if (!Array.isArray(args?.todos)) return current
+  const parsed: PiTodoItemSummary[] = []
+  for (let i = 0; i < args.todos.length; i += 1) {
+    const item = args.todos[i]
+    if (!item || typeof item !== 'object') continue
+    const rec = item as Record<string, unknown>
+    if (typeof rec.content !== 'string' || !rec.content.trim()) continue
+    parsed.push({
+      id: typeof rec.id === 'string' && rec.id ? rec.id : `todo-${i + 1}`,
+      content: rec.content.trim(),
+      status: typeof rec.status === 'string' ? rec.status : 'pending',
+      note: typeof rec.note === 'string' && rec.note.trim() ? rec.note.trim() : undefined,
+    })
+  }
+  if (!parsed.length) return current
+  if (args.merge === true && current.length > 0) {
+    const merged = current.map((item) => ({ ...item }))
+    const indexById = new Map<string, number>()
+    for (let i = 0; i < merged.length; i += 1) indexById.set(merged[i]!.id, i)
+    for (const item of parsed) {
+      const existingIndex = indexById.get(item.id)
+      if (existingIndex !== undefined) {
+        merged[existingIndex] = item
+      } else {
+        indexById.set(item.id, merged.length)
+        merged.push(item)
+      }
+    }
+    return merged
+  }
+  return parsed
 }
 
 function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
   let todos: PiTodoItemSummary[] = []
+  const pairedResults = pairToolCalls(flatParts)
   for (let index = 0; index < flatParts.length; index += 1) {
-    const part = flatParts[index]
+    const part = flatParts[index]!
     if (part.type !== 'toolCall') continue
     const args = part.args && typeof part.args === 'object' ? (part.args as Record<string, unknown>) : undefined
-    if (part.name === 'todo_write' && Array.isArray(args?.todos)) {
-      const parsed: PiTodoItemSummary[] = []
-      for (let i = 0; i < args.todos.length; i += 1) {
-        const item = args.todos[i]
-        if (!item || typeof item !== 'object') continue
-        const rec = item as Record<string, unknown>
-        if (typeof rec.content !== 'string' || !rec.content.trim()) continue
-        parsed.push({
-          id: typeof rec.id === 'string' && rec.id ? rec.id : `todo-${i + 1}`,
-          content: rec.content.trim(),
-          status: typeof rec.status === 'string' ? rec.status : 'pending',
-          note: typeof rec.note === 'string' && rec.note.trim() ? rec.note.trim() : undefined,
-        })
+    if (part.name === 'todo_write') {
+      const result = pairedResults.get(index)
+      if (result?.isError === true) continue
+      todos = applyTodoWriteArgs(todos, args)
+    } else if (part.name === 'codemode' && typeof args?.code === 'string') {
+      const result = pairedResults.get(index)
+      if (result?.isError === true) continue
+      const staticCalls = extractStaticToolCalls(args.code, CODEMODE_TODO_TOOLS)
+      for (const call of staticCalls) {
+        todos = applyTodoWriteArgs(todos, call.args)
       }
-      if (parsed.length) todos = parsed
     }
   }
-  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity }): PiSpecialistSummary => activity ? { id, agent, mission, status, activity } : { id, agent, mission, status })
+  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity }): PiSpecialistSummary =>
+    activity ? { id, agent, mission, status, activity } : { id, agent, mission, status },
+  )
   return { todos, specialists }
 }
 
@@ -77,7 +112,21 @@ interface MessageSummary extends TranscriptSummary {
   widgetParts: MessagePart[]
 }
 
-const WIDGET_TOOLS = new Set(['todo_write', 'task', 'task_chain', 'task_start', 'task_send', 'task_wait', 'task_status', 'task_close', 'task_abort'])
+const WIDGET_TOOLS = new Set([
+  'todo_write',
+  'task',
+  'task_chain',
+  'task_start',
+  'task_send',
+  'task_wait',
+  'task_status',
+  'task_close',
+  'task_abort',
+  'task_list',
+  'Async Task Settled',
+  'async-task-settled',
+  'codemode',
+])
 const EMPTY_PARTS: MessagePart[] = []
 
 function sameItems<T>(left: readonly T[], right: readonly T[]): boolean {
@@ -89,7 +138,10 @@ function summarizeMessage(message: TranscriptMessage, previous?: MessageSummary)
   let lastText: string | undefined
   let widgetParts: MessagePart[] = []
   for (const part of Array.isArray(message.parts) ? message.parts : EMPTY_PARTS) {
-    if (part.type === 'text') lastText = part.text
+    if (part.type === 'text') {
+      lastText = part.text
+      if (/^Async RPC worker settled:/m.test(part.text)) widgetParts.push(part)
+    }
     if (part.type === 'toolCall') {
       toolCount += 1
       if (WIDGET_TOOLS.has(part.name)) widgetParts.push(part)

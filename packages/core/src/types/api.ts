@@ -62,6 +62,11 @@ export interface AppUpdateState {
   message?: string
 }
 
+export interface DiscoveredProjectScript {
+  name: string
+  command: string
+}
+
 export interface ProjectScripts {
   setup: string
   run: string
@@ -87,6 +92,7 @@ export interface ProjectRecord {
   inferred?: boolean
   readOnly?: boolean
   scripts?: ProjectScripts
+  discoveredScripts?: DiscoveredProjectScript[]
 }
 
 export interface SessionRecord {

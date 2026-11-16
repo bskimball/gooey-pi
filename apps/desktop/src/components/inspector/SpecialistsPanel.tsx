@@ -4,8 +4,10 @@ import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { isLiveSpecialist, shortModelName, specialistMarkState, specialistStatusLabel } from '@/lib/specialist-status'
+import { Banner } from '@astryxdesign/core/Banner'
 import { ApexButton } from '../ui'
 import { extractPiSpecialistSessions, type PiSpecialistSession } from '@/lib/specialist-records'
 import { CaretRight, Question, WarningCircle } from '../icons'
@@ -20,12 +22,25 @@ import { observedPath } from '@/lib/specialist-evidence'
 export { extractPiSpecialistSessions, type PiSpecialistSession } from '@/lib/specialist-records'
 
 
-/** Agents panel tab order: live agents in start order, then finished agents most recent first. */
+const SPECIALIST_STATUS_RANK: Record<PiSpecialistSession['status'], number> = {
+  waiting: 0,
+  running: 1,
+  error: 2,
+  done: 3,
+  stopped: 4,
+  closed: 5,
+}
+
+/** Agents panel tab order: waiting -> running (start order), then error -> done -> stopped -> closed (most recent first within each status). */
 export function orderSpecialistTabs<T extends { status: PiSpecialistSession['status'] }>(specialists: readonly T[]): T[] {
-  return [
-    ...specialists.filter((spec) => isLiveSpecialist(spec.status)),
-    ...specialists.filter((spec) => !isLiveSpecialist(spec.status)).reverse(),
-  ]
+  return specialists
+    .map((spec, index) => ({ spec, index }))
+    .sort((a, b) => {
+      const rankDiff = SPECIALIST_STATUS_RANK[a.spec.status] - SPECIALIST_STATUS_RANK[b.spec.status]
+      if (rankDiff !== 0) return rankDiff
+      return isLiveSpecialist(a.spec.status) ? a.index - b.index : b.index - a.index
+    })
+    .map(({ spec }) => spec)
 }
 
 interface SpecialistsPanelProps {
@@ -78,6 +93,10 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   sessionKey,
   cwd,
 }: SpecialistsPanelProps) {
+  const prefersReducedMotion = useReducedMotion()
+  const shouldReduceMotion = Boolean(prefersReducedMotion)
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const specialists = useMemo(() => extractPiSpecialistSessions(messages), [messages])
   const tabs = useMemo(() => orderSpecialistTabs(specialists), [specialists])
   const liveTabCount = tabs.filter((spec) => isLiveSpecialist(spec.status)).length
@@ -267,6 +286,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
         className={`specialist-tabstrip scroll-area ${stylex.props(baseStyles.scrollArea, agentsStyles.specialistTabstrip).className ?? ""}`}
         role="tablist"
         aria-label="Session specialists"
+        style={{ '--tab-z-front': tabs.length + 4 } as CSSProperties}
         onWheel={(event) => {
           const strip = event.currentTarget
           if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && strip.scrollWidth > strip.clientWidth) {
@@ -274,38 +294,57 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           }
         }}
       >
-        {tabs.map((spec, index) => {
-          const isSelected = spec.id === active.id
-          const status = specialistStatusLabel[spec.status]
-          const model = shortModelName(spec.model)
-          return (
-            <Fragment key={spec.id}>
-            {index === liveTabCount && liveTabCount > 0 ? <span className={`specialist-tabstrip__divider ${stylex.props(agentsStyles.specialistTabDivider).className ?? ''}`} aria-hidden="true" /> : null}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              aria-label={`${spec.agent} ${spec.id}${model ? ` (${model})` : ''}: ${status}. ${spec.mission || 'No task recorded'}`}
-              title={`${spec.mission} · ${model ? `${model} · ` : ''}${status}`}
-              tabIndex={isSelected ? 0 : -1}
-              onKeyDown={(event) => {
-                const destinations: Record<string, number> = { ArrowRight: (index + 1) % tabs.length, ArrowDown: (index + 1) % tabs.length, ArrowLeft: (index - 1 + tabs.length) % tabs.length, ArrowUp: (index - 1 + tabs.length) % tabs.length, Home: 0, End: tabs.length - 1 }
-                const next = destinations[event.key]
-                if (next === undefined) return
-                event.preventDefault()
-                onSelect(tabs[next].id)
-                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
-              }}
-              className={[`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.status}`, stylex.props(agentsStyles.specialistTabstripItem, (isSelected) && agentsStyles.specialistTabstripItemIsActive, ((spec.status === "running")) && agentsStyles.specialistTabstripItemIsRunning, ((spec.status === "waiting")) && agentsStyles.specialistTabstripItemIsWaiting, ((spec.status === "error")) && agentsStyles.specialistTabstripItemIsError).className].filter(Boolean).join(' ')}
-              onClick={() => onSelect(spec.id)}
-            >
-              {spec.status === 'waiting' ? <Question size={12} /> : <StatusMark state={specialistMarkState(spec.status)} size={12} />}
-              <strong>{spec.agent}</strong>
-              {model ? <span>{model}</span> : /^task_\d+$/.test(spec.id) ? <span>{spec.id}</span> : null}
-            </button>
-            </Fragment>
-          )
-        })}
+        <LayoutGroup>
+          <AnimatePresence initial={false}>
+            {tabs.flatMap((spec, index) => {
+              const isSelected = spec.id === active.id
+              const status = specialistStatusLabel[spec.status]
+              const model = shortModelName(spec.model)
+              const nodes = []
+              if (index === liveTabCount && liveTabCount > 0) {
+                nodes.push(
+                  <span
+                    key="specialist-tabstrip-divider"
+                    className={`specialist-tabstrip__divider ${stylex.props(agentsStyles.specialistTabDivider).className ?? ''}`}
+                    aria-hidden="true"
+                  />,
+                )
+              }
+              nodes.push(
+                <motion.button
+                  key={spec.id}
+                  layout={shouldReduceMotion ? false : 'position'}
+                  initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95, x: -6 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95, transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.23, 1, 0.32, 1], layout: { type: 'spring', duration: 0.28, bounce: 0 } }}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  aria-label={`${spec.agent} ${spec.id}${model ? ` (${model})` : ''}: ${status}. ${spec.mission || 'No task recorded'}`}
+                  title={`${spec.mission} · ${model ? `${model} · ` : ''}${status}`}
+                  tabIndex={isSelected ? 0 : -1}
+                  style={{ '--tab-z': isSelected ? tabs.length + 2 : tabs.length - index } as CSSProperties}
+                  onKeyDown={(event) => {
+                    const destinations: Record<string, number> = { ArrowRight: (index + 1) % tabs.length, ArrowDown: (index + 1) % tabs.length, ArrowLeft: (index - 1 + tabs.length) % tabs.length, ArrowUp: (index - 1 + tabs.length) % tabs.length, Home: 0, End: tabs.length - 1 }
+                    const next = destinations[event.key]
+                    if (next === undefined) return
+                    event.preventDefault()
+                    onSelect(tabs[next].id)
+                    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+                  }}
+                  className={[`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.status}`, stylex.props(agentsStyles.specialistTabstripItem, (isSelected) && agentsStyles.specialistTabstripItemIsActive, ((spec.status === "running")) && agentsStyles.specialistTabstripItemIsRunning, ((spec.status === "waiting")) && agentsStyles.specialistTabstripItemIsWaiting, ((spec.status === "error")) && agentsStyles.specialistTabstripItemIsError).className].filter(Boolean).join(' ')}
+                  onClick={() => onSelect(spec.id)}
+                >
+                  {spec.status === 'waiting' ? <Question size={12} /> : <StatusMark state={specialistMarkState(spec.status)} size={12} />}
+                  <strong>{spec.agent}</strong>
+                  {model ? <span>{model}</span> : /^task_\d+$/.test(spec.id) ? <span>{spec.id}</span> : null}
+                </motion.button>,
+              )
+              return nodes
+            })}
+          </AnimatePresence>
+        </LayoutGroup>
       </div>
       <header className={`specialist-header scroll-area ${stylex.props(baseStyles.scrollArea, agentsStyles.specialistHeader).className ?? ""}`} key={active.id}>
         <details className={`specialist-header__details ${stylex.props(agentsStyles.specialistHeaderDetails).className ?? ""}`}>
@@ -365,7 +404,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
             return (
               <article key={message.id} className={`specialist-turn specialist-turn--assistant ${stylex.props(agentsStyles.specialistTurn, agentsStyles.specialistTurnAssistant).className ?? ""}`}>
                 {isAssistant && assistantTurnCount > 1 ? <div className={`specialist-turn__divider ${stylex.props(agentsStyles.specialistTurnDivider).className ?? ""}`}><span>Turn {assistantTurnCount}</span></div> : null}
-                {message.errorMessage ? <div className={`specialist-header__error ${stylex.props(agentsStyles.specialistHeaderError).className ?? ""}`} role="alert">{message.errorMessage}</div> : null}
+                {message.errorMessage ? <Banner status="error" role="alert" title={message.errorMessage} className="specialist-header__error" xstyle={agentsStyles.specialistHeaderError} /> : null}
                 <MarkdownScopeContext.Provider value="specialist-assistant"><div className="specialist-turn__content">
                   {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, streaming, 'current-step')}
                   {reportPart?.type === 'text' ? <section className={`specialist-result ${stylex.props(agentsStyles.specialistResult).className ?? ""}`} ref={resultRef}><h3>Result</h3><MarkdownText variant="report" text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true, streaming, 'current-step')}</section> : null}

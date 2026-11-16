@@ -1,7 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
 
-const menuIn = stylex.keyframes({ from: { opacity: 0, transform: 'translateY(-3px) scale(.98)' } })
-
 export const styles = stylex.create({
   shell: { paddingTop: 0 },
   conversation: { minWidth: 0 },
@@ -65,7 +63,6 @@ export const styles = stylex.create({
   pickerPopover: {
     position: 'absolute', zIndex: 120, top: 'calc(100% + 6px)', left: 0, width: 'min(380px, calc(100vw - 20px))', padding: 4,
     borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--color-border-emphasized)', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--color-background-popover)', boxShadow: 'var(--shadow-popover)',
-    animationName: menuIn, animationDuration: '120ms', animationTimingFunction: 'cubic-bezier(.2, 0, 0, 1)',
   },
   pickerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 2, paddingRight: 4, paddingBottom: 3, paddingLeft: 4 },
   pickerCount: { paddingBlock: 0, paddingInline: 4, color: 'var(--text-tertiary)', fontSize: 'var(--fs-micro)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },

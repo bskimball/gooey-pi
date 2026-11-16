@@ -1,4 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
+import { Banner } from '@astryxdesign/core/Banner'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as markdownStyles } from 'apex-ui/styles/markdown.stylex'
 import { useEffect, useRef, useState } from 'react'
@@ -116,17 +118,24 @@ function HtmlFenceCard({ source, xstyle, sourceXstyle, chat }: Props & { chat: I
     /> : null}
     {expanded && showSource ? <pre className={`html-preview__source ${stylex.props(transcriptStyles.htmlPreviewSource, sourceXstyle).className ?? ''}`} dir="ltr"><code {...stylex.props(markdownStyles.code, markdownStyles.blockCode)}>{source}</code></pre> : null}
     {chat ? <div {...stylex.props(cardStyles.feedback)}>
-      <label>Feedback<textarea {...stylex.props(cardStyles.textarea)} value={draft} maxLength={4000} disabled={status === 'sending'} onChange={(event) => {
-        const value = event.target.value
-        userEdited.current = Boolean(value)
-        setDraft(value)
-        setStatus('idle')
-        draftRevision.current = saveDraft(draftKey, value)
-      }} placeholder="Describe your choice or changes" /></label>
+      <TextArea
+        label="Feedback"
+        controlXstyle={cardStyles.textarea}
+        value={draft}
+        maxLength={4000}
+        isDisabled={status === 'sending'}
+        onChange={(value) => {
+          userEdited.current = Boolean(value)
+          setDraft(value)
+          setStatus('idle')
+          draftRevision.current = saveDraft(draftKey, value)
+        }}
+        placeholder="Describe your choice or changes"
+      />
       <ApexButton xstyle={cardStyles.submit} disabled={chat.disabled || status === 'sending' || !draft.trim()} onClick={() => void sendFeedback()}>{status === 'sending' ? 'Sending…' : 'Send feedback'}</ApexButton>
       {status === 'prepared' ? <span role="status">Preview choice prepared. Review it before sending.</span> : null}
       {status === 'sent' ? <span role="status">Sent to this conversation</span> : null}
-      {status === 'failed' ? <span role="alert">Could not send feedback. Try again.</span> : null}
+      {status === 'failed' ? <Banner status="error" role="alert" title="Could not send feedback. Try again." /> : null}
     </div> : null}
   </figure>
 }

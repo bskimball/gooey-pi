@@ -10,7 +10,7 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { useMachine } from '@xstate/react'
 import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
 import { useEffect, useState } from 'react'
-import { ApexButton, IconButton, Modal } from '@/components/ui'
+import { ApexButton, IconButton, Modal, SelectControl } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import {
@@ -56,9 +56,9 @@ function ModelSelect({ label, description, value, options, onChange }: { label: 
     <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
       <span><strong>{label}</strong><small>{description}</small></span>
       <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
-        <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-          {choices.map((option) => <option key={option.value} value={option.value}>{option.label}{option.recommended ? ' · Recommended' : ''}</option>)}
-        </select>
+        <SelectControl label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+          {choices.map((option) => <option key={option.value} value={option.value}>{`${option.label}${option.recommended ? ' · Recommended' : ''}`}</option>)}
+        </SelectControl>
         {selected ? <small>{selected.detail}</small> : null}
       </span>
     </label>
@@ -71,7 +71,16 @@ function PathInput({ label, description, placeholder, value, onCommit }: { label
   return (
     <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
       <span><strong>{label}</strong><small>{description}</small></span>
-      <input aria-label={label} value={draft} placeholder={placeholder} spellCheck={false} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft !== value) onCommit(draft) }} />
+      <TextInput
+        label={label}
+        isLabelHidden
+        aria-label={label}
+        value={draft}
+        placeholder={placeholder}
+        hasSpellCheck={false}
+        onChange={(nextValue) => setDraft(nextValue)}
+        onBlur={() => { if (draft !== value) onCommit(draft) }}
+      />
     </label>
   )
 }
@@ -193,10 +202,15 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           <div><h2 id="voice-connections-title">Connections</h2><p>Add a key for any hosted service you want to use. Secure storage keeps keys encrypted between app sessions; otherwise they stay only in memory until Apex quits.</p></div>
         </div>
         {serviceState === 'ready' && status && !secureStorageAvailable ? (
-          <div className={`voice-storage-notice ${stylex.props(settingsStyles.voiceStorageNotice).className ?? ""}`} role="alert">
-            <ShieldWarning size={17} />
-            <span><strong>Keys will work only until Apex quits</strong><small>{status.storage.message} You can still add a key for this session. Apex will keep it only in desktop memory and will not save it to disk.</small></span>
-          </div>
+          <Banner
+            xstyle={[settingsStyles.voiceStorageNotice]}
+            status="warning"
+            role="alert"
+            className="voice-storage-notice"
+            icon={<ShieldWarning size={17} />}
+            title="Keys will work only until Apex quits"
+            description={`${status.storage.message} You can still add a key for this session. Apex will keep it only in desktop memory and will not save it to disk.`}
+          />
         ) : null}
         {voice ? <div className={`voice-connection-grid ${stylex.props(settingsStyles.voiceConnectionGrid).className ?? ""}`}>
           {CONNECTION_CREDENTIALS.map((item) => {
@@ -227,9 +241,9 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
             <span><strong>Service</strong><small>Choose where your microphone audio is transcribed.</small></span>
             <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
-              <select aria-label="Dictation service" value={settings.voiceTranscriptionProvider} onChange={(event) => update('voiceTranscriptionProvider', event.target.value as VoiceTranscriptionProvider)}>
-                {VOICE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}{option.recommended ? ' · Recommended' : ''}</option>)}
-              </select>
+              <SelectControl label="Dictation service" value={settings.voiceTranscriptionProvider} onChange={(event) => update('voiceTranscriptionProvider', event.target.value as VoiceTranscriptionProvider)}>
+                {VOICE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{`${option.label}${option.recommended ? ' · Recommended' : ''}`}</option>)}
+              </SelectControl>
               <small>{provider.detail}</small>
             </span>
           </label>
@@ -243,11 +257,11 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
               <span className={`voice-local-setup__intro ${stylex.props(settingsStyles.voiceLocalSetupIntro).className ?? ""}`}><HardDrives size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
               <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
                 <span><strong>Server URL</strong><small>Enter the server base URL or its full /v1/audio/transcriptions endpoint.</small></span>
-                <input aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_URL', value: event.target.value })} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
+                <TextInput label="Self-hosted server URL" isLabelHidden aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" hasSpellCheck={false} onChange={(nextValue) => send({ type: 'SET_SELF_HOSTED_URL', value: nextValue })} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
               </label>
               <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
                 <span><strong>Model ID</strong><small>Optional. Leave blank to ask the server for its default English model.</small></span>
-                <input aria-label="Self-hosted model ID" value={selfHostedModel} placeholder="nvidia/parakeet-tdt-0.6b-v3" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_MODEL', value: event.target.value })} onBlur={() => { const value = selfHostedModel.trim(); if (value !== settings.voiceSelfHostedModel) update('voiceSelfHostedModel', value) }} />
+                <TextInput label="Self-hosted model ID" isLabelHidden aria-label="Self-hosted model ID" value={selfHostedModel} placeholder="nvidia/parakeet-tdt-0.6b-v3" hasSpellCheck={false} onChange={(nextValue) => send({ type: 'SET_SELF_HOSTED_MODEL', value: nextValue })} onBlur={() => { const value = selfHostedModel.trim(); if (value !== settings.voiceSelfHostedModel) update('voiceSelfHostedModel', value) }} />
               </label>
               <div className={`voice-self-hosted-auth ${stylex.props(settingsStyles.voiceSelfHostedAuth, [responsiveStyles.voiceSelfHostedAuth, responsiveLayoutStyles.voiceSelfHostedAuth]).className ?? ""}`}>
                 <span><strong>Access token</strong><small>Optional. Stored with the same OS-backed protection as your other voice keys.</small></span>
@@ -290,7 +304,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           ) : selectedCredential ? (
             <div className={[`voice-requirement${selectedConfigured ? ' is-ready' : ''}`, stylex.props(settingsStyles.voiceRequirement).className].filter(Boolean).join(' ')}>
               <span>{selectedConfigured ? <Check size={13} /> : <Key size={13} />}{selectedConfigured ? `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} is connected` : `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} key required`}</span>
-              {!selectedConfigured && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential(selectedCredential)}>Add key</button> : null}
+              {!selectedConfigured && voice && serviceState === 'ready' ? <ApexButton compact onClick={() => openCredential(selectedCredential)}>Add key</ApexButton> : null}
             </div>
           ) : <div className={`voice-requirement is-ready ${stylex.props(settingsStyles.voiceRequirement, settingsStyles.voiceRequirementIsReady).className ?? ""}`}><span><Check size={13} />Runs locally with no API key</span></div>}
         </div>
@@ -306,7 +320,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           <ModelSelect label="Speaking voice" description="The voice you hear when the orb responds." value={settings.voiceRealtimeVoice} options={REALTIME_VOICES} onChange={(value) => update('voiceRealtimeVoice', value)} />
           <div className={[`voice-requirement${status?.configured.openai ? ' is-ready' : ''}`, stylex.props(settingsStyles.voiceRequirement).className].filter(Boolean).join(' ')}>
             <span>{status?.configured.openai ? <Check size={13} /> : <Key size={13} />}{status?.configured.openai ? 'OpenAI is connected' : 'OpenAI key required'}</span>
-            {!status?.configured.openai && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential('openai')}>Add key</button> : null}
+            {!status?.configured.openai && voice && serviceState === 'ready' ? <ApexButton compact onClick={() => openCredential('openai')}>Add key</ApexButton> : null}
           </div>
           {secureStorageAvailable ? <p className={`voice-realtime-note ${stylex.props(settingsStyles.voiceRealtimeNote).className ?? ""}`}>Saved API keys are encrypted using your operating system’s internal keychain. When you open the voice agent, your system may ask for your password to retrieve the key.</p> : null}
         </div>

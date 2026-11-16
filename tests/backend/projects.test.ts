@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isBroadProjectRoot, ProjectService } from '../../apps/desktop/electron/main/projects'
+import { discoverProjectScripts } from '../../apps/desktop/electron/main/project-scripts'
 import { MAX_WORKSPACE_TEXT_BYTES } from '../../apps/desktop/electron/main/workspace-text'
 import { CheckoutService } from '../../apps/desktop/electron/main/checkouts'
 import { RepositoryUseGate } from '../../apps/desktop/electron/main/repository-use-gate'
@@ -1171,5 +1172,104 @@ describe('ProjectService scripts', () => {
     const { service } = setup()
     await expect(service.updateScripts('missing', { setup: '', run: 'npm start' })).rejects.toThrow(/not explicitly granted/)
     await expect(service.updateScripts('missing', { setup: '', run: 'bad\0command' })).rejects.toThrow(/NUL/)
+  })
+})
+
+describe('ProjectService script discovery', () => {
+  it('discovers package.json scripts with pnpm lockfile detection, lifecycle filtering, and priority ordering', async () => {
+    const { root, service, store } = setup()
+    writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')
+    writeFileSync(join(root, 'package.json'), JSON.stringify({
+      name: 'demo',
+      scripts: {
+        zebra: 'echo zebra',
+        prepare: 'husky',
+        prepublishOnly: 'echo prepublish',
+        version: 'echo version',
+        prebuild: 'echo prebuild',
+        posttest: 'echo posttest',
+        build: 'vite build',
+        preview: 'vite preview',
+        dev: 'vite',
+        test: 'vitest',
+        alpha: 'echo alpha',
+      },
+    }))
+    const now = new Date().toISOString()
+    await store.update((state) => { state.projects.push({
+      id: 'pnpm-project', harness: 'pi', name: 'Pnpm project', path: root, folders: [root], primaryFolder: root,
+      pinned: false, createdAt: now, lastOpenedAt: now, folderIdentities: identities(root),
+    }) })
+
+    const [listed] = await service.list()
+    expect(listed?.discoveredScripts).toEqual([
+      { name: 'dev', command: 'pnpm run dev' },
+      { name: 'preview', command: 'pnpm run preview' },
+      { name: 'build', command: 'pnpm run build' },
+      { name: 'test', command: 'pnpm run test' },
+      { name: 'alpha', command: 'pnpm run alpha' },
+      { name: 'zebra', command: 'pnpm run zebra' },
+    ])
+  })
+
+  it('formats npm test idiomatically and omits discoveredScripts when a project has no scripts', async () => {
+    const { root, service, store } = setup()
+    const emptyRoot = mkdtempSync(join(tmpdir(), 'apex-empty-scripts-'))
+    dirs.push(emptyRoot)
+    writeFileSync(join(root, 'package.json'), JSON.stringify({
+      name: 'npm-app',
+      scripts: { test: 'vitest', dev: 'vite' },
+    }))
+    const now = new Date().toISOString()
+    await store.update((state) => {
+      state.projects.push(
+        {
+          id: 'npm-project', harness: 'pi', name: 'Npm project', path: root, folders: [root], primaryFolder: root,
+          pinned: false, createdAt: now, lastOpenedAt: now, folderIdentities: identities(root),
+        },
+        {
+          id: 'empty-project', harness: 'pi', name: 'Empty project', path: emptyRoot, folders: [emptyRoot], primaryFolder: emptyRoot,
+          pinned: false, createdAt: now, lastOpenedAt: now, folderIdentities: identities(emptyRoot),
+        },
+      )
+    })
+
+    const listed = await service.list()
+    const npmProject = listed.find((p) => p.id === 'npm-project')
+    const emptyProject = listed.find((p) => p.id === 'empty-project')
+    expect(npmProject?.discoveredScripts).toEqual([
+      { name: 'dev', command: 'npm run dev' },
+      { name: 'test', command: 'npm test' },
+    ])
+    expect(emptyProject?.discoveredScripts).toBeUndefined()
+  })
+
+  it('discovers fallback manifests for Cargo, Go, and Makefile projects', async () => {
+    const cargoDir = mkdtempSync(join(tmpdir(), 'apex-cargo-'))
+    const goDir = mkdtempSync(join(tmpdir(), 'apex-go-'))
+    const makeDir = mkdtempSync(join(tmpdir(), 'apex-make-'))
+    dirs.push(cargoDir, goDir, makeDir)
+
+    writeFileSync(join(cargoDir, 'Cargo.toml'), '[package]\nname = "demo"\n')
+    mkdirSync(join(cargoDir, 'src'))
+    writeFileSync(join(cargoDir, 'src', 'main.rs'), 'fn main() {}\n')
+    expect(await discoverProjectScripts(cargoDir)).toEqual([
+      { name: 'run', command: 'cargo run' },
+      { name: 'test', command: 'cargo test' },
+      { name: 'check', command: 'cargo check' },
+    ])
+
+    writeFileSync(join(goDir, 'go.mod'), 'module example.com/demo\n')
+    expect(await discoverProjectScripts(goDir)).toEqual([
+      { name: 'run', command: 'go run .' },
+      { name: 'test', command: 'go test ./...' },
+      { name: 'build', command: 'go build ./...' },
+    ])
+
+    writeFileSync(join(makeDir, 'Makefile'), '.PHONY: build test\n_internal:\n\techo skip\nbuild:\n\techo build\ntest:\n\techo test\n')
+    expect(await discoverProjectScripts(makeDir)).toEqual([
+      { name: 'build', command: 'make build' },
+      { name: 'test', command: 'make test' },
+    ])
   })
 })

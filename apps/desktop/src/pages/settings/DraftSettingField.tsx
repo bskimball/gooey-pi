@@ -2,6 +2,7 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ApexButton } from '@/components/ui'
 import {
@@ -89,13 +90,16 @@ export function DraftSettingField({
         <label htmlFor={id}><strong>{label}</strong></label>
         <small>{description}</small>
       </span>
-      <input
+      <TextInput
         id={id}
-        className={className}
+        label={label}
+        isLabelHidden
+        controlClassName={className}
         value={state.value}
+        status={state.error ? { type: 'error' } : undefined}
         aria-invalid={Boolean(state.error)}
         aria-describedby={state.error ? errorId : undefined}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={onChange}
         onBlur={() => { void commit() }}
         onKeyDown={onKeyDown}
       />

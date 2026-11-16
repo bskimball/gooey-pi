@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useActorRef, useMachine, useSelector } from "@xstate/react";
 import type {
 	ExtensionTabControls,
@@ -44,7 +45,7 @@ import {
 	X,
 } from "../icons";
 import { Banner } from "@astryxdesign/core/Banner";
-import { IconButton } from "../ui";
+import { ApexButton, IconButton } from "../ui";
 import { BrowserAnnotationPopover } from "./BrowserAnnotationPopover";
 import { browserAnnotationMachine } from "./browserAnnotationMachine";
 import {
@@ -128,6 +129,7 @@ export function BrowserPanel({
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
+	const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
 	const previewActorRef = useActorRef(browserPreviewMachine, { input: { home } });
 	const previewSnapshot = useSelector(previewActorRef, (snapshot) => snapshot);
 	const { address, currentUrl, canBack, canForward, history, previewWebContentsId } = previewSnapshot.context;
@@ -454,44 +456,51 @@ export function BrowserPanel({
 						type="button"
 						role="tab"
 						aria-selected={!showAgentTab}
-						className={showAgentTab ? "" : "is-active"}
+						className={[showAgentTab ? "" : "is-active", stylex.props(inspectorStyles.browserTabstripPreview).className].filter(Boolean).join(" ")}
 						onClick={() => onShowPreview?.()}
 					>
 						Preview
 					</button>
-					{agentTabs.map((tab) => (
-						<div
-							key={tab.tabId}
-							role="tab"
-							tabIndex={0}
-							aria-selected={showAgentTab && tab.tabId === activeAgentTabId}
-							className={[`browser-tabstrip__agent ${showAgentTab && tab.tabId === activeAgentTabId ? "is-active" : ""}`, stylex.props(inspectorStyles.browserTabstripAgent, (showAgentTab && tab.tabId === activeAgentTabId) && inspectorStyles.browserTabstripAgentIsActive).className].filter(Boolean).join(' ')}
-							title={tab.url}
-							onClick={() => onSelectAgentTab?.(tab.tabId)}
-							onKeyDown={(event) => {
-								if (event.key !== "Enter" && event.key !== " ") return;
-								event.preventDefault();
-								onSelectAgentTab?.(tab.tabId);
-							}}
-						>
-							{tab.backend === "extension" ? (
-								<Globe size={11} aria-label="In your browser" />
-							) : (
-								<Robot size={11} aria-hidden />
-							)}
-							<span>{agentTabLabel(tab)}</span>
-							<button
-								type="button"
-								aria-label={`Close agent tab ${agentTabLabel(tab)}`}
-								onClick={(event) => {
-									event.stopPropagation();
-									onCloseAgentTab?.(tab.tabId);
+					{(() => {
+						const agentTabItems = agentTabs.map((tab) => (
+							<motion.div
+								key={tab.tabId}
+								initial={instant ? false : { opacity: 0, scale: 0.95 }}
+								animate={{ opacity: 1, scale: 1 }}
+								exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
+								transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+								role="tab"
+								tabIndex={0}
+								aria-selected={showAgentTab && tab.tabId === activeAgentTabId}
+								className={[`browser-tabstrip__agent ${showAgentTab && tab.tabId === activeAgentTabId ? "is-active" : ""}`, stylex.props(inspectorStyles.browserTabstripAgent, (showAgentTab && tab.tabId === activeAgentTabId) && inspectorStyles.browserTabstripAgentIsActive).className].filter(Boolean).join(' ')}
+								title={tab.url}
+								onClick={() => onSelectAgentTab?.(tab.tabId)}
+								onKeyDown={(event) => {
+									if (event.key !== "Enter" && event.key !== " ") return;
+									event.preventDefault();
+									onSelectAgentTab?.(tab.tabId);
 								}}
 							>
-								<X size={11} />
-							</button>
-						</div>
-					))}
+								{tab.backend === "extension" ? (
+									<Globe size={11} aria-label="In your browser" />
+								) : (
+									<Robot size={11} aria-hidden />
+								)}
+								<span>{agentTabLabel(tab)}</span>
+								<button
+									type="button"
+									aria-label={`Close agent tab ${agentTabLabel(tab)}`}
+									onClick={(event) => {
+										event.stopPropagation();
+										onCloseAgentTab?.(tab.tabId);
+									}}
+								>
+									<X size={11} />
+								</button>
+							</motion.div>
+						));
+						return instant ? agentTabItems : <AnimatePresence initial={false}>{agentTabItems}</AnimatePresence>;
+					})()}
 					{extension?.status ? (
 						<ExtensionStatusIndicator status={extension.status} />
 					) : null}
@@ -545,13 +554,13 @@ export function BrowserPanel({
 							aria-label="Browser address"
 							spellCheck={false}
 						/>
-						<button
-							type="button"
-							aria-label="Browser history"
+						<IconButton
+							size="small"
+							label="Browser history"
 							onClick={() => previewActorRef.send({ type: "TOGGLE_HISTORY" })}
 						>
 							<ClockCounterClockwise size={13} />
-						</button>
+						</IconButton>
 					</form>
 					<IconButton
 						label={picking && isDirectArmed ? "Stop selecting" : "Select element"}
@@ -582,12 +591,13 @@ export function BrowserPanel({
 					<div className={`browser-history ${stylex.props(inspectorStyles.browserHistory).className ?? ""}`}>
 						<div>
 							<strong>Recent pages</strong>
-							<button
-								type="button"
+							<ApexButton
+								compact
+								variant="quiet"
 								onClick={() => previewActorRef.send({ type: "CLEAR_HISTORY" })}
 							>
 								Clear
-							</button>
+							</ApexButton>
 						</div>
 						{history
 							.slice()
@@ -691,16 +701,18 @@ export function BrowserPanel({
 						</form>
 						{!activeAgentTab.attached ? <em>connecting…</em> : null}
 						{extension?.status?.connected ? (
-							<button
-								type="button"
-								className={`browser-pop-out ${stylex.props(inspectorStyles.browserPopOut).className ?? ""}`}
+							<ApexButton
+								compact
+								variant="quiet"
+								icon={<ArrowSquareOut size={13} />}
+								className="browser-pop-out"
+								xstyle={inspectorStyles.browserPopOut}
 								data-testid="browser-pop-out-button"
 								title="Move this tab into your browser, where the agent keeps driving it"
 								onClick={() => extension.popOut(activeAgentTab)}
 							>
-								<ArrowSquareOut size={13} />
 								Pop out to Browser
-							</button>
+							</ApexButton>
 						) : null}
 					</div>
 					<div

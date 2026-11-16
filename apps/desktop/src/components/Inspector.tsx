@@ -4,6 +4,7 @@ import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { pathToFileUrl } from "@/lib/desktop-actions";
 import type {
 	ExtensionTabControls,
@@ -138,6 +139,7 @@ export const Inspector = memo(function Inspector({
 }: InspectorProps) {
 	const [browserVisited, setBrowserVisited] = useState(activeTab === "browser");
 	useEffect(() => { if (activeTab === "browser") setBrowserVisited(true); }, [activeTab]);
+	const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
 	const [selectReadiness] = useState(createReadinessSelector);
@@ -176,7 +178,7 @@ export const Inspector = memo(function Inspector({
 						aria-selected={activeTab === tab.id}
 						aria-controls={`inspector-panel-${tab.id}`}
 						tabIndex={activeTab === tab.id ? 0 : -1}
-						className={activeTab === tab.id ? "is-active" : ""}
+						className={[activeTab === tab.id ? "is-active" : "", stylex.props(inspectorStyles.inspectorTabButton).className].filter(Boolean).join(" ")}
 						key={tab.id}
 						onKeyDown={(event) => {
 							if (
@@ -197,6 +199,13 @@ export const Inspector = memo(function Inspector({
 						) : tab.id === "specialists" && specialistCount ? (
 							<span className={`inspector__tab-count ${stylex.props(inspectorStyles.inspectorTabCount).className ?? ""}`}>{specialistCount}</span>
 						) : null}
+						{activeTab === tab.id ? (
+							<motion.span
+								layoutId="inspector-active-tab"
+								{...stylex.props(inspectorStyles.inspectorTabIndicator)}
+								transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.25, bounce: 0 }}
+							/>
+						) : null}
 					</button>
 				))}
 				<span className={`inspector__tab-spacer ${stylex.props(inspectorStyles.inspectorTabSpacer).className ?? ""}`} />
@@ -212,45 +221,64 @@ export const Inspector = memo(function Inspector({
 				aria-labelledby={`inspector-tab-${activeTab}`}
 				tabIndex={0}
 			>
-				{activeTab === "summary" ? (
-					<div className={`inspector-scroll scroll-area ${stylex.props(baseStyles.scrollArea, inspectorStyles.inspectorScroll).className ?? ""}`}>
-						<SummaryPanel
-							runtime={runtime}
-							behaviorMode={behaviorMode}
-							cwd={cwd}
-							sessionKey={agentSessionKey}
-							summary={summary}
-							readiness={readiness}
-							git={git}
-							automations={automations}
-							onOpenAutomation={onOpenAutomation}
-							onOpenSpecialist={(id) => {
-								onSelectSpecialist(id);
-								onTabChange("specialists");
-							}}
-						/>
-					</div>
-				) : null}
-				{activeTab === "specialists" ? (
-					<SpecialistsPanel
-						key={agentSessionKey ?? "no-session"}
-						cwd={cwd}
-						messages={messages}
-						selectedId={selectedSpecialistId}
-						onSelect={onSelectSpecialist}
-						homeDir={homeDir}
-						sessionKey={agentSessionKey}
-					/>
-				) : null}
-				{activeTab === "changes" ? (
-					<ChangesPanel
-						key={cwd ?? "no-workspace"}
-						cwd={cwd}
-						git={git}
-						readOnly={project?.readOnly === true}
-						onGrantProject={onGrantProject}
-						onRefreshGit={onRefreshGit}
-					/>
+				{activeTab !== "browser" ? (
+					<motion.div
+						key={activeTab}
+						{...stylex.props(inspectorStyles.inspectorPanelMotion)}
+						initial={instant ? false : { opacity: 0 }}
+						animate={{ opacity: 1 }}
+						transition={instant ? { duration: 0 } : { duration: 0.14, ease: [0.23, 1, 0.32, 1] }}
+					>
+						{activeTab === "summary" ? (
+							<div className={`inspector-scroll scroll-area ${stylex.props(baseStyles.scrollArea, inspectorStyles.inspectorScroll).className ?? ""}`}>
+								<SummaryPanel
+									runtime={runtime}
+									behaviorMode={behaviorMode}
+									cwd={cwd}
+									sessionKey={agentSessionKey}
+									summary={summary}
+									readiness={readiness}
+									git={git}
+									automations={automations}
+									onOpenAutomation={onOpenAutomation}
+									onOpenSpecialist={(id) => {
+										onSelectSpecialist(id);
+										onTabChange("specialists");
+									}}
+								/>
+							</div>
+						) : null}
+						{activeTab === "specialists" ? (
+							<SpecialistsPanel
+								key={agentSessionKey ?? "no-session"}
+								cwd={cwd}
+								messages={messages}
+								selectedId={selectedSpecialistId}
+								onSelect={onSelectSpecialist}
+								homeDir={homeDir}
+								sessionKey={agentSessionKey}
+							/>
+						) : null}
+						{activeTab === "changes" ? (
+							<ChangesPanel
+								key={cwd ?? "no-workspace"}
+								cwd={cwd}
+								git={git}
+								readOnly={project?.readOnly === true}
+								onGrantProject={onGrantProject}
+								onRefreshGit={onRefreshGit}
+							/>
+						) : null}
+						{activeTab === "files" ? (
+							<FilesPanel
+								project={project}
+								git={git}
+								platform={platform}
+								onOpen={handleOpenFile}
+								onReveal={onRevealPath}
+							/>
+						) : null}
+					</motion.div>
 				) : null}
 				{activeTab === "browser" || browserVisited ? (
 					<div className={`inspector__browser-panel ${stylex.props(inspectorStyles.inspectorBrowserPanel).className ?? ""}`} hidden={activeTab !== "browser"} inert={activeTab !== "browser"}>
@@ -278,15 +306,6 @@ export const Inspector = memo(function Inspector({
 						extension={agentBrowserExtension}
 					/>
 					</div>
-				) : null}
-				{activeTab === "files" ? (
-					<FilesPanel
-						project={project}
-						git={git}
-						platform={platform}
-						onOpen={handleOpenFile}
-						onReveal={onRevealPath}
-					/>
 				) : null}
 			</div>
 		</InspectorShell>

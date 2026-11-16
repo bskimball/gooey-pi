@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { sortProjects } from '../../src/lib/project-order'
 import type { GitWorktree, ProjectFileEntry, ProjectFileListing, ProjectRecord, ProjectScripts, SessionRecord } from '../../src/types/api'
 import { listGitWorktrees } from './git'
+import { discoverProjectScripts } from './project-scripts'
 import { readWorkspaceText } from './workspace-text'
 import { HARNESSES } from './harness'
 import { mapLimit } from 'apex-core/lib/async'
@@ -524,6 +525,8 @@ export class ProjectService {
         branchLookupFailed = true
         throw error
       }
+      const discovered = await discoverProjectScripts(target.cwd)
+      if (discovered.length > 0) target.record.discoveredScripts = discovered
       return target
     })
     return sortProjects(records, 'recent')

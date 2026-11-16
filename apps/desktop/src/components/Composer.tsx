@@ -3,6 +3,7 @@ import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { appendTaskContext, EXCERPT_LIMIT, useTaskWorkflowContext, type TaskExcerpt } from '@/lib/task-context';
 import { cleanRequestErrorDetail } from "@/app/workspace";
@@ -268,6 +269,14 @@ export const Composer = memo(function Composer({
 	insertDraft,
 	onDraftInserted,
 }: ComposerProps) {
+	const instant =
+		Boolean(useReducedMotion()) ||
+		(typeof document !== "undefined" &&
+			document.documentElement.classList.contains("reduce-motion")) ||
+		Boolean(
+			(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean })
+				.IS_REACT_ACT_ENVIRONMENT,
+		);
 	const taskWorkflow = useTaskWorkflowContext();
 	const excerpts = taskExcerpts ?? taskWorkflow?.excerpts ?? [];
 	const removeExcerpts = onRemoveTaskExcerpts ?? taskWorkflow?.remove;
@@ -767,19 +776,21 @@ export const Composer = memo(function Composer({
 
 	return (
 		<div className={`composer-wrap ${stylex.props(workbenchStyles.composerWrap, workbenchStyles.composerWrapDocked).className ?? ""}`}>
-			{queuedMessages.length ? (
-				<ComposerQueue
-					queuedMessages={queuedMessages}
-					onSendNow={(queued) => {
-						void sendQueuedMessageImmediately(queued);
-					}}
-					onEdit={(queued) => {
-						onEditQueuedMessage?.(queued);
-						setDraft(queued.text);
-					}}
-					onDelete={onDeleteQueuedMessage}
-				/>
-			) : null}
+			<AnimatePresence initial={false}>
+				{queuedMessages.length ? (
+					<ComposerQueue
+						queuedMessages={queuedMessages}
+						onSendNow={(queued) => {
+							void sendQueuedMessageImmediately(queued);
+						}}
+						onEdit={(queued) => {
+							onEditQueuedMessage?.(queued);
+							setDraft(queued.text);
+						}}
+						onDelete={onDeleteQueuedMessage}
+					/>
+				) : null}
+			</AnimatePresence>
 			<div
 				className={`composer ${stylex.props(composerMarker, styles.composer, imageAttachments.dragging && styles.dragging, [responsiveStyles.composer, responsiveLayoutStyles.composer]).className ?? ""}`}
 				{...imageAttachments.dragHandlers}
@@ -791,7 +802,24 @@ export const Composer = memo(function Composer({
 						Drop files to attach
 					</div>
 				) : null}
-				{excerpts.length ? <div className={`task-context-tray ${stylex.props(taskWorkflowsStyles.taskContextTray).className ?? ""}`} aria-label="Selected context attachments">{excerpts.map((excerpt) => <div className={`task-context-tray__item ${stylex.props(taskWorkflowsStyles.taskContextTrayItem).className ?? ""}`} key={excerpt.id}><details><summary>{excerpt.source}{excerpt.path ? ` · ${excerpt.path}` : ''}{excerpt.range ? ` · ${excerpt.range}` : ''}</summary>{excerpt.sessionFile ? <small>{excerpt.sessionFile}</small> : null}<pre>{excerpt.text}</pre></details><IconButton size="small" label={`Remove context ${excerpt.source}`} onClick={() => removeExcerpts?.([excerpt.id])}><X size={12} /></IconButton></div>)}</div> : null}
+				{excerpts.length ? (
+					<div className={`task-context-tray ${stylex.props(taskWorkflowsStyles.taskContextTray).className ?? ""}`} aria-label="Selected context attachments">
+						<AnimatePresence initial={false}>
+							{excerpts.map((excerpt) => (
+								<motion.div
+									className={`task-context-tray__item ${stylex.props(taskWorkflowsStyles.taskContextTrayItem).className ?? ""}`}
+									key={excerpt.id}
+									initial={instant ? false : { scale: 0.95, opacity: 0 }}
+									animate={{ scale: 1, opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] } }}
+									exit={instant ? undefined : { scale: 0.95, opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+								>
+									<details><summary>{excerpt.source}{excerpt.path ? ` · ${excerpt.path}` : ''}{excerpt.range ? ` · ${excerpt.range}` : ''}</summary>{excerpt.sessionFile ? <small>{excerpt.sessionFile}</small> : null}<pre>{excerpt.text}</pre></details>
+									<IconButton size="small" label={`Remove context ${excerpt.source}`} onClick={() => removeExcerpts?.([excerpt.id])}><X size={12} /></IconButton>
+								</motion.div>
+							))}
+						</AnimatePresence>
+					</div>
+				) : null}
 				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
 				{images.length ||
 				unsupportedFiles.length ||
@@ -801,91 +829,120 @@ export const Composer = memo(function Composer({
 						{extensionTab && browserExtension ? (
 							<ExtensionTabPill tab={sharedSelection || processingSelection ? extensionTab : { ...extensionTab, selection: undefined }} extension={browserExtension} />
 						) : null}
-						{terminalSelection?.text ? (
-							<div
-								className={`composer-attachment composer-attachment--terminal ${stylex.props(styles.attachment, styles.terminalAttachment).className}`}
-								title={`Selected text from ${terminalSelection.label}`}
-							>
-								<button
-									type="button"
-									{...stylex.props(styles.terminalExpand)}
-									aria-expanded={terminalSelectionOpen}
-									aria-label={`Inspect selected text from ${terminalSelection.label}`}
-									onClick={() => setTerminalSelectionOpen((open) => !open)}
+						<AnimatePresence initial={false}>
+							{terminalSelection?.text ? (
+								<motion.div
+									key="terminal-selection-chip"
+									initial={instant ? false : { scale: 0.95, opacity: 0 }}
+									animate={{ scale: 1, opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] } }}
+									exit={instant ? undefined : { scale: 0.95, opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+									className={`composer-attachment composer-attachment--terminal ${stylex.props(styles.attachment, styles.terminalAttachment).className}`}
+									title={`Selected text from ${terminalSelection.label}`}
 								>
-									<TerminalWindow size={13} />
-									<span {...stylex.props(styles.terminalLabel)}>{terminalSelection.label}</span>
-									<small {...stylex.props(styles.terminalSelected)}>selected</small>
-									<CaretDown
-										size={11}
-										{...stylex.props(styles.fixedIcon, terminalSelectionOpen && styles.openCaret)}
-									/>
-								</button>
-								<IconButton
-									size="small"
-									xstyle={styles.terminalClear}
-									label="Clear terminal selection"
-									onClick={onClearTerminalSelection}
-								>
-									<X size={12} />
-								</IconButton>
-							</div>
-						) : null}
-						{images.map((image) => (
-							<div className={`composer-attachment ${stylex.props(styles.attachment).className}`} key={image.id}>
-								<img
-									{...stylex.props(styles.attachmentImage)}
-									src={`data:${image.mimeType};base64,${image.data}`}
-									alt=""
-								/>
-								<span {...stylex.props(styles.attachmentLabel)}>
-									<ImageIcon {...stylex.props(styles.fixedIcon)} size={12} />
-									{image.name}
-								</span>
-								<button
-									type="button"
-									{...stylex.props(styles.attachmentRemove)}
-									aria-label={`Remove ${image.name}`}
-									onClick={() => imageAttachments.remove(image.id)}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						))}
-						{unsupportedFiles.map((file) => (
-							<div className={`composer-attachment ${stylex.props(styles.attachment).className}`} key={file.id}>
-								<span {...stylex.props(styles.attachmentLabel)}>
-									<Paperclip {...stylex.props(styles.fixedIcon)} size={12} />
-									{file.name}
-								</span>
-								<button
-									type="button"
-									{...stylex.props(styles.attachmentRemove)}
-									aria-label={`Remove ${file.name}`}
-									onClick={() => imageAttachments.remove(file.id)}
-								>
-									<X size={12} />
-								</button>
-							</div>
-						))}
-					</div>
-				) : null}
-				{terminalSelectionOpen && terminalSelection?.text ? (
-					<div
-						className={`composer-terminal-selection ${stylex.props(styles.terminalSelection).className}`}
-						role="region"
-						aria-label="Selected terminal text"
-					>
-						<div {...stylex.props(styles.terminalHeading)}>
-							<TerminalWindow size={14} aria-hidden="true" />
-							<strong {...stylex.props(styles.terminalHeadingLabel)}>{terminalSelection.label}</strong>
-							{terminalSelection.truncated ? (
-								<small {...stylex.props(styles.terminalTruncated)}>start truncated</small>
+									<button
+										type="button"
+										{...stylex.props(styles.terminalExpand)}
+										aria-expanded={terminalSelectionOpen}
+										aria-label={`Inspect selected text from ${terminalSelection.label}`}
+										onClick={() => setTerminalSelectionOpen((open) => !open)}
+									>
+										<TerminalWindow size={13} />
+										<span {...stylex.props(styles.terminalLabel)}>{terminalSelection.label}</span>
+										<small {...stylex.props(styles.terminalSelected)}>selected</small>
+										<CaretDown
+											size={11}
+											{...stylex.props(styles.fixedIcon, terminalSelectionOpen && styles.openCaret)}
+										/>
+									</button>
+									<IconButton
+										size="small"
+										xstyle={styles.terminalClear}
+										label="Clear terminal selection"
+										onClick={onClearTerminalSelection}
+									>
+										<X size={12} />
+									</IconButton>
+								</motion.div>
 							) : null}
-						</div>
-						<pre {...stylex.props(styles.terminalText)}>{terminalSelection.text}</pre>
+						</AnimatePresence>
+						<AnimatePresence initial={false}>
+							{images.map((image) => (
+								<motion.div
+									className={`composer-attachment ${stylex.props(styles.attachment).className}`}
+									key={image.id}
+									initial={instant ? false : { scale: 0.95, opacity: 0 }}
+									animate={{ scale: 1, opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] } }}
+									exit={instant ? undefined : { scale: 0.95, opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+								>
+									<img
+										{...stylex.props(styles.attachmentImage)}
+										src={`data:${image.mimeType};base64,${image.data}`}
+										alt=""
+									/>
+									<span {...stylex.props(styles.attachmentLabel)}>
+										<ImageIcon {...stylex.props(styles.fixedIcon)} size={12} />
+										{image.name}
+									</span>
+									<IconButton
+										size="small"
+										xstyle={styles.attachmentRemove}
+										label={`Remove ${image.name}`}
+										onClick={() => imageAttachments.remove(image.id)}
+									>
+										<X size={12} />
+									</IconButton>
+								</motion.div>
+							))}
+						</AnimatePresence>
+						<AnimatePresence initial={false}>
+							{unsupportedFiles.map((file) => (
+								<motion.div
+									className={`composer-attachment ${stylex.props(styles.attachment).className}`}
+									key={file.id}
+									initial={instant ? false : { scale: 0.95, opacity: 0 }}
+									animate={{ scale: 1, opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] } }}
+									exit={instant ? undefined : { scale: 0.95, opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+								>
+									<span {...stylex.props(styles.attachmentLabel)}>
+										<Paperclip {...stylex.props(styles.fixedIcon)} size={12} />
+										{file.name}
+									</span>
+									<IconButton
+										size="small"
+										xstyle={styles.attachmentRemove}
+										label={`Remove ${file.name}`}
+										onClick={() => imageAttachments.remove(file.id)}
+									>
+										<X size={12} />
+									</IconButton>
+								</motion.div>
+							))}
+						</AnimatePresence>
 					</div>
 				) : null}
+				<AnimatePresence initial={false}>
+					{terminalSelectionOpen && terminalSelection?.text ? (
+						<motion.div
+							key="terminal-selection-preview"
+							initial={instant ? false : { height: 0, opacity: 0 }}
+							animate={{ height: "auto", opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] } }}
+							exit={instant ? undefined : { height: 0, opacity: 0, transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
+							style={{ overflow: "hidden" }}
+							className={`composer-terminal-selection ${stylex.props(styles.terminalSelection).className}`}
+							role="region"
+							aria-label="Selected terminal text"
+						>
+							<div {...stylex.props(styles.terminalHeading)}>
+								<TerminalWindow size={14} aria-hidden="true" />
+								<strong {...stylex.props(styles.terminalHeadingLabel)}>{terminalSelection.label}</strong>
+								{terminalSelection.truncated ? (
+									<small {...stylex.props(styles.terminalTruncated)}>start truncated</small>
+								) : null}
+							</div>
+							<pre {...stylex.props(styles.terminalText)}>{terminalSelection.text}</pre>
+						</motion.div>
+					) : null}
+				</AnimatePresence>
 				<div {...stylex.props(styles.input)}>
 					<textarea
 						{...stylex.props(styles.textarea)}
@@ -1179,14 +1236,38 @@ export const Composer = memo(function Composer({
 								else void dictation.start();
 							}}
 						>
-							{dictation.state === "recording" ? (
-								<Square size={10} fill="currentColor" />
-							) : dictation.state === "connecting" ||
-								dictation.state === "transcribing" ? (
-								<CircleNotch {...stylex.props(styles.spinning)} size={15} />
-							) : (
-								<Microphone size={15} />
-							)}
+							<AnimatePresence mode="popLayout" initial={false}>
+								<motion.span
+									key={dictation.state}
+									initial={instant ? false : { scale: 0.8, opacity: 0, filter: "blur(2px)" }}
+									animate={{
+										scale: 1,
+										opacity: 1,
+										filter: "blur(0px)",
+										transition: instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] },
+									}}
+									exit={
+										instant
+											? undefined
+											: {
+													scale: 0.8,
+													opacity: 0,
+													filter: "blur(2px)",
+													transition: { duration: 0.12, ease: [0.2, 0, 0, 1] },
+												}
+									}
+									style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+								>
+									{dictation.state === "recording" ? (
+										<Square size={10} fill="currentColor" />
+									) : dictation.state === "connecting" ||
+										dictation.state === "transcribing" ? (
+										<CircleNotch {...stylex.props(styles.spinning)} size={15} />
+									) : (
+										<Microphone size={15} />
+									)}
+								</motion.span>
+							</AnimatePresence>
 						</button>
 						{dictation.state === "recording" ? (
 							<button

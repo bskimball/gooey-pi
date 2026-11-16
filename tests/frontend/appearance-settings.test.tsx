@@ -46,12 +46,12 @@ describe('AppearanceSettings', () => {
     expect(container.querySelector('h1')?.textContent).toBe('外观')
     expect(container.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('界面文本大小')
     expect(container.textContent).toContain('支持 2 种语言')
-    const locale = container.querySelector<HTMLSelectElement>('select')!
-    expect([...locale.options].map((option) => option.textContent)).toEqual(['跟随系统', '英语', '简体中文'])
-    act(() => {
-      locale.value = 'en'
-      locale.dispatchEvent(new Event('change', { bubbles: true }))
-    })
+    const locale = container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="界面语言"]')!
+    const listbox = container.querySelector<HTMLElement>(`#${CSS.escape(locale.getAttribute('aria-controls')!)}`)!
+    const localeOptions = [...listbox.querySelectorAll<HTMLElement>('[role="option"]')]
+    expect(localeOptions.map((option) => option.textContent?.trim())).toEqual(['跟随系统', '英语', '简体中文'])
+    act(() => { locale.click() })
+    act(() => { localeOptions.find((option) => option.textContent?.includes('英语'))!.click() })
     expect(update).toHaveBeenCalledWith({ locale: 'en' })
   })
 

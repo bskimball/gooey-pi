@@ -4,14 +4,37 @@ import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { isSessionRunning } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
+import { motion, useReducedMotion } from 'motion/react'
 import { StatusMark } from './activity/StatusMark'
 
+const dotStyles = stylex.create({
+  workingDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--apex)',
+  },
+})
+
+/** Small pulsing dot for live work; static under reduced motion. Decorative: callers carry the label. */
+export function WorkingDot() {
+  const reduceMotion = useReducedMotion()
+  return (
+    <motion.span
+      {...stylex.props(dotStyles.workingDot)}
+      aria-hidden="true"
+      animate={reduceMotion ? undefined : { opacity: [1, 0.35, 1], scale: [1, 0.8, 1] }}
+      transition={reduceMotion ? undefined : { duration: 1.4, ease: 'easeInOut', repeat: Infinity }}
+    />
+  )
+}
+
 /**
- * Trailing status for a session row: a crest while running, a crossed crest for a failure that still needs review,
+ * Trailing status for a session row: a pulsing dot while running, a crossed crest for a failure that still needs review,
  * and an amber dot for anything waiting on the user. The wrapper always takes its slot so titles never shift.
  */
 export function SessionStatusGlyph({ session, attention, live }: { session: SessionRecord; attention: boolean; live?: SessionLive }) {
-  const mark = isSessionRunning(session, live) ? <StatusMark state="running" size={14} />
+  const mark = isSessionRunning(session, live) ? <WorkingDot />
     : session.status === 'failed' && attention ? <StatusMark state="failed" size={14} />
       : attention || session.status === 'waiting' ? <span className={`session-row__dot ${stylex.props(sidebarStyles.sessionRowDot).className ?? ""}`} />
         : null

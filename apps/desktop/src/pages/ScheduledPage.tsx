@@ -30,6 +30,7 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, type FormEvent } from 'react'
 import { useMachine } from '@xstate/react'
 import type {
@@ -298,6 +299,9 @@ export function ScheduledPage({
   onCreate, onUpdate, onPause, onResume, onDelete, onRunNow, onPreview, onOpenSession,
 }: ScheduledPageProps) {
   const [snapshot, send, actor] = useMachine(scheduledPageMachine)
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const {
     filter, selectedId, editorMode, scheduleId, form, baseline, formError,
     preview, previewError, action, actionError, actionNotice,
@@ -475,7 +479,7 @@ export function ScheduledPage({
               {form.frequency !== 'advanced' ? <div className={`schedule-inline-fields ${stylex.props(pagesStyles.scheduleInlineFields).className ?? ""}`}>
                 <label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Every</span><input type="number" min="1" max="999" value={form.interval} onChange={(event) => updateForm({ interval: event.target.value })} /></label>
                 <span>{form.frequency === 'hourly' ? 'hour(s)' : form.frequency === 'daily' ? 'day(s)' : form.frequency === 'weekly' ? 'week(s)' : 'month(s)'}</span>
-              </div> : <label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>RRULE</span><textarea className={`schedule-rrule ${stylex.props(pagesStyles.scheduleRrule).className ?? ""}`} rows={3} spellCheck={false} value={form.advancedRrule} placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" onChange={(event) => updateForm({ advancedRrule: event.target.value })} /></label>}
+              </div> : <TextArea label="RRULE" containerClassName="field" containerXstyle={overlaysStyles.field} controlClassName={`schedule-rrule ${stylex.props(pagesStyles.scheduleRrule).className ?? ""}`} rows={3} hasSpellCheck={false} value={form.advancedRrule} placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" onChange={(value) => updateForm({ advancedRrule: value })} />}
               {form.frequency === 'weekly' ? <fieldset className={`weekday-fieldset ${stylex.props(pagesStyles.weekdayFieldset).className ?? ""}`}><legend>On days</legend><div className={`weekday-chips ${stylex.props(pagesStyles.weekdayChips).className ?? ""}`}>{WEEKDAYS.map((day) => { const active = form.weekdays.includes(day.value); return <label key={day.value} className={active ? 'is-active' : ''} title={day.long}><input type="checkbox" checked={active} onChange={() => updateForm({ weekdays: active ? form.weekdays.filter((value) => value !== day.value) : [...form.weekdays, day.value] })} /><span>{day.label}</span></label> })}</div></fieldset> : null}
             </> : null}
             <div className={`schedule-date-fields ${stylex.props(pagesStyles.scheduleDateFields, [responsiveStyles.scheduleDateFields, responsiveLayoutStyles.scheduleDateFields]).className ?? ""}`}>
@@ -489,8 +493,8 @@ export function ScheduledPage({
         <fieldset className={`schedule-fieldset schedule-fieldset--execution ${stylex.props(pagesStyles.scheduleFieldset, pagesStyles.scheduleFieldsetExecution).className ?? ""}`}>
           <legend><Gauge size={14} /> Execution</legend>
           <div className={`schedule-execution-grid ${stylex.props(pagesStyles.scheduleExecutionGrid, [responsiveStyles.scheduleExecutionGrid, responsiveLayoutStyles.scheduleExecutionGrid]).className ?? ""}`}>
-            <label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Model</span><select value={form.model} onChange={(event) => selectModel(event.target.value)}>{!form.model ? <option value="" disabled>No model available</option> : null}{form.model && !models.some((model) => model.key === form.model && model.enabled !== false && model.available) ? <option value={form.model}>{form.model} (unavailable)</option> : null}{availableModels.map((model) => <option key={model.key} value={model.key}>{model.name} · {model.provider}</option>)}</select></label>
-            <label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Reasoning</span><select value={form.thinking} onChange={(event) => updateForm({ thinking: event.target.value as ScheduleForm['thinking'] })}><option value="auto">Auto</option>{THINKING_LEVELS.filter((level) => !selectedModel || selectedModel.availableThinkingLevels.includes(level) || level === form.thinking).map((level) => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1)}</option>)}</select></label>
+            <div className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Model</span><SelectControl label="Model" value={form.model} onChange={(event) => selectModel(event.target.value)}>{!form.model ? <option value="" disabled>No model available</option> : null}{form.model && !models.some((model) => model.key === form.model && model.enabled !== false && model.available) ? <option value={form.model}>{`${form.model} (unavailable)`}</option> : null}{availableModels.map((model) => <option key={model.key} value={model.key}>{`${model.name} · ${model.provider}`}</option>)}</SelectControl></div>
+            <div className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Reasoning</span><SelectControl label="Reasoning" value={form.thinking} onChange={(event) => updateForm({ thinking: event.target.value as ScheduleForm['thinking'] })}><option value="auto">Auto</option>{THINKING_LEVELS.filter((level) => !selectedModel || selectedModel.availableThinkingLevels.includes(level) || level === form.thinking).map((level) => <option key={level} value={level}>{level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1)}</option>)}</SelectControl></div>
             <CheckboxInput
               className={[`schedule-fast-toggle ${selectedModel && !selectedModel.fastModeSupported ? 'is-disabled' : ''}`, stylex.props(pagesStyles.scheduleFastToggle, (selectedModel && !selectedModel.fastModeSupported) && pagesStyles.scheduleFastToggleIsDisabled, [responsiveStyles.scheduleFastToggle, responsiveLayoutStyles.scheduleFastToggle]).className].filter(Boolean).join(' ')}
               value={form.fast}
@@ -511,17 +515,17 @@ export function ScheduledPage({
     </Modal>
   ) : null
 
-  if (selected) {
+  const viewContent = selected ? (() => {
     const project = projectMap.get(selected.target.projectId)
     const targetSession = selected.target.kind === 'session' ? sessionMap.get(selected.target.sessionId) : undefined
     const recentRuns = [...selected.runs].sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)).slice(0, 8)
     const busy = rowRunning
     return (
-      <div className={`page scroll-area ${stylex.props(baseStyles.scrollArea, pagesStyles.page).className ?? ""}`}><div className={`page-container schedule-page schedule-page--detail ${stylex.props(pagesStyles.pageContainer, pagesStyles.schedulePage, pagesStyles.schedulePageDetail, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
+      <div className={`page-container schedule-page schedule-page--detail ${stylex.props(pagesStyles.pageContainer, pagesStyles.schedulePage, pagesStyles.schedulePageDetail, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
         <ApexButton variant="quiet" icon={<ArrowLeft size={15} />} onClick={() => send({ type: 'SELECT_SCHEDULE', id: null })}>All schedules</ApexButton>
         <header className={`schedule-detail__header ${stylex.props(pagesStyles.scheduleDetailHeader).className ?? ""}`}>
           <div className={[`schedule-detail__mark schedule-detail__mark--${needsAttention(selected) ? 'attention' : selected.status}`, stylex.props(pagesStyles.scheduleDetailMark, (needsAttention(selected) ? false : selected.status === "paused") && pagesStyles.scheduleDetailMarkPaused, (needsAttention(selected) ? false : selected.status === "completed") && pagesStyles.scheduleDetailMarkCompleted, needsAttention(selected) && pagesStyles.scheduleDetailMarkAttention, (needsAttention(selected) ? false : selected.status === "blocked") && pagesStyles.scheduleDetailMarkBlocked).className].filter(Boolean).join(' ')}>{statusIcon(selected, 18)}</div>
-          <div><span className={[`schedule-state schedule-state--${needsAttention(selected) ? 'attention' : selected.status}`, stylex.props(pagesStyles.scheduleState, (needsAttention(selected) ? false : selected.status === "paused") && pagesStyles.scheduleStatePaused, (needsAttention(selected) ? false : selected.status === "completed") && pagesStyles.scheduleStateCompleted, needsAttention(selected) && pagesStyles.scheduleStateAttention, (needsAttention(selected) ? false : selected.status === "blocked") && pagesStyles.scheduleStateBlocked).className].filter(Boolean).join(' ')}>{statusLabel(selected)}</span><h1>{selected.title}</h1><p>Revision {selected.revision} · Updated {formatRelative(selected.updatedAt)}</p></div>
+          <div><span className={[`schedule-state schedule-state--${needsAttention(selected) ? 'attention' : selected.status}`, stylex.props(pagesStyles.scheduleState, (needsAttention(selected) ? false : selected.status === "paused") && pagesStyles.scheduleStatePaused, (needsAttention(selected) ? false : selected.status === "completed") && pagesStyles.scheduleStateCompleted, needsAttention(selected) && pagesStyles.scheduleStateAttention, (needsAttention(selected) ? false : selected.status === "blocked") && pagesStyles.scheduleStateBlocked).className].filter(Boolean).join(' ')}>{statusLabel(selected)}</span><h1>{selected.title}</h1><p className={stylex.props(pagesStyles.tabularNums).className}>Revision {selected.revision} · Updated {formatRelative(selected.updatedAt)}</p></div>
         </header>
         <div className={`schedule-detail__actions ${stylex.props(pagesStyles.scheduleDetailActions, [responsiveStyles.scheduleDetailActions, responsiveLayoutStyles.scheduleDetailActions]).className ?? ""}`} aria-label="Schedule actions">
           <ApexButton variant="primary" disabled={busy || selected.status === 'completed'} icon={<Play size={13} />} onClick={() => void perform(`run:${selected.id}`, () => onRunNow(selected.id), 'Run queued.')}>{action === `run:${selected.id}` ? 'Queuing…' : 'Run now'}</ApexButton>
@@ -537,36 +541,33 @@ export function ScheduledPage({
         <div className={`schedule-detail__grid ${stylex.props(pagesStyles.scheduleDetailGrid, [responsiveStyles.scheduleDetailGrid, responsiveLayoutStyles.scheduleEditorGrid]).className ?? ""}`}>
           <section className={`schedule-detail__card schedule-detail__card--prompt ${stylex.props(pagesStyles.scheduleDetailCard, [responsiveStyles.scheduleDetailCard, responsiveLayoutStyles.scheduleDetailCard]).className ?? ""}`}><span className={`schedule-detail__eyebrow ${stylex.props(pagesStyles.scheduleDetailEyebrow).className ?? ""}`}>Instruction</span><p>{selected.prompt}</p></section>
           <section className={`schedule-detail__card ${stylex.props(pagesStyles.scheduleDetailCard, [responsiveStyles.scheduleDetailCard, responsiveLayoutStyles.scheduleDetailCard]).className ?? ""}`}><span className={`schedule-detail__eyebrow ${stylex.props(pagesStyles.scheduleDetailEyebrow).className ?? ""}`}>Delivery</span><dl><div><dt>Target</dt><dd>{targetSession?.title ?? project?.name ?? 'Unavailable target'}</dd></div><div><dt>Mode</dt><dd>{selected.target.kind === 'session' ? 'Existing session' : 'New session'}</dd></div><div><dt>Created by</dt><dd>{selected.createdBy}</dd></div></dl></section>
-          <section className={`schedule-detail__card ${stylex.props(pagesStyles.scheduleDetailCard, [responsiveStyles.scheduleDetailCard, responsiveLayoutStyles.scheduleDetailCard]).className ?? ""}`}><span className={`schedule-detail__eyebrow ${stylex.props(pagesStyles.scheduleDetailEyebrow).className ?? ""}`}>Cadence</span><dl><div><dt>Timing</dt><dd>{timingLabel(selected.timing)}</dd></div><div><dt>Next run</dt><dd>{selected.nextRunAt ? `${formatDateTime(selected.nextRunAt)} · ${formatRelative(selected.nextRunAt)}` : 'None scheduled'}</dd></div>{selected.timing.kind === 'rrule' ? <div><dt>Rule</dt><dd><code>{selected.timing.rrule}</code></dd></div> : null}</dl></section>
+          <section className={`schedule-detail__card ${stylex.props(pagesStyles.scheduleDetailCard, [responsiveStyles.scheduleDetailCard, responsiveLayoutStyles.scheduleDetailCard]).className ?? ""}`}><span className={`schedule-detail__eyebrow ${stylex.props(pagesStyles.scheduleDetailEyebrow).className ?? ""}`}>Cadence</span><dl><div><dt>Timing</dt><dd>{timingLabel(selected.timing)}</dd></div><div><dt>Next run</dt><dd className={stylex.props(pagesStyles.tabularNums).className}>{selected.nextRunAt ? `${formatDateTime(selected.nextRunAt)} · ${formatRelative(selected.nextRunAt)}` : 'None scheduled'}</dd></div>{selected.timing.kind === 'rrule' ? <div><dt>Rule</dt><dd><code>{selected.timing.rrule}</code></dd></div> : null}</dl></section>
           <section className={`schedule-detail__card ${stylex.props(pagesStyles.scheduleDetailCard, [responsiveStyles.scheduleDetailCard, responsiveLayoutStyles.scheduleDetailCard]).className ?? ""}`}><span className={`schedule-detail__eyebrow ${stylex.props(pagesStyles.scheduleDetailEyebrow).className ?? ""}`}>Execution</span><dl><div><dt>Model</dt><dd>{models.find((model) => model.key === selected.execution.model)?.name ?? selected.execution.model}</dd></div><div><dt>Reasoning</dt><dd>{selected.execution.thinking}</dd></div><div><dt>Speed</dt><dd>{selected.execution.speed}</dd></div></dl></section>
         </div>
 
         <section className={`schedule-history ${stylex.props(pagesStyles.scheduleHistory).className ?? ""}`}>
-          <header><div><ClockCounterClockwise size={15} /><h2>Run history</h2></div><span>{selected.runs.length} total · latest 8</span></header>
+          <header><div><ClockCounterClockwise size={15} /><h2>Run history</h2></div><span className={stylex.props(pagesStyles.tabularNums).className}>{selected.runs.length} total · latest 8</span></header>
           {recentRuns.length ? <div className={`schedule-history__list ${stylex.props(pagesStyles.scheduleHistoryList).className ?? ""}`}>{recentRuns.map((run) => {
             const runSession = run.sessionId ? sessionMap.get(run.sessionId) : undefined
             return <article key={run.id} className={[`schedule-run schedule-run--${run.status}`, stylex.props(pagesStyles.scheduleRun, [responsiveStyles.scheduleRun, responsiveLayoutStyles.scheduleRun]).className].filter(Boolean).join(' ')}>
               <div className={`schedule-run__icon ${stylex.props(pagesStyles.scheduleRunIcon).className ?? ""}`}>{runIcon(run.status)}</div>
               <div className={`schedule-run__main ${stylex.props(pagesStyles.scheduleRunMain).className ?? ""}`}><div><strong>{run.status}</strong><span>{run.trigger}</span></div><p>{run.error ?? `Scheduled for ${formatRunDate(run.scheduledFor)}`}</p></div>
-              <time dateTime={run.queuedAt}>{formatRunDate(run.finishedAt ?? run.startedAt ?? run.queuedAt)}</time>
-              {run.sessionFile ? <button type="button" className={`schedule-session-link ${stylex.props(pagesStyles.scheduleSessionLink, [responsiveStyles.scheduleSessionLink, responsiveLayoutStyles.scheduleSessionLink]).className ?? ""}`} onClick={() => onOpenSession(run.sessionFile!)}>Open {runSession?.title ?? 'session'} <CaretRight size={13} /></button> : <span className={`schedule-run__no-session ${stylex.props(pagesStyles.scheduleRunNoSession, responsiveStyles.scheduleRunNoSession).className ?? ""}`}>No session</span>}
+              <time className={stylex.props(pagesStyles.tabularNums).className} dateTime={run.queuedAt}>{formatRunDate(run.finishedAt ?? run.startedAt ?? run.queuedAt)}</time>
+              {run.sessionFile ? <ApexButton variant="quiet" compact endIcon={<CaretRight size={13} />} className={`schedule-session-link ${stylex.props(pagesStyles.scheduleSessionLink, [responsiveStyles.scheduleSessionLink, responsiveLayoutStyles.scheduleSessionLink]).className ?? ""}`} onClick={() => onOpenSession(run.sessionFile!)}>{`Open ${runSession?.title ?? 'session'}`}</ApexButton> : <span className={`schedule-run__no-session ${stylex.props(pagesStyles.scheduleRunNoSession, responsiveStyles.scheduleRunNoSession).className ?? ""}`}>No session</span>}
             </article>
           })}</div> : <div className={`schedule-history__empty ${stylex.props(pagesStyles.scheduleHistoryEmpty).className ?? ""}`}><ClockCounterClockwise size={20} /><p>No runs yet. Run it now or wait for the first occurrence.</p></div>}
         </section>
-        {editorModal}
-      </div></div>
+      </div>
     )
-  }
-
-  return (
-    <div className={`page scroll-area ${stylex.props(baseStyles.scrollArea, pagesStyles.page).className ?? ""}`}><div className={`page-container schedule-page ${stylex.props(pagesStyles.pageContainer, pagesStyles.schedulePage, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
-      <header className={`page-header schedule-page__header ${stylex.props(pagesStyles.pageHeader, pagesStyles.schedulePageHeader, [responsiveStyles.pageHeader, responsiveLayoutStyles.pageHeaderSchedulePageHeader]).className ?? ""}`}><div><span className={`schedule-page__kicker ${stylex.props(pagesStyles.schedulePageKicker).className ?? ""}`}><span /> Automation desk</span><h1>Scheduled</h1><p>Unattended {HARNESS_SHORT_NAMES[harness]} work, with every run accounted for.</p></div><ApexButton variant="primary" icon={<Plus size={14} />} onClick={openCreate}>New schedule</ApexButton></header>
-      <div className={`schedule-ledger-summary ${stylex.props(pagesStyles.scheduleLedgerSummary, [responsiveStyles.scheduleLedgerSummary, responsiveLayoutStyles.scheduleLedgerSummary]).className ?? ""}`} aria-label="Schedule summary">
+  })() : (
+    <div className={`page-container schedule-page ${stylex.props(pagesStyles.pageContainer, pagesStyles.schedulePage, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
+      <header className={`page-header schedule-page__header ${stylex.props(pagesStyles.pageHeader, pagesStyles.schedulePageHeader, [responsiveStyles.pageHeader, responsiveLayoutStyles.pageHeaderSchedulePageHeader]).className ?? ""}`}><div><span className={`schedule-page__kicker ${stylex.props(pagesStyles.schedulePageKicker).className ?? ""}`}><span /> Automation desk</span><h1>Scheduled</h1><p className={stylex.props(pagesStyles.prettyText).className}>Unattended {HARNESS_SHORT_NAMES[harness]} work, with every run accounted for.</p></div><ApexButton variant="primary" icon={<Plus size={14} />} onClick={openCreate}>New schedule</ApexButton></header>
+      <div className={`schedule-ledger-summary ${stylex.props(pagesStyles.scheduleLedgerSummary, pagesStyles.tabularNums, [responsiveStyles.scheduleLedgerSummary, responsiveLayoutStyles.scheduleLedgerSummary]).className ?? ""}`} aria-label="Schedule summary">
         <span><i className="is-active" /> <strong>{counts.active}</strong> active</span>
         <span><i className="is-paused" /> <strong>{counts.paused}</strong> paused</span>
         <span><i className="is-attention" /> <strong>{counts.attention}</strong> need attention</span>
       </div>
-      <div className={`page-tools schedule-tools ${stylex.props(pagesStyles.pageTools, pagesStyles.scheduleTools, [responsiveStyles.pageTools, responsiveLayoutStyles.directoryTools]).className ?? ""}`}><Segmented value={filter} label="Schedule filter" onChange={(value) => send({ type: 'SET_FILTER', filter: value as ScheduleFilter })} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'attention', label: 'Needs attention' }, { value: 'all', label: 'All' }]} /><span>{visible.length} {visible.length === 1 ? 'schedule' : 'schedules'}</span></div>
+      <div className={`page-tools schedule-tools ${stylex.props(pagesStyles.pageTools, pagesStyles.scheduleTools, [responsiveStyles.pageTools, responsiveLayoutStyles.directoryTools]).className ?? ""}`}><Segmented value={filter} label="Schedule filter" onChange={(value) => send({ type: 'SET_FILTER', filter: value as ScheduleFilter })} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'attention', label: 'Needs attention' }, { value: 'all', label: 'All' }]} /><span className={stylex.props(pagesStyles.tabularNums).className}>{visible.length} {visible.length === 1 ? 'schedule' : 'schedules'}</span></div>
       {error ? <Banner xstyle={[inspectorStyles.pageInlineError]} status="error" role="alert" className="page-inline-error" title={`Schedule catalog unavailable: ${error}`} /> : null}
       {actionError ? <Banner xstyle={[inspectorStyles.pageInlineError]} status="error" role="alert" className="page-inline-error" title={actionError} /> : null}
       {visible.length ? <div className={`schedule-ledger ${stylex.props(pagesStyles.scheduleLedger).className ?? ""}`}>{visible.map((item) => {
@@ -575,11 +576,27 @@ export function ScheduledPage({
         return <button type="button" key={item.id} className={`schedule-row ${stylex.props(pagesStyles.scheduleRow, [responsiveStyles.scheduleRow, responsiveLayoutStyles.scheduleRow]).className ?? ""}`} onClick={() => send({ type: 'SELECT_SCHEDULE', id: item.id })} aria-label={`Open ${item.title}`}>
           <span className={[`schedule-row__status schedule-row__status--${needsAttention(item) ? 'attention' : item.status}`, stylex.props(pagesStyles.scheduleRowStatus, (needsAttention(item) ? false : item.status === "paused") && pagesStyles.scheduleRowStatusPaused, (needsAttention(item) ? false : item.status === "completed") && pagesStyles.scheduleRowStatusCompleted, needsAttention(item) && pagesStyles.scheduleRowStatusAttention, [responsiveStyles.scheduleRowStatus, responsiveLayoutStyles.scheduleRowStatus]).className].filter(Boolean).join(' ')}>{statusIcon(item)}</span>
           <span className={`schedule-row__main ${stylex.props(pagesStyles.scheduleRowMain).className ?? ""}`}><span><strong>{item.title}</strong><i className={[`schedule-state schedule-state--${needsAttention(item) ? 'attention' : item.status}`, stylex.props(pagesStyles.scheduleState, (needsAttention(item) ? false : item.status === "paused") && pagesStyles.scheduleStatePaused, (needsAttention(item) ? false : item.status === "completed") && pagesStyles.scheduleStateCompleted, needsAttention(item) && pagesStyles.scheduleStateAttention, (needsAttention(item) ? false : item.status === "blocked") && pagesStyles.scheduleStateBlocked).className].filter(Boolean).join(' ')}>{statusLabel(item)}</i></span><small>{item.prompt}</small><span className={`schedule-row__tags ${stylex.props(pagesStyles.scheduleRowTags).className ?? ""}`}><span><Kanban size={11} />{targetSession?.title ?? project?.name ?? 'Unavailable target'}</span><span><Repeat size={11} />{timingLabel(item.timing)}</span><span><Gauge size={11} />{models.find((model) => model.key === item.execution.model)?.name ?? item.execution.model}</span></span></span>
-          <span className={`schedule-row__next ${stylex.props(pagesStyles.scheduleRowNext, [responsiveStyles.scheduleRowNext, responsiveLayoutStyles.scheduleRowNext]).className ?? ""}`}><small>Next</small><strong>{item.nextRunAt ? formatDateTime(item.nextRunAt) : '—'}</strong><span>{item.nextRunAt ? formatRelative(item.nextRunAt) : 'No future run'}</span></span>
+          <span className={`schedule-row__next ${stylex.props(pagesStyles.scheduleRowNext, pagesStyles.tabularNums, [responsiveStyles.scheduleRowNext, responsiveLayoutStyles.scheduleRowNext]).className ?? ""}`}><small>Next</small><strong>{item.nextRunAt ? formatDateTime(item.nextRunAt) : '—'}</strong><span>{item.nextRunAt ? formatRelative(item.nextRunAt) : 'No future run'}</span></span>
           <CaretRight className={`schedule-row__chevron ${stylex.props(pagesStyles.scheduleRowChevron, responsiveStyles.scheduleRowChevron).className ?? ""}`} size={16} />
         </button>
       })}</div> : <EmptyState icon={<CalendarDots size={24} />} title={filter === 'all' ? 'No scheduled work' : `No ${filter === 'attention' ? 'schedules need attention' : `${filter} schedules`}`} action={schedules.length ? undefined : <ApexButton variant="primary" icon={<Plus size={13} />} onClick={openCreate}>Create schedule</ApexButton>}>{schedules.length ? 'Choose another filter to see the rest of your automation ledger.' : `Create a schedule and ${HARNESS_SHORT_NAMES[harness]} will bring every result back here.`}</EmptyState>}
+    </div>
+  )
+
+  return (
+    <div className={`page scroll-area ${stylex.props(baseStyles.scrollArea, pagesStyles.page).className ?? ""}`}>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={selected ? `detail:${selected.id}` : 'ledger'}
+          initial={instant ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={instant ? undefined : { opacity: 0, y: -2 }}
+          transition={{ duration: instant ? 0 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+        >
+          {viewContent}
+        </motion.div>
+      </AnimatePresence>
       {editorModal}
-    </div></div>
+    </div>
   )
 }

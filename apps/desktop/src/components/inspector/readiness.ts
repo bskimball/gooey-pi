@@ -62,9 +62,9 @@ function observeCheck(previous: SnapshotFrom<typeof checkMachine> | undefined, o
 
 const SHELL_TOOLS = new Set(['bash', 'powershell'])
 const FILE_MUTATING_TOOLS = new Set(['edit', 'write', 'apply_patch', 'multi_edit'])
-const TASK_TOOLS = new Set(['task', 'task_start', 'task_wait', 'task_status', 'task_send', 'task_chain'])
-const VERDICT_TOOLS = new Set(['task', 'task_wait', 'task_status'])
-const RELEVANT_TOOLS = new Set([...SHELL_TOOLS, ...FILE_MUTATING_TOOLS, ...TASK_TOOLS])
+const TASK_TOOLS = new Set(['task', 'task_start', 'task_wait', 'task_status', 'task_send', 'task_chain', 'async task settled', 'async-task-settled'])
+const VERDICT_TOOLS = new Set(['task', 'task_wait', 'task_status', 'async task settled', 'async-task-settled'])
+const RELEVANT_TOOLS = new Set([...SHELL_TOOLS, ...FILE_MUTATING_TOOLS, ...TASK_TOOLS, 'codemode'])
 const REVIEW_AGENTS: readonly string[] = ['oracle', 'inspector']
 const WRITER_AGENTS = new Set(['machinist', 'artisan', 'stevedore', 'scribe', 'picasso'])
 const VERDICT = /^(?:outcome|verdict)\s*[:-]\s*(BLOCK|BLOCKED|PASS|ADVISORY|FAIL)\b/im
@@ -73,11 +73,11 @@ const RECEIPT = /\b(?:started|reused)\s+task_\d+\b|^\s*(?:lifecycle|status|state
 const CHECK_KINDS: readonly CheckKind[] = ['test', 'lint', 'typecheck', 'build', 'format']
 const RUNNER = '(?:npm|pnpm|yarn|bun)'
 const CHECK_PATTERNS: Record<CheckKind, RegExp> = {
-  test: new RegExp(`^(?:vitest|jest|pytest|playwright test|bun test|go test|cargo test|${RUNNER}(?: run)? test)(?![\\w-])`),
-  lint: new RegExp(`^(?:oxlint|eslint|ruff|golangci-lint|${RUNNER} run lint)(?![\\w-])`),
-  typecheck: new RegExp(`^(?:tsc|pyright|mypy|${RUNNER} run typecheck)(?![\\w-])`),
-  build: new RegExp(`^(?:vite build|electron-vite build|cargo build|go build|${RUNNER} run build)(?![\\w-])`),
-  format: new RegExp(`^(?:(?:oxfmt|prettier)\\b.*--check|${RUNNER} run format:check)(?![\\w-])`),
+  test: new RegExp(`^(?:vitest|jest|pytest|playwright test|bun test|go test|cargo test|node --test|${RUNNER}(?: run)? test(?::[\\w:-]+)?)(?![\\w-])`),
+  lint: new RegExp(`^(?:oxlint|eslint|ruff|golangci-lint|biome (?:lint|check)|${RUNNER}(?: run)? lint(?::[\\w:-]+)?|${RUNNER} run check)(?![\\w-])`),
+  typecheck: new RegExp(`^(?:tsc|vue-tsc|svelte-check|pyright|mypy|${RUNNER}(?: run)? typecheck(?::[\\w:-]+)?)(?![\\w-])`),
+  build: new RegExp(`^(?:vite build|electron-vite build|cargo build|go build|${RUNNER}(?: run)? build(?::[\\w:-]+)?)(?![\\w-])`),
+  format: new RegExp(`^(?:(?:oxfmt|prettier)\\b.*(?:\\s|^)(?:--check|-c)|biome format\\b.*(?:\\s|^)--check|${RUNNER} run format(?::check|:[\\w:-]*check[\\w:-]*))(?![\\w-])`),
 }
 const READ_ONLY_COMMANDS = new Set(['cd', 'pushd', 'popd', 'ls', 'dir', 'cat', 'type', 'head', 'tail', 'grep', 'rg', 'find', 'pwd', 'echo', 'printf', 'wc', 'which', 'where', 'true', ':', 'sleep'])
 const READ_ONLY_GIT = new Set(['status', 'diff', 'log', 'show', 'rev-parse'])
@@ -119,7 +119,11 @@ function parseCommand(command: string): { simple: SimpleCommand[]; opaque: boole
   const pieces = stripped.split(/(&&|\|\||;|\||\r?\n)/)
   const simple: SimpleCommand[] = []
   for (let i = 0; i < pieces.length; i += 2) {
-    const words = pieces[i].trim().split(/\s+/).filter(Boolean)
+    const words = pieces[i]
+      .trim()
+      .split(/\s+/)
+      .map((word) => (word.includes('$(') ? word : word.replace(/^\(+|\)+$/g, '')))
+      .filter(Boolean)
     if (words.length) simple.push({ words, next: pieces[i + 1], previous: pieces[i - 1] })
   }
   return {
@@ -143,8 +147,14 @@ function invocation(words: readonly string[]): string[] {
       while (rest[0]?.startsWith('-')) rest = rest.slice(1)
       continue
     }
-    if (PACKAGE_MANAGERS.has(first) && ['exec', 'x', 'dlx'].includes(rest[1])) { rest = rest.slice(2); continue }
-    if (/^(?:python3?|py)$/.test(first) && rest[1] === '-m') { rest = rest.slice(2); continue }
+    if (PACKAGE_MANAGERS.has(first) && ['exec', 'x', 'dlx'].includes(rest[1])) {
+      rest = rest.slice(2)
+      continue
+    }
+    if (/^(?:python3?|py)$/.test(first) && rest[1] === '-m') {
+      rest = rest.slice(2)
+      continue
+    }
     return rest
   }
 }
@@ -177,13 +187,65 @@ export function isReadinessPart(part: MessagePart): boolean {
   return false
 }
 
-function findResult(parts: readonly MessagePart[], startIndex: number, name: string): { part: ToolResultPart; index: number } | undefined {
-  for (let cursor = startIndex + 1; cursor < parts.length; cursor += 1) {
-    const candidate = parts[cursor]
-    if (candidate.type === 'toolCall' && toolName(candidate.name) === name) return undefined
-    if (candidate.type === 'toolResult' && (candidate.name === undefined || toolName(candidate.name) === name)) return { part: candidate, index: cursor }
+function pairResults(parts: readonly MessagePart[]): Map<number, { part: ToolResultPart; index: number }> {
+  const paired = new Map<number, { part: ToolResultPart; index: number }>()
+  const runs = new Map<string, { openCalls: number[]; results: { part: ToolResultPart; index: number }[] }>()
+  const pendingOrder: string[] = []
+
+  const getRun = (name: string) => {
+    let run = runs.get(name)
+    if (!run) {
+      run = { openCalls: [], results: [] }
+      runs.set(name, run)
+    }
+    return run
   }
-  return undefined
+
+  const flush = (name: string, hasLaterCall: boolean) => {
+    const run = runs.get(name)
+    if (!run) return
+    const { openCalls, results } = run
+    const m = openCalls.length
+    const n = results.length
+    if (m > 0 && n > 0) {
+      if (n >= m || !hasLaterCall) {
+        const count = Math.min(m, n)
+        for (let i = 0; i < count; i += 1) paired.set(openCalls[i], results[i])
+      } else {
+        for (let i = 0; i < n; i += 1) paired.set(openCalls[m - n + i], results[i])
+      }
+    }
+    run.openCalls = []
+    run.results = []
+  }
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]
+    if (part.type === 'toolCall') {
+      const name = toolName(part.name) ?? ''
+      const run = getRun(name)
+      if (run.results.length > 0) flush(name, true)
+      run.openCalls.push(index)
+      pendingOrder.push(name)
+    } else if (part.type === 'toolResult') {
+      const explicitName = toolName(part.name)
+      let targetName = explicitName
+      if (targetName === undefined) {
+        const pendingIdx = pendingOrder.findIndex((candidate) => {
+          const run = runs.get(candidate)
+          return run !== undefined && run.results.length < run.openCalls.length
+        })
+        if (pendingIdx !== -1) targetName = pendingOrder.splice(pendingIdx, 1)[0]
+      } else {
+        const pendingIdx = pendingOrder.indexOf(targetName)
+        if (pendingIdx !== -1) pendingOrder.splice(pendingIdx, 1)
+      }
+      if (targetName !== undefined) getRun(targetName).results.push({ part, index })
+    }
+  }
+
+  for (const name of runs.keys()) flush(name, false)
+  return paired
 }
 
 function exitCodes(result: ToolResultPart): number[] {
@@ -200,7 +262,6 @@ function exitCodes(result: ToolResultPart): number[] {
  */
 function checkOutcomes(command: string, result: ToolResultPart | undefined): Map<CheckKind, CheckOutcome> {
   const { simple, opaque, redirects } = parseCommand(command)
-  const maskable = opaque || simple.some(({ next, previous }) => next === '||' || next === '|' || previous === '|' || previous === '||')
   const outcomes = new Map<CheckKind, CheckOutcome>()
   simple.forEach(({ words }, position) => {
     const kinds = checkKindsOf(words)
@@ -209,22 +270,49 @@ function checkOutcomes(command: string, result: ToolResultPart | undefined): Map
     if (!result || result.streaming) outcome = 'running'
     else if (result.isError || exitCodes(result).some((code) => code !== 0)) outcome = 'failed'
     else {
+      const masked = opaque || simple.slice(position).some(({ next }) => next === '||' || next === '|')
       const chainedWithAnd = simple.slice(position, -1).every(({ next }) => next === '&&')
       const onlyChecksFollow = simple.slice(position + 1).every((later) => checkKindsOf(later.words).length > 0 && isReadOnly(later.words))
-      outcome = !maskable && !redirects && chainedWithAnd && onlyChecksFollow ? 'passed' : 'unknown'
+      outcome = !masked && !redirects && chainedWithAnd && onlyChecksFollow ? 'passed' : 'unknown'
     }
     for (const kind of kinds) outcomes.set(kind, outcome)
   })
   return outcomes
 }
 
-export function extractReadiness(messages: TranscriptMessage[]): Readiness {
-  return readinessFromParts(messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []))
+function extractCodemodeCommands(code: string): string[] {
+  const commands: string[] = []
+  const pattern = /\btools\.(?:bash|powershell)\s*\(\s*\{[^}]*?\bcommand\s*:\s*(?:'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|`((?:\\.|[^`$\\])*)`)/gs
+  for (const match of code.matchAll(pattern)) {
+    const raw = match[1] ?? match[2] ?? match[3]
+    if (raw !== undefined) commands.push(raw.replace(/\\(['"`\\])/g, '$1'))
+  }
+  return commands
 }
 
-function agentsOf(args: Record<string, unknown> | undefined, workerAgents: ReadonlyMap<string, string>): string[] {
+export function extractReadiness(messages: TranscriptMessage[]): Readiness {
+  return readinessFromParts(messages.flatMap((message) => (Array.isArray(message.parts) ? message.parts : [])))
+}
+
+function settledWorkerIds(name: string, result: ToolResultPart | undefined): string[] {
+  if (!result) return []
+  if (name === 'async task settled' || name === 'async-task-settled') {
+    return [...result.text.matchAll(/^(task_\d+):\s*settled\b/gm)].map((match) => match[1])
+  }
+  const detailsWorker = result.details && typeof result.details === 'object' ? (result.details as { worker?: { id?: unknown } }).worker?.id : undefined
+  if (typeof detailsWorker === 'string') return [detailsWorker]
+  const matched = /^(task_\d+)\b/m.exec(result.text)?.[1]
+  return matched ? [matched] : []
+}
+
+function agentsOf(name: string, args: Record<string, unknown> | undefined, workerAgents: ReadonlyMap<string, string>, result: ToolResultPart | undefined): string[] {
   if (typeof args?.agent === 'string') return [args.agent.toLowerCase()]
   if (typeof args?.id === 'string') return [workerAgents.get(args.id)].filter((agent): agent is string => agent !== undefined)
+  if (Array.isArray(args?.ids) || name === 'async task settled' || name === 'async-task-settled') {
+    return settledWorkerIds(name, result)
+      .map((id) => workerAgents.get(id))
+      .filter((agent): agent is string => agent !== undefined)
+  }
   if (!Array.isArray(args?.steps)) return []
   return args.steps.flatMap((step: unknown) => {
     const agent = step && typeof step === 'object' ? (step as Record<string, unknown>).agent : undefined
@@ -233,10 +321,21 @@ function agentsOf(args: Record<string, unknown> | undefined, workerAgents: Reado
 }
 
 function readinessFromParts(parts: readonly MessagePart[]): Readiness {
+  const pairedResults = pairResults(parts)
   const changeIndexes: number[] = []
   const latestChecks = new Map<CheckKind, { state: SnapshotFrom<typeof checkMachine>; index: number }>()
   const latestReviews = new Map<ReviewAgent, { verdict: string; index: number }>()
   const workerAgents = new Map<string, string>()
+
+  const applyCommand = (command: string, result: ToolResultPart | undefined, index: number) => {
+    for (const [kind, outcome] of checkOutcomes(command, result)) {
+      const previous = latestChecks.get(kind)
+      const state = observeCheck(previous?.state, outcome)
+      // A suppressed run keeps the failure's position, so later changes still count against it.
+      if (state.value === outcome) latestChecks.set(kind, { state, index })
+    }
+    if (mayChangeWorkspace(command)) changeIndexes.push(index)
+  }
 
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index]
@@ -246,21 +345,17 @@ function readinessFromParts(parts: readonly MessagePart[]): Readiness {
     if (FILE_MUTATING_TOOLS.has(name)) {
       changeIndexes.push(index)
     } else if (SHELL_TOOLS.has(name) && typeof args?.command === 'string') {
-      const found = findResult(parts, index, name)
-      for (const [kind, outcome] of checkOutcomes(args.command, found?.part)) {
-        const previous = latestChecks.get(kind)
-        const state = observeCheck(previous?.state, outcome)
-        // A suppressed run keeps the failure's position, so later changes still count against it.
-        if (state.value === outcome) latestChecks.set(kind, { state, index })
-      }
-      if (mayChangeWorkspace(args.command)) changeIndexes.push(index)
+      applyCommand(args.command, pairedResults.get(index)?.part, index)
+    } else if (name === 'codemode' && typeof args?.code === 'string') {
+      const found = pairedResults.get(index)
+      for (const command of extractCodemodeCommands(args.code)) applyCommand(command, found?.part, index)
     } else if (TASK_TOOLS.has(name)) {
-      const found = findResult(parts, index, name)
+      const found = pairedResults.get(index)
       if (name === 'task_start' && typeof args?.agent === 'string') {
         const started = found ? /\b(?:started|reused)\s+(task_\d+)\b/i.exec(found.part.text)?.[1] : undefined
         if (started) workerAgents.set(started, args.agent.toLowerCase())
       }
-      const agents = agentsOf(args, workerAgents)
+      const agents = agentsOf(name, args, workerAgents, found?.part)
       if (agents.some((agent) => WRITER_AGENTS.has(agent))) changeIndexes.push(found?.index ?? index)
       const agent = agents[0]
       if (VERDICT_TOOLS.has(name) && agent && REVIEW_AGENTS.includes(agent) && found && !found.part.streaming && !RECEIPT.test(found.part.text)) {

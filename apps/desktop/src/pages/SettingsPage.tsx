@@ -7,6 +7,7 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import * as stylex from '@stylexjs/stylex'
 import { ArrowLeft, CaretRight, Cube, Info, LockKey, PawPrint, Robot, SlidersHorizontal, Sun, Terminal, Waveform } from '@/components/icons'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState, type ComponentType } from 'react'
 import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
@@ -26,7 +27,21 @@ import { TerminalSettings } from './settings/TerminalSettings'
 import { VoiceSettings } from './settings/VoiceSettings'
 
 const navStyles = stylex.create({
+  itemWrap: {
+    position: 'relative',
+    width: '100%',
+  },
+  activePill: {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--surface-selected)',
+    pointerEvents: 'none',
+    zIndex: 0,
+  },
   item: {
+    position: 'relative',
+    zIndex: 1,
     width: '100%',
     minHeight: 34,
     height: 34,
@@ -38,12 +53,26 @@ const navStyles = stylex.create({
     backgroundImage: 'none',
     boxShadow: 'none',
     fontWeight: 500,
+    transitionProperty: 'transform, color, background-color',
+    transitionDuration: '120ms',
+    transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
     ':hover': {
       color: 'var(--text)',
       backgroundColor: 'var(--surface-hover)',
     },
+    ':active:not(:disabled)': {
+      transform: 'scale(0.98)',
+    },
   },
   itemActive: {
+    color: 'var(--text)',
+    backgroundColor: 'transparent',
+    ':hover': {
+      color: 'var(--text)',
+      backgroundColor: 'transparent',
+    },
+  },
+  itemActiveStatic: {
     color: 'var(--text)',
     backgroundColor: 'var(--surface-selected)',
   },
@@ -95,6 +124,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
   const [resetError, setResetError] = useState('')
   const { t } = useI18n()
   const platform = meta?.platform ?? detectRendererPlatform()
+  const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
 
   useEffect(() => { setSection(initialSection) }, [initialSection, initialSectionRequestId])
 
@@ -144,23 +174,46 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           const Icon = item.icon
           const active = section === item.id
           return (
-            <AstryxButton
-              key={item.id}
-              label={t(item.label)}
-              variant="ghost"
-              size="sm"
-              icon={<Icon size={14} />}
-              endContent={<CaretRight size={12} />}
-              className={active ? 'is-active' : ''}
-              xstyle={[navStyles.item, active && navStyles.itemActive]}
-              onClick={() => setSection(item.id)}
-            >
-              <span>{t(item.label)}</span>
-            </AstryxButton>
+            <div key={item.id} {...stylex.props(navStyles.itemWrap)}>
+              {active && !instant ? (
+                <motion.span
+                  layoutId="settings-active-pill"
+                  aria-hidden="true"
+                  {...stylex.props(navStyles.activePill)}
+                  transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                />
+              ) : null}
+              <AstryxButton
+                label={t(item.label)}
+                variant="ghost"
+                size="sm"
+                icon={<Icon size={14} />}
+                endContent={<CaretRight size={12} />}
+                className={active ? 'is-active' : ''}
+                xstyle={[navStyles.item, active && (instant ? navStyles.itemActiveStatic : navStyles.itemActive)]}
+                onClick={() => setSection(item.id)}
+              >
+                <span>{t(item.label)}</span>
+              </AstryxButton>
+            </div>
           )
         })}
       </nav>
-      <div className={`settings-content scroll-area ${stylex.props(baseStyles.scrollArea, settingsStyles.settingsContent).className ?? ""}`}><div className={`settings-content__inner ${stylex.props(settingsStyles.settingsContentInner, [responsiveStyles.settingsContentInner, responsiveLayoutStyles.settingsContentInner]).className ?? ""}`}>{content}</div></div>
+      <div className={`settings-content scroll-area ${stylex.props(baseStyles.scrollArea, settingsStyles.settingsContent).className ?? ""}`}>
+        <div className={`settings-content__inner ${stylex.props(settingsStyles.settingsContentInner, [responsiveStyles.settingsContentInner, responsiveLayoutStyles.settingsContentInner]).className ?? ""}`}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={section}
+              initial={instant ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={instant ? undefined : { opacity: 0, y: -2 }}
+              transition={{ duration: instant ? 0 : 0.15, ease: [0.23, 1, 0.32, 1] }}
+            >
+              {content}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
       {confirmReset ? (
         <Modal
           title="Clear browser data?"

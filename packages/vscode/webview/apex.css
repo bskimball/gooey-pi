@@ -34,6 +34,7 @@ body[class*='vscode-'] {
   --surface-subtle: color-mix(in srgb, var(--vscode-foreground, #ccc) 4%, var(--canvas));
   --surface-hover: var(--vscode-list-hoverBackground, color-mix(in srgb, var(--vscode-foreground, #ccc) 7%, var(--canvas)));
   --surface-selected: var(--vscode-list-inactiveSelectionBackground, color-mix(in srgb, var(--vscode-foreground, #ccc) 10%, var(--canvas)));
+  --surface-user: color-mix(in srgb, var(--vscode-foreground, #ccc) 8%, var(--canvas));
   --surface-raised: var(--vscode-input-background, var(--surface));
   --text: var(--vscode-foreground, #cccccc);
   --text-primary: var(--text);

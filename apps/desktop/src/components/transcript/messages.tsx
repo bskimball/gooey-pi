@@ -19,7 +19,8 @@ import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
-import { classifyTool, formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
+import { WorkingDot } from '../SidebarAttention'
+import { classifyTool, formatWorkedDuration, LiveElapsed, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 import { WorkGroup } from './work-group'
 import { ContextExcerpt } from '../ContextExcerpt'
@@ -152,9 +153,7 @@ export const AssistantMessage = memo(
           {message.errorMessage ? <div className={`activity-line activity-line--result is-error ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, transcriptStyles.activityLineResultIsError).className ?? ""}`} role="alert">{message.errorMessage}</div> : null}
           {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming, true, `Assistant response ${message.id}`)}
           {message.streaming && !hasVisibleActivity ? (
-            <div className={`streaming-state ${stylex.props(transcriptStyles.streamingState).className ?? ""}`} aria-live="polite">
-              <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${shortName} is `} />
-            </div>
+            <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{shortName} is working</div>
           ) : null}
           {showReceipt ? (
             <TurnReceipt
@@ -257,13 +256,21 @@ export const UserMessage = memo(function UserMessage({ message, turnLabel, turnS
   const images = message.parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
   const referencedImages = new Set(message.parts.flatMap((part) => part.type === 'text' ? parseAnnotationReferences(splitAnnotationBlock(splitTerminalContextBlock(part.text).text).block ?? '').flatMap((reference) => reference.imageIndex === undefined ? [] : [reference.imageIndex]) : []))
   return (
-    <article className={`message message--user ${stylex.props(transcriptStyles.message, transcriptStyles.messageUser, [responsiveStyles.messageUser, responsiveLayoutStyles.messageUser]).className ?? ""}`}>
+    <article className={`message message--user ${stylex.props(transcriptStyles.message, transcriptStyles.messageUser).className ?? ""}`}>
       <div className={`user-bubble ${stylex.props(transcriptStyles.userBubble).className ?? ""}`}>
         {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} images={images} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' && !referencedImages.has(images.indexOf(part)) ? renderImage(part, `user-${index}`) : null))}
       </div>
       {turnState ? (
-        <span className={[`message__turn-status is-${turnState}`, stylex.props((turnState === 'done') && transcriptStyles.messageTurnStatusIsDone, (turnState === 'running') && transcriptStyles.messageTurnStatusIsRunning, (turnState === 'failed') && transcriptStyles.messageTurnStatusIsFailed).className].filter(Boolean).join(' ')}>
-          <span aria-hidden="true">{turnState === 'running' ? <><span className={`message__turn-dot ${stylex.props(transcriptStyles.messageTurnDot).className ?? ""}`} /> Running <LiveElapsed since={turnSince} /></> : turnState === 'failed' ? <><X size={11} /> Turn failed</> : <><Check size={11} /> {turnLabel}</>}</span>
+        <span className={[`message__turn-status is-${turnState}`, stylex.props(transcriptStyles.messageTurnStatus, (turnState === 'done') && transcriptStyles.messageTurnStatusDone, (turnState === 'running') && transcriptStyles.messageTurnStatusRunning, (turnState === 'failed') && transcriptStyles.messageTurnStatusFailed).className].filter(Boolean).join(' ')}>
+          <span aria-hidden="true">
+            {turnState === 'running' ? (
+              <><WorkingDot /> Running <LiveElapsed since={turnSince} /></>
+            ) : turnState === 'failed' ? (
+              <><X size={11} /> Turn failed</>
+            ) : (
+              <><Check size={11} /> {turnLabel}</>
+            )}
+          </span>
           <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{turnState === 'running' ? 'Turn running' : turnState === 'failed' ? 'Turn failed' : `Turn took ${turnLabel}`}</span>
         </span>
       ) : null}

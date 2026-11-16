@@ -1,10 +1,16 @@
 import { styles as overlaysStyles } from './styles/overlays.stylex'
 import { Dialog } from '@astryxdesign/core/Dialog'
 import * as stylex from '@stylexjs/stylex'
+import { useReducedMotion } from 'motion/react'
 import { X } from './icons'
 import { IconButton, focusableSelector, useAppShellOverlay } from './ui'
 import { useCallback, useId, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+
+const modalIn = stylex.keyframes({
+  from: { opacity: 0, transform: 'scale(0.96)' },
+  to: { opacity: 1, transform: 'scale(1)' },
+})
 
 const styles = stylex.create({
   modalDialog: {
@@ -17,10 +23,24 @@ const styles = stylex.create({
     backgroundColor: 'var(--surface-raised)',
     boxShadow: 'var(--shadow-popover)',
     overflow: 'hidden',
+    transformOrigin: 'center',
+    animationName: {
+      default: modalIn,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    animationDuration: {
+      default: '200ms',
+      '@media (prefers-reduced-motion: reduce)': '0ms',
+    },
+    animationTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
     '::backdrop': {
       backgroundColor: 'rgba(6, 11, 18, 0.46)',
       backdropFilter: 'blur(4px)',
     },
+  },
+  modalDialogInstant: {
+    animationName: 'none',
+    animationDuration: '0ms',
   },
   modalHeader: {
     flexShrink: 0,
@@ -85,6 +105,9 @@ function ensureDialogModalMethods(dialog: HTMLDialogElement | null): void {
 
 export function Modal({ title, children, onClose, footer }: { title: string; children: ReactNode; onClose(): void; footer?: ReactNode }) {
   const titleId = useId()
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   useAppShellOverlay(true)
   const attachDialog = useCallback((node: HTMLDialogElement | null) => {
     ensureDialogModalMethods(node)
@@ -107,7 +130,7 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
       role="dialog"
       aria-labelledby={titleId}
       className="modal"
-      xstyle={[overlaysStyles.modal, styles.modalDialog]}
+      xstyle={[overlaysStyles.modal, styles.modalDialog, instant && styles.modalDialogInstant]}
     >
       <div className={`modal__header ${stylex.props(overlaysStyles.modalHeader, styles.modalHeader).className ?? ""}`} style={headerStylex.style}>
         <h2 id={titleId} className={titleStylex.className} style={titleStylex.style}>{title}</h2>

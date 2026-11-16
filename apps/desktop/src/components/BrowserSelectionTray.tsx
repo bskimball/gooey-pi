@@ -5,6 +5,14 @@ import type { BrowserAnnotation } from '@/types/api'
 import { annotationElementLabel, type BrowserReference } from '@/lib/browser-annotations'
 import { ImageParts } from './transcript/TranscriptImage'
 import { Crosshair, X } from './icons'
+import { ApexButton, IconButton } from './ui'
+
+const trayStyles = stylex.create({
+  imageOutline: {
+    outline: '1px solid light-dark(oklch(0 0 0 / 0.1), oklch(1 0 0 / 0.1))',
+    outlineOffset: -1,
+  },
+})
 
 export function annotationReference(annotation: BrowserAnnotation): BrowserReference {
   return {
@@ -40,9 +48,9 @@ export function BrowserSelectionTray({
           <span>
             {annotations.length} selected element{annotations.length === 1 ? '' : 's'}
           </span>
-          <button type="button" {...stylex.props(contextStyles.trayHeadingButton)} aria-label="Remove page annotations" onClick={onClear}>
+          <ApexButton compact variant="quiet" xstyle={contextStyles.trayHeadingButton} aria-label="Remove page annotations" onClick={onClear}>
             Clear
-          </button>
+          </ApexButton>
         </header>
       ) : null}
       {processing ? <p {...stylex.props(contextStyles.trayParagraph)} role="status">Preparing element preview…</p> : null}
@@ -57,12 +65,12 @@ export function BrowserSelectionTray({
                   <Crosshair {...stylex.props(contextStyles.targetIcon)} size={12} />
                   <span {...stylex.props(contextStyles.targetLabel)}>{reference.label}</span>
                 </button>
-                <button type="button" {...stylex.props(contextStyles.headerLastButton)} aria-label={`Remove annotation ${index + 1}`} onClick={() => onRemove(annotation.id)}>
+                <IconButton size="small" xstyle={contextStyles.headerLastButton} label={`Remove annotation ${index + 1}`} onClick={() => onRemove(annotation.id)}>
                   <X size={13} />
-                </button>
+                </IconButton>
               </header>
               {annotation.preview ? (
-                <ImageParts images={[annotation.preview]} alt={`Selected ${reference.label}`} xstyle={[contextStyles.trayPreview, contextStyles.imagePreviewFocus]} imageXstyle={contextStyles.trayImage} />
+                <ImageParts images={[annotation.preview]} alt={`Selected ${reference.label}`} xstyle={[contextStyles.trayPreview, contextStyles.imagePreviewFocus]} imageXstyle={[contextStyles.trayImage, trayStyles.imageOutline]} />
               ) : (
                 <div className={`browser-selection-card__missing ${stylex.props(browserReferencesStyles.browserSelectionCardMissing).className ?? ""}`}>Element details attached · no image</div>
               )}

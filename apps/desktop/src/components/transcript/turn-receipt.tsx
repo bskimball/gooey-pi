@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Fragment, useId, useState, type ReactNode } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
 import type { GitStatus, MessagePart } from '@/types/api'
@@ -35,9 +36,18 @@ interface TurnReceiptProps {
   copy?: ReactNode
 }
 
+function useInstantMotion(): boolean {
+  return (
+    Boolean(useReducedMotion()) ||
+    (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) ||
+    Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  )
+}
+
 /** The settled turn's one closing line: outcome, scale of the work, what it left in the working tree, and copy. */
 export function TurnReceipt({ duration, failed = false, agents, tools, git, onReviewChanges, copy }: TurnReceiptProps) {
   const [diffOpen, setDiffOpen] = useState(false)
+  const instant = useInstantMotion()
   const diffId = useId()
   const files = git?.files ?? []
   const { additions, deletions } = changeTotals(files)
@@ -61,10 +71,28 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
     </span> })
   }
   if (copy) facts.push({ key: 'copy', node: copy })
-  return <div className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}>
+  return <motion.div
+    className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}
+    initial={instant ? false : { opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+  >
     <div className={`turn-receipt__line ${stylex.props(transcriptStyles.turnReceiptLine).className ?? ""}`}>
       {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className={`turn-receipt__separator ${stylex.props(transcriptStyles.turnReceiptSeparator).className ?? ""}`} aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
     </div>
-    {diffOpen ? <ChangedFilesList id={diffId} files={files} lineCounts={lineCounts} /> : null}
-  </div>
+    <AnimatePresence initial={false}>
+      {diffOpen ? (
+        <motion.div
+          key="diff-list"
+          style={{ overflow: 'hidden' }}
+          initial={instant ? false : { height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={instant ? undefined : { height: 0, opacity: 0, transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
+          transition={instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+        >
+          <ChangedFilesList id={diffId} files={files} lineCounts={lineCounts} />
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  </motion.div>
 }

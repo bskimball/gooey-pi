@@ -1,5 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { Brain, CaretRight, WarningCircle, Wrench } from '../icons'
 import type { MessagePart } from '@/types/api'
@@ -102,9 +103,18 @@ function summarizeWork(parts: MessagePart[], steps: number[], streaming: boolean
   return { label: sentence[0].toUpperCase() + sentence.slice(1), failed, running, thoughtsOnly: thoughts > 0 && phrases.length === 1 }
 }
 
+function useInstantMotion(): boolean {
+  return (
+    Boolean(useReducedMotion()) ||
+    (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) ||
+    Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  )
+}
+
 /** A tool-only disclosure between narrative boundaries; replies never enter its scroll region. */
 export function WorkGroup({ parts, showReasoning, showTools, streaming, live, subagents, presentation = 'summary' }: WorkGroupProps) {
   const [open, setOpen] = useState(false)
+  const instant = useInstantMotion()
   const bodyId = useId()
   const bodyRef = useRef<HTMLDivElement>(null)
   const following = useRef(true)
@@ -131,20 +141,82 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
   const latestStep = steps.at(-1)
   const label = currentLabel ?? (presentation === 'summary' && live && latestStep !== undefined && parts[latestStep].type === 'thinking' ? 'Thinking' : summary.label)
   const state = summary.failed ? 'is-error' : summary.running || live ? 'is-running' : 'is-done'
+  const iconKey = summary.running || live ? 'running' : summary.thoughtsOnly ? 'brain' : 'wrench'
   const foldedImages = open ? [] : partImages(current === undefined ? parts : parts.slice(0, current))
 
   return <div className={[`work-group ${state}${live ? ' is-live' : ''}`, stylex.props(transcriptStyles.workGroup).className].filter(Boolean).join(' ')}>
-    {summarized.length > 0 ? <button type="button" className={`work-group__summary ${stylex.props(transcriptStyles.workGroupSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => { following.current = true; setOpen((value) => !value) }}>
-      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}</span>
-      <span key={label} className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`} title={label}>{label}</span>
-      {summary.failed ? <span className={`work-group__failed ${stylex.props(transcriptStyles.workGroupFailed).className ?? ""}`}><WarningCircle size={12} /> {summary.failed} failed</span> : null}
-      <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
-    </button> : null}
-    {open ? <div ref={bodyRef} className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody, presentation === 'summary' && transcriptStyles.workGroupHistory).className ?? ""}`} data-tool-history={presentation === 'summary' ? '' : undefined} id={bodyId} role="region" aria-label="Tool activity history" tabIndex={0} onScroll={(event) => {
-      const body = event.currentTarget
-      following.current = body.scrollHeight - body.scrollTop - body.clientHeight <= 1
-    }}>{timeline(parts)}</div> : null}
+    <AnimatePresence initial={false}>
+      {summarized.length > 0 ? <motion.div
+        key="summary"
+        style={{ overflow: 'hidden' }}
+        initial={instant ? false : { height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={instant ? undefined : { height: 0, opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+        transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
+      >
+        <button type="button" className={`work-group__summary ${stylex.props(transcriptStyles.workGroupSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => { following.current = true; setOpen((value) => !value) }}>
+          <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={iconKey}
+                style={{ display: 'inline-grid', placeItems: 'center' }}
+                initial={instant ? false : { opacity: 0, scale: 0.82, filter: 'blur(2px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={instant ? undefined : { opacity: 0, scale: 0.82, filter: 'blur(2px)' }}
+                transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+          <span style={{ position: 'relative', display: 'grid', minWidth: 0, overflow: 'hidden' }}>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={label}
+                className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`}
+                title={label}
+                initial={instant ? false : { opacity: 0, y: 5, filter: 'blur(1.5px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={instant ? undefined : { opacity: 0, y: -5, filter: 'blur(1.5px)', transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+                transition={instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {label}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+          {summary.failed ? <span className={`work-group__failed ${stylex.props(transcriptStyles.workGroupFailed).className ?? ""}`}><WarningCircle size={12} /> {summary.failed} failed</span> : null}
+          <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
+        </button>
+      </motion.div> : null}
+    </AnimatePresence>
+    <AnimatePresence initial={false}>
+      {open ? <motion.div
+        key="body"
+        style={{ overflow: 'hidden' }}
+        initial={instant ? false : { height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={instant ? undefined : { height: 0, opacity: 0, transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
+        transition={instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+      >
+        <div ref={bodyRef} className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody, presentation === 'summary' && transcriptStyles.workGroupHistory).className ?? ""}`} data-tool-history={presentation === 'summary' ? '' : undefined} id={bodyId} role="region" aria-label="Tool activity history" tabIndex={0} onScroll={(event) => {
+          const body = event.currentTarget
+          following.current = body.scrollHeight - body.scrollTop - body.clientHeight <= 1
+        }}>{timeline(parts)}</div>
+      </motion.div> : null}
+    </AnimatePresence>
     <ImageParts images={foldedImages} />
-    {!open && current !== undefined ? <div className="work-group__current">{timeline(parts.slice(current))}</div> : null}
+    <AnimatePresence mode="popLayout" initial={false}>
+      {!open && current !== undefined ? <motion.div
+        key={`current-${current}`}
+        className="work-group__current"
+        style={{ overflow: 'hidden' }}
+        initial={instant ? false : { opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={instant ? undefined : { opacity: 0, y: -4, height: 0, transition: { duration: 0.14, ease: [0.2, 0, 0, 1] } }}
+        transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
+      >
+        {timeline(parts.slice(current))}
+      </motion.div> : null}
+    </AnimatePresence>
   </div>
 }

@@ -289,7 +289,8 @@ export const styles = stylex.create({
     "backgroundOrigin": { "default": "padding-box", ":hover": "padding-box", ":focus-visible": "padding-box" },
     "backgroundClip": { "default": "border-box", ":hover": "border-box", ":focus-visible": "border-box" },
     "textAlign": "left",
-    "transition": "background var(--fast)",
+    "transform": { "default": null, ":active": "scale(0.99)" },
+    "transition": "background var(--fast), transform 120ms cubic-bezier(0.23, 1, 0.32, 1)",
   },
   "scheduleRowStatus": {
     "width": "34px",
@@ -936,4 +937,6 @@ export const styles = stylex.create({
     "backgroundClip": "border-box",
   },
   "scheduleEditorSaveStatus": { "flexGrow": 1, "flexShrink": 1, "flexBasis": "0%", "color": "var(--text-tertiary)", "fontSize": "var(--fs-micro)" },
+  "tabularNums": { "fontVariantNumeric": "tabular-nums" },
+  "prettyText": { "textWrap": "pretty" },
 })

@@ -2,7 +2,7 @@ import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layo
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
-import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   Brain,
@@ -29,7 +29,17 @@ import { StatusMark } from '../activity/StatusMark'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
 import { diffCounts, EditDiff, editDiffLines, isEditTool } from './edit-diff'
-import { isSubagentTool, pairSubagentCalls, SubagentLane, TodoStep, type SubagentPairs } from './subagent-lane'
+import {
+  arrivalMotionProps,
+  collapseMotionProps,
+  isSubagentTool,
+  MorphInline,
+  pairSubagentCalls,
+  SubagentLane,
+  TodoStep,
+  useInstantMotion,
+  type SubagentPairs,
+} from './subagent-lane'
 
 function timestamp(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -88,9 +98,10 @@ function exploreLabel(part: Extract<MessagePart, { type: 'toolCall' }>): string 
   return SEARCH_TOOLS.test(part.name) ? preview : preview.split(/[\\/]/).at(-1) ?? preview
 }
 
-function ToolRun({ members, children }: { members: RunMember[]; children: ReactElement[] }) {
+function ToolRun({ members, children, animateArrival = false }: { members: RunMember[]; children: ReactElement[]; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
+  const instant = useInstantMotion()
   const failed = members.filter((member) => member.failed).length
   const running = members.some((member) => member.running)
   const searches = members.filter((member) => member.search).length
@@ -98,16 +109,22 @@ function ToolRun({ members, children }: { members: RunMember[]; children: ReactE
   const label = reads ? `Read ${plural(reads, 'file')}${searches ? `, ${plural(searches, 'search', 'searches')}` : ''}` : `Ran ${plural(searches, 'search', 'searches')}`
   const names = members.map((member) => member.label).filter(Boolean)
   return (
-    <div className={[`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`, stylex.props(transcriptStyles.activityRun).className].filter(Boolean).join(' ')}>
+    <motion.div className={[`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`, stylex.props(transcriptStyles.activityRun).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
       <button type="button" className={`activity-run__summary ${stylex.props(transcriptStyles.activityRunSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-        <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{running ? <StatusMark state="running" size={14} /> : toolIcon('file')}</span>
-        <span className={`activity-run__label ${stylex.props(transcriptStyles.activityRunLabel).className ?? ""}`}>{label}</span>
+        <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>
+          <MorphInline morphKey={running ? 'running' : 'done'} instant={instant}>{running ? <StatusMark state="running" size={14} /> : toolIcon('file')}</MorphInline>
+        </span>
+        <span className={`activity-run__label ${stylex.props(transcriptStyles.activityRunLabel).className ?? ""}`}>
+          <MorphInline morphKey={label} instant={instant}>{label}</MorphInline>
+        </span>
         {names.length ? <span className={`activity-run__names ${stylex.props(transcriptStyles.activityRunNames).className ?? ""}`}>{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
         {failed ? <span className={`activity-run__failed ${stylex.props(transcriptStyles.activityRunFailed).className ?? ""}`}><WarningCircle size={12} /> {failed} failed</span> : null}
         <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
-      {open ? <div className={`activity-run__items ${stylex.props(transcriptStyles.activityRunItems).className ?? ""}`} id={bodyId}>{children}</div> : null}
-    </div>
+      <AnimatePresence initial={false}>
+        {open ? <motion.div key="run-items" className={`activity-run__items ${stylex.props(transcriptStyles.activityRunItems).className ?? ""}`} id={bodyId} {...collapseMotionProps(instant)}>{children}</motion.div> : null}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
@@ -123,42 +140,57 @@ export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): s
 }
 
 /** Reasoning stays readable while its turn runs and after it settles; a Thought header lets you fold it away. */
-function ReasoningPart({ part, live = false, streaming = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean }) {
+function ReasoningPart({ part, live = false, streaming = false, animateArrival = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean; animateArrival?: boolean }) {
   const [open, setOpen] = useState(true)
   const bodyId = useId()
+  const instant = useInstantMotion()
   if (live && !part.text.trim()) return null
   const body = <MarkdownText variant="reasoning" text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} />
-  if (live) return <div className={`activity-line activity-line--reasoning ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineReasoning).className ?? ""}`}>{body}</div>
-  return <div className={`activity-line activity-line--reasoning is-settled ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineReasoning, transcriptStyles.activityLineReasoningIsSettled).className ?? ""}`}>
-    <button type="button" className={`activity-thought__summary ${stylex.props(transcriptStyles.activityThoughtSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}><Brain size={14} /></span>
-      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>Thought</span>
-      <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
-    </button>
-    {open ? <div className={`activity-thought__body ${stylex.props(transcriptStyles.activityThoughtBody).className ?? ""}`} id={bodyId}>{body}</div> : null}
-  </div>
-}
-
-export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
-  const clipId = `thinking-waterline-${useId().replace(/[^\w-]/g, '')}`
-  // Seeded once per mount so concurrent indicators drift out of step and the fin's passes feel unscripted.
-  const [fin] = useState(() => ({
-    duration: `${(4.4 + Math.random() * 1.8).toFixed(2)}s`,
-    delay: `${(-Math.random() * 4).toFixed(2)}s`,
-    reverse: Math.random() < 0.3,
-  }))
+  const bodyCollapse = collapseMotionProps(instant)
+  const summaryCollapse = collapseMotionProps(instant)
   return (
-    <span className={`thinking-dots ${stylex.props(transcriptStyles.thinkingDots).className ?? ""}`} role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
-      <svg width="24" height="10" viewBox="0 0 24 10" fill="none" aria-hidden="true" focusable="false">
-        <defs><clipPath id={clipId}><rect x="-8" y="0" width="40" height="7" /></clipPath></defs>
-        <g clipPath={`url(#${clipId})`}>
-          <g transform={fin.reverse ? 'matrix(-1 0 0 1 24 0)' : undefined}>
-            <path className={`thinking-dots__fin ${stylex.props(transcriptStyles.thinkingDotsFin).className ?? ""}`} style={{ animationDuration: fin.duration, animationDelay: fin.delay }} d="M4.4 7.2C3 5.2 2 2.4 1.2 1.8C1.3 3.9 .9 5.6 0 7.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-          </g>
-        </g>
-        <path className={`thinking-dots__wave ${stylex.props(transcriptStyles.thinkingDotsWave).className ?? ""}`} d="M0 7 Q2 4.75 4 7 T8 7 T12 7 T16 7 T20 7 T24 7 T28 7 T32 7" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-      </svg>
-    </span>
+    <motion.div
+      className={[
+        `activity-line activity-line--reasoning${live ? '' : ' is-settled'}`,
+        stylex.props(
+          transcriptStyles.activityLine,
+          transcriptStyles.activityLineReasoning,
+          !live && transcriptStyles.activityLineReasoningIsSettled,
+        ).className,
+      ].filter(Boolean).join(' ')}
+      {...arrivalMotionProps(instant, animateArrival)}
+    >
+      <AnimatePresence initial={false}>
+        {!live ? (
+          <motion.button
+            key="thought-summary"
+            type="button"
+            className={`activity-thought__summary ${stylex.props(transcriptStyles.activityThoughtSummary).className ?? ""}`}
+            aria-expanded={open}
+            aria-controls={open ? bodyId : undefined}
+            onClick={() => setOpen((value) => !value)}
+            {...summaryCollapse}
+            transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}><Brain size={14} /></span>
+            <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>Thought</span>
+            <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
+          </motion.button>
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {live || open ? (
+          <motion.div
+            key="thought-body"
+            className={live ? undefined : `activity-thought__body ${stylex.props(transcriptStyles.activityThoughtBody).className ?? ""}`}
+            id={live ? undefined : bodyId}
+            {...bodyCollapse}
+          >
+            {body}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
@@ -203,7 +235,8 @@ function readRange(part: Extract<MessagePart, { type: 'toolCall' }>): string | u
   return count === undefined ? `:${first}` : `:${first}–${first + count - 1}`
 }
 
-const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<MessagePart, { type: 'toolCall' }>; result?: Extract<MessagePart, { type: 'toolResult' }> }) {
+const ToolPart = memo(function ToolPart({ part, result, animateArrival = false }: { part: Extract<MessagePart, { type: 'toolCall' }>; result?: Extract<MessagePart, { type: 'toolResult' }>; animateArrival?: boolean }) {
+  const instant = useInstantMotion()
   const failed = result?.isError
   const finished = result && !result.streaming
   const kind = classifyTool(part.name)
@@ -245,8 +278,10 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
     }
   }
 
+  const collapse = collapseMotionProps(instant)
+
   return (
-    <><div className={[`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineTool, classifyTool(part.name) === "question" && transcriptStyles.activityLineQuestion).className].filter(Boolean).join(' ')}>
+    <><motion.div className={[`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineTool, classifyTool(part.name) === "question" && transcriptStyles.activityLineQuestion).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
       <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setToggled((value) => !value)} aria-expanded={canExpand ? open : undefined} aria-controls={canExpand && open ? detailsId : undefined}>
         <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{command ? <Terminal size={14} /> : toolIcon(kind)}</span>
         {command
@@ -257,42 +292,56 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
             {range ? <span className={`activity-tool__range ${stylex.props(transcriptStyles.activityToolRange).className ?? ""}`}>{range}</span> : null}
           </>}
         {showDiff ? <span className={`activity-tool__diff-counts ${stylex.props(transcriptStyles.activityToolDiffCounts).className ?? ""}`}><span className={`diff-count diff-count--add ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountAdd).className ?? ""}`}>+{additions}</span><span className={`diff-count diff-count--remove ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountRemove).className ?? ""}`}>−{deletions}</span></span> : null}
-        <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><StatusMark state="running" size={12} /> running</>}</span>
+        <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>
+          <MorphInline morphKey={state} instant={instant}>
+            {failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><StatusMark state="running" size={12} /> running</>}
+          </MorphInline>
+        </span>
         {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
       </button>
-      {showDiff && open ? <EditDiff id={detailsId} diff={diff} /> : null}
-      {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <pre className={[`activity-tool__tail${state === 'error' ? ' is-error' : ''}`, stylex.props(transcriptStyles.activityToolTail).className].filter(Boolean).join(' ')}>{outputTail(output)}</pre> : null}
-      {open && visibleOutput ? (
-        <div className={`activity-tool__details ${stylex.props(transcriptStyles.activityToolDetails).className ?? ""}`} id={detailsId}>
-          <div className={`activity-tool__details-toolbar ${stylex.props(transcriptStyles.activityToolDetailsToolbar).className ?? ""}`}>
-            <button type="button" className={`activity-tool__copy ${stylex.props(transcriptStyles.activityToolCopy).className ?? ""}`} aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
-              {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-          <pre className={`activity-tool__contents ${stylex.props(transcriptStyles.activityToolContents).className ?? ""}`}><SyntaxText text={visibleOutput} /></pre>
-        </div>
-      ) : null}
-    </div>
+      <AnimatePresence initial={false}>
+        {showDiff && open ? <motion.div key="edit-diff" {...collapse}><EditDiff id={detailsId} diff={diff} /></motion.div> : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <motion.pre key="tool-tail" className={[`activity-tool__tail${state === 'error' ? ' is-error' : ''}`, stylex.props(transcriptStyles.activityToolTail).className].filter(Boolean).join(' ')} {...collapse}>{outputTail(output)}</motion.pre> : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {open && visibleOutput ? (
+          <motion.div key="tool-details" className={`activity-tool__details ${stylex.props(transcriptStyles.activityToolDetails).className ?? ""}`} id={detailsId} {...collapse}>
+            <div className={`activity-tool__details-toolbar ${stylex.props(transcriptStyles.activityToolDetailsToolbar).className ?? ""}`}>
+              <button type="button" className={`activity-tool__copy ${stylex.props(transcriptStyles.activityToolCopy).className ?? ""}`} aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
+                {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre className={`activity-tool__contents ${stylex.props(transcriptStyles.activityToolContents).className ?? ""}`}><SyntaxText text={visibleOutput} /></pre>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
     <ImageParts images={result?.images} /></>
   )
 })
 
-function StandaloneToolResult({ part }: { part: Extract<MessagePart, { type: 'toolResult' }> }) {
-  return <><div className={[`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, (part.isError) && transcriptStyles.activityLineResultIsError).className].filter(Boolean).join(' ')}><span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div><ImageParts images={part.images} /></>
+function StandaloneToolResult({ part, animateArrival = false }: { part: Extract<MessagePart, { type: 'toolResult' }>; animateArrival?: boolean }) {
+  const instant = useInstantMotion()
+  return <><motion.div className={[`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, (part.isError) && transcriptStyles.activityLineResultIsError).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}><span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></motion.div><ImageParts images={part.images} /></>
 }
 
-function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agentMessage' }> }) {
+function AgentActivityPart({ part, animateArrival = false }: { part: Extract<MessagePart, { type: 'agentMessage' }>; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
+  const instant = useInstantMotion()
   const canExpand = Boolean(part.text)
-  return <div className={`activity-line activity-line--agent ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineAgent).className ?? ""}`}>
+  return <motion.div className={`activity-line activity-line--agent ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineAgent).className ?? ""}`} {...arrivalMotionProps(instant, animateArrival)}>
     <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
       <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}><ChatCircle size={14} /></span>
       <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>Message from agent</span>
       {part.agentName ? <span className={`activity-agent__name ${stylex.props(transcriptStyles.activityAgentName).className ?? ""}`}>{part.agentName}</span> : null}
       {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open && part.text ? <div className={`activity-agent__details ${stylex.props(transcriptStyles.activityAgentDetails).className ?? ""}`}><MarkdownText variant="compact" text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></div> : null}
-  </div>
+    <AnimatePresence initial={false}>
+      {open && part.text ? <motion.div key="agent-details" className={`activity-agent__details ${stylex.props(transcriptStyles.activityAgentDetails).className ?? ""}`} {...collapseMotionProps(instant)}><MarkdownText variant="compact" text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></motion.div> : null}
+    </AnimatePresence>
+  </motion.div>
 }
 
 function compactionReasonLabel(reason: Extract<MessagePart, { type: 'compaction' }>['reason']): string {
@@ -303,14 +352,16 @@ function compactionReasonLabel(reason: Extract<MessagePart, { type: 'compaction'
   return 'context'
 }
 
-function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compaction' }> }) {
+function CompactionPart({ part, animateArrival = false }: { part: Extract<MessagePart, { type: 'compaction' }>; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
+  const instant = useInstantMotion()
   const canExpand = Boolean(part.summary || part.error)
   const label = part.status === 'running'
     ? 'Compacting context'
     : part.status === 'done'
       ? 'Context compacted'
       : part.status === 'cancelled' ? 'Context compaction cancelled' : part.outcome === 'skipped' ? 'Context compaction skipped' : 'Context compaction failed'
+  const stateKey = part.status === 'running' ? 'running' : part.status === 'done' ? (part.willRetry ? 'continuing' : 'done') : part.status
   const state = part.status === 'running'
     ? <><StatusMark state="running" size={12} /> running</>
     : part.status === 'done'
@@ -318,17 +369,26 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
       : <><WarningCircle size={12} /> {part.status === 'cancelled' ? 'cancelled' : 'needs attention'}</>
   const details = part.error || part.summary
   const tokenLabel = part.tokensBefore === undefined ? '' : `${part.tokensBefore.toLocaleString()} tokens before`
-  return <div className={[`activity-line activity-line--compaction is-${part.status}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineCompaction, ((part.status === "running")) && transcriptStyles.activityLineCompactionIsRunning).className].filter(Boolean).join(' ')}>
+  const iconKey = part.status === 'running' || part.status === 'done' ? 'stack' : 'warn'
+  return <motion.div className={[`activity-line activity-line--compaction is-${part.status}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineCompaction, ((part.status === "running")) && transcriptStyles.activityLineCompactionIsRunning).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
     <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{part.status === 'running' ? <StatusMark state="running" size={14} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
-      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>{label}</span>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>
+        <MorphInline morphKey={iconKey} instant={instant}>{part.status === 'running' || part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</MorphInline>
+      </span>
+      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>
+        <MorphInline morphKey={label} instant={instant}>{label}</MorphInline>
+      </span>
       <span className={`activity-compaction__reason ${stylex.props(transcriptStyles.activityCompactionReason).className ?? ""}`}>{compactionReasonLabel(part.reason)}</span>
       {tokenLabel ? <span className={`activity-compaction__tokens ${stylex.props(transcriptStyles.activityCompactionTokens).className ?? ""}`}>{tokenLabel}</span> : null}
-      <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>{state}</span>
+      <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>
+        <MorphInline morphKey={stateKey} instant={instant}>{state}</MorphInline>
+      </span>
       {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open && details ? <div className={[`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`, stylex.props(transcriptStyles.activityCompactionDetails, !(part.status === 'done') && transcriptStyles.activityCompactionDetailsIsError).className].filter(Boolean).join(' ')}><MarkdownText variant="compact" text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></div> : null}
-  </div>
+    <AnimatePresence initial={false}>
+      {open && details ? <motion.div key="compaction-details" className={[`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`, stylex.props(transcriptStyles.activityCompactionDetails, !(part.status === 'done') && transcriptStyles.activityCompactionDetailsIsError).className].filter(Boolean).join(' ')} {...collapseMotionProps(instant)}><MarkdownText variant="compact" text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></motion.div> : null}
+    </AnimatePresence>
+  </motion.div>
 }
 
 /**
@@ -343,6 +403,7 @@ function partKey(part: MessagePart, index: number): string {
 }
 
 export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false, subagents }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean; subagents?: SubagentPairs }) {
+  const instant = useInstantMotion()
   const { followUps, absorbed } = subagents ?? pairSubagentCalls(parts)
   const pairedResults = new Set<number>()
   const pendingKeys = new Set<string>()
@@ -353,27 +414,27 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     if (absorbed.has(part) || part.type === 'toolResult' && pairedResults.has(index)) return null
     if (part.type === 'compaction') {
       if (part.status === 'running') pendingKeys.add(key)
-      return <CompactionPart key={key} part={part} />
+      return <CompactionPart key={key} part={part} animateArrival={streaming} />
     }
-    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} streaming={isTailPart} /> : null
+    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} streaming={isTailPart} animateArrival={streaming} /> : null
     if (part.type === 'toolCall') {
       if (!showTools) return null
       const next = parts[index + 1]
       if (next?.type === 'toolResult') pairedResults.add(index + 1)
       if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
       const result = next?.type === 'toolResult' ? next : undefined
-      if (part.name === 'todo_write') return <TodoStep key={key} part={part} />
-      if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <Fragment key={key}><SubagentLane part={part} result={result} followUps={followUps.get(part)} /><ImageParts images={result?.images} /></Fragment>
+      if (part.name === 'todo_write') return <TodoStep key={key} part={part} animateArrival={streaming} />
+      if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <Fragment key={key}><SubagentLane part={part} result={result} followUps={followUps.get(part)} animateArrival={streaming} /><ImageParts images={result?.images} /></Fragment>
       if (isExploreTool(part.name)) {
         const running = streaming && (!result || Boolean(result.streaming))
         runMembers.set(key, { failed: Boolean(result?.isError), running, search: SEARCH_TOOLS.test(part.name), label: exploreLabel(part) })
       }
-      return <ToolPart key={key} part={part} result={result} />
+      return <ToolPart key={key} part={part} result={result} animateArrival={streaming} />
     }
-    if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : <ImageParts key={key} images={part.images} />
+    if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} animateArrival={streaming} /> : <ImageParts key={key} images={part.images} />
     if (part.type === 'image') return <ImageParts key={key} images={[part]} />
-    if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
-    if (part.type === 'text') return part.text.trim() || !streaming ? <div className={`activity-line activity-line--note ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineNote).className ?? ""}`} key={key}><MarkdownText variant="note" text={part.text} streaming={isTailPart} /></div> : null
+    if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} animateArrival={streaming} />
+    if (part.type === 'text') return part.text.trim() || !streaming ? <motion.div className={`activity-line activity-line--note ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineNote).className ?? ""}`} key={key} {...arrivalMotionProps(instant, streaming)}><MarkdownText variant="note" text={part.text} streaming={isTailPart} /></motion.div> : null
     return null
   }).filter((row) => row !== null)
   // Back-to-back reads and searches fold into a single row; edits, commands, plans, and agents stay in the stream.
@@ -385,7 +446,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       const members = items.slice(index, end)
       const runKey = `run:${String(items[index].key)}`
       if (members.some((row) => row.key !== null && pendingKeys.has(String(row.key)))) pendingKeys.add(runKey)
-      rows.push(<ToolRun key={runKey} members={members.map((row) => runMembers.get(String(row.key))!)}>{members}</ToolRun>)
+      rows.push(<ToolRun key={runKey} members={members.map((row) => runMembers.get(String(row.key))!)} animateArrival={streaming}>{members}</ToolRun>)
     } else {
       end = Math.max(end, index + 1)
       rows.push(...items.slice(index, end))
@@ -403,54 +464,6 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
   return <div className={`work-timeline ${stylex.props(transcriptStyles.workTimeline).className ?? ""}`} id={id}>{pages}</div>
 }
 
-const THINKING_STATUS_VERBS = [
-  'Thinking',
-  'Sounding',
-  'Charting',
-  'Fathoming',
-  'Scouting',
-  'Wayfinding',
-  'Reckoning',
-] as const
-
-const WORKING_STATUS_VERBS = [
-  'Working',
-  'Cresting',
-  'Slicing',
-  'Surging',
-  'Tacking',
-  'Navigating',
-  'Forging',
-] as const
-
-const STREAMING_STATUS_VERBS = [
-  'working',
-  'cresting',
-  'slicing',
-  'charting',
-  'surging',
-  'sounding',
-  'navigating',
-  'tacking',
-  'forging',
-] as const
-
-export function LiveWorkVerb({ mode, prefix = '' }: { mode: 'Thinking' | 'Working' | 'streaming'; prefix?: string }) {
-  const verbs = mode === 'Thinking' ? THINKING_STATUS_VERBS : mode === 'Working' ? WORKING_STATUS_VERBS : STREAMING_STATUS_VERBS
-  const [index, setIndex] = useState(0)
-  useEffect(() => {
-    setIndex(0)
-    const id = window.setInterval(() => {
-      setIndex((current) => (current + 1) % verbs.length)
-    }, 2_600)
-    return () => window.clearInterval(id)
-  }, [verbs])
-  const word = verbs[index] ?? verbs[0]
-  return <>
-    <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{`${prefix}${verbs[0]}`}</span>
-    <span key={word} className={`live-work-verb ${stylex.props(transcriptStyles.liveWorkVerb).className ?? ""}`} aria-hidden="true">{`${prefix}${word}`}</span>
-  </>
-}
 
 /** What the live turn is waiting on right now, named from the newest unsettled tool call. */
 export function activeWorkLabel(parts: MessagePart[]): string | undefined {
@@ -486,13 +499,33 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
 
 /** The live run ledger: the turn's chronological stream (`children`) with the status row beneath it. */
 export function WorkDisclosure({ message, showReasoning, showTools, children }: { message: TranscriptMessage; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
+  const instant = useInstantMotion()
   const activity = showTools ? activeWorkLabel(message.parts) : undefined
+  const statusText = activity ?? liveWorkStatus(message.parts, showReasoning, showTools)
+  const statusClass = activity ? `work-disclosure__activity ${stylex.props(transcriptStyles.workDisclosureActivity).className ?? ""}` : 'work-disclosure__verb'
+  const statusKey = `${activity ? 'activity' : 'verb'}:${statusText}`
   return <section className={`work-disclosure is-running ${stylex.props(transcriptStyles.workDisclosure, transcriptStyles.workDisclosureIsRunning).className ?? ""}`} aria-label="Agent work activity">
     <div className={`work-disclosure__live ${stylex.props(transcriptStyles.workDisclosureLive).className ?? ""}`}>
       {children}
       <div className={`work-disclosure__status ${stylex.props(transcriptStyles.workDisclosureStatus).className ?? ""}`} role="status">
-        {activity ? <span className={`work-disclosure__activity ${stylex.props(transcriptStyles.workDisclosureActivity).className ?? ""}`} title={activity}>{activity}</span> : <LiveWorkVerb mode={liveWorkStatus(message.parts, showReasoning, showTools)} />}
-        <LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots />
+        {instant ? (
+          <span className={statusClass} title={activity}>{statusText}</span>
+        ) : (
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={statusKey}
+              className={statusClass}
+              title={activity}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4, transition: { duration: 0.11, ease: [0.2, 0, 0, 1] } }}
+              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+            >
+              {statusText}
+            </motion.span>
+          </AnimatePresence>
+        )}
+        <LiveElapsed since={message.startedAt ?? message.timestamp} />
       </div>
     </div>
   </section>

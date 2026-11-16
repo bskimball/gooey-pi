@@ -8,7 +8,7 @@ import type { ProjectRecord } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const project: ProjectRecord = {
+const baseProject: ProjectRecord = {
   id: 'project-1',
   harness: 'pi',
   name: 'Apex',
@@ -21,17 +21,12 @@ const project: ProjectRecord = {
   sessionCount: 0,
 }
 
-function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
-  setter?.call(textarea, value)
-  textarea.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
 describe('ProjectRunControl', () => {
   let root: Root
   let container: HTMLDivElement
 
   beforeEach(() => {
+    window.localStorage.clear()
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -42,54 +37,76 @@ describe('ProjectRunControl', () => {
     container.remove()
     vi.restoreAllMocks()
   })
-  it('opens configuration and focuses the run command when Play has no command', async () => {
-    act(() => root.render(<ProjectRunControl project={project} onRun={vi.fn()} onStop={vi.fn()} onSave={vi.fn()} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Run project"]')?.click())
-    await act(async () => { await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())) })
 
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
-    expect(document.activeElement).toBe(container.querySelector<HTMLTextAreaElement>('[placeholder="npm run dev"]'))
+  it('hides completely when a project has no discovered or saved scripts', () => {
+    act(() => root.render(<ProjectRunControl project={baseProject} onRun={vi.fn()} onStop={vi.fn()} />))
+    expect(container.firstChild).toBeNull()
   })
 
-  it('runs the saved command and changes the primary action to Stop while active', () => {
+  it('runs the primary discovered script on Play without rendering a chevron when only one script exists', () => {
+    const onRun = vi.fn()
+    const single: ProjectRecord = {
+      ...baseProject,
+      discoveredScripts: [{ name: 'dev', command: 'pnpm run dev' }],
+    }
+    act(() => root.render(<ProjectRunControl project={single} onRun={onRun} onStop={vi.fn()} />))
+
+    expect(container.querySelector('[aria-label="Select project script"]')).toBeNull()
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Run dev"]')?.click())
+    expect(onRun).toHaveBeenCalledWith({ command: 'pnpm run dev', label: 'dev' })
+  })
+
+  it('changes the primary action to Stop while active', () => {
     const onRun = vi.fn()
     const onStop = vi.fn()
-    const configured = { ...project, scripts: { setup: '', run: 'npm run dev' } }
-    act(() => root.render(<ProjectRunControl project={configured} onRun={onRun} onStop={onStop} onSave={vi.fn()} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Run project"]')?.click())
-    expect(onRun).toHaveBeenCalledWith('run')
-
-    act(() => root.render(<ProjectRunControl project={configured} activeKind="run" onRun={onRun} onStop={onStop} onSave={vi.fn()} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Stop run script"]')?.click())
+    const configured: ProjectRecord = {
+      ...baseProject,
+      discoveredScripts: [{ name: 'dev', command: 'npm run dev' }],
+    }
+    act(() => root.render(<ProjectRunControl project={configured} activeKind="run" onRun={onRun} onStop={onStop} />))
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Stop project script"]')?.click())
     expect(onStop).toHaveBeenCalledOnce()
   })
 
-  it('saves both commands from the shared dropdown', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    act(() => root.render(<ProjectRunControl project={project} onRun={vi.fn()} onStop={vi.fn()} onSave={onSave} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Configure project scripts"]')?.click())
-    const fields = container.querySelectorAll<HTMLTextAreaElement>('textarea')
-    await act(async () => {
-      setTextareaValue(fields[0], 'npm install')
-      setTextareaValue(fields[1], 'npm run dev')
-    })
-    await act(async () => container.querySelector<HTMLButtonElement>('footer .button--primary')?.click())
+  it('opens the script menu when multiple scripts exist, switches selection, and runs the chosen script', () => {
+    const onRun = vi.fn()
+    const multi: ProjectRecord = {
+      ...baseProject,
+      discoveredScripts: [
+        { name: 'dev', command: 'pnpm run dev' },
+        { name: 'test', command: 'pnpm run test' },
+      ],
+    }
+    act(() => root.render(<ProjectRunControl project={multi} onRun={onRun} onStop={vi.fn()} />))
 
-    expect(onSave).toHaveBeenCalledWith({ setup: 'npm install', run: 'npm run dev' })
+    const menuTrigger = container.querySelector<HTMLButtonElement>('[aria-label="Select project script"]')
+    expect(menuTrigger).not.toBeNull()
+    act(() => menuTrigger?.click())
+
+    const items = container.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+    expect(items).toHaveLength(2)
+    expect(items[0].textContent).toContain('dev')
+    expect(items[0].textContent).toContain('pnpm run dev')
+    expect(items[1].textContent).toContain('test')
+    expect(items[1].textContent).toContain('pnpm run test')
+
+    act(() => items[1].click())
+
+    expect(onRun).toHaveBeenCalledWith({ command: 'pnpm run test', label: 'test' })
+    expect(container.querySelector('[role="menu"]')).toBeNull()
+    expect(window.localStorage.getItem('apex.project-script:project-1')).toBe('test')
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Run test"]')).not.toBeNull()
   })
 
-  it.each([
-    [{ setupLastRun: 'npm install', setupLastExitCode: 0 }, 'Setup completed', 'is-success'],
-    [{ setupLastRun: 'npm install', setupLastExitCode: 2 }, 'Setup exited with code 2', 'is-error'],
-    [{ setupLastRun: 'npm install' }, 'Setup did not finish', ''],
-  ])('shows the setup status for %j', (state, text, statusClass) => {
-    const configured = { ...project, scripts: { setup: 'npm install', run: 'npm run dev', ...state } }
-    act(() => root.render(<ProjectRunControl project={configured} onRun={vi.fn()} onStop={vi.fn()} onSave={vi.fn()} />))
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Configure project scripts"]')?.click())
-
-    const status = container.querySelector('.project-run-menu__status')
-    expect(status?.textContent).toContain(text)
-    if (statusClass) expect(status?.classList.contains(statusClass)).toBe(true)
-    else expect(status?.classList.contains('is-error')).toBe(false)
+  it('includes a legacy saved run command when not already in discoveredScripts', () => {
+    const onRun = vi.fn()
+    const legacy: ProjectRecord = {
+      ...baseProject,
+      scripts: { setup: '', run: 'just dev' },
+      discoveredScripts: [{ name: 'test', command: 'npm test' }],
+    }
+    act(() => root.render(<ProjectRunControl project={legacy} onRun={onRun} onStop={vi.fn()} />))
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Run run"]')?.click())
+    expect(onRun).toHaveBeenCalledWith({ command: 'just dev', label: 'run' })
   })
 })

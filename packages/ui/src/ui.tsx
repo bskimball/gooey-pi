@@ -58,14 +58,31 @@ const styles = stylex.create({
     padding: 0,
     borderWidth: 0,
     borderRadius: 'var(--radius-sm)',
-    color: 'var(--text-secondary)',
-    backgroundColor: 'transparent',
+    color: {
+      default: 'var(--text-secondary)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--text)',
+      },
+    },
+    backgroundColor: {
+      default: 'transparent',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--surface-hover)',
+      },
+    },
     backgroundImage: 'none',
     boxShadow: 'none',
     cursor: 'pointer',
-    ':hover': {
-      color: 'var(--text)',
-      backgroundColor: 'var(--surface-hover)',
+    transform: {
+      default: null,
+      ':active:not(:disabled)': 'scale(0.97)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    transition: {
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease',
+      '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
   iconButtonSmall: {
@@ -87,14 +104,26 @@ const styles = stylex.create({
     borderRadius: 'var(--radius-md)',
     color: 'var(--text)',
     // Gray tonal fill like the sidebar session actions, with a defined edge.
-    backgroundColor: 'var(--surface-hover)',
+    backgroundColor: {
+      default: 'var(--surface-hover)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--surface-selected)',
+      },
+    },
     backgroundImage: 'none',
     boxShadow: 'none',
     fontSize: 'var(--fs-body)',
     fontWeight: 550,
     cursor: 'pointer',
-    ':hover': {
-      backgroundColor: 'var(--surface-selected)',
+    transform: {
+      default: null,
+      ':active:not(:disabled)': 'scale(0.97)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    transition: {
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease',
+      '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
   buttonCompact: {
@@ -104,35 +133,65 @@ const styles = stylex.create({
   },
   // Primary stays in the same gray family, one step stronger than secondary.
   buttonPrimary: {
-    color: 'var(--text)',
-    backgroundColor: 'var(--surface-selected)',
-    borderColor: 'var(--border-strong)',
-    fontWeight: 600,
-    ':hover': {
-      color: 'var(--text)',
-      backgroundColor: 'color-mix(in srgb, var(--surface-selected) 82%, var(--text))',
-      borderColor: 'color-mix(in srgb, var(--border-strong) 80%, var(--text))',
+    color: {
+      default: 'var(--text)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--text)',
+      },
     },
+    backgroundColor: {
+      default: 'var(--surface-selected)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'color-mix(in srgb, var(--surface-selected) 82%, var(--text))',
+      },
+    },
+    borderColor: {
+      default: 'var(--border-strong)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'color-mix(in srgb, var(--border-strong) 80%, var(--text))',
+      },
+    },
+    fontWeight: 600,
   },
   buttonDanger: {
     borderRadius: 999,
     paddingInline: 14,
     color: '#ffffff',
-    backgroundColor: 'var(--danger)',
+    backgroundColor: {
+      default: 'var(--danger)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--danger)',
+      },
+    },
     borderColor: 'var(--danger)',
-    ':hover': {
-      backgroundColor: 'var(--danger)',
-      filter: 'brightness(0.94)',
+    filter: {
+      default: null,
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'brightness(0.94)',
+      },
     },
   },
   buttonQuiet: {
     borderColor: 'transparent',
-    backgroundColor: 'transparent',
+    backgroundColor: {
+      default: 'transparent',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--surface-hover)',
+      },
+    },
     boxShadow: 'none',
-    color: 'var(--text-secondary)',
-    ':hover': {
-      color: 'var(--text)',
-      backgroundColor: 'var(--surface-hover)',
+    color: {
+      default: 'var(--text-secondary)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--text)',
+      },
     },
   },
   selectRoot: {
@@ -251,6 +310,10 @@ const styles = stylex.create({
     gap: 0,
     padding: 32,
     textAlign: 'center',
+    textWrap: 'pretty',
+  },
+  emptyStateDescription: {
+    textWrap: 'pretty',
   },
 })
 
@@ -565,13 +628,13 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   )
 }
 
-export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: string; children: ReactNode; action?: ReactNode }) {
+export function EmptyState({ icon, title, children, action, className = '', role }: { icon?: ReactNode; title: string; children: ReactNode; action?: ReactNode; className?: string; role?: string }) {
   const textDescription = typeof children === 'string' || typeof children === 'number' ? String(children) : undefined
   const actionsSlot = textDescription !== undefined
     ? (action ? <div className={`empty-state__action ${stylex.props(pagesStyles.emptyStateAction).className ?? ""}`}>{action}</div> : undefined)
     : (
         <>
-          <div>{children}</div>
+          <div {...stylex.props(styles.emptyStateDescription)}>{children}</div>
           {action ? <div className={`empty-state__action ${stylex.props(pagesStyles.emptyStateAction).className ?? ""}`}>{action}</div> : null}
         </>
       )
@@ -582,7 +645,8 @@ export function EmptyState({ icon, title, children, action }: { icon?: ReactNode
       icon={icon ? <div className={`empty-state__icon ${stylex.props(pagesStyles.emptyStateIcon).className ?? ""}`}>{icon}</div> : undefined}
       description={textDescription}
       actions={actionsSlot}
-      className="empty-state"
+      role={role}
+      className={`empty-state ${className}`.trim()}
       xstyle={[pagesStyles.emptyState, styles.emptyState]}
     />
   )

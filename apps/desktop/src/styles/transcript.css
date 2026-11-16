@@ -10,19 +10,16 @@
 .prompt-suggestions button { min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; color: var(--text-secondary); background: var(--surface-selected); font-weight: 550; transition: color var(--fast), background var(--fast), transform 120ms ease-out; }
 .prompt-suggestions button:hover { color: var(--text); background: color-mix(in srgb, var(--surface-selected) 70%, var(--text-tertiary)); transform: translateY(-1px); }
 .prompt-suggestions button:active { transform: scale(.97); }
-/* Each sent prompt is a tinted block with a muted apex edge, so your side of a long session stays
+/* Each sent prompt is a left-aligned tinted block, so your side of a long session stays
    easy to find while scanning the agent's output. */
 .message--user>* { grid-column: 1; min-width: 0; }
-.message--user>.message-actions { grid-row: 1; grid-column: 2; align-self: start; margin-top: -3px; }
+.message--user>.message-actions { grid-row: 2; grid-column: 1; margin-top: 2px; }
 /* Turns are grouped by air, not rules: a short gap from prompt to reply, a long pause before the next prompt.
    The reply's hover-only Copy row (30px) already opens that pause, so the margin adds only the rest. */
 .message~.message--user { margin-top: 44px; }
-/* Prompt-line turn outcome: duration (or live state) borrowed from the reply, right-aligned
-   where the copy action appears on hover, so the two trade places instead of stacking. */
-.message--user>.message__turn-status { grid-row: 1; grid-column: 2; align-self: start; display: inline-flex; align-items: center; margin-top: 2px; color: var(--text-tertiary); font-size: var(--chat-meta); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
-.message__turn-status>span[aria-hidden] { height: 20px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--canvas); }
-.message__turn-status.is-running>span[aria-hidden] { border-color: color-mix(in srgb, var(--apex) 32%, var(--border)); }
-.message__turn-status.is-failed>span[aria-hidden] { border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); background: var(--danger-soft); }
+/* Turn outcome: quiet duration (or live state) under the prompt bubble, left-aligned
+   in the row where Copy appears on hover, so the two trade places instead of stacking. */
+.message--user>.message__turn-status { grid-row: 2; grid-column: 1; align-self: center; white-space: nowrap; pointer-events: none; transition: opacity 130ms ease-out; }
 .message--user:hover>.message__turn-status, .message--user:focus-within>.message__turn-status { opacity: 0; }
 .message--steer-read span { flex: 0 0 auto; }
 .user-annotations>summary { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--annotation) 35%, var(--border)); border-radius: var(--radius-sm); color: var(--annotation); background: color-mix(in srgb, var(--annotation) 8%, transparent); cursor: pointer; font-size: var(--chat-meta); font-weight: 600; list-style: none; user-select: none; }
@@ -33,19 +30,16 @@
 /* Assistant prose and work rows start at the transcript's left content edge. */
 /* A live turn that ends the transcript sits directly above the composer, whose clearance the
    transcript's bottom padding already reserves, so it drops the margins that space later rows. */
-.message--assistant:has(.work-disclosure.is-running,.streaming-state):not(:has(~.message)), .message--assistant:not(:has(~.message))>.message__content>.work-disclosure.is-running:last-child { margin-bottom: 0; }
+.message--assistant:has(.work-disclosure.is-running):not(:has(~.message)), .message--assistant:not(:has(~.message))>.message__content>.work-disclosure.is-running:last-child { margin-bottom: 0; }
 /* Settled work is one ledger line between prompt and answer: no rule above it, the caret and count carry it. */
 /* The caret hangs left by its padding plus the glyph's own inset, so its point lines up with the reply text. */
 .work-disclosure__button { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; margin-left: 0; padding: 0 2px; color: var(--text-tertiary); background: transparent; text-align: left; font-size: var(--chat-ui); font-weight: 550; transition: color var(--fast); }
 .work-disclosure__button:hover { color: var(--text); }
-/* Live status reads as a quiet activity row, not a capsule: the pulsing dots, the rotating verb, and the clock. */
+/* Live status reads as a quiet activity row: the elapsed clock only; the composer ribbon carries the motion. */
 .work-disclosure.is-running .work-timeline:empty { display: none; }
 .work-disclosure.is-running .work-timeline:empty+.work-disclosure__status { margin-top: 0; }
-.work-disclosure__status>.thinking-dots { order: -1; }
-/* Each verb fades in and gets one light sweep (the 2.6s matches LiveWorkVerb's rotation).
-   The sweep ends on the resting colour, so reduced motion lands on plain secondary text. */
 /* Live elapsed clock on running work rows: tabular digits keep the 1-second
-   updates from shifting the adjacent dots around. */
+   updates from shifting adjacent text. */
 .timeline-page__body:not([hidden]) { display: flex; flex-direction: column; gap: 12px; }
 .timeline-page__body[hidden] { display: none; }
 .work-disclosure.is-running .work-timeline { padding: 12px 0 16px; }
@@ -76,23 +70,22 @@
 /* Settled reasoning stays open under a quiet Thought header that can fold it away. */
 .activity-thought__summary .activity-line__kind { color: inherit; font-weight: 550; }
 .activity-thought__summary[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
-/* Subagent lanes are independent units of work, so they earn a bounded row; the role badge says who, the pill says where it stands. */
-.subagent-lane__summary.is-clickable { cursor: pointer; transition: background-color var(--fast); }
-.subagent-lane__summary.is-clickable:hover { background: var(--surface-hover); }
+/* Subagent lanes sit inline in the work-timeline ledger as a single quiet row alongside tool calls. */
 .subagent-lane.is-running .subagent-lane__status { color: var(--apex); }
-.subagent-lane.is-done .subagent-lane__status { color: var(--success); }
-.subagent-lane.is-error .subagent-lane__status { color: var(--danger); }
-/* The tree rail: report highlights hang off the lane header like the TUI's agent tree. */
-.subagent-lane__tree>li { min-width: 0; display: flex; align-items: baseline; gap: 6px; color: var(--text-secondary); }
-.subagent-lane__tree>li.is-pending { color: var(--text-tertiary); }
-.subagent-lane__report-toggle[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
-.subagent-lane.is-running .subagent-lane__state { color: var(--apex); background: var(--apex-soft); }
+.subagent-lane.is-done .subagent-lane__status, .subagent-lane.is-done .subagent-lane__state { color: var(--success); }
+.subagent-lane.is-error .subagent-lane__status, .subagent-lane.is-error .subagent-lane__state { color: var(--danger); }
+.subagent-lane__summary[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
+.subagent-lane.is-running .subagent-lane__state { color: var(--apex); }
 .subagent-lane.is-waiting .subagent-lane__status, .subagent-lane.is-waiting .subagent-lane__state { color: var(--warning); }
-.subagent-lane.is-waiting .subagent-lane__state { background: var(--warning-soft); }
-.subagent-lane.is-sent .subagent-lane__state { color: var(--text-secondary); background: var(--surface-subtle); }
-.subagent-lane.is-error .subagent-lane__state { color: var(--danger); background: var(--danger-soft); }
-.subagent-lane__links button { padding: 3px 0; color: var(--text-secondary); background: transparent; font-size: var(--chat-meta); text-decoration: underline; text-underline-offset: 3px; }
-.subagent-lane.is-stopped .subagent-lane__state, .subagent-lane.is-closed .subagent-lane__state { color: var(--text-secondary); background: var(--surface-hover); }
+.subagent-lane.is-sent .subagent-lane__state { color: var(--text-secondary); }
+@media (hover: hover) and (pointer: fine) {
+  .subagent-lane__open { opacity: 0; }
+  .subagent-lane__summary:hover .subagent-lane__open, .subagent-lane__summary:focus-within .subagent-lane__open { opacity: 1; }
+}
+.subagent-lane__links button { min-height: 22px; display: inline-flex; align-items: center; gap: 3px; margin-left: -6px; padding: 0 6px; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; font-size: var(--chat-meta); font-weight: 500; text-decoration: none; transition: color var(--fast), background-color var(--fast); }
+.subagent-lane__links button:hover { color: var(--text); background: var(--surface-subtle); }
+.subagent-lane__links button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.subagent-lane.is-stopped .subagent-lane__state, .subagent-lane.is-closed .subagent-lane__state { color: var(--text-secondary); }
 /* Plan updates head the steps that follow them: the count and active step read as a section label, not a tool call. */
 .todo-step__summary:hover:not(:disabled) { background: var(--surface-subtle); }
 .todo-step.is-finished .todo-step__count { color: var(--success); background: var(--success-soft); }
@@ -111,10 +104,8 @@
 .message--activity .work-timeline { padding: 0; }
 .changes-card__text strong { font-size: var(--fs-body); font-weight: 550; }
 .changes-card__text small { color: var(--text-tertiary); font-size: var(--chat-meta); }
-.transcript-active-placeholder .streaming-state { margin-top: 0; }
 /* A monoline waterline slides one period per cycle so the seam never shows; a dorsal fin, clipped above
    the waterline, surfaces for ~40% of a per-mount randomized cycle. Reduced motion parks both mid-wave. */
-.thinking-dots svg { display: block; overflow: hidden; }
 @keyframes thinking-wave-slide { to { transform: translateX(-8px); } }
 @keyframes thinking-fin-cruise {
   0%, 18% { transform: translate(-6px, 3px); }

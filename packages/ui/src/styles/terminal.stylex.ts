@@ -103,6 +103,7 @@ export const styles = stylex.create({
     "columnGap": "2px"
   },
   "terminalTab": {
+    "position": "relative",
     "height": "29px",
     "display": "flex",
     "alignItems": "center",
@@ -125,7 +126,7 @@ export const styles = stylex.create({
   },
   "terminalTabIsActive": {
     "color": "var(--terminal-control-active)",
-    "backgroundColor": "var(--terminal-control-bg)",
+    "backgroundColor": "transparent",
     "backgroundImage": "none",
     "backgroundPosition": "0% 0%",
     "backgroundSize": "auto auto",
@@ -134,8 +135,16 @@ export const styles = stylex.create({
     "backgroundOrigin": "padding-box",
     "backgroundClip": "border-box"
   },
+  "terminalTabIndicator": {
+    "position": "absolute",
+    "inset": 0,
+    "borderRadius": "var(--radius-sm)",
+    "backgroundColor": "var(--terminal-control-bg)",
+    "pointerEvents": "none"
+  },
   "terminalTabClose": {
     "position": "relative",
+    "zIndex": 1,
     "width": "20px",
     "height": "20px",
     "display": "grid",
@@ -263,6 +272,8 @@ export const contextStyles = stylex.create({
     display: 'none'
   },
   tabButton: {
+    position: 'relative',
+    zIndex: 1,
     height: 29,
     display: 'flex',
     alignItems: 'center',
@@ -273,7 +284,9 @@ export const contextStyles = stylex.create({
     paddingLeft: 8,
     color: 'inherit',
     backgroundColor: 'transparent',
-    fontSize: 'var(--fs-meta)'
+    fontSize: 'var(--fs-meta)',
+    transform: { default: 'none', ':active': 'scale(0.97)' },
+    transition: 'transform 120ms ease-out',
   },
   closeActive: {
     opacity: {

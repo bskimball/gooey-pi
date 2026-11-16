@@ -1,6 +1,9 @@
 import type { MessagePart, TranscriptMessage } from '../types/api'
 import { specialistOutcome, specialistStepStatus, uiRequestsEvent, workerDetails, type SpecialistStatus } from './status'
 import { applySpecialistEvents, isLiveSpecialist } from './machine'
+import { extractStaticToolCalls, pairToolCalls, type ToolResultPart } from './tool-calls'
+
+export { extractStaticToolCalls, pairToolCalls, type ToolResultPart } from './tool-calls'
 
 export interface PiSpecialistSummary {
   id: string
@@ -61,11 +64,7 @@ function activityPartsFromDetails(rawActivities: unknown): { parts: MessagePart[
     if (!item || typeof item.tool !== 'string' || !item.tool.trim()) continue
     const tool = item.tool.trim()
     const id = typeof item.id === 'string' && item.id ? item.id : `spec-act-${i + 1}`
-    const summaryText = typeof item.summary === 'string'
-      ? item.summary
-      : typeof item.args === 'string'
-        ? item.args
-        : ''
+    const summaryText = typeof item.summary === 'string' ? item.summary : typeof item.args === 'string' ? item.args : ''
     const status = typeof item.status === 'string' ? item.status : 'completed'
     const duration = typeof item.duration === 'number' && Number.isFinite(item.duration) ? item.duration : undefined
     if (status === 'running') {
@@ -122,6 +121,8 @@ function buildMessagesFromTurns(turns: SpecialistTurnDraft[]): TranscriptMessage
   return out
 }
 
+const CODEMODE_TASK_TOOLS = new Set(['task_close', 'task_abort', 'task_wait'])
+
 export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSpecialistSession[] {
   return parseSpecialistRecords(messages.flatMap((message) => message.parts))
 }
@@ -131,21 +132,13 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
   const specialists: PiSpecialistSession[] = []
   const turnsBySpecId = new Map<string, SpecialistTurnDraft[]>()
   const workerById = new Map<string, PiSpecialistSession>()
+  const pairedResults = pairToolCalls(flatParts)
 
-  const findNextToolResult = (
-    startIndex: number,
-    toolName: string,
-    includeStreaming = false,
-  ): Extract<TranscriptMessage['parts'][number], { type: 'toolResult' }> | undefined => {
-    for (let cursor = startIndex + 1; cursor < flatParts.length; cursor += 1) {
-      const candidate = flatParts[cursor]
-      if (candidate.type === 'toolCall' && candidate.name === toolName) return undefined
-      if (candidate.type === 'toolResult' && (candidate.name === undefined || candidate.name === toolName)) {
-        if (candidate.streaming && !includeStreaming) return undefined
-        return candidate
-      }
-    }
-    return undefined
+  const getPairedResult = (index: number, includeStreaming: boolean): ToolResultPart | undefined => {
+    const result = pairedResults.get(index)
+    if (!result) return undefined
+    if (result.streaming && !includeStreaming) return undefined
+    return result
   }
 
   const applyWorkerDetails = (target: PiSpecialistSession, details: Record<string, unknown> | undefined) => {
@@ -167,23 +160,100 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     if (typeof worker.killReason === 'string' && worker.killReason) target.killReason = worker.killReason
   }
 
+  const syncTurnState = (target: PiSpecialistSession) => {
+    if (!isLiveSpecialist(target.status)) delete target.activity
+    const turns = turnsBySpecId.get(target.id)
+    const currentTurn = turns?.at(-1)
+    if (currentTurn) {
+      currentTurn.streaming = isLiveSpecialist(target.status)
+      currentTurn.isError = target.status === 'error'
+      target.messages = buildMessagesFromTurns(turns!)
+    }
+  }
+
+  const applyControlResult = (target: PiSpecialistSession, toolName: string, result: ToolResultPart) => {
+    const details = asRecord(result.details)
+    const workerView = asRecord(details?.worker)
+    applyWorkerDetails(target, details)
+    const sessionFileMatch = /^session_file:\s*(.+)$/m.exec(result.text)?.[1]?.trim()
+    if (sessionFileMatch) target.sessionFile = sessionFileMatch
+    const killReason = /^kill_reason:[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim()
+    if (killReason) target.killReason = killReason
+
+    target.status = specialistOutcome({ previous: target.status, tool: toolName, result })
+    const rawActivity = isLiveSpecialist(target.status)
+      ? /^(?:activity|running):[ \t]*(.+)$/m
+          .exec(result.text)?.[1]
+          ?.trim()
+          .replace(/^running\s+/i, '')
+      : undefined
+    if (rawActivity && rawActivity !== '(none)') target.activity = rawActivity.slice(0, 80)
+    else delete target.activity
+
+    const turns = turnsBySpecId.get(target.id)
+    const currentTurn = turns?.at(-1)
+    if (currentTurn) {
+      const { parts: detailActivities, runningLabel } = activityPartsFromDetails(workerView?.activities)
+      if (detailActivities.length > 0) {
+        currentTurn.activities = detailActivities
+      } else if (target.activity) {
+        const colon = target.activity.indexOf(':')
+        const activityTool = colon > 0 ? target.activity.slice(0, colon).trim() : 'tool'
+        const toolSummary = colon > 0 ? target.activity.slice(colon + 1).trim() : target.activity
+        currentTurn.activities = [
+          { type: 'toolCall', id: `${target.id}-live-tool`, name: activityTool, args: { command: toolSummary } },
+          { type: 'toolResult', name: activityTool, text: toolSummary, streaming: true },
+        ]
+      }
+      if (isLiveSpecialist(target.status) && runningLabel && !target.activity) {
+        target.activity = runningLabel
+      }
+      const settledBody = typeof details?.finalReport === 'string' ? details.finalReport.trim() : extractSettledResultBody(result.text)
+      if (target.status === 'done' && settledBody && (toolName === 'task_wait' || !target.finalReport)) target.finalReport = settledBody
+      const latestText = typeof workerView?.latestText === 'string' && workerView.latestText.trim() ? workerView.latestText.trim() : undefined
+      if (target.finalReport) currentTurn.responseText = target.finalReport
+      else if (settledBody) currentTurn.responseText = settledBody
+      else if (latestText) currentTurn.responseText = latestText
+      currentTurn.streaming = isLiveSpecialist(target.status)
+      currentTurn.isError = target.status === 'error'
+      target.messages = buildMessagesFromTurns(turns!)
+    }
+  }
+
+  const applyAsyncSettlementLines = (text: string) => {
+    const pattern = /^(task_\d+):\s*(settled|failed|aborted)\b(.*)$/gm
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(text)) !== null) {
+      const target = workerById.get(match[1]!)
+      if (!target) continue
+      const word = match[2]!
+      const eventType = word === 'settled' ? 'SETTLED' : word === 'failed' ? 'FAILED' : 'ABORTED'
+      target.status = applySpecialistEvents(target.status, [{ type: eventType }])
+      syncTurnState(target)
+    }
+  }
+
   for (let index = 0; index < flatParts.length; index += 1) {
-    const part = flatParts[index]
+    const part = flatParts[index]!
+    if (part.type === 'toolResult' && (part.name === 'Async Task Settled' || part.name === 'async-task-settled')) {
+      applyAsyncSettlementLines(part.text)
+      continue
+    }
+    if (part.type === 'text' && /^Async RPC worker settled:/m.test(part.text)) {
+      applyAsyncSettlementLines(part.text)
+      continue
+    }
     if (part.type !== 'toolCall') continue
     const args = asRecord(part.args)
     if (part.name === 'task' && typeof args?.agent === 'string') {
-      const result = findNextToolResult(index, 'task', true)
+      const result = getPairedResult(index, true)
       const finalResult = result && !result.streaming ? result : undefined
       const details = asRecord(result?.details)
       const { parts: activityParts, runningLabel } = activityPartsFromDetails(details?.activities)
-      const status: PiSpecialistSession['status'] = finalResult
-        ? (finalResult.isError ? 'error' : 'done')
-        : 'running'
+      const status: PiSpecialistSession['status'] = finalResult ? (finalResult.isError ? 'error' : 'done') : 'running'
       const fullPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
       const rawPrompt = fullPrompt.replace(/\s+/g, ' ')
-      const responseText = typeof details?.finalReport === 'string' && details.finalReport.trim()
-        ? details.finalReport.trim()
-        : finalResult?.text?.trim() || undefined
+      const responseText = typeof details?.finalReport === 'string' && details.finalReport.trim() ? details.finalReport.trim() : finalResult?.text?.trim() || undefined
       const id = part.id ?? `task-${specialists.length + 1}`
       const turn: SpecialistTurnDraft = {
         id,
@@ -213,13 +283,13 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
       }
       specialists.push(entry)
     } else if (part.name === 'task_chain' && Array.isArray(args?.steps)) {
-      const result = findNextToolResult(index, 'task_chain', true)
+      const result = getPairedResult(index, true)
       const finalResult = result && !result.streaming ? result : undefined
       const details = asRecord(result?.details)
       const detailSteps = Array.isArray(details?.steps) ? details.steps : []
       const baseId = part.id ?? `chain-${specialists.length + 1}`
       const anyStepFailed = typeof finalResult?.text === 'string' && /^step\s+\d+\s+(?:failed|aborted|timeout)\b/m.test(finalResult.text)
-      const finalBody = typeof finalResult?.text === 'string' ? extractSettledResultBody(finalResult.text) ?? finalResult.text : undefined
+      const finalBody = typeof finalResult?.text === 'string' ? (extractSettledResultBody(finalResult.text) ?? finalResult.text) : undefined
       let failedEarlier = false
       for (let stepIndex = 0; stepIndex < args.steps.length; stepIndex += 1) {
         const step = asRecord(args.steps[stepIndex])
@@ -247,11 +317,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         }
         const id = `${baseId}-step-${stepIndex + 1}`
         const isLastStep = stepIndex === args.steps.length - 1 || status === 'error'
-        const stepReport = typeof stepDetail?.report === 'string' && stepDetail.report.trim()
-          ? stepDetail.report.trim()
-          : finalResult && isLastStep
-            ? finalBody
-            : undefined
+        const stepReport = typeof stepDetail?.report === 'string' && stepDetail.report.trim() ? stepDetail.report.trim() : finalResult && isLastStep ? finalBody : undefined
         const turn: SpecialistTurnDraft = {
           id,
           prompt: fullPrompt,
@@ -274,7 +340,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         specialists.push(entry)
       }
     } else if (part.name === 'task_start' && typeof args?.agent === 'string') {
-      const result = findNextToolResult(index, 'task_start', false)
+      const result = getPairedResult(index, false)
       const details = asRecord(result?.details)
       const workerView = asRecord(details?.worker)
       const fullPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
@@ -305,13 +371,15 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         existing.messages = buildMessagesFromTurns(turns)
       } else {
         const id = workerId ?? part.id ?? `task-${specialists.length + 1}`
-        const turns: SpecialistTurnDraft[] = [{
-          id: `${id}-gen-1`,
-          prompt: fullPrompt,
-          activities: activityParts,
-          streaming: !result?.isError,
-          isError: Boolean(result?.isError),
-        }]
+        const turns: SpecialistTurnDraft[] = [
+          {
+            id: `${id}-gen-1`,
+            prompt: fullPrompt,
+            activities: activityParts,
+            streaming: !result?.isError,
+            isError: Boolean(result?.isError),
+          },
+        ]
         turnsBySpecId.set(id, turns)
         const entry: PiSpecialistSession = {
           id,
@@ -330,7 +398,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     } else if (part.name === 'task_send' && typeof args?.id === 'string') {
       const target = workerById.get(args.id)
       if (!target) continue
-      const result = findNextToolResult(index, 'task_send', false)
+      const result = getPairedResult(index, false)
       if (result?.isError) continue
       const details = asRecord(result?.details)
       applyWorkerDetails(target, details)
@@ -344,7 +412,10 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
       }
       target.status = specialistOutcome({ previous: target.status, tool: part.name, result, startsGeneration: mode === 'prompt' })
       if (!isLiveSpecialist(target.status) || mode === 'prompt') delete target.activity
-      if (isLiveSpecialist(target.status) && mode === 'prompt') { delete target.killReason; delete target.finalReport }
+      if (isLiveSpecialist(target.status) && mode === 'prompt') {
+        delete target.killReason
+        delete target.finalReport
+      }
       if (fullMessage) {
         const turns = turnsBySpecId.get(target.id) ?? []
         turns.push({
@@ -360,48 +431,88 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     } else if ((part.name === 'task_wait' || part.name === 'task_status' || part.name === 'task_close' || part.name === 'task_abort') && typeof args?.id === 'string') {
       const target = workerById.get(args.id)
       if (!target) continue
-      const result = findNextToolResult(index, part.name, part.name === 'task_wait' || part.name === 'task_status')
+      const result = getPairedResult(index, part.name === 'task_wait' || part.name === 'task_status')
+      if (!result) continue
+      applyControlResult(target, part.name, result)
+    } else if (part.name === 'task_wait' && Array.isArray(args?.ids)) {
+      const result = getPairedResult(index, true)
       if (!result) continue
       const details = asRecord(result.details)
       const workerView = asRecord(details?.worker)
-      applyWorkerDetails(target, details)
-      const sessionFileMatch = /^session_file:\s*(.+)$/m.exec(result.text)?.[1]?.trim()
-      if (sessionFileMatch) target.sessionFile = sessionFileMatch
-      const killReason = /^kill_reason:[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim()
-      if (killReason) target.killReason = killReason
-
-      target.status = specialistOutcome({ previous: target.status, tool: part.name, result })
-      const rawActivity = isLiveSpecialist(target.status) ? /^(?:activity|running):[ \t]*(.+)$/m.exec(result.text)?.[1]?.trim().replace(/^running\s+/i, '') : undefined
-      if (rawActivity && rawActivity !== '(none)') target.activity = rawActivity.slice(0, 80)
-      else delete target.activity
-
-      const turns = turnsBySpecId.get(target.id)
-      const currentTurn = turns?.at(-1)
-      if (currentTurn) {
-        const { parts: detailActivities, runningLabel } = activityPartsFromDetails(workerView?.activities)
-        if (detailActivities.length > 0) {
-          currentTurn.activities = detailActivities
-        } else if (target.activity) {
-          const colon = target.activity.indexOf(':')
-          const toolName = colon > 0 ? target.activity.slice(0, colon).trim() : 'tool'
-          const toolSummary = colon > 0 ? target.activity.slice(colon + 1).trim() : target.activity
-          currentTurn.activities = [
-            { type: 'toolCall', id: `${target.id}-live-tool`, name: toolName, args: { command: toolSummary } },
-            { type: 'toolResult', name: toolName, text: toolSummary, streaming: true },
-          ]
+      const primaryId = (typeof workerView?.id === 'string' && workerView.id) || /^(task_\d+)\s+(?:already\s+)?settled\b/im.exec(result.text)?.[1] || /^(task_\d+)\b/m.exec(result.text)?.[1]
+      if (primaryId) {
+        const target = workerById.get(primaryId)
+        if (target) applyControlResult(target, 'task_wait', result)
+      }
+      const othersLine = /^others:[ \t]*(.+)$/im.exec(result.text)?.[1]
+      if (othersLine) {
+        const otherPattern = /\b(task_\d+)\s+(settled|running|starting|retrying|failed|aborted|closed)\b/gi
+        let m: RegExpExecArray | null
+        while ((m = otherPattern.exec(othersLine)) !== null) {
+          const otherId = m[1]!
+          if (otherId === primaryId) continue
+          const other = workerById.get(otherId)
+          if (!other) continue
+          other.status = specialistOutcome({
+            previous: other.status,
+            tool: 'task_wait',
+            result: { type: 'toolResult', name: 'task_wait', text: `lifecycle: ${m[2]!.toLowerCase()}` },
+          })
+          syncTurnState(other)
         }
-        if (isLiveSpecialist(target.status) && runningLabel && !target.activity) {
-          target.activity = runningLabel
+      }
+    } else if (part.name === 'task_list') {
+      const result = getPairedResult(index, false)
+      if (!result || result.isError) continue
+      const details = asRecord(result.details)
+      const listObj = asRecord(details?.list)
+      const rawWorkers = Array.isArray(listObj?.workers) ? listObj.workers : Array.isArray(details?.workers) ? details.workers : []
+      for (const item of rawWorkers) {
+        const w = asRecord(item)
+        if (!w || typeof w.id !== 'string' || typeof w.lifecycle !== 'string') continue
+        const target = workerById.get(w.id)
+        if (!target) continue
+        target.status = specialistOutcome({
+          previous: target.status,
+          tool: 'task_list',
+          result: { type: 'toolResult', name: 'task_list', text: `lifecycle: ${w.lifecycle}`, details: { worker: w } },
+        })
+        syncTurnState(target)
+      }
+      const rowPattern = /^(task_\d+)\s+lifecycle=([a-z_]+)/gim
+      let rowMatch: RegExpExecArray | null
+      while ((rowMatch = rowPattern.exec(result.text)) !== null) {
+        const target = workerById.get(rowMatch[1]!)
+        if (!target) continue
+        target.status = specialistOutcome({
+          previous: target.status,
+          tool: 'task_list',
+          result: { type: 'toolResult', name: 'task_list', text: `lifecycle: ${rowMatch[2]!}` },
+        })
+        syncTurnState(target)
+      }
+    } else if (part.name === 'codemode' && typeof args?.code === 'string') {
+      const result = getPairedResult(index, false)
+      if (result?.isError) continue
+      const staticCalls = extractStaticToolCalls(args.code, CODEMODE_TASK_TOOLS)
+      for (const call of staticCalls) {
+        const id = typeof call.args.id === 'string' ? call.args.id : undefined
+        if (!id) continue
+        const target = workerById.get(id)
+        if (!target) continue
+        if (call.name === 'task_close' || call.name === 'task_abort') {
+          applyControlResult(target, call.name, {
+            type: 'toolResult',
+            name: call.name,
+            text: call.name === 'task_close' ? 'lifecycle: closed' : 'lifecycle: aborted',
+          })
+        } else if (call.name === 'task_wait' && result?.text && (/\blifecycle[:=]\s*[a-z_]+/i.test(result.text) || /^task_\d+\s+(?:already\s+)?settled\b/im.test(result.text))) {
+          applyControlResult(target, 'task_wait', {
+            type: 'toolResult',
+            name: 'task_wait',
+            text: result.text,
+          })
         }
-        const settledBody = typeof details?.finalReport === 'string' ? details.finalReport.trim() : extractSettledResultBody(result.text)
-        if (target.status === 'done' && settledBody && (part.name === 'task_wait' || !target.finalReport)) target.finalReport = settledBody
-        const latestText = typeof workerView?.latestText === 'string' && workerView.latestText.trim() ? workerView.latestText.trim() : undefined
-        if (target.finalReport) currentTurn.responseText = target.finalReport
-        else if (settledBody) currentTurn.responseText = settledBody
-        else if (latestText) currentTurn.responseText = latestText
-        currentTurn.streaming = isLiveSpecialist(target.status)
-        currentTurn.isError = target.status === 'error'
-        target.messages = buildMessagesFromTurns(turns!)
       }
     }
   }

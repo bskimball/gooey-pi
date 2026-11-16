@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
-import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ChatCircleDots, Check, Clock, X } from '@/components/icons'
 import { ApexButton } from '@/components/ui'
@@ -116,13 +116,15 @@ export function ActivityQuestionCard({
         ) : question.method === 'select' ? (
           <div className={`activity-question-card__select ${stylex.props(activityStyles.activityQuestionCardSelect).className ?? ""}`}>
             {selectOptions.length > COMPACT_SELECT_FILTER_THRESHOLD ? (
-              <input
-                type="text"
-                className={`activity-question-card__filter ${stylex.props(activityStyles.activityQuestionCardFilter).className ?? ""}`}
-                value={filterQuery}
-                onChange={(event) => setFilterQuery(event.target.value)}
-                placeholder={`Filter ${selectOptions.length} options…`}
+              <TextInput
+                label="Filter options"
+                isLabelHidden
                 aria-label="Filter options"
+                controlClassName="activity-question-card__filter"
+                controlXstyle={activityStyles.activityQuestionCardFilter}
+                value={filterQuery}
+                onChange={setFilterQuery}
+                placeholder={`Filter ${selectOptions.length} options…`}
               />
             ) : null}
             <div
@@ -131,15 +133,17 @@ export function ActivityQuestionCard({
               aria-label={question.title}
             >
               {filteredOptions.map((option, index) => (
-                <button
+                <ApexButton
                   key={`${option}-${index}`}
                   type="button"
-                  className={`button button--compact activity-question-card__option ${stylex.props(workbenchStyles.button, workbenchStyles.buttonCompact, activityStyles.activityQuestionCardOption).className ?? ""}`}
+                  compact
+                  className="activity-question-card__option"
+                  xstyle={activityStyles.activityQuestionCardOption}
                   disabled={submitting || !onRespond}
                   onClick={() => void submitResponse({ value: option })}
                 >
                   {option}
-                </button>
+                </ApexButton>
               ))}
               {filteredOptions.length === 0 ? (
                 <span className={`activity-question-card__empty ${stylex.props(activityStyles.activityQuestionCardEmpty).className ?? ""}`}>No matching options</span>
@@ -148,14 +152,16 @@ export function ActivityQuestionCard({
           </div>
         ) : question.method === 'input' ? (
           <form className={`activity-question-card__input-form ${stylex.props(activityStyles.activityQuestionCardInputForm).className ?? ""}`} onSubmit={handleInputSubmit}>
-            <input
-              type="text"
-              className={`activity-question-card__input ${stylex.props(activityStyles.activityQuestionCardInput).className ?? ""}`}
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              placeholder={inputPlaceholder}
+            <TextInput
+              label={question.title}
+              isLabelHidden
               aria-label={question.title}
-              disabled={submitting || !onRespond}
+              controlClassName="activity-question-card__input"
+              controlXstyle={activityStyles.activityQuestionCardInput}
+              value={inputValue}
+              onChange={setInputValue}
+              placeholder={inputPlaceholder}
+              isDisabled={submitting || !onRespond}
             />
             <ApexButton
               type="submit"

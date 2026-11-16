@@ -50,7 +50,6 @@
 .transcript--chat .message--user > .message__turn-status:not(.is-failed) { display: none; }
 .transcript--chat .message--assistant { display: flex; flex-direction: column; align-items: flex-start; }
 .transcript--chat .message--assistant > .message__content,
-.transcript--chat .transcript-active-placeholder > .streaming-state { position: relative; max-width: min(85%, 640px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 18px 18px 18px 4px; background: var(--surface-raised); }
 .transcript--chat .message--assistant > .message__content > .message-actions { position: absolute; bottom: 0; left: 100%; margin: 0 0 0 4px; }
 
 /* Back-to-back collapsed work groups (separate tool calls with no prose between) stack as one list. */

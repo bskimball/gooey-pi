@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
+import { ActivityCoordinator } from '../../apps/desktop/src/components/activity/ActivityCoordinator'
 import { useCoordinatorRuntime } from '../../apps/desktop/src/hooks/useCoordinatorRuntime'
 import type { ApexApi } from '../../apps/desktop/src/types/api'
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -78,5 +79,45 @@ it('reuses the open coordinator when Activity remounts and closes it after the w
     expect(close).toHaveBeenCalledWith('warm')
   } finally {
     vi.useRealTimers()
+  }
+})
+
+it('renders a styled error card when coordinator.open rejects and recovers on Try again', async () => {
+  const errorMessage = 'Add an explicitly granted project to open the coordinator'
+  const open = vi
+    .fn()
+    .mockRejectedValueOnce(new Error(errorMessage))
+    .mockResolvedValueOnce({
+      attachmentId: 'recovered',
+      eventSequence: 0,
+      session: { id: 'recovered' },
+      runtime: { runtimeId: 'recovered' },
+      messages: [],
+      pendingDialogs: [],
+    })
+  const bridge = {
+    agent: { onEvent: () => () => {} },
+    providers: { catalog: vi.fn().mockResolvedValue({ providers: [], models: [] }) },
+    coordinator: { open, close: vi.fn().mockResolvedValue(true) },
+  } as unknown as ApexApi
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  try {
+    await act(async () => root.render(<ActivityCoordinator bridge={bridge} spaceId="error-space" embedded />))
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert).not.toBeNull()
+    expect(alert?.className).toContain('activity-coordinator__error')
+    expect(alert?.querySelector('h3')?.textContent).toBe('Unable to open Chief of Staff')
+    expect(alert?.textContent).toContain(errorMessage)
+    const retry = [...(alert?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.includes('Try again'))
+    expect(retry).toBeDefined()
+    await act(async () => retry?.click())
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(container.textContent).toContain('What should we move forward?')
+  } finally {
+    await act(async () => root.unmount())
+    container.remove()
   }
 })

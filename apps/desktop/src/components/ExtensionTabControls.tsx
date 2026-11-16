@@ -1,12 +1,12 @@
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as browserReferencesStyles } from 'apex-ui/styles/browser-references.stylex'
 import { styles as extensionStyles, selectionDetailsMarker } from 'apex-ui/styles/extension-controls.stylex'
-import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import type { ExtensionTabControls } from '@/hooks/useAgentBrowserTabs'
 import { annotationElementLabel } from '@/lib/browser-annotations'
 import type { AgentBrowserExtensionStatus, AgentBrowserTabRecord, BrowserAnnotationElement } from '@/types/api'
 import { ArrowSquareOut, Pause, Play } from './icons'
 import { ImageParts } from './transcript/TranscriptImage'
+import { ApexButton, IconButton } from './ui'
 import * as stylex from '@stylexjs/stylex'
 
 const pillStyles = stylex.create({
@@ -70,18 +70,36 @@ export function ExtensionTabCard({ tab, extension }: { tab: AgentBrowserTabRecor
       <p className={`extension-tab-card__hint ${stylex.props(inspectorStyles.extensionTabCardHint, browserReferencesStyles.extensionTabCardHint).className ?? ""}`}>{tab.picking ? 'Click one element in Chrome to attach it to chat.' : 'This page is open in Chrome, not embedded here.'}</p>
       <div className={`extension-tab-card__actions ${stylex.props(inspectorStyles.extensionTabCardActions, browserReferencesStyles.extensionTabCardActions).className ?? ""}`}>
         {extension.setPicking ? (
-          <button type="button" className={`button button--primary ${stylex.props(workbenchStyles.button, workbenchStyles.buttonPrimary, extensionStyles.actionButton, tab.picking && extensionStyles.pressedButton).className ?? ""}`} aria-pressed={tab.picking === true} disabled={offline} onClick={() => extension.setPicking?.(tab, tab.picking !== true)}>
+          <ApexButton
+            compact
+            variant="primary"
+            xstyle={[extensionStyles.actionButton, tab.picking && extensionStyles.pressedButton]}
+            aria-pressed={tab.picking === true}
+            disabled={offline}
+            onClick={() => extension.setPicking?.(tab, tab.picking !== true)}
+          >
             {tab.picking ? 'Stop selecting' : 'Select element'}
-          </button>
+          </ApexButton>
         ) : null}
-        <button type="button" className={`button ${stylex.props(workbenchStyles.button, extensionStyles.actionButton, paused && extensionStyles.pressedButton).className ?? ""}`} aria-pressed={paused} disabled={offline} onClick={() => extension.setPaused(tab, !paused)}>
-          {paused ? <Play size={13} weight="fill" /> : <Pause size={13} weight="fill" />}
+        <ApexButton
+          compact
+          icon={paused ? <Play size={13} weight="fill" /> : <Pause size={13} weight="fill" />}
+          xstyle={[extensionStyles.actionButton, paused && extensionStyles.pressedButton]}
+          aria-pressed={paused}
+          disabled={offline}
+          onClick={() => extension.setPaused(tab, !paused)}
+        >
           {paused ? 'Resume Agent' : 'Pause Agent'}
-        </button>
-        <button type="button" className={`button ${stylex.props(workbenchStyles.button, extensionStyles.actionButton).className ?? ""}`} disabled={offline} onClick={() => extension.focus(tab)}>
-          <ArrowSquareOut size={13} />
+        </ApexButton>
+        <ApexButton
+          compact
+          icon={<ArrowSquareOut size={13} />}
+          xstyle={extensionStyles.actionButton}
+          disabled={offline}
+          onClick={() => extension.focus(tab)}
+        >
           Focus in Browser
-        </button>
+        </ApexButton>
       </div>
       {tab.selection ? (
         <div className={`extension-tab-card__selection ${stylex.props(inspectorStyles.extensionTabCardSelection).className ?? ""}`} data-testid="extension-tab-selection">
@@ -121,12 +139,26 @@ export function ExtensionTabPill({ tab, extension }: { tab: AgentBrowserTabRecor
           {selectionLabel(tab.selection)}
         </span>
       ) : null}
-      <button type="button" {...stylex.props(pillStyles.button)} aria-label={`${paused ? 'Resume' : 'Pause'} agent in ${label}`} title={paused ? 'Resume agent' : 'Pause agent'} onClick={() => extension.setPaused(tab, !paused)}>
+      <IconButton
+        size="small"
+        xstyle={pillStyles.button}
+        label={`${paused ? 'Resume' : 'Pause'} agent in ${label}`}
+        aria-label={`${paused ? 'Resume' : 'Pause'} agent in ${label}`}
+        title={paused ? 'Resume agent' : 'Pause agent'}
+        onClick={() => extension.setPaused(tab, !paused)}
+      >
         {paused ? <Play size={11} weight="fill" /> : <Pause size={11} weight="fill" />}
-      </button>
-      <button type="button" {...stylex.props(pillStyles.button)} aria-label={`Focus ${label} in browser`} title="Focus in browser" onClick={() => extension.focus(tab)}>
+      </IconButton>
+      <IconButton
+        size="small"
+        xstyle={pillStyles.button}
+        label={`Focus ${label} in browser`}
+        aria-label={`Focus ${label} in browser`}
+        title="Focus in browser"
+        onClick={() => extension.focus(tab)}
+      >
         <ArrowSquareOut size={11} />
-      </button>
+      </IconButton>
     </div>
   )
 }

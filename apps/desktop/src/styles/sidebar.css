@@ -40,6 +40,11 @@
 .project-row__collapse[aria-expanded='false'] svg { transform: rotate(-90deg); }
 @media (prefers-reduced-motion: reduce) { .project-row__collapse svg { transition: none; } }
 .reduce-motion .project-row__collapse svg { transition: none; }
+.session-row__collapse::after { content: ''; position: absolute; inset: -4px -2px; }
+.session-row__collapse svg { transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1); }
+.session-row__collapse[aria-expanded='false'] svg { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .session-row__collapse svg { transition: none; } }
+.reduce-motion .session-row__collapse svg { transition: none; }
 .project-row__main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-ui); font-weight: 600; color: var(--text); }
 .project-row:hover .row-action, .project-row:focus-within .row-action { opacity: 1; }
 

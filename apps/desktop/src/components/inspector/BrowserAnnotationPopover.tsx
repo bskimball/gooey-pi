@@ -7,6 +7,8 @@ import { useMachine } from '@xstate/react'
 import type { BrowserAnnotationElement, BrowserSourceResult } from '@/types/api'
 import { MAX_COMMENT_LENGTH } from '@/lib/browser-annotations'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
+import { Banner } from '@astryxdesign/core/Banner'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import { ChatCircleText, X } from '../icons'
 import { ApexButton, IconButton } from '../ui'
 import { annotationSourceMachine } from './browserAnnotationMachine'
@@ -110,21 +112,23 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
               </ApexButton>
             </>
           ) : null}
-          {error ? <p {...stylex.props(annotationContextStyles.sourceParagraph, annotationContextStyles.sourceAlert)} role="alert">{error}</p> : null}
+          {error ? <Banner status="error" role="alert" title={error} className="annotation-notice" /> : null}
         </section>
-        <textarea
-          {...stylex.props(annotationContextStyles.commentFocus)}
-          autoFocus
+        <TextArea
+          label="Element comment"
+          isLabelHidden
           aria-label="Element comment"
+          hasAutoFocus
           maxLength={MAX_COMMENT_LENGTH}
           value={text}
-          onChange={(event) => onTextChange(event.target.value)}
+          onChange={(value) => onTextChange(value)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || event.shiftKey) return
             event.preventDefault()
             if (save() && (event.ctrlKey || event.metaKey)) onRequestSend()
           }}
           placeholder="Describe what should change…"
+          controlXstyle={annotationContextStyles.commentFocus}
         />
         <p className={`annotation-popover__hints ${stylex.props(inspectorStyles.annotationPopoverHints, annotationSourceStyles.annotationPopoverHints).className ?? ""}`}>
           <span>

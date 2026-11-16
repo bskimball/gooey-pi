@@ -5,6 +5,7 @@ import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Check, Laptop, Moon, Sun } from '@/components/icons'
+import { SelectControl } from '@/components/ui'
 import { useRef, type KeyboardEvent } from 'react'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import type { InterfaceFontScale, LocalePreference, ThemeMode } from '@/types/api'
@@ -77,12 +78,12 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.language.title')}</h2>
-        <label className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>{t('appearance.language.label')}</strong><small>{t('appearance.language.description')} {t('appearance.language.available', { count: locales.length - 1 })}</small></span>
-          <select value={settings.locale} onChange={(event) => { void onUpdate({ locale: event.target.value as LocalePreference }) }}>
+          <SelectControl label={t('appearance.language.label')} value={settings.locale} onChange={(event) => { void onUpdate({ locale: event.target.value as LocalePreference }) }}>
             {locales.map((locale) => <option key={locale.value} value={locale.value}>{t(locale.label)}</option>)}
-          </select>
-        </label>
+          </SelectControl>
+        </div>
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.text.title')}</h2>

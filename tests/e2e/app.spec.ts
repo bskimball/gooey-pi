@@ -1892,10 +1892,7 @@ test.describe('Prime Work desktop smoke', () => {
     // The pending question is the live step; the reasoning before it folds into the summary row.
     await expect(page.locator('.work-group.is-live .work-group__summary')).toContainText('Thought')
     await expect(page.locator('.work-group__current .activity-line--question')).toBeVisible()
-    const thinkingMark = page.locator('.work-disclosure__status .thinking-dots svg')
-    await expect(thinkingMark).toHaveCount(1)
-    await expect(thinkingMark.locator('.thinking-dots__wave')).toHaveCount(1)
-    await expect(thinkingMark.locator('.thinking-dots__fin')).toHaveCount(1)
+    await expect(page.locator('.thinking-dots')).toHaveCount(0)
     await expect(dialog).toContainText('Question 1 of 2')
     const context = dialog.getByRole('textbox', { name: 'Additional context' })
     await context.fill('For the pilot')

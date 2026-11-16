@@ -33,18 +33,16 @@ export const styles = stylex.create({
     "textAlign": "center"
   },
   "specialistTabstrip": {
-    "minHeight": "38px",
+    "minHeight": "42px",
     "flexGrow": 0,
     "flexShrink": 0,
     "flexBasis": "auto",
     "display": "flex",
     "alignItems": "center",
-    "rowGap": "5px",
-    "columnGap": "5px",
-    "paddingTop": "5px",
-    "paddingRight": "10px",
-    "paddingBottom": "5px",
-    "paddingLeft": "10px",
+    "paddingTop": "7px",
+    "paddingRight": "12px",
+    "paddingBottom": "7px",
+    "paddingLeft": "12px",
     "overflowX": "auto",
     "overflowY": "hidden",
     "borderBottomWidth": "1px",
@@ -60,7 +58,7 @@ export const styles = stylex.create({
     "backgroundClip": "border-box"
   },
   /** Separates live agents from finished ones in the tab strip. */
-  "specialistTabDivider": { "width": "1px", "height": "16px", "flexGrow": 0, "flexShrink": 0, "flexBasis": "auto", "marginTop": 0, "marginRight": "3px", "marginBottom": 0, "marginLeft": "3px", "backgroundColor": "var(--border)" },
+  "specialistTabDivider": { "width": "1px", "height": "16px", "flexGrow": 0, "flexShrink": 0, "flexBasis": "auto", "marginTop": 0, "marginRight": "8px", "marginBottom": 0, "marginLeft": "8px", "backgroundColor": "var(--border)" },
   "specialistTabstripItem": {
     "height": "26px",
     "flexGrow": 0,
@@ -76,16 +74,44 @@ export const styles = stylex.create({
     "paddingLeft": "9px",
     "borderTopWidth": "1px",
     "borderTopStyle": "solid",
-    "borderTopColor": "transparent",
+    "borderTopColor": {
+      "default": "var(--border)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "var(--border-strong)"
+      },
+      ":focus-visible": "var(--border-strong)"
+    },
     "borderRightWidth": "1px",
     "borderRightStyle": "solid",
-    "borderRightColor": "transparent",
+    "borderRightColor": {
+      "default": "var(--border)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "var(--border-strong)"
+      },
+      ":focus-visible": "var(--border-strong)"
+    },
     "borderBottomWidth": "1px",
     "borderBottomStyle": "solid",
-    "borderBottomColor": "transparent",
+    "borderBottomColor": {
+      "default": "var(--border)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "var(--border-strong)"
+      },
+      ":focus-visible": "var(--border-strong)"
+    },
     "borderLeftWidth": "1px",
     "borderLeftStyle": "solid",
-    "borderLeftColor": "transparent",
+    "borderLeftColor": {
+      "default": "var(--border)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "var(--border-strong)"
+      },
+      ":focus-visible": "var(--border-strong)"
+    },
     "borderTopLeftRadius": "999px",
     "borderTopRightRadius": "999px",
     "borderBottomRightRadius": "999px",
@@ -98,10 +124,11 @@ export const styles = stylex.create({
       "@media (hover: hover) and (pointer: fine)": {
         "default": null,
         ":hover": "var(--text)"
-      }
+      },
+      ":focus-visible": "var(--text)"
     },
     "backgroundColor": {
-      "default": "transparent",
+      "default": "var(--surface-raised)",
       "@media (hover: hover) and (pointer: fine)": {
         "default": null,
         ":hover": "var(--surface-hover)"
@@ -156,13 +183,26 @@ export const styles = stylex.create({
         ":hover": "border-box"
       }
     },
+    "boxShadow": {
+      "default": "0 0 0 1.5px var(--canvas)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "0 3px 8px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.2)) 70%, transparent), 0 0 0 1.5px var(--canvas)"
+      },
+      ":focus-visible": "0 3px 8px color-mix(in srgb, var(--color-shadow, rgba(0, 0, 0, 0.2)) 70%, transparent), 0 0 0 1.5px var(--canvas)"
+    },
     "fontSize": "var(--fs-meta)",
     "whiteSpace": "nowrap",
     "cursor": "pointer",
-    "transition": "color var(--fast), background-color var(--fast), border-color var(--fast), transform 120ms ease-out",
+    "transition": "color var(--fast), background-color var(--fast), border-color var(--fast), box-shadow 160ms var(--ease-out), margin-left 160ms var(--ease-out), transform 160ms var(--ease-out)",
     "transform": {
       "default": null,
-      ":active": "scale(0.97)"
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "translateY(-2px)"
+      },
+      ":focus-visible": "translateY(-2px)",
+      ":active": "translateY(0) scale(0.97)"
     },
     "::before": {
       "position": "absolute",
@@ -186,6 +226,18 @@ export const styles = stylex.create({
       "backgroundClip": "border-box",
       "pointerEvents": "none"
     },
+    "outlineWidth": {
+      "default": null,
+      ":focus-visible": "2px"
+    },
+    "outlineStyle": {
+      "default": null,
+      ":focus-visible": "solid"
+    },
+    "outlineColor": {
+      "default": null,
+      ":focus-visible": "var(--focus)"
+    },
     "outlineOffset": {
       "default": null,
       ":focus-visible": "-2px"
@@ -197,7 +249,13 @@ export const styles = stylex.create({
     "borderBottomColor": "var(--border-strong)",
     "borderLeftColor": "var(--border-strong)",
     "color": "var(--text)",
-    "backgroundColor": "var(--surface-selected)",
+    "backgroundColor": {
+      "default": "var(--surface-selected)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover": "var(--surface-selected)"
+      }
+    },
     "backgroundImage": "none",
     "backgroundPosition": "0% 0%",
     "backgroundSize": "auto auto",
@@ -209,6 +267,10 @@ export const styles = stylex.create({
   },
   "specialistTabstripItemIsRunning": {
     "--status-tint": "color-mix(in srgb, var(--apex) 14%, transparent)",
+    "borderTopColor": "color-mix(in srgb, var(--apex) 36%, var(--border))",
+    "borderRightColor": "color-mix(in srgb, var(--apex) 36%, var(--border))",
+    "borderBottomColor": "color-mix(in srgb, var(--apex) 36%, var(--border))",
+    "borderLeftColor": "color-mix(in srgb, var(--apex) 36%, var(--border))",
     "::before": {
       "animationName": {
         "default": sessionStatusBreatheAnimation,
@@ -245,10 +307,18 @@ export const styles = stylex.create({
     }
   },
   "specialistTabstripItemIsWaiting": {
-    "--status-tint": "color-mix(in srgb, var(--warning) 12%, transparent)"
+    "--status-tint": "color-mix(in srgb, var(--warning) 12%, transparent)",
+    "borderTopColor": "color-mix(in srgb, var(--warning) 40%, var(--border))",
+    "borderRightColor": "color-mix(in srgb, var(--warning) 40%, var(--border))",
+    "borderBottomColor": "color-mix(in srgb, var(--warning) 40%, var(--border))",
+    "borderLeftColor": "color-mix(in srgb, var(--warning) 40%, var(--border))"
   },
   "specialistTabstripItemIsError": {
-    "--status-tint": "color-mix(in srgb, var(--danger) 12%, transparent)"
+    "--status-tint": "color-mix(in srgb, var(--danger) 12%, transparent)",
+    "borderTopColor": "color-mix(in srgb, var(--danger) 38%, var(--border))",
+    "borderRightColor": "color-mix(in srgb, var(--danger) 38%, var(--border))",
+    "borderBottomColor": "color-mix(in srgb, var(--danger) 38%, var(--border))",
+    "borderLeftColor": "color-mix(in srgb, var(--danger) 38%, var(--border))"
   },
   "runState": {
     "height": "20px",

@@ -19,7 +19,7 @@ import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { createSessionSummarySelector } from './inspector/session-summary'
 import { SubagentContext } from './transcript/subagent-lane'
 import { TurnNavigator } from './transcript/turn-navigator'
-import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkDisclosure } from './transcript/timeline'
+import { formatWorkedDuration, WorkDisclosure } from './transcript/timeline'
 import { WorkspaceImageContext } from './WorkspaceImage'
 import { BrowserReferenceContext } from './transcript/BrowserReferenceCards'
 import type { BrowserReference } from '@/lib/browser-annotations'
@@ -87,7 +87,7 @@ function ActiveAssistantMessage({ message, shortName, showReasoning, showTools }
           ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true, true, `Assistant response ${message.id}`)}</WorkDisclosure>
           : <>
             {renderNarrative(message.parts, 'live', true, `Assistant response ${message.id}`)}
-            <div className={`streaming-state ${stylex.props(transcriptStyles.streamingState).className ?? ""}`} aria-live="polite"><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${shortName} is `} /> <LiveElapsed since={message.startedAt ?? message.timestamp} /></div>
+            <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{shortName} is working</div>
           </>}
       </div>
     </article>
@@ -187,9 +187,7 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
             : <div className={[`message message--${message.role}`, stylex.props(transcriptStyles.message, ((message.role === "user")) && transcriptStyles.messageUser, ((message.role === "steer-read")) && transcriptStyles.messageSteerRead, ((message.role === "assistant")) && transcriptStyles.messageAssistant, ((message.role === "activity")) && transcriptStyles.messageActivity, ((message.role === "agent")) && transcriptStyles.messageAgent, ((message.role === "goal")) && transcriptStyles.messageGoal, ((message.role === "user")) && [responsiveStyles.messageUser, responsiveLayoutStyles.messageUser]).className].filter(Boolean).join(' ')}>{message.parts.map((part, partIndex) => part.type === 'text' ? <span key={partIndex}>{part.text}</span> : null)}</div>}
           </ErrorBoundary>
         })}
-        {active && !activeAssistantId ? <article className={`message message--assistant message--streaming transcript-active-placeholder ${stylex.props(transcriptStyles.message, transcriptStyles.messageAssistant, transcriptStyles.transcriptActivePlaceholder).className ?? ""}`} aria-live="polite">
-          <div className={`streaming-state ${stylex.props(transcriptStyles.streamingState).className ?? ""}`}><ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${workingName} is `} /></div>
-        </article> : null}
+        {active && !activeAssistantId ? <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{workingName} is working</div> : null}
         <div />
       </div>
     </div>

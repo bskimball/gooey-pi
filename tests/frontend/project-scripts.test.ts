@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { initialTransition, transition } from 'xstate'
-import { activeProjectScriptKind, ProjectScriptBusyError, setupNeedsRun } from '../../apps/desktop/src/lib/project-scripts'
+import { activeProjectScriptKind, availableProjectScripts, ProjectScriptBusyError, resolveSelectedProjectScript, setupNeedsRun } from '../../apps/desktop/src/lib/project-scripts'
 import { isProjectScriptBusy, projectScriptFinishEvent, projectScriptMachine, type ProjectScriptEvent, type ProjectScriptRun } from '../../apps/desktop/src/components/projectScriptMachine'
 
 describe('project script helpers', () => {
@@ -28,6 +28,22 @@ describe('project script helpers', () => {
     const error = new ProjectScriptBusyError()
     expect(error).toBeInstanceOf(Error)
     expect(error.message).toContain('already starting or running')
+  })
+
+  it('combines discovered scripts with non-duplicate legacy run scripts and resolves selection', () => {
+    const discovered = [
+      { name: 'dev', command: 'pnpm run dev' },
+      { name: 'test', command: 'pnpm run test' },
+    ]
+    expect(availableProjectScripts({ discoveredScripts: discovered })).toEqual(discovered)
+    expect(availableProjectScripts({ discoveredScripts: discovered, scripts: { setup: '', run: 'pnpm run dev' } })).toEqual(discovered)
+    expect(availableProjectScripts({ discoveredScripts: discovered, scripts: { setup: '', run: 'just serve' } })).toEqual([
+      { name: 'run', command: 'just serve' },
+      ...discovered,
+    ])
+    expect(resolveSelectedProjectScript(discovered, 'test')).toEqual({ name: 'test', command: 'pnpm run test' })
+    expect(resolveSelectedProjectScript(discovered, 'missing')).toEqual({ name: 'dev', command: 'pnpm run dev' })
+    expect(resolveSelectedProjectScript([])).toBeUndefined()
   })
 })
 

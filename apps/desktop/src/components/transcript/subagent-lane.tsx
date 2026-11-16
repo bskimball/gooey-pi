@@ -1,14 +1,69 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
-import { createContext, memo, useContext, useId, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { createContext, memo, useContext, useId, useState, type ReactNode } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
-import { isLiveSpecialist, specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
+import { isLiveSpecialist, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
 import { CaretRight, Check, Robot } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
+
+const EASE_OUT = [0.23, 1, 0.32, 1] as const
+const EASE_EXIT = [0.2, 0, 0, 1] as const
+
+export function useInstantMotion(): boolean {
+  const reduced = useReducedMotion()
+  return Boolean(reduced)
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+}
+
+export function collapseMotionProps(instant: boolean) {
+  return {
+    initial: instant ? (false as const) : { height: 0, opacity: 0 },
+    animate: { height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' as const } },
+    exit: instant ? undefined : { height: 0, opacity: 0, overflow: 'hidden' as const, transition: { duration: 0.125, ease: EASE_EXIT } },
+    transition: instant ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT },
+    style: { overflow: 'hidden' as const },
+  }
+}
+
+export function arrivalMotionProps(instant: boolean, animateArrival: boolean) {
+  return {
+    initial: instant || !animateArrival ? (false as const) : { opacity: 0, y: 4 },
+    animate: { opacity: 1, y: 0 },
+    transition: instant ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT },
+  }
+}
+
+export function MorphInline({
+  morphKey,
+  instant,
+  children,
+}: {
+  morphKey: string
+  instant: boolean
+  children: ReactNode
+}) {
+  if (instant) return <>{children}</>
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.span
+        key={morphKey}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 'inherit' }}
+        initial={{ opacity: 0, scale: 0.88, filter: 'blur(2px)' }}
+        animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+        exit={{ opacity: 0, scale: 0.88, filter: 'blur(2px)', transition: { duration: 0.11, ease: EASE_EXIT } }}
+        transition={{ duration: 0.16, ease: EASE_OUT }}
+      >
+        {children}
+      </motion.span>
+    </AnimatePresence>
+  )
+}
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 type ToolResult = Extract<MessagePart, { type: 'toolResult' }>
@@ -22,15 +77,85 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
 const text = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : undefined
-const oneLine = (value: string | undefined) => value ? boundText(value.replace(/\s+/g, ' '), 160, '…') : undefined
+
+const LANE_STATUS_LABEL: Record<SpecialistStatus, string> = {
+  running: 'running',
+  waiting: 'waiting',
+  done: 'done',
+  error: 'failed',
+  stopped: 'stopped',
+  closed: 'closed',
+}
+
+function stripMarkdown(line: string): string {
+  return line
+    .replace(/^(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s+)/, '')
+    .replace(/[*_`]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const PREAMBLE_LINE = /^(?:repo\s*:|read\s+agents\.md\b|worktree\b)/i
+const HEADING_GOAL = /^(?:#{1,6}\s*)?(?:goal|outcome)\s*:?\s*(.*)$/i
+
+export function cleanGoal(rawPrompt: string | undefined): string | undefined {
+  if (!rawPrompt?.trim()) return undefined
+  const lines = rawPrompt.split(/\r?\n/).map((line) => line.trim())
+  let inFence = false
+  let afterGoalHeading = false
+  let fallback: string | undefined
+  for (const line of lines) {
+    if (!line) continue
+    if (line.startsWith('```')) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence || /^-{3,}$/.test(line)) continue
+    const goalMatch = HEADING_GOAL.exec(line)
+    if (goalMatch) {
+      const inline = stripMarkdown(goalMatch[1])
+      if (inline && !PREAMBLE_LINE.test(inline)) return boundText(inline, 120, '…')
+      afterGoalHeading = true
+      continue
+    }
+    if (PREAMBLE_LINE.test(line)) continue
+    const cleaned = stripMarkdown(line)
+    if (!cleaned) continue
+    if (afterGoalHeading) return boundText(cleaned, 120, '…')
+    if (!fallback && !/^#{1,6}\s+/.test(line)) fallback = cleaned
+  }
+  if (fallback) return boundText(fallback, 120, '…')
+  const firstNonPreamble = lines.find((line) => line && !line.startsWith('```') && !/^-{3,}$/.test(line) && !PREAMBLE_LINE.test(line))
+  const cleaned = firstNonPreamble ? stripMarkdown(firstNonPreamble) : undefined
+  return cleaned ? boundText(cleaned, 120, '…') : undefined
+}
+
+export function cleanOutcome(report: string | undefined): string | undefined {
+  if (!report?.trim()) return undefined
+  const handoffMatch = /(?:^|\n)\s*outcome:\s*(.+)/i.exec(report) ?? /"outcome":\s*"([^"]+)"/.exec(report)
+  if (handoffMatch?.[1]) {
+    const cleaned = stripMarkdown(handoffMatch[1].replace(/["',]+$/, ''))
+    if (cleaned) return boundText(cleaned, 120, '…')
+  }
+  const lines = report.split(/\r?\n/).map((line) => line.trim())
+  let inFence = false
+  for (const line of lines) {
+    if (!line || line.startsWith('```')) {
+      if (line.startsWith('```')) inFence = !inFence
+      continue
+    }
+    if (inFence || /^-{3,}$/.test(line) || /^#{1,6}\s+/.test(line)) continue
+    const cleaned = stripMarkdown(line)
+    if (cleaned) return boundText(cleaned, 120, '…')
+  }
+  return undefined
+}
 
 /** Settled task output carries the report after a `--- result ---` marker; everything above it is lifecycle metadata. */
 function settledReport(output: string): string | undefined {
   const body = /^---\s*result(?:\s*\([^)]*\))?\s*---\r?\n([\s\S]*)$/m.exec(output)?.[1]?.trim()
   return body && body !== '(empty)' ? body : undefined
 }
-
-const VERBS: Record<string, string> = { task_wait: 'Waiting on', task_chain: 'Chain' }
 
 export interface SubagentFollowUp { call: ToolCall; result?: ToolResult }
 export interface SubagentPairs { followUps: Map<ToolCall, SubagentFollowUp[]>; absorbed: Set<MessagePart> }
@@ -74,31 +199,23 @@ export function pairSubagentCalls(parts: MessagePart[]): SubagentPairs {
   return { followUps, absorbed }
 }
 
-/** The report's first few headings or bullets, as plain one-liners for the tree rail. */
-function reportHighlights(report: string): string[] {
-  const lines = report.split('\n').map((line) => line.trim()).filter(Boolean)
-  const marked = lines.flatMap((line) => {
-    const match = /^(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)(.+)$/.exec(line)
-    return match ? [match[1]] : []
-  })
-  return (marked.length ? marked : lines).slice(0, 3).map((line) => oneLine(line.replace(/[*_`]+/g, ''))!)
-}
-
 /**
- * Subagent orchestration calls read as lanes: who was asked, what for, where it stands,
- * and a tree rail of the report's highlights, so a delegated run can be followed without leaving the transcript.
+ * Subagent orchestration calls render as a single quiet ledger row in the reading column,
+ * with settled reports and transcript links tucked behind a clean disclosure.
  */
-export const SubagentLane = memo(function SubagentLane({ part, result, followUps = [] }: { part: ToolCall; result?: ToolResult; followUps?: SubagentFollowUp[] }) {
+export const SubagentLane = memo(function SubagentLane({ part, result, followUps = [], animateArrival = false }: { part: ToolCall; result?: ToolResult; followUps?: SubagentFollowUp[]; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
+  const instant = useInstantMotion()
   const { specialists, onOpen } = useContext(SubagentContext)
   const args = record(part.args) ?? {}
   const steps = Array.isArray(args.steps) ? args.steps.map(record).filter((step) => text(step?.agent)) : []
   const roles = part.name === 'task_chain' ? steps.map((step) => text(step?.agent)!) : text(args.agent) ? [text(args.agent)!] : []
+  const roleLabel = roles.length ? roles.join(' → ') : 'agent'
   const taskId = text(args.id) ?? (part.name === 'task_start' ? startedTaskId(result) : undefined) ?? part.id
   const specialist = specialists.find((candidate) => candidate.id === taskId)
   const targets = specialists.filter((candidate) => part.name === 'task_chain' ? candidate.id.startsWith(`${taskId}-step-`) : candidate.id === taskId)
-  const mission = oneLine(text(args.prompt) ?? text(args.message) ?? text(steps[0]?.prompt))
+  const rawPrompt = text(args.prompt) ?? text(args.message) ?? text(steps[0]?.prompt)
   // Failed operations stay in the timeline; keep the last received report in the lane.
   const latest = [...followUps].reverse().find((followUp) => followUp.call.name === 'task_wait' && !followUp.result?.isError) ?? { call: part, result }
   const latestOutput = latest.result?.text ?? ''
@@ -107,44 +224,75 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   let outcome: SpecialistStatus = pending || background ? 'running' : latest.result?.isError ? 'error' : 'done'
   for (const followUp of followUps) outcome = specialistOutcome({ previous: outcome, tool: followUp.call.name, result: followUp.result, startsGeneration: record(followUp.call.args)?.mode === 'prompt' })
   const state = specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : outcome)
-  const stateLabel = specialistStatusLabel[state]
+  const stateLabel = LANE_STATUS_LABEL[state]
   const report = text(record(latest.result?.details)?.finalReport) ?? settledReport(latestOutput) ?? (pending || background ? undefined : text(latestOutput))
-  const highlights = report ? reportHighlights(report) : []
-  const rail = highlights.length ? highlights : isLiveSpecialist(state) ? [specialist?.activity ? `Last observed: ${specialist.activity}` : 'Awaiting a recorded update…'] : []
-  const verb = VERBS[part.name]
+  const summary = isLiveSpecialist(state) && specialist?.activity
+    ? boundText(specialist.activity.replace(/\s+/g, ' '), 120, '…')
+    : !isLiveSpecialist(state) && report
+      ? cleanOutcome(report) ?? cleanGoal(rawPrompt)
+      : cleanGoal(rawPrompt)
   const singleTarget = onOpen && targets.length === 1 ? targets[0] : undefined
+  const canExpand = Boolean(report) || (Boolean(onOpen) && targets.length > 1)
+  const isClickable = canExpand || Boolean(singleTarget)
+  const hasBody = Boolean(report) || (Boolean(onOpen) && targets.length > 0)
+  const statusKey = isLiveSpecialist(state) ? 'running' : state
 
-  return <div className={[`subagent-lane is-${state}`, stylex.props(transcriptStyles.subagentLane, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "running")) && transcriptStyles.subagentLaneIsRunning, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "error")) && transcriptStyles.subagentLaneIsError, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "waiting")) && transcriptStyles.subagentLaneIsWaiting).className].filter(Boolean).join(' ')}>
+  const handleSummaryClick = () => {
+    if (canExpand) {
+      setOpen((value) => !value)
+    } else if (onOpen && singleTarget) {
+      onOpen(singleTarget.id)
+    }
+  }
+
+  return <motion.div className={[`subagent-lane is-${state}`, stylex.props(transcriptStyles.subagentLane, state === 'running' && transcriptStyles.subagentLaneIsRunning, state === 'error' && transcriptStyles.subagentLaneIsError, state === 'waiting' && transcriptStyles.subagentLaneIsWaiting).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
     <div
-      className={[`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`, stylex.props(transcriptStyles.subagentLaneSummary).className].filter(Boolean).join(' ')}
-      onClick={onOpen && singleTarget ? () => onOpen(singleTarget.id) : undefined}
+      className={[`subagent-lane__summary${isClickable ? ' is-clickable' : ''}`, stylex.props(isClickable ? transcriptStyles.subagentLaneSummaryClickable : transcriptStyles.subagentLaneSummary).className].filter(Boolean).join(' ')}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-expanded={canExpand ? open : undefined}
+      aria-controls={canExpand && open ? bodyId : undefined}
+      onClick={isClickable ? handleSummaryClick : undefined}
+      onKeyDown={isClickable ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          handleSummaryClick()
+        }
+      } : undefined}
     >
-      <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ""}`} aria-hidden="true">{isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
-      {verb ? <span className={`subagent-lane__verb ${stylex.props(transcriptStyles.subagentLaneVerb).className ?? ""}`}>{verb}</span> : null}
-      {roles.length
-        ? roles.map((role, index) => <span key={`${role}-${index}`} className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ""}`}>{role}</span>)
-        : <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ""}`}>agent</span>}
-      {taskId ? <code className={`subagent-lane__id ${stylex.props(transcriptStyles.subagentLaneId).className ?? ""}`}>{taskId}</code> : null}
-      {mission ? <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ""}`} title={mission}>{mission}</span> : <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ""}`} />}
-      <span className={`subagent-lane__state ${stylex.props(transcriptStyles.subagentLaneState).className ?? ""}`}>{stateLabel}</span>
-    </div>
-    {onOpen && targets.length > 0 ? <div className={`subagent-lane__links ${stylex.props(transcriptStyles.subagentLaneLinks).className ?? ""}`}>{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
-    {rail.length || report ? <ul className={`subagent-lane__tree ${stylex.props(transcriptStyles.subagentLaneTree).className ?? ""}`}>
-      {rail.map((line, index) => <li key={`${index}-${line}`} className={highlights.length ? undefined : 'is-pending'}>
-        <span className={`subagent-lane__branch ${stylex.props(transcriptStyles.subagentLaneBranch).className ?? ""}`} aria-hidden="true">{index === rail.length - 1 && !report ? '╰─' : '├─'}</span>
-        <span className={`subagent-lane__leaf ${stylex.props(transcriptStyles.subagentLaneLeaf).className ?? ""}`}>{line}</span>
-      </li>)}
-      {report ? <li>
-        <span className={`subagent-lane__branch ${stylex.props(transcriptStyles.subagentLaneBranch).className ?? ""}`} aria-hidden="true">╰─</span>
-        <button type="button" className={`subagent-lane__report-toggle ${stylex.props(transcriptStyles.subagentLaneReportToggle).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-          {open ? 'Hide full report' : 'View full report'}<CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={11} />
+      <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ''}`} aria-hidden="true">
+        <MorphInline morphKey={statusKey} instant={instant}>
+          {isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}
+        </MorphInline>
+      </span>
+      <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ''}`} title={taskId || undefined}>{roleLabel}</span>
+      <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ''}`} title={summary}>{summary ?? ''}</span>
+      {onOpen && singleTarget ? (
+        <button
+          type="button"
+          className={`subagent-lane__open ${stylex.props(transcriptStyles.subagentLaneOpen).className ?? ''}`}
+          aria-label="Open agent transcript"
+          title="Open agent transcript"
+          onClick={(event) => {
+            event.stopPropagation()
+            onOpen(singleTarget.id)
+          }}
+        >
+          Transcript
         </button>
-      </li> : null}
-    </ul> : null}
-    {open && report ? <div className={`subagent-lane__body ${stylex.props(transcriptStyles.subagentLaneBody).className ?? ""}`} id={bodyId}>
-      <MarkdownText variant="muted" text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} />
-    </div> : null}
-  </div>
+      ) : null}
+      <span className={`subagent-lane__state ${stylex.props(transcriptStyles.subagentLaneState).className ?? ''}`}>
+        <MorphInline morphKey={stateLabel} instant={instant}>{stateLabel}</MorphInline>
+      </span>
+      {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.subagentLaneCaret, transcriptStyles.disclosureCaret).className ?? ''}`} size={11} aria-hidden="true" /> : null}
+    </div>
+    <AnimatePresence initial={false}>
+      {open && hasBody ? <motion.div key="subagent-body" className={`subagent-lane__body ${stylex.props(transcriptStyles.subagentLaneBody).className ?? ''}`} id={bodyId} {...collapseMotionProps(instant)}>
+        {onOpen && targets.length > 0 ? <div className={`subagent-lane__links ${stylex.props(transcriptStyles.subagentLaneLinks).className ?? ''}`}>{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
+        {report ? <MarkdownText variant="muted" text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} /> : null}
+      </motion.div> : null}
+    </AnimatePresence>
+  </motion.div>
 })
 
 type TodoStatus = 'completed' | 'in_progress' | 'pending' | 'cancelled'
@@ -163,25 +311,34 @@ function todoItems(args: unknown): TodoItem[] {
 }
 
 /** A plan update reads as the step header for the work that follows it. */
-export const TodoStep = memo(function TodoStep({ part }: { part: ToolCall }) {
+export const TodoStep = memo(function TodoStep({ part, animateArrival = false }: { part: ToolCall; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
   const listId = useId()
+  const instant = useInstantMotion()
   const todos = todoItems(part.args)
   const done = todos.filter((todo) => todo.status === 'completed').length
   const active = todos.find((todo) => todo.status === 'in_progress')
   const finished = todos.length > 0 && done === todos.length
-  return <div className={[`todo-step ${finished ? 'is-finished' : ''}`, stylex.props(transcriptStyles.todoStep).className].filter(Boolean).join(' ')}>
+  const countText = `${done}/${todos.length} done`
+  const labelText = active?.content ?? (finished ? 'All steps complete' : 'Plan updated')
+  return <motion.div className={[`todo-step ${finished ? 'is-finished' : ''}`, stylex.props(transcriptStyles.todoStep).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
     <button type="button" className={`todo-step__summary ${stylex.props(transcriptStyles.todoStepSummary).className ?? ""}`} disabled={!todos.length} aria-expanded={todos.length ? open : undefined} aria-controls={todos.length && open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className={`todo-step__count ${stylex.props(transcriptStyles.todoStepCount).className ?? ""}`}>{done}/{todos.length} done</span>
-      <span className={`todo-step__label ${stylex.props(transcriptStyles.todoStepLabel).className ?? ""}`}>{active?.content ?? (finished ? 'All steps complete' : 'Plan updated')}</span>
+      <span className={`todo-step__count ${stylex.props(transcriptStyles.todoStepCount).className ?? ""}`}>
+        <MorphInline morphKey={countText} instant={instant}>{countText}</MorphInline>
+      </span>
+      <span className={`todo-step__label ${stylex.props(transcriptStyles.todoStepLabel).className ?? ""}`}>
+        <MorphInline morphKey={labelText} instant={instant}>{labelText}</MorphInline>
+      </span>
       {todos.length ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open ? <ol className={`todo-step__list ${stylex.props(transcriptStyles.todoStepList).className ?? ""}`} id={listId}>
-      {todos.map((todo, index) => <li key={`${index}-${todo.content}`} className={`is-${todo.status}`}>
-        <span className={`todo-step__mark ${stylex.props(transcriptStyles.todoStepMark).className ?? ""}`} aria-hidden="true">{todo.status === 'completed' ? <Check size={10} /> : null}</span>
-        <span>{todo.content}</span>
-        <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{todo.status.replace('_', ' ')}</span>
-      </li>)}
-    </ol> : null}
-  </div>
+    <AnimatePresence initial={false}>
+      {open ? <motion.ol key="todo-list" className={`todo-step__list ${stylex.props(transcriptStyles.todoStepList).className ?? ""}`} id={listId} {...collapseMotionProps(instant)}>
+        {todos.map((todo, index) => <li key={`${index}-${todo.content}`} className={`is-${todo.status}`}>
+          <span className={`todo-step__mark ${stylex.props(transcriptStyles.todoStepMark).className ?? ""}`} aria-hidden="true">{todo.status === 'completed' ? <Check size={10} /> : null}</span>
+          <span>{todo.content}</span>
+          <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{todo.status.replace('_', ' ')}</span>
+        </li>)}
+      </motion.ol> : null}
+    </AnimatePresence>
+  </motion.div>
 })

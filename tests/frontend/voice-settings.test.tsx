@@ -48,11 +48,20 @@ async function enter(input: HTMLInputElement, value: string) {
   })
 }
 
-async function choose(select: HTMLSelectElement, value: string) {
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value)
-    select.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+function getCombobox(label: string): HTMLButtonElement {
+  return container.querySelector<HTMLButtonElement>(`[role="combobox"][aria-label="${label}"]`)!
+}
+
+function getComboboxOptions(combobox: HTMLButtonElement): HTMLElement[] {
+  const listbox = container.querySelector<HTMLElement>(`#${CSS.escape(combobox.getAttribute('aria-controls')!)}`)!
+  return [...listbox.querySelectorAll<HTMLElement>('[role="option"]')]
+}
+
+async function choose(combobox: HTMLButtonElement, optionText: string) {
+  await act(async () => { combobox.click() })
+  const options = getComboboxOptions(combobox)
+  const target = options.find((option) => option.textContent?.includes(optionText))!
+  await act(async () => { target.click() })
 }
 
 function voiceBridge(overrides: Partial<ApexApi['voice']> = {}): ApexApi['voice'] {
@@ -77,15 +86,15 @@ describe('Voice settings setup flow', () => {
   it('shows only the selected provider model picker and switches to curated Groq models', async () => {
     await render(<Harness voice={voiceBridge()} />)
 
-    const service = container.querySelector<HTMLSelectElement>('select[aria-label="Dictation service"]')!
-    const model = container.querySelector<HTMLSelectElement>('select[aria-label="Dictation model"]')!
-    expect(service.value).toBe('openai-live')
-    expect([...model.options].map((option) => option.value)).toEqual(['gpt-live-transcribe', 'gpt-realtime-whisper'])
+    const service = getCombobox('Dictation service')
+    const model = getCombobox('Dictation model')
+    expect(service.textContent).toContain('OpenAI · Live')
+    expect(getComboboxOptions(model).map((option) => option.textContent?.trim())).toEqual(['GPT Live Transcribe · Recommended', 'GPT Realtime Whisper'])
     expect(container.querySelector('input[aria-label="whisper-cli executable"]')).toBeNull()
 
-    await choose(service, 'groq')
-    const groqModel = container.querySelector<HTMLSelectElement>('select[aria-label="Dictation model"]')!
-    expect([...groqModel.options].map((option) => option.value)).toEqual(['whisper-large-v3-turbo', 'whisper-large-v3'])
+    await choose(service, 'Groq')
+    const groqModel = getCombobox('Dictation model')
+    expect(getComboboxOptions(groqModel).map((option) => option.textContent?.trim())).toEqual(['Whisper Large V3 Turbo · Recommended', 'Whisper Large V3'])
     expect(container.textContent).not.toContain('OpenAI file model')
   })
 
@@ -174,8 +183,8 @@ describe('Voice settings setup flow', () => {
     } satisfies VoiceCredentialStatus)
     await render(<Harness voice={voiceBridge({ testSelfHosted, saveApiKey })} />)
 
-    const service = container.querySelector<HTMLSelectElement>('select[aria-label="Dictation service"]')!
-    await choose(service, 'self-hosted')
+    const service = getCombobox('Dictation service')
+    await choose(service, 'Self-hosted')
     expect(container.textContent).toContain('Connect your transcription server')
     expect(container.textContent).toContain('Parakeet, Whisper')
     expect(container.querySelector('input[aria-label="whisper-cli executable"]')).toBeNull()

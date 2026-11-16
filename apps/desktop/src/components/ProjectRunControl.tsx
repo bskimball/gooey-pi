@@ -1,43 +1,61 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
-import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
-import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
-import { Banner } from '@astryxdesign/core/Banner'
-import { TextArea } from '@astryxdesign/core/TextArea'
-import { ArrowCounterClockwise, CaretDown, CheckCircle, CircleNotch, Play, Square, WarningCircle } from './icons'
-import { StatusMark } from './activity/StatusMark'
-import { ApexButton, IconButton } from './ui'
-import { useEffect, useId, useRef, useState } from 'react'
-import type { ProjectRecord } from '@/types/api'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { CaretDown, Check, Play, Square } from './icons'
+import { IconButton } from './ui'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { availableProjectScripts, resolveSelectedProjectScript } from '@/lib/project-scripts'
+import type { DiscoveredProjectScript, ProjectRecord } from '@/types/api'
 
 export type ProjectScriptKind = 'setup' | 'run'
+export type ProjectScriptTarget = ProjectScriptKind | { command: string; label?: string }
 
 interface ProjectRunControlProps {
   project: ProjectRecord
   activeKind?: ProjectScriptKind
-  setupError?: string
-  onRun(kind: ProjectScriptKind): Promise<void> | void
+  onRun(target: ProjectScriptTarget): Promise<void> | void
   onStop(): void
-  onSave(scripts: { setup: string; run: string }): Promise<void>
 }
 
-export function ProjectRunControl({ project, activeKind, setupError, onRun, onStop, onSave }: ProjectRunControlProps) {
+function readStoredScriptName(projectId: string): string | null {
+  try {
+    return window.localStorage.getItem(`apex.project-script:${projectId}`)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredScriptName(projectId: string, name: string): void {
+  try {
+    window.localStorage.setItem(`apex.project-script:${projectId}`, name)
+  } catch {
+    // Ignore storage errors in restricted environments.
+  }
+}
+
+export function ProjectRunControl({ project, activeKind, onRun, onStop }: ProjectRunControlProps) {
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
-  const runInputRef = useRef<HTMLTextAreaElement>(null)
   const [open, setOpen] = useState(false)
-  const [setup, setSetup] = useState(project.scripts?.setup ?? '')
-  const [run, setRun] = useState(project.scripts?.run ?? '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [selectedName, setSelectedName] = useState<string | null>(() => readStoredScriptName(project.id))
+  const prefersReducedMotion = useReducedMotion()
+  const instant = Boolean(prefersReducedMotion)
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+
   const running = activeKind !== undefined
+  const availableScripts = useMemo(
+    () => availableProjectScripts(project),
+    [project.discoveredScripts, project.scripts],
+  )
+  const selected = useMemo(
+    () => resolveSelectedProjectScript(availableScripts, selectedName),
+    [availableScripts, selectedName],
+  )
 
   useEffect(() => {
-    setSetup(project.scripts?.setup ?? '')
-    setRun(project.scripts?.run ?? '')
-    setError('')
+    setSelectedName(readStoredScriptName(project.id))
     setOpen(false)
-  }, [project.id, project.scripts?.run, project.scripts?.setup])
+  }, [project.id])
 
   useEffect(() => {
     if (!open) return
@@ -45,7 +63,10 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setOpen(false) }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setOpen(false)
+      }
     }
     document.addEventListener('pointerdown', dismiss, true)
     document.addEventListener('keydown', dismissOnEscape, true)
@@ -55,104 +76,96 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
     }
   }, [open])
 
-  const startScript = (kind: ProjectScriptKind) => {
-    setError('')
-    void Promise.resolve(onRun(kind)).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : `Could not start the ${kind} script`)
-      setOpen(true)
-    })
+  if (availableScripts.length === 0 && !running) return null
+
+  const startScript = (script: DiscoveredProjectScript) => {
+    void Promise.resolve(onRun({ command: script.command, label: script.name })).catch(() => undefined)
+  }
+
+  const selectScript = (script: DiscoveredProjectScript) => {
+    setSelectedName(script.name)
+    writeStoredScriptName(project.id, script.name)
   }
 
   const runPrimary = () => {
-    if (running) { onStop(); return }
-    if (!project.scripts?.run.trim()) {
-      setOpen(true)
-      requestAnimationFrame(() => runInputRef.current?.focus())
+    if (running) {
+      onStop()
       return
     }
-    startScript('run')
+    if (!selected) return
+    startScript(selected)
   }
 
-  const save = async () => {
-    setSaving(true)
-    setError('')
-    try {
-      await onSave({ setup, run })
-      setOpen(false)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save project scripts')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const setupStatus = (() => {
-    const scripts = project.scripts
-    if (!setup.trim()) return null
-    if (activeKind === 'setup') return <span className={`project-run-menu__status is-running ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsRunning).className ?? ""}`}><StatusMark state="running" size={12} /> Setup running</span>
-    if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className={`project-run-menu__status ${stylex.props(workbenchStyles.projectRunMenuStatus).className ?? ""}`}>Runs automatically after save</span>
-    if (setupError) return <span className={`project-run-menu__status is-error ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsError).className ?? ""}`}><WarningCircle size={12} /> Setup could not start: {setupError}</span>
-    if (scripts.setupLastExitCode === 0) return <span className={`project-run-menu__status is-success ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsSuccess).className ?? ""}`}><CheckCircle size={12} /> Setup completed</span>
-    if (scripts.setupLastExitCode !== undefined) return <span className={`project-run-menu__status is-error ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsError).className ?? ""}`}><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
-    return <span className={`project-run-menu__status ${stylex.props(workbenchStyles.projectRunMenuStatus).className ?? ""}`}>Setup did not finish</span>
-  })()
+  const hasMenu = availableScripts.length > 1
 
   return (
-    <div ref={rootRef} className={`project-run-control ${stylex.props(workbenchStyles.projectRunControl).className ?? ""}`}>
-      <div className={[`project-run-split ${running ? 'is-running' : ''}`, stylex.props(workbenchStyles.projectRunSplit, (running) && workbenchStyles.projectRunSplitIsRunning).className].filter(Boolean).join(' ')}>
-        <IconButton xstyle={[workbenchStyles.projectRunSplitPrimary]}
-          title={running ? (activeKind === 'setup' ? 'Stop setup' : 'Stop project') : 'Run project'}
+    <div ref={rootRef} className={`project-run-control ${stylex.props(workbenchStyles.projectRunControl).className ?? ''}`}>
+      <div className={[`project-run-split ${running ? 'is-running' : ''}`, stylex.props(workbenchStyles.projectRunSplit, running && workbenchStyles.projectRunSplitIsRunning).className].filter(Boolean).join(' ')}>
+        <IconButton
+          xstyle={[workbenchStyles.projectRunSplitPrimary]}
+          title={running ? 'Stop project' : (selected ? `Run ${selected.name} (${selected.command})` : 'Run project')}
           className="project-run-split__primary"
-          label={running ? `Stop ${activeKind} script` : 'Run project'}
+          label={running ? 'Stop project script' : (selected ? `Run ${selected.name}` : 'Run project')}
           onClick={runPrimary}
         >
           {running ? <Square size={16} fill="currentColor" /> : <Play size={16} />}
         </IconButton>
-        <IconButton xstyle={[workbenchStyles.projectRunSplitMenu]}
-          title="Configure project scripts"
-          className="project-run-split__menu"
-          label="Configure project scripts"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <CaretDown size={14} />
-        </IconButton>
+        {hasMenu ? (
+          <IconButton
+            xstyle={[workbenchStyles.projectRunSplitMenu]}
+            title="Select project script"
+            className="project-run-split__menu"
+            label="Select project script"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <CaretDown size={14} />
+          </IconButton>
+        ) : null}
       </div>
-      {open ? (
-        <section id={menuId} className={`project-run-menu ${stylex.props(workbenchStyles.projectRunMenu).className ?? ""}`} role="dialog" aria-label={`Scripts for ${project.name}`}>
-          <header><strong>Project scripts</strong><small>{project.name}</small></header>
-          <TextArea
-            id={`${menuId}-setup`}
-            label="Setup command"
-            description="Runs once when first configured, and again whenever this command changes."
-            rows={2}
-            value={setup}
-            placeholder="npm install"
-            hasSpellCheck={false}
-            controlClassName="mono"
-            onChange={(value) => setSetup(value)}
-          />
-          {setupStatus}
-          <TextArea
-            ref={runInputRef}
-            id={`${menuId}-run`}
-            label="Run command"
-            rows={2}
-            value={run}
-            placeholder="npm run dev"
-            hasSpellCheck={false}
-            controlClassName="mono"
-            onChange={(value) => setRun(value)}
-          />
-          {error ? <Banner xstyle={[workbenchStyles.projectRunMenuError]} status="error" role="alert" className="project-run-menu__error" title={error} /> : null}
-          <footer>
-            <ApexButton variant="quiet" disabled={!project.scripts?.setup.trim() || running || saving} icon={<ArrowCounterClockwise size={13} />} onClick={() => startScript('setup')}>Run setup again</ApexButton>
-            <ApexButton variant="primary" disabled={saving} icon={saving ? <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={13} /> : undefined} onClick={() => void save()}>Save</ApexButton>
-          </footer>
-        </section>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {open && hasMenu ? (
+          <motion.div
+            id={menuId}
+            role="menu"
+            aria-label={`Scripts for ${project.name}`}
+            className={`project-run-menu project-run-menu--scripts ${stylex.props(workbenchStyles.projectRunMenu).className ?? ''}`}
+            style={{ transformOrigin: 'top right' }}
+            initial={instant ? false : { opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={instant ? undefined : { opacity: 0, scale: 0.96 }}
+            transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+          >
+            {availableScripts.map((script) => {
+              const isSelected = selected?.name === script.name
+              return (
+                <button
+                  key={script.name}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={isSelected}
+                  className={`project-run-menu__item${isSelected ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    selectScript(script)
+                    setOpen(false)
+                    startScript(script)
+                  }}
+                >
+                  <span className="project-run-menu__item-text">
+                    <strong>{script.name}</strong>
+                    <code className="mono">{script.command}</code>
+                  </span>
+                  <span className="project-run-menu__item-check" aria-hidden="true">
+                    {isSelected ? <Check size={12} /> : null}
+                  </span>
+                </button>
+              )
+            })}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

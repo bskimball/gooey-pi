@@ -467,30 +467,35 @@ export function FilesPanel({
                       <small className={[`file-tree__status ${statusClassName}`, stylex.props(filesPanelStyles.fileTreeStatus, (status === 'M') && filesPanelStyles.fileTreeStatusModified, ((status === 'M') ? (false) : ((status === 'A'))) && filesPanelStyles.fileTreeStatusAdded, ((status === 'M') ? (false) : (((status === 'A') ? (false) : ((status === 'D'))))) && filesPanelStyles.fileTreeStatusDeleted).className].filter(Boolean).join(' ')}>{status}</small>
                     ) : null}
                   </button>
-                  <button
-                    type="button"
-                    className={`file-tree__reveal ${stylex.props(filesPanelStyles.fileTreeReveal).className ?? ""}`}
-                    aria-label={`Reveal ${node.name} in ${managerName}`}
+                  <IconButton
+                    size="small"
+                    className="file-tree__reveal"
+                    xstyle={filesPanelStyles.fileTreeReveal}
+                    label={`Reveal ${node.name} in ${managerName}`}
                     title={`Reveal in ${managerName}`}
-                    onClick={() => onReveal(node.fullPath)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onReveal(node.fullPath)
+                    }}
                   >
                     <FolderOpen size={13} />
-                  </button>
+                  </IconButton>
                 </div>
               )
             })
           : null}
 
         {!loading && !error && visibleNodes.length > displayedNodes.length ? (
-          <button
-            type="button"
+          <ApexButton
+            compact
+            variant="quiet"
             className="file-tree__show-more"
             onClick={() =>
               setVisibleLimit((limit) => Math.min(visibleNodes.length, limit + 1_000))
             }
           >
             Show {Math.min(1_000, visibleNodes.length - displayedNodes.length)} more paths
-          </button>
+          </ApexButton>
         ) : null}
 
         {!loading && !error && treeRoots.length > 0 && visibleNodes.length === 0 ? (

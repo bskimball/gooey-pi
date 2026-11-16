@@ -6,6 +6,7 @@ import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { ChiefOfStaffOpening } from '@/components/activity/ChiefOfStaffOpening'
@@ -15,7 +16,7 @@ import { TaskWorkflowFinished, TaskWorkflowNotice } from '@/components/TaskWorkf
 import { AppRail } from '@/components/AppRail'
 import { TitleToolbar } from '@/components/TitleToolbar'
 import { SessionControls } from '@/components/SessionControls'
-import type { ProjectScriptKind } from '@/components/ProjectRunControl'
+import type { ProjectScriptKind, ProjectScriptTarget } from '@/components/ProjectRunControl'
 import { Composer } from '@/components/Composer'
 import { InteractiveChatProvider } from '@/components/InteractiveChatContext'
 import type { TerminalCommandOutcome, TerminalDrawerHandle } from '@/components/TerminalDrawer'
@@ -103,6 +104,9 @@ interface TerminalSessionMount {
 
 
 export default function App() {
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const bridge = hasBridge() ? window.apex : null
   const initialProject = bridge ? undefined : SAMPLE_PROJECTS[0]
   const initialSession = bridge ? undefined : SAMPLE_SESSIONS[0]
@@ -555,13 +559,15 @@ export default function App() {
     if (session) void selectSession(session)
     else setToast('That referenced session is archived or no longer available.')
   })
-  const startProjectScript = useCallback(async (kind: ProjectScriptKind) => {
+  const startProjectScript = useCallback(async (target: ProjectScriptTarget) => {
     if (!bridge || !activeProject || !activeCwd) throw new Error('Project scripts are available in the desktop app for an active project.')
     if (isProjectScriptBusy(projectScriptRef.current)) throw new ProjectScriptBusyError()
     sendProjectScript({ type: 'REQUEST' })
     try {
       const project = activeProject.inferred ? await grantProject(activeProject) : activeProject
-      const command = project.scripts?.[kind]?.trim() ?? ''
+      const kind: ProjectScriptKind = typeof target === 'string' ? target : 'run'
+      const command = typeof target === 'string' ? (project.scripts?.[target]?.trim() ?? '') : target.command.trim()
+      const label = typeof target === 'string' ? (target === 'setup' ? 'Setup' : 'Run') : (target.label?.trim() || 'Run')
       if (!command) throw new Error(`Configure a ${kind} command first.`)
       if (kind === 'setup') {
         const scripts = await bridge.projects.markSetupStarted(project.id, command, project.harness)
@@ -584,7 +590,7 @@ export default function App() {
           initialCommand: {
             id: tabId,
             command,
-            label: kind === 'setup' ? 'Setup' : 'Run',
+            label,
             onExit: (outcome) => finishProjectScriptRun(started, outcome),
           },
         }])
@@ -594,12 +600,6 @@ export default function App() {
       throw error
     }
   }, [activeCwd, activeProject, activeTerminalSessionPath, bridge, finishProjectScriptRun, grantProject, patchProjectScripts, sendProjectScript, terminalWorkspaceKey, terminalSessions])
-  const saveProjectScripts = useCallback(async (scripts: { setup: string; run: string }) => {
-    if (!bridge || !activeProject) throw new Error('Select a project first.')
-    const project = activeProject.inferred ? await grantProject(activeProject) : activeProject
-    const updated = await bridge.projects.updateScripts(project.id, scripts, project.harness)
-    patchProjectScripts(project.id, updated)
-  }, [activeProject, bridge, grantProject, patchProjectScripts])
   const stopProjectScript = useCallback(() => {
     const run = projectScriptRef.current.context.run
     if (!run) return
@@ -727,9 +727,23 @@ export default function App() {
     <AppRail onNavigate={navigate} vscodeProject={activeProject} terminalOpen={terminalOpen} onToggleTerminal={sidebarActions.onToggleTerminal} onOpenInVsCode={bridge ? sidebarActions.onOpenInVsCode : undefined} sidebarOpen={sidebarVisible} onToggleSidebar={toggleSidebar} voiceOpen={voiceOrbOpen} onToggleVoice={handleToggleVoice} view={view} platform={platform} />
     {sidebarVisible ? <Sidebar sideConversations={taskWorkflow.children} onOpenSideConversation={taskWorkflow.navigate} projects={projects} sessions={chatSessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} specialistRosters={specialistRosters} openSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey && inspectorVisible && settingsState.inspectorTab === 'specialists' ? selectedSpecialist.id : null} onOpenSpecialist={openSessionSpecialist} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} overlay={layout.compactLayout} platform={platform} /> : null}
     {sidebarVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" edge="end" cssVariable="--sidebar-width" scopeSelector=".app-shell" label="Resize sidebar" value={layout.sidebarWidth} min={SIDEBAR_MIN} max={layout.sidebarMax} defaultValue={SIDEBAR_DEFAULT} onChange={layout.setSidebarWidth} /> : null}
-    {sidebarVisible ? <button type="button" className={`panel-scrim panel-scrim--sidebar ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimSidebar).className ?? ""}`} aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
+    <AnimatePresence initial={false}>
+      {sidebarVisible ? (
+        <motion.button
+          key="sidebar-scrim"
+          type="button"
+          className={`panel-scrim panel-scrim--sidebar ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimSidebar).className ?? ""}`}
+          aria-label="Close sidebar"
+          onClick={toggleSidebar}
+          initial={instant ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={instant ? undefined : { opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+          transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+        />
+      ) : null}
+    </AnimatePresence>
     <div className={`workbench ${stylex.props(workbenchStyles.workbench).className ?? ""}`} inert={layout.compactLayout && sidebarVisible ? true : undefined}>
-      <TitleToolbar sessionActions={<TaskWorkflowFinished workflow={taskWorkflow} />} project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} projectSetupError={projectScript.context.setupFailure?.projectId === activeProject?.id ? projectScript.context.setupFailure?.error : undefined} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} inspectorOpen={inspectorVisible} onToggleInspector={toggleInspector} platform={platform} />
+      <TitleToolbar sessionActions={<TaskWorkflowFinished workflow={taskWorkflow} />} project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} inspectorOpen={inspectorVisible} onToggleInspector={toggleInspector} platform={platform} />
       <div className={`workbench__content ${stylex.props(workbenchStyles.workbenchContent).className ?? ""}`}>{view === 'session' ? <div ref={layout.workspaceRowRef} className={`session-workspace ${stylex.props(workbenchStyles.sessionWorkspace).className ?? ""}`} style={{ '--inspector-width': `${layout.inspectorWidth}px`, '--terminal-height': `${layout.terminalHeight}px` } as CSSProperties}>
         <div ref={layout.sessionWorkspaceRef} inert={layout.compactLayout && inspectorVisible ? true : undefined} className={`conversation-column ${stylex.props(workbenchStyles.conversationColumn).className ?? ""}`}>
           <TaskWorkflowNotice workflow={taskWorkflow} />
@@ -750,7 +764,21 @@ export default function App() {
         </div>
           {inspectorVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" label="Resize inspector" value={layout.inspectorWidth} min={INSPECTOR_MIN} max={layout.inspectorMax} defaultValue={layout.inspectorDefaultWidth} onChange={layout.setInspectorWidth} /> : null}
           <Suspense fallback={inspectorVisible ? <LoadingPanel label="inspector" /> : null}><Inspector visible={inspectorVisible} expanded={layout.inspectorExpanded} onToggleExpanded={layout.toggleInspectorExpanded} browserActive={Boolean(busy && agentBrowser.activityEvent && (agentBrowser.activityEvent.sessionFile === activeRuntimeSessionFile || agentBrowser.activityEvent.sessionFile === activeSessionFilePath))} key={`inspector-${browserGeneration}`} selectedSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey ? selectedSpecialist.id : null} onSelectSpecialist={openSpecialist} activeTab={settingsState.inspectorTab} onTabChange={settingsState.selectInspectorTab} onClose={toggleInspector} agentName={HARNESS_AGENT_NAMES[activeHarness]} shortName={HARNESS_SHORT_NAMES[activeHarness]} project={activeProject} cwd={activeCwd} runtime={workspace.runtime} behaviorMode={activeSession?.behaviorMode} messages={settingsState .inspectorTab === 'summary' || settingsState.inspectorTab === 'specialists' ? workspace.messages : EMPTY_MESSAGES} git={git} automations={inspectorAutomations} onOpenAutomation={openAutomation} browserHome={settingsState.settings.browserHome} browserNavigationRequest={browserNavigationRequest} onBrowserNavigationRequestHandled={handleBrowserNavigationRequest} browserAnnotations={browserAnnotations} agentBrowserTabs={activeAgentTabs} activeAgentTabId={activeAgentTabId} agentPreviewSelected={agentPreviewSelected} onSelectAgentTab={selectAgentTab} onCloseAgentTab={agentBrowser.close} onShowBrowserPreview={showBrowserPreview} onAgentSlotRect={setAgentSlotRect} agentSessionKey={activeRuntimeSessionFile ?? activeSessionFilePath} onPreviewContext={previewContext} previewPointerEvent={agentBrowser.pointerEvent?.tabId === 'preview' ? agentBrowser.pointerEvent : null} onNavigateAgentTab={navigateAgentTab} agentBrowserExtension={agentBrowser.extension} onRefreshGit={refreshGit} onOpenExternal={openExternal} onRevealPath={revealInFileManager} onGrantProject={grantActiveProject} overlay={layout.compactLayout} platform={platform} homeDir={meta?.homeDir} /></Suspense>
-          {inspectorVisible ? <button type="button" className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ""}`} aria-label="Close inspector" onClick={toggleInspector} /> : null}
+          <AnimatePresence initial={false}>
+            {inspectorVisible ? (
+              <motion.button
+                key="inspector-scrim"
+                type="button"
+                className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ""}`}
+                aria-label="Close inspector"
+                onClick={toggleInspector}
+                initial={instant ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={instant ? undefined : { opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+                transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              />
+            ) : null}
+          </AnimatePresence>
       </div> : view === 'activity' ? <ActivityWorkspace rowRef={layout.workspaceRowRef} inspectorVisible={inspectorVisible} compact={layout.compactLayout} width={layout.inspectorWidth} maxWidth={layout.inspectorMax} defaultWidth={layout.inspectorDefaultWidth} expanded={layout.inspectorExpanded} onWidthChange={layout.setInspectorWidth} onToggleExpanded={layout.toggleInspectorExpanded} onClose={toggleInspector}>{(renderInspector) => <Suspense fallback={<ChiefOfStaffOpening />}><ActivityPage contentInert={layout.compactLayout && inspectorVisible} contentRef={layout.sessionWorkspaceRef} renderInspector={renderInspector} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} bridge={bridge} sessions={sessions} projects={projects} controls={activityControls} /></Suspense>}</ActivityWorkspace> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
     </div>
     {voiceOrbOpen && bridge ? <Suspense fallback={null}><VoiceOrb voice={bridge.voice} harness={activeHarness} onClose={() => { setFocusPetVoiceControl(false); setVoiceOrbOpen(false); setRestorePetVoiceFocus(settingsState.settings.petEnabled) }} onTaskStarted={handleVoiceTaskStarted} pet={{ pets: bridge.pets, petId: settingsState.settings.petId, petSize: settingsState.settings.petSize, agentBusy: busy, reduceMotion: settingsState.settings.reduceMotion }} focusPetControl={focusPetVoiceControl} onPetControlFocused={() => setFocusPetVoiceControl(false)} /></Suspense> : null}
@@ -767,7 +795,9 @@ export default function App() {
         }}
       /></Suspense>
     ) : null}
-    {toast ? <AppToast message={toast} onDismiss={() => setToast(null)} /> : null}
+    <AnimatePresence initial={false}>
+      {toast ? <AppToast key={toast} message={toast} onDismiss={() => setToast(null)} /> : null}
+    </AnimatePresence>
     {bridge ? <AgentBrowserLayer tabs={agentBrowser.tabs} visibleTabId={agentTabVisible ? activeAgentTabId : null} rect={agentTabVisible ? agentSlotRect : null} pointerEvent={agentBrowser.pointerEvent} onAttach={agentBrowser.attach} /> : null}
     {taskWorkflow.dialog ? <Suspense fallback={<LoadingPanel label="task review" />}><TaskWorkflowDialogs workflow={taskWorkflow} /></Suspense> : null}
   </div></TaskWorkflowContext.Provider></I18nProvider>

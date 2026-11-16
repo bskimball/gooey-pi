@@ -1,6 +1,8 @@
 import * as stylex from '@stylexjs/stylex'
+import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { TextArea } from '@astryxdesign/core/TextArea'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Folder, Globe, Plus, PencilSimple, Stack, X } from '@/components/icons'
 import { styles } from './spaces-page.stylex'
@@ -14,6 +16,7 @@ import type { SpaceRecord } from '@/types/api'
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export function SpacesPage({ bridge, sessions, projects, controls, showReasoning, showTools, renderInspector, contentRef, contentInert }: ActivityPageProps) {
+  const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const [spaces, setSpaces] = useState<SpaceRecord[]>([])
   const [selectedId, setSelectedId] = useState<string>('global')
   // The embedded Chief portals its chat actions here so they share the toolbar line.
@@ -175,7 +178,7 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
             </button>
           ))}
         </nav>
-        {refreshError ? <div {...stylex.props(styles.section)} role="status"><p {...stylex.props(styles.muted)}>Spaces could not refresh: {refreshError}</p><ApexButton compact onClick={() => setRefreshRevision((value) => value + 1)}>Retry</ApexButton></div> : null}
+        {refreshError ? <div {...stylex.props(styles.section)}><Banner status="error" role="status" title={`Spaces could not refresh: ${refreshError}`} /><ApexButton compact onClick={() => setRefreshRevision((value) => value + 1)}>Retry</ApexButton></div> : null}
       </section>
       {!creating && !loading && !listError ? <>
         <section {...stylex.props(styles.section, styles.divider)} aria-label="Context">
@@ -213,7 +216,7 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
             </div> : null}
           </section>
         </> : null}
-        {error ? <p {...stylex.props(styles.alert)} role="alert">{error}</p> : null}
+        {error ? <Banner status="error" role="alert" title={error} /> : null}
       </> : null}
     </div>
   )
@@ -234,31 +237,50 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
             <ApexButton variant="quiet" compact icon={<Plus size={14} />} disabled={saving} onClick={startCreating}>New space</ApexButton>
           </div>
         </header>
-        {creating && error ? <p {...stylex.props(styles.alert)} role="alert">{error}</p> : null}
-        {listError ? <div {...stylex.props(styles.alert)} role="alert">Could not load Spaces: {listError} <ApexButton compact onClick={() => setListRevision((value) => value + 1)}>Retry</ApexButton></div> : null}
+        {creating && error ? <Banner status="error" role="alert" title={error} /> : null}
+        {listError ? <><Banner status="error" role="alert" title={`Could not load Spaces: ${listError}`} /><ApexButton compact onClick={() => setListRevision((value) => value + 1)}>Retry</ApexButton></> : null}
         {loading ? <div {...stylex.props(styles.content)}><ChiefOfStaffOpening /></div> : listError ? null : selectedId !== 'global' && !space && !creating ? (
-          <p {...stylex.props(styles.alert)} role="alert">This Space is no longer available. Choose another Space or Global Chief.</p>
-        ) : creating ? (
-          <form {...stylex.props(styles.form)} onSubmit={(event) => { event.preventDefault(); void create() }}>
-            <h3 {...stylex.props(styles.formTitle)}>Keep related work together</h3>
-            <p {...stylex.props(styles.muted)}>Give this space an objective and a project. Its Chief of Staff will keep the conversation and delegated work in one place.</p>
-            <TextInput label="Name" value={name} onChange={setName} isRequired />
-            <label {...stylex.props(styles.field)}>Project
-              <SelectControl label="Space project" value={projectId} onChange={(event) => setProjectId(event.target.value)} fullWidth>
-                <option value="">Choose a project</option>
-                {projects.filter((item) => !item.inferred && !item.readOnly).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </SelectControl>
-            </label>
-            <TextArea label="Objective" value={objective} onChange={setObjective} />
-            <div {...stylex.props(styles.actions)}>
-              <ApexButton variant="primary" type="submit" disabled={saving || !name.trim() || !projectId}>Create space</ApexButton>
-              <ApexButton variant="quiet" type="button" disabled={saving} onClick={() => { setCreating(false); setError(undefined) }}>Cancel</ApexButton>
-            </div>
-          </form>
+          <Banner status="error" role="alert" title="This Space is no longer available. Choose another Space or Global Chief." />
         ) : (
-          <div {...stylex.props(styles.content)}>
-            <ActivityCoordinator key={selectedId} embedded actionsTarget={chatActions} bridge={bridge ?? null} controls={controls} showReasoning={showReasoning} showTools={showTools} spaceId={space?.id} projectName={project?.name} />
-          </div>
+          <AnimatePresence mode="wait" initial={false}>
+            {creating ? (
+              <motion.form
+                key="creating"
+                initial={instant ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={instant ? undefined : { opacity: 0, y: 4 }}
+                transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                {...stylex.props(styles.form)}
+                onSubmit={(event) => { event.preventDefault(); void create() }}
+              >
+                <h3 {...stylex.props(styles.formTitle)}>Keep related work together</h3>
+                <p {...stylex.props(styles.muted)}>Give this space an objective and a project. Its Chief of Staff will keep the conversation and delegated work in one place.</p>
+                <TextInput label="Name" value={name} onChange={setName} isRequired />
+                <label {...stylex.props(styles.field)}>Project
+                  <SelectControl label="Space project" value={projectId} onChange={(event) => setProjectId(event.target.value)} fullWidth>
+                    <option value="">Choose a project</option>
+                    {projects.filter((item) => !item.inferred && !item.readOnly).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </SelectControl>
+                </label>
+                <TextArea label="Objective" value={objective} onChange={setObjective} />
+                <div {...stylex.props(styles.actions)}>
+                  <ApexButton variant="primary" type="submit" disabled={saving || !name.trim() || !projectId}>Create space</ApexButton>
+                  <ApexButton variant="quiet" type="button" disabled={saving} onClick={() => { setCreating(false); setError(undefined) }}>Cancel</ApexButton>
+                </div>
+              </motion.form>
+            ) : (
+              <motion.div
+                key="coordinator"
+                initial={instant ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={instant ? undefined : { opacity: 0, y: 4 }}
+                transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                {...stylex.props(styles.content)}
+              >
+                <ActivityCoordinator key={selectedId} embedded actionsTarget={chatActions} bridge={bridge ?? null} controls={controls} showReasoning={showReasoning} showTools={showTools} spaceId={space?.id} projectName={project?.name} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
       </div>
       {renderInspector ? renderInspector(sidebar) : sidebar}

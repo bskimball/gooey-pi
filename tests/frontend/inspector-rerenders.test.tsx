@@ -685,8 +685,8 @@ describe('VS Code webview sub-agent inspection', () => {
     expect(container.querySelector('.apex-specialists-pane')).toBeNull()
 
     // Click the sub-agent lane in the transcript to open its transcript view.
-    const openLink = container.querySelector<HTMLButtonElement>('.subagent-lane__links button')!
-    expect(openLink?.textContent).toBe('Open agent transcript')
+    const openLink = container.querySelector<HTMLButtonElement>('.subagent-lane__open')!
+    expect(openLink.getAttribute('aria-label')).toBe('Open agent transcript')
     await act(async () => { openLink.click() })
     await act(async () => {})
 

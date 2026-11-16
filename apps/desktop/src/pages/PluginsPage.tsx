@@ -12,6 +12,7 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { TabList, Tab } from '@astryxdesign/core/TabList'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { TextArea } from '@astryxdesign/core/TextArea'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useMemo, useState } from 'react'
 import type { CapabilityMutationInput, ExtensionInstallInput, HarnessId, McpConnectionInput, McpStateInput, PluginWarning, SkillRecord } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
@@ -74,6 +75,9 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
   const [tab, setTab] = useState<DirectoryTab>('plugins')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const addFlow = useAddCapabilityFlow()
   const operation = usePluginOperation()
   const { snapshot: addSnapshot, send: sendAdd } = addFlow
@@ -233,7 +237,7 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     <div className={`page plugin-page scroll-area ${stylex.props(baseStyles.scrollArea, pagesStyles.page).className ?? ""}`}>
       <div className={`page-container plugin-container ${stylex.props(pagesStyles.pageContainer, pluginsStyles.pluginContainer, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
         <header className={`plugin-header ${stylex.props(pluginsStyles.pluginHeader, [responsiveStyles.pluginHeader, responsiveLayoutStyles.pluginHeader]).className ?? ""}`}>
-          <div><span className="eyebrow">{HARNESS_SHORT_NAMES[harness]} capabilities</span><h1>Extend {HARNESS_SHORT_NAMES[harness]}</h1><p>Manage packages, extensions, MCP servers, and reusable skills for this harness.</p></div>
+          <div><span className="eyebrow">{HARNESS_SHORT_NAMES[harness]} capabilities</span><h1>Extend {HARNESS_SHORT_NAMES[harness]}</h1><p className={stylex.props(pagesStyles.prettyText).className}>Manage packages, extensions, MCP servers, and reusable skills for this harness.</p></div>
           <div>
             <ApexButton icon={<ArrowsClockwise className={[loading ? 'spin' : '', stylex.props((loading) && activityStyles.spin, (loading) && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={13}/>} onClick={() => void onRefresh()}>Refresh</ApexButton>
             <ApexButton icon={<SlidersHorizontal size={13}/>} onClick={() => setFilter('installed')}>Manage</ApexButton>
@@ -256,20 +260,30 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
         {harness === 'pi' && mcpSupportNotice ? <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" role="status" className="connection-warning" title={mcpSupportNotice} /> : null}
         {harness === 'pi' && !piMcpAdapterInstalled ? <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title="Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers." /> : null}
         <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title={NETWORK_MCP_UNAVAILABLE_DETAIL} />
-        <div className={`directory-heading ${stylex.props(pluginsStyles.directoryHeading).className ?? ""}`}><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span>{visible.length} shown</span></div>
-        {visible.length ? (
-          <div className={`directory-list ${stylex.props(pluginsStyles.directoryList, [responsiveStyles.directoryList, responsiveLayoutStyles.directoryList]).className ?? ""}`}>{visible.map((skill) => {
-            const statusDetail = mcpStatusDetail(skill)
-            return <article key={skill.id}>
-              <span className={[`directory-icon directory-icon--${skill.kind}`, stylex.props(pluginsStyles.directoryIcon, ((skill.kind === "mcp")) && pluginsStyles.directoryIconMcp, ((skill.kind === "prompt")) && pluginsStyles.directoryIconPrompt).className].filter(Boolean).join(' ')}><SkillIcon skill={skill}/></span>
-              <div><div><h3>{skill.name}</h3><span>{skill.location}</span></div><p id={statusDetail ? capabilityDetailId(skill) : undefined}>{skill.description}{statusDetail ? ` ${statusDetail}` : ''}</p></div>
-              <div className="capability-actions">
-                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <IconButton size="small" className="plugin-remove" label={`Remove ${skill.name}`} disabled={busy} onClick={() => operation.requestRemove(skill)}><Trash size={13}/></IconButton> : null}
-                {capabilityControl(skill)}
-              </div>
-            </article>
-          })}</div>
-        ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
+        <div className={`directory-heading ${stylex.props(pluginsStyles.directoryHeading).className ?? ""}`}><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span className={stylex.props(pagesStyles.tabularNums).className}>{visible.length} shown</span></div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${tab}:${filter}`}
+            initial={instant ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={instant ? undefined : { opacity: 0 }}
+            transition={{ duration: instant ? 0 : 0.14, ease: [0.23, 1, 0.32, 1] }}
+          >
+            {visible.length ? (
+              <div className={`directory-list ${stylex.props(pluginsStyles.directoryList, [responsiveStyles.directoryList, responsiveLayoutStyles.directoryList]).className ?? ""}`}>{visible.map((skill) => {
+                const statusDetail = mcpStatusDetail(skill)
+                return <article key={skill.id}>
+                  <span className={[`directory-icon directory-icon--${skill.kind}`, stylex.props(pluginsStyles.directoryIcon, ((skill.kind === "mcp")) && pluginsStyles.directoryIconMcp, ((skill.kind === "prompt")) && pluginsStyles.directoryIconPrompt).className].filter(Boolean).join(' ')}><SkillIcon skill={skill}/></span>
+                  <div><div><h3>{skill.name}</h3><span>{skill.location}</span></div><p id={statusDetail ? capabilityDetailId(skill) : undefined}>{skill.description}{statusDetail ? ` ${statusDetail}` : ''}</p></div>
+                  <div className="capability-actions">
+                    {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <IconButton size="small" className="plugin-remove" label={`Remove ${skill.name}`} disabled={busy} onClick={() => operation.requestRemove(skill)}><Trash size={13}/></IconButton> : null}
+                    {capabilityControl(skill)}
+                  </div>
+                </article>
+              })}</div>
+            ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
+          </motion.div>
+        </AnimatePresence>
 
         {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
         {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}

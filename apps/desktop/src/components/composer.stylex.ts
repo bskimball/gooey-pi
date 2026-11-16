@@ -114,7 +114,17 @@ export const styles = stylex.create({
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'var(--surface-subtle)',
   },
-  attachmentImage: { width: 20, height: 20, flex: '0 0 auto', borderRadius: 'var(--radius-xs)', objectFit: 'cover' },
+  attachmentImage: {
+    width: 20,
+    height: 20,
+    flex: '0 0 auto',
+    borderRadius: 'var(--radius-xs)',
+    objectFit: 'cover',
+    outlineWidth: '1px',
+    outlineStyle: 'solid',
+    outlineColor: 'light-dark(oklch(0 0 0 / 0.1), oklch(1 0 0 / 0.1))',
+    outlineOffset: '-1px',
+  },
   attachmentLabel: {
     minWidth: 0,
     display: 'flex',

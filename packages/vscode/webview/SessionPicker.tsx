@@ -5,6 +5,7 @@ import { styles } from './session-controls.stylex'
 import { styles as webview } from './webview.stylex'
 import { Badge } from '@astryxdesign/core/Badge'
 import { ApexButton, CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useMachine } from '@xstate/react'
 import type { HostState, SessionSummary } from '../src/protocol'
@@ -20,6 +21,9 @@ interface SessionPickerProps {
 
 export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPickerProps) {
   const [snapshot, send] = useMachine(sessionPickerMachine)
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const open = snapshot.matches({ disclosure: 'open' })
   const loading = snapshot.matches({ catalog: 'loading' })
   const { items, currentPath } = snapshot.context
@@ -132,14 +136,21 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
       >
         <span className={`apex-session-picker__trigger-label ${stylex.props(webview.pickerLabel).className}`}>{activeTitle}</span>
       </ApexButton>
-      {open ? (
-        <div
-          className={`apex-session-picker__popover ${stylex.props(webview.pickerPopover).className}`}
-          onBlur={(event) => {
-            const next = event.relatedTarget
-            if (next instanceof Node && !rootRef.current?.contains(next)) close()
-          }}
-        >
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            key="picker-popover"
+            className={`apex-session-picker__popover ${stylex.props(webview.pickerPopover).className}`}
+            style={{ transformOrigin: 'top left' }}
+            initial={instant ? false : { opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={instant ? undefined : { opacity: 0, scale: 0.96, transition: { duration: 0.1, ease: [0.23, 1, 0.32, 1] } }}
+            transition={instant ? { duration: 0 } : { duration: 0.14, ease: [0.23, 1, 0.32, 1] }}
+            onBlur={(event) => {
+              const next = event.relatedTarget
+              if (next instanceof Node && !rootRef.current?.contains(next)) close()
+            }}
+          >
           <div className={`apex-session-picker__header ${stylex.props(webview.pickerHeader).className}`}>
             <span className={`sidebar-menu__label ${stylex.props(sidebarStyles.sidebarMenuLabel).className ?? ""}`}>Sessions</span>
             {items.length > 0 ? <Badge label={String(items.length)} className="apex-session-picker__count" xstyle={webview.pickerCount} /> : null}
@@ -196,8 +207,9 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
               )
             })}
           </div>
-        </div>
-      ) : null}
+        </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

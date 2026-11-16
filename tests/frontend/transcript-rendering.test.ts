@@ -5,7 +5,8 @@ import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { Transcript } from '../../apps/desktop/src/components/Transcript'
-import { LiveElapsed, LiveWorkVerb } from '../../apps/desktop/src/components/transcript/timeline'
+import { LiveElapsed, WorkTimeline } from '../../apps/desktop/src/components/transcript/timeline'
+import { cleanGoal, cleanOutcome } from '../../apps/desktop/src/components/transcript/subagent-lane'
 import { replayApexEvents } from '../../apps/desktop/src/lib/events/reduce'
 import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
@@ -150,11 +151,14 @@ describe('transcript rendering', () => {
     try {
       await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop, onOpenSpecialist })))
       const first = container.querySelector('.subagent-lane')!
-      expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('Failed')
-      await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
+      expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('failed')
+      await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__open')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
       onOpenSpecialist.mockClear()
+      // Settled lanes with a report expand on summary click to show the report and transcript link.
       await act(async () => first.querySelector<HTMLElement>('.subagent-lane__summary.is-clickable')!.click())
+      expect(first.querySelector('.subagent-lane__body')).not.toBeNull()
+      await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
       expect(first.querySelector('.status-mark--running')).toBeNull()
       expect(first.querySelector('.subagent-lane__status .status-mark--failed')).not.toBeNull()
@@ -187,7 +191,7 @@ describe('transcript rendering', () => {
       expect(operation.textContent).toContain(tool)
       await act(async () => operation.querySelector<HTMLButtonElement>('.activity-tool__summary')!.click())
       expect(operation.textContent).toContain('Operation rejected: worker transport unavailable')
-      if (tool !== 'task_wait') expect(container.querySelector('.subagent-lane__state')?.textContent).toBe('Finished')
+      if (tool !== 'task_wait') expect(container.querySelector('.subagent-lane__state')?.textContent).toBe('done')
       expect(container.querySelector('.subagent-lane')?.textContent).toContain('Completed report')
     } finally {
       await act(async () => root.unmount())
@@ -205,7 +209,7 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('Open agent transcript')
   })
 
-  it('keeps live reasoning behind a compact disclosure with animated thinking dots', () => {
+  it('keeps live reasoning behind a compact disclosure without thinking dots', () => {
     const html = render([{
       id: 'active',
       role: 'assistant',
@@ -220,14 +224,7 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('work-disclosure__rail')
     expect(html).not.toContain('assistant-mark')
     expect(html).toContain('work-disclosure__status')
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"]")].map(element => [element.querySelector(':scope > .sr-only:first-child')?.textContent, element.querySelector(':scope > .sr-only + .live-work-verb[aria-hidden="true"]')?.textContent])).toContainEqual(["Thinking", "Thinking"])
-    expect(html).not.toContain('Checking the workspace now.')
-    expect(html).not.toContain('**the workspace**')
-    expect(html).not.toContain('Worked for')
-    expect(html).toContain('thinking-dots')
-    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.thinking-dots > svg')).not.toBeNull()
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".thinking-dots__wave")]).toHaveLength(1)
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".thinking-dots__fin")]).toHaveLength(1)
+    expect(html).not.toContain('thinking-dots')
   })
 
   it.each([
@@ -250,7 +247,7 @@ describe('transcript rendering', () => {
     if (activity) {
       expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__activity:first-child")].map(element => [element.getAttribute('title'), element.textContent])).toContainEqual([activity, activity])
       expect(html).not.toContain('live-work-verb')
-    } else expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"]")].map(element => [element.querySelector(':scope > .sr-only:first-child')?.textContent, element.querySelector(':scope > .sr-only + .live-work-verb[aria-hidden="true"]')?.textContent])).toContainEqual(["Working", "Working"])
+    } else expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('[role="status"] > .work-disclosure__verb:first-child')].map(element => element.textContent)).toContain('Working')
   })
 
   it('names a running subagent in the live status line', () => {
@@ -272,7 +269,7 @@ describe('transcript rendering', () => {
           { type: 'toolResult', name: 'read_file', text: 'done' },
         ],
       }], false, showTools)
-      expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain(status)
+      expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__verb:first-child")].map(element => element.textContent)).toContain(status)
     },
   )
 
@@ -283,12 +280,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read_file' },
       { type: 'tool_execution_update', toolCallId: 'tool-1', toolName: 'read_file', partialResult: 'halfway' },
     ])
-    expect([...new DOMParser().parseFromString(render(updating, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Working")
+    expect([...new DOMParser().parseFromString(render(updating, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__verb:first-child")].map(element => element.textContent)).toContain("Working")
 
     const finished = replayApexEvents(updating, [
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
-    expect([...new DOMParser().parseFromString(render(finished, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Thinking")
+    expect([...new DOMParser().parseFromString(render(finished, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__verb:first-child")].map(element => element.textContent)).toContain("Thinking")
 
     const ended = replayApexEvents(updating, [{ type: 'agent_end' }])
     expect(ended[0].parts.find((part) => part.type === 'toolResult')).toMatchObject({ streaming: false, isError: true })
@@ -303,12 +300,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
     expect(reasoning[0].parts.map((part) => part.type)).toEqual(['thinking', 'toolCall', 'toolResult', 'thinking'])
-    expect([...new DOMParser().parseFromString(render(reasoning), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Thinking")
+    expect([...new DOMParser().parseFromString(render(reasoning), 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__verb:first-child")].map(element => element.textContent)).toContain("Thinking")
 
     const narrative = replayApexEvents(reasoning, [
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Final answer.' } },
     ])
-    expect([...new DOMParser().parseFromString(render(narrative, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Working")
+    expect([...new DOMParser().parseFromString(render(narrative, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__verb:first-child")].map(element => element.textContent)).toContain("Working")
   })
 
   it('keeps external active work readable until the whole agent turn is done', () => {
@@ -354,7 +351,8 @@ describe('transcript rendering', () => {
     // The prior turn's reasoning stays folded under its Thought summary rather than reopening as live work.
     expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought")
     expect(html).not.toContain('Prior completed reasoning.')
-    expect(html).toContain('transcript-active-placeholder')
+    expect(html).toContain('sr-only')
+    expect(html).toContain('aria-live="polite"')
     expect(html).toContain('Pi is working')
   })
 
@@ -465,12 +463,13 @@ describe('transcript rendering', () => {
       { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' },
     ]
     const live = render([{ id: 'live-image', role: 'assistant', timestamp: 1_000, streaming: true, parts }], true)
-    expect(live).toContain('streaming-state')
+    expect(live).toContain('sr-only')
+    expect(live).toContain('aria-live="polite"')
     expect(live).toContain('Here is the chart.')
     expect(live).toContain('src="data:image/png;base64,iVBORw0KGgo="')
 
     const settled = render([{ id: 'live-image', role: 'assistant', timestamp: 1_000, completedAt: 2_000, parts }])
-    expect(settled).not.toContain('streaming-state')
+    expect(settled).not.toContain('is working')
     expect(settled).toContain('Here is the chart.')
     expect(settled).toContain('src="data:image/png;base64,iVBORw0KGgo="')
   })
@@ -590,26 +589,31 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('1/2 done')
     expect(html).toContain('Implement the lane')
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane")]).toHaveLength(2)
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect([...doc.querySelectorAll('.subagent-lane')]).toHaveLength(2)
     expect(html).toContain('>scout</span>')
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
-    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".status-mark.status-mark--running")).not.toBeNull()
-    // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane__leaf")].map(element => [element.previousElementSibling?.textContent, element.textContent])).toContainEqual(["├─", "Transcript lives in messages.tsx"])
-    expect(html).toContain('View full report')
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane__leaf")].map(element => [element.previousElementSibling?.textContent, element.textContent])).toContainEqual(["╰─", "Awaiting a recorded update…"])
+    expect(doc.querySelector('.status-mark.status-mark--running')).not.toBeNull()
+    // Single-line default: no stacked tree rail, no awaiting-update placeholder, no View full report row.
+    expect(doc.querySelectorAll('.subagent-lane__tree')).toHaveLength(0)
+    expect(doc.querySelectorAll('.subagent-lane__leaf')).toHaveLength(0)
+    expect(html).not.toContain('Awaiting a recorded update…')
+    expect(html).not.toContain('View full report')
+    const missions = [...doc.querySelectorAll('.subagent-lane__mission')].map((element) => element.textContent)
+    expect(missions).toContain('Transcript lives in messages.tsx')
+    expect(missions).toContain('Build the lane')
   })
 
-  it('folds a task_wait into the lane of the task it started and shows the settled report highlights', () => {
+  it('folds a task_wait into the lane of the task it started and summarizes the settled outcome on one line', () => {
     const html = render([{
       id: 'paired',
       role: 'assistant',
       timestamp: 1_000,
       completedAt: 2_000,
       parts: [
-        { type: 'toolCall', id: 'start', name: 'task_start', args: { agent: 'scout', prompt: 'Map the code' } },
+        { type: 'toolCall', id: 'start', name: 'task_start', args: { agent: 'scout', prompt: 'Repo: C:\\repo\n## Goal\nMap the code' } },
         { type: 'toolResult', name: 'task_start', text: 'Started task_1 in background' },
         { type: 'text', text: 'Waiting on the scout.' },
         { type: 'toolCall', id: 'wait', name: 'task_wait', args: { id: 'task_1' } },
@@ -617,13 +621,21 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane")]).toHaveLength(1)
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect([...doc.querySelectorAll('.subagent-lane')]).toHaveLength(1)
     expect(html).toContain('subagent-lane is-done')
-    expect(html).toContain('>Finished</span>')
-    expect(html).toContain('>Findings</span>')
-    expect(html).toContain('>Lanes live in subagent-lane.tsx</span>')
+    expect(html).toContain('>done</span>')
+    expect(doc.querySelector('.subagent-lane__mission')?.textContent).toBe('Lanes live in subagent-lane.tsx')
     expect(html).not.toContain('Waiting on</span>')
+    expect(html).not.toContain('<code>task_1</code>')
     expect(html.indexOf('Waiting on the scout.')).toBeGreaterThan(html.indexOf('subagent-lane is-done'))
+  })
+
+  it('extracts concise goal and outcome summaries without prompt preamble or handoff fences', () => {
+    expect(cleanGoal('Repo: C:\\Users\\dev\\pi-desktop\nRead AGENTS.md first\nWorktree: clean\n## Goal\nMake `SubagentLane` minimal')).toBe('Make SubagentLane minimal')
+    expect(cleanGoal('Goal: Audit the sidebar state')).toBe('Audit the sidebar state')
+    expect(cleanOutcome('## Summary\n---\n```handoff\noutcome: Reduced SubagentLane to one 28px row\n```')).toBe('Reduced SubagentLane to one 28px row')
+    expect(cleanOutcome('{"outcome": "All 4 checks passed"}')).toBe('All 4 checks passed')
   })
 
   it('marks a failed turn on its prompt and shows the latest turn diff inline', () => {
@@ -706,6 +718,19 @@ describe('transcript rendering', () => {
   })
 
   it('renders compaction activity and completion separately from system failures', () => {
+    const runningHtml = render([{
+      id: 'compaction-running',
+      role: 'system',
+      parts: [{ type: 'compaction', status: 'running', reason: 'threshold', tokensBefore: 80_000 }],
+    }])
+    expect(runningHtml).toContain('activity-line--compaction is-running')
+    expect(runningHtml).toContain('Compacting context')
+    expect(runningHtml).toContain('automatic threshold')
+    expect(runningHtml).toContain('80,000 tokens before')
+    expect(runningHtml.match(/status-mark--running/g)).toHaveLength(1)
+    expect(runningHtml).toContain('activity-tool__state')
+    expect(runningHtml).not.toContain('width="14"')
+
     const html = render([{
       id: 'compaction',
       role: 'system',
@@ -816,42 +841,80 @@ describe('transcript rendering', () => {
     expect(statusStart).toBeGreaterThan(timelineEnd)
   })
 
-  it('cycles decorative work verbs while keeping the screen-reader status label stable until mode changes', () => {
-    vi.useFakeTimers()
+  it('preserves ReasoningPart body DOM node across live-to-settled transition and folds on click', async () => {
     const container = document.createElement('div')
-    document.body.appendChild(container)
+    document.body.append(container)
+    const root = createRoot(container)
+    const parts: TranscriptMessage['parts'] = [{ type: 'thinking', partId: 'think-1', text: 'Checking **morph**.' }]
+    try {
+      await act(async () => root.render(createElement(WorkTimeline, { parts, showReasoning: true, showTools: true, streaming: true })))
+      const liveRow = container.querySelector('.activity-line--reasoning')!
+      const proseNode = liveRow.querySelector('.prose')!
+      expect(liveRow.classList.contains('is-settled')).toBe(false)
+      expect(liveRow.querySelector('.activity-thought__summary')).toBeNull()
+      expect(proseNode.textContent).toContain('Checking morph.')
+
+      await act(async () => root.render(createElement(WorkTimeline, { parts, showReasoning: true, showTools: true, streaming: false })))
+      expect(container.querySelector('.activity-line--reasoning')).toBe(liveRow)
+      expect(liveRow.classList.contains('is-settled')).toBe(true)
+      expect(liveRow.querySelector('.prose')).toBe(proseNode)
+      const summary = liveRow.querySelector<HTMLButtonElement>('.activity-thought__summary')!
+      expect(summary).not.toBeNull()
+      expect(summary.getAttribute('aria-expanded')).toBe('true')
+      expect(liveRow.querySelector('.activity-thought__body')).not.toBeNull()
+
+      await act(async () => summary.click())
+      expect(summary.getAttribute('aria-expanded')).toBe('false')
+      expect(liveRow.querySelector('.activity-thought__body')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('transitions ToolPart, SubagentLane, and TodoStep from running to settled/done cleanly', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
     const root = createRoot(container)
     try {
-      act(() => {
-        root.render(createElement(LiveWorkVerb, { mode: 'Thinking' }))
-      })
-      expect(container.querySelector('.sr-only')?.textContent).toBe('Thinking')
-      expect(container.querySelector('.live-work-verb')?.getAttribute('aria-hidden')).toBe('true')
-      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Thinking')
+      await act(async () => root.render(createElement(WorkTimeline, {
+        parts: [
+          { type: 'toolCall', id: 'cmd-1', name: 'bash', args: { command: 'echo hi' } },
+          { type: 'toolCall', id: 'sub-1', name: 'task_start', args: { agent: 'scout', prompt: 'Check' } },
+          { type: 'toolCall', id: 'todo-1', name: 'todo_write', args: { todos: [{ content: 'Step 1', status: 'in_progress' }, { content: 'Step 2', status: 'pending' }] } },
+        ],
+        showReasoning: true,
+        showTools: true,
+        streaming: true,
+      })))
+      expect(container.querySelector('.activity-line--tool.is-running .activity-tool__state')?.textContent).toContain('running')
+      expect(container.querySelector('.subagent-lane.is-running .subagent-lane__state')?.textContent).toBe('running')
+      expect(container.querySelector('.todo-step__count')?.textContent).toBe('0/2 done')
+      expect(container.querySelector('.todo-step__label')?.textContent).toBe('Step 1')
 
-      act(() => {
-        vi.advanceTimersByTime(2_600)
-      })
-      expect(container.querySelector('.sr-only')?.textContent).toBe('Thinking')
-      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Sounding')
-
-      act(() => {
-        root.render(createElement(LiveWorkVerb, { mode: 'Working' }))
-      })
-      expect(container.querySelector('.sr-only')?.textContent).toBe('Working')
-      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Working')
-
-      act(() => {
-        vi.advanceTimersByTime(2_600)
-      })
-      expect(container.querySelector('.sr-only')?.textContent).toBe('Working')
-      expect(container.querySelector('.live-work-verb')?.textContent).toBe('Cresting')
+      await act(async () => root.render(createElement(WorkTimeline, {
+        parts: [
+          { type: 'toolCall', id: 'cmd-1', name: 'bash', args: { command: 'echo hi' } },
+          { type: 'toolResult', name: 'bash', text: 'hi' },
+          { type: 'toolCall', id: 'sub-1', name: 'task_start', args: { agent: 'scout', prompt: 'Check' } },
+          { type: 'toolResult', name: 'task_start', text: 'started task_1' },
+          { type: 'toolCall', id: 'wait-1', name: 'task_wait', args: { id: 'task_1' } },
+          { type: 'toolResult', name: 'task_wait', text: 'lifecycle: settled\n--- result ---\nAll good' },
+          { type: 'toolCall', id: 'todo-1', name: 'todo_write', args: { todos: [{ content: 'Step 1', status: 'completed' }, { content: 'Step 2', status: 'completed' }] } },
+        ],
+        showReasoning: true,
+        showTools: true,
+        streaming: false,
+      })))
+      expect(container.querySelector('.activity-line--tool.is-done .activity-tool__state')?.textContent).toContain('done')
+      expect(container.querySelector('.subagent-lane.is-done .subagent-lane__state')?.textContent).toBe('done')
+      expect(container.querySelector('.todo-step.is-finished .todo-step__count')?.textContent).toBe('2/2 done')
+      expect(container.querySelector('.todo-step.is-finished .todo-step__label')?.textContent).toBe('All steps complete')
+      await act(async () => container.querySelector<HTMLButtonElement>('.todo-step__summary')!.click())
+      expect(container.querySelectorAll('.todo-step__list li.is-completed')).toHaveLength(2)
     } finally {
-      act(() => {
-        root.unmount()
-      })
+      await act(async () => root.unmount())
       container.remove()
-      vi.useRealTimers()
     }
   })
 

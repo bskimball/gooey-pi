@@ -17,14 +17,26 @@
 .specialists-empty small { color: var(--text-tertiary); font-size: var(--fs-meta); line-height: 1.45; }
 
 /* Horizontal specialist selector strip */
+.specialist-tabstrip__item { z-index: var(--tab-z, 1); }
+.specialist-tabstrip__item:not(:first-child) { margin-left: -8px; }
+.specialist-tabstrip__divider + .specialist-tabstrip__item { margin-left: 0; }
 @media (hover: hover) and (pointer: fine) {
+	.specialist-tabstrip__item:hover { z-index: var(--tab-z-front, 100); }
+	.specialist-tabstrip__item:hover + .specialist-tabstrip__item { margin-left: -2px; }
+	.specialist-tabstrip__item:hover + .specialist-tabstrip__divider { margin-left: 10px; }
 }
+.specialist-tabstrip__item:focus-visible { z-index: var(--tab-z-front, 100); }
+.specialist-tabstrip__item:focus-visible + .specialist-tabstrip__item { margin-left: -2px; }
+.specialist-tabstrip__item:focus-visible + .specialist-tabstrip__divider { margin-left: 10px; }
 .specialist-tabstrip__item strong { font-weight: 550; }
 .specialist-tabstrip__item span { color: var(--text-tertiary); font-family: var(--chat-mono); font-size: 10.5px; }
 .specialist-tabstrip__item.is-waiting svg:not(.status-mark) { color: var(--warning); }
 .specialist-tabstrip__item.is-stopped svg:not(.status-mark), .specialist-tabstrip__item.is-closed svg:not(.status-mark) { color: var(--text-tertiary); }
 @keyframes session-status-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
-@media (prefers-reduced-motion: reduce) { }
+@media (prefers-reduced-motion: reduce) {
+	.specialist-tabstrip__item { transform: none !important; transition: none !important; }
+}
+.reduce-motion .specialist-tabstrip__item { transform: none !important; transition: none !important; }
 .reduce-motion .specialist-tabstrip__item.is-running::before { animation: none; }
 
 /* Run-state pill */
@@ -122,67 +134,6 @@
 
 /* Assistant turns & multi-turn divider */
 .specialist-turn--assistant>.specialist-turn__content { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-
-/* Inspector-tailored tool calls, grouped runs, and thinking blocks */
-.specialists-panel .work-timeline, .specialists-panel .timeline-page, .specialists-panel .timeline-page__body:not([hidden]) { gap: 2px; padding: 0; }
-.specialists-panel .activity-line--tool, .specialists-panel .activity-line--agent, .specialists-panel .activity-run { border-radius: var(--radius-sm); }
-.specialists-panel .activity-line--tool:hover, .specialists-panel .activity-line--agent:hover, .specialists-panel .activity-run:hover { background: transparent; }
-.specialists-panel .activity-tool__summary, .specialists-panel .activity-run__summary, .specialists-panel .activity-thought__summary {
-	width: 100%;
-	min-height: 30px;
-	gap: 7px;
-	padding: 4px 8px;
-	border-radius: var(--radius-sm);
-	cursor: pointer;
-	transition: background-color var(--fast), color var(--fast);
-}
-.specialists-panel .activity-tool__summary:disabled { cursor: default; }
-@media (hover: hover) and (pointer: fine) {
-	.specialists-panel .activity-tool__summary:hover:not(:disabled), .specialists-panel .activity-run__summary:hover, .specialists-panel .activity-thought__summary:hover { background: var(--surface-hover); }
-}
-.specialists-panel .activity-tool__summary:focus-visible, .specialists-panel .activity-run__summary:focus-visible, .specialists-panel .activity-thought__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.specialists-panel .activity-line__icon {
-	color: var(--text-secondary);
-}
-.specialists-panel .activity-line.is-running .activity-line__icon, .specialists-panel .activity-run.is-running .activity-line__icon { color: var(--apex); }
-.specialists-panel .activity-line.is-error .activity-line__icon, .specialists-panel .activity-run.is-error .activity-line__icon { color: var(--danger); }
-.specialists-panel .activity-line--tool.is-running>.activity-tool__summary { background: color-mix(in srgb, var(--apex-soft) 45%, transparent); }
-.specialists-panel .activity-line--tool.is-error>.activity-tool__summary { background: color-mix(in srgb, var(--danger-soft) 38%, transparent); }
-.specialists-panel .activity-line__kind, .specialists-panel .activity-run__label { color: var(--text); font-size: var(--fs-meta); font-weight: 550; }
-.specialists-panel .activity-tool__preview, .specialists-panel .activity-tool__command, .specialists-panel .activity-run__names { color: var(--text-secondary); font-size: 11.5px; }
-.specialists-panel .activity-tool__state { font-size: var(--fs-micro); }
-.specialists-panel .activity-line.is-running .activity-tool__state { color: var(--apex); }
-.specialists-panel :is(.activity-tool__summary,.activity-run__summary,.activity-thought__summary) .disclosure-caret {
-	color: var(--text-tertiary);
-	opacity: 0.35;
-	transition: opacity 120ms ease-out, transform 180ms var(--ease-out);
-}
-.specialists-panel .activity-thought__summary .disclosure-caret { margin-left: auto; }
-.specialists-panel :is(.activity-tool__summary:hover:not(:disabled),.activity-tool__summary:focus-visible,.activity-tool__summary[aria-expanded="true"],.activity-run__summary:hover,.activity-run__summary:focus-visible,.activity-run__summary[aria-expanded="true"],.activity-thought__summary:hover,.activity-thought__summary:focus-visible,.activity-thought__summary[aria-expanded="true"]) .disclosure-caret { opacity: 0.95; }
-
-/* Expanded tool details, diffs, tails, and grouped file runs */
-.specialists-panel .activity-tool__details { position: relative; max-height: 240px; margin: 3px 0 6px 27px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); }
-.specialists-panel .activity-tool__details-toolbar { position: sticky; top: 4px; float: right; margin: 4px 5px 0 8px; padding: 0; background: transparent; }
-.specialists-panel .activity-tool__copy { border: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--canvas) 82%, var(--surface-subtle)); }
-.specialists-panel .activity-tool__contents { padding: 8px 10px; font-size: 11.5px; line-height: 1.5; }
-.specialists-panel .activity-edit-diff, .specialists-panel .activity-tool__tail { margin: 3px 0 6px 27px; border-radius: var(--radius-sm); }
-.specialists-panel .activity-tool__tail { border: 1px solid var(--border-subtle); background: var(--surface-subtle); }
-.specialists-panel .activity-run__items { margin: 2px 0 4px 17px; padding-left: 9px; border-left: 1.5px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
-.specialists-panel .activity-line--note { padding: 5px 6px; color: var(--text); }
-
-/* Thinking / reasoning blocks */
-.specialists-panel .activity-thought__summary .activity-line__icon { border-color: color-mix(in srgb, var(--apex) 22%, var(--border-subtle)); color: var(--apex); background: color-mix(in srgb, var(--apex-soft) 65%, var(--surface-subtle)); }
-.specialists-panel .activity-thought__summary .activity-line__kind { color: var(--text-secondary); }
-.specialists-panel .activity-thought__body, .specialists-panel .activity-line--reasoning:not(.is-settled) {
-	margin: 2px 0 6px 17px;
-	padding: 8px 11px;
-	border-left: 2px solid color-mix(in srgb, var(--apex) 38%, var(--border-strong));
-	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-	color: var(--text-secondary);
-	background: color-mix(in srgb, var(--surface-subtle) 75%, transparent);
-	font-size: var(--fs-meta);
-	line-height: 1.58;
-}
 
 /* Settled specialist report card */
 .specialist-result>h3 {

@@ -483,13 +483,17 @@ export const ModelPicker = memo(function ModelPicker({
                 // A null relatedTarget means focus left the document entirely (app
                 // switch), which keeps the popover and the typed query alive.
                 const next = event.relatedTarget
-                if (
-                  next instanceof Node &&
-                  !rootRef.current?.contains(next) &&
-                  !popoverRef.current?.contains(next)
-                ) {
-                  close()
+                if (!(next instanceof Node)) return
+                if (rootRef.current?.contains(next) || popoverRef.current?.contains(next)) return
+                // Pressing a non-focusable part of the popover (the provider-row
+                // scrollbar) moves focus to the nearest focusable ancestor, e.g. the
+                // enclosing modal <dialog>. That is not a tab-out, so keep the picker
+                // open and hand focus back to the search field for arrow-key nav.
+                if (next.contains(event.currentTarget)) {
+                  searchRef.current?.focus({ preventScroll: true })
+                  return
                 }
+                close()
               }}
             >
               <div {...stylex.props(styles.searchRow)}>

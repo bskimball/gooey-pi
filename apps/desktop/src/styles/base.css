@@ -41,6 +41,7 @@
   --surface-subtle: #f1f6fa;
   --surface-hover: #e4edf5;
   --surface-selected: #d9e6f2;
+  --surface-user: color-mix(in srgb, var(--surface-hover) 82%, var(--surface-selected));
   --surface-raised: #ffffff;
   --text: #0f172a;
   --text-primary: #0f172a;
@@ -136,6 +137,7 @@
   --surface-subtle: #0e1320;
   --surface-hover: #131a29;
   --surface-selected: #1a2234;
+  --surface-user: color-mix(in srgb, var(--surface-hover) 70%, var(--surface-selected));
   --surface-raised: #101624;
   --text: #edf1f8;
   --text-primary: #edf1f8;

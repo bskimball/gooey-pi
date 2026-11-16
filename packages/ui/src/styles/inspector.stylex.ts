@@ -129,8 +129,25 @@ export const styles = stylex.create({
     "animationFillMode": "none",
     "animationPlayState": "running",
   },
+  "inspectorTabButton": {
+    "position": "relative",
+    "transform": { "default": "none", ":active": "scale(0.97)" },
+    "transition": "transform 120ms ease-out",
+    "::after": { "display": "none" },
+  },
+  "inspectorTabIndicator": {
+    "position": "absolute",
+    "left": "8px",
+    "right": "8px",
+    "bottom": "-1px",
+    "height": "2px",
+    "borderRadius": "2px",
+    "backgroundColor": "var(--apex)",
+    "pointerEvents": "none",
+  },
   "inspectorTabSpacer": { "flexGrow": 1, "flexShrink": 1, "flexBasis": "0%" },
   "inspectorBody": { "flexGrow": 1, "flexShrink": 1, "flexBasis": "0%", "minHeight": 0, "overflowX": "hidden", "overflowY": "hidden" },
+  "inspectorPanelMotion": { "height": "100%", "minHeight": 0 },
   "inspectorScroll": { "height": "100%", "overflowX": "auto", "overflowY": "auto" },
   "summaryPanel": { "paddingTop": "5px", "paddingRight": "22px", "paddingBottom": "5px", "paddingLeft": "22px" },
   "summarySection": {
@@ -863,6 +880,12 @@ export const styles = stylex.create({
     "whiteSpace": "nowrap",
     "cursor": "pointer",
     "userSelect": "none",
+    "transform": { "default": "none", ":active": "scale(0.97)" },
+    "transition": "transform 120ms ease-out",
+  },
+  "browserTabstripPreview": {
+    "transform": { "default": "none", ":active": "scale(0.97)" },
+    "transition": "transform 120ms ease-out",
   },
   "browserTabstripAgentIsActive": {
     "borderTopColor": "var(--border)",
