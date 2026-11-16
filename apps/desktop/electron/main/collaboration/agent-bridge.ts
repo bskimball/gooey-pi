@@ -261,7 +261,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     const source = await this.sourceFor(claim)
     if (method === 'list' || method === 'projects') {
       const wasGlobal = source.globalCoordinator
-      const result = method === 'list' ? await this.listPeers(source) : await this.listProjects(source)
+      const result = method === 'list' ? await this.listPeers(source, params.offset) : await this.listProjects(source)
       await this.sourceFor(claim)
       if (wasGlobal !== source.globalCoordinator) throw new Error('The collaboration authority changed')
       return result
@@ -358,19 +358,29 @@ export class AgentCollaborationBridge extends CapabilityBridge {
     return peers.sort((left, right) => Date.parse(right.session.updatedAt) - Date.parse(left.session.updatedAt))
   }
 
-  private async listPeers(source: CollaborationTarget): Promise<Array<Record<string, unknown>>> {
-    return (await this.peersFor(source)).filter(({ session }) => !('role' in session && session.role === 'coordinator')).slice(0, MAX_LISTED_SESSIONS).map(({ session, manager, projectId, cwd }) => ({
-      id: session.id,
-      project_id: projectId,
-      cwd,
-      harness: session.harness,
-      title: session.title,
-      status: waitingForUser(manager, manager.getForSession(session.filePath)) ? 'waiting' : session.status,
-      updated_at: session.updatedAt,
-      live: Boolean(manager.getForSession(session.filePath)),
-      waiting_for_user: waitingForUser(manager, manager.getForSession(session.filePath)),
-      last_error: this.lastErrors.get(resolve(session.filePath)),
-    }))
+  private async listPeers(source: CollaborationTarget, offsetValue?: unknown): Promise<Array<Record<string, unknown>>> {
+    const offset = offsetValue === undefined ? 0 : requireInteger(offsetValue, 'offset', 0, 1_000_000)
+    const peers = (await this.peersFor(source)).filter(({ session }) => session.role !== 'coordinator')
+    // Keep attached runtimes ahead of newer saved history, without treating attachment as activity.
+    peers.sort((left, right) => Number(Boolean(right.manager.getForSession(right.session.filePath))) - Number(Boolean(left.manager.getForSession(left.session.filePath))))
+    return peers.slice(offset, offset + MAX_LISTED_SESSIONS).map(({ session, manager, projectId, cwd }) => {
+      const runtime = manager.getForSession(session.filePath)
+      const waiting = waitingForUser(manager, runtime)
+      const busy = runtime && (runtime.isStreaming || runtime.isCompacting || runtime.sessionActions?.active || (runtime.sessionActions?.queuedCount ?? 0) > 0)
+      return {
+        id: session.id,
+        project_id: projectId,
+        cwd,
+        harness: session.harness,
+        title: session.title,
+        status: waiting ? 'waiting' : runtime ? (busy ? 'running' : 'idle') : session.status,
+        status_source: runtime ? 'runtime' : 'saved',
+        updated_at: session.updatedAt,
+        live: Boolean(runtime),
+        waiting_for_user: waiting,
+        last_error: this.lastErrors.get(resolve(session.filePath)),
+      }
+    })
   }
 
   private async listProjects(source: CollaborationTarget): Promise<Array<{ id: string; name: string; cwd: string }>> {

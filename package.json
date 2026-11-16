@@ -90,6 +90,7 @@
 		"electron-vite": "^5.0.0",
 		"extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
 		"jsdom": "^30.0.1",
+		"motion": "^14.14.0",
 		"oxfmt": "^0.74.0",
 		"oxlint": "^1.89.0",
 		"react": "^19.2.8",

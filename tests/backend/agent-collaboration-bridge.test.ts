@@ -186,6 +186,34 @@ async function fixture(
 }
 
 describe('AgentCollaborationBridge', () => {
+  it('keeps older attached peers visible, uses runtime activity, and pages saved history', async () => {
+    const setup = await fixture()
+    setup.records.push(
+      ...Array.from({ length: 105 }, (_, index) => ({
+        ...target,
+        id: `history-${index}`,
+        filePath: `/sessions/history-${index}.jsonl`,
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      })),
+    )
+    const first = await setup.call('list')
+    expect(first.body.result).toHaveLength(100)
+    expect(first.body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, live: true, status: 'idle', status_source: 'runtime' })]))
+    const runtime = setup.apexManager.getForSession(target.filePath)!
+    runtime.sessionActions = { queuedCount: 0, steering: [], followUps: [], active: { kind: 'turn', phase: 'preparing' } }
+    expect((await setup.call('list')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, status: 'running' })]))
+    runtime.sessionActions = { queuedCount: 1, steering: [], followUps: [] }
+    expect((await setup.call('list')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, status: 'running' })]))
+    runtime.sessionActions = { queuedCount: 0, steering: [], followUps: [] }
+    expect((await setup.call('list')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, status: 'idle' })]))
+    runtime.isStreaming = true
+    expect((await setup.call('list')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, status: 'running' })]))
+    setup.apexManager.dialogs.push({ method: 'question', title: 'Approve?' })
+    expect((await setup.call('list')).body.result).toEqual(expect.arrayContaining([expect.objectContaining({ id: target.id, status: 'waiting' })]))
+    expect((await setup.call('list', { offset: 100 })).body.result).toHaveLength(6)
+    expect((await setup.call('list', { offset: -1 })).body.ok).toBe(false)
+  })
+
   it('limits global operations to currently granted projects while ordinary agents remain project scoped', async () => {
     const folder = mkdtempSync(join(tmpdir(), 'chief-project-'))
     const canonical = realpathSync(folder)

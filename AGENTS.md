@@ -48,6 +48,21 @@ Keep handwritten production files `<= 750` lines when practical; split by cohesi
   `reset, apex-base, astryx-base, astryx-theme, apex, stylex, apex-overrides, apex-sidebar, apex-responsive`.
 - Author styles with `stylex.create(...)` and apply with `stylex.props(...)`; keep contextual/sidebar/responsive overrides in their higher layers rather than fighting StyleX specificity.
 
+## Motion (`motion`)
+
+- Import React components and hooks (`motion`, `AnimatePresence`, `LayoutGroup`, `useReducedMotion`) from `motion/react` (not `framer-motion` or bare `motion`).
+- Pair `motion.*` elements with `stylex.props(...)` for UI transitions, layout animations, and exit presence, and respect reduced-motion preferences.
+
+## TanStack Query (`@tanstack/react-query`)
+
+- Used for renderer/IPC data caching and optimistic catalog updates (`apps/desktop/src/hooks/useSidebarCatalog.ts`, `apps/desktop/src/hooks/useBootstrap.ts`).
+- Set `networkMode: 'always'` for Electron IPC queries and avoid browser focus/reconnect refetching where main-process events own invalidation.
+
+## TanStack Router (`@tanstack/react-router`)
+
+- Use `@tanstack/react-router` for renderer routing and typed route state.
+- Use `createMemoryHistory` or `createHashHistory` in Electron; pathname/search URL changes break `will-navigate` and `isTrustedRendererUrl` (`apps/desktop/electron/main/ipc.ts`).
+
 ## Effect (`effect`)
 
 - Used selectively for typed boundary validation (`effect/Schema` in `packages/core/src/validation.ts`) and cancellable async IPC (`effect/Effect` + `AbortController` in `apps/desktop/electron/main/effective-config-ipc.ts`).
