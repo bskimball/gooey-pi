@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as contextStyles } from 'apex-ui/styles/browser-references-context.stylex'
+import { styles as browserReferencesStyles } from 'apex-ui/styles/browser-references.stylex'
 import type { BrowserAnnotation } from '@/types/api'
 import { annotationElementLabel, type BrowserReference } from '@/lib/browser-annotations'
 import { ImageParts } from './transcript/TranscriptImage'
@@ -31,46 +34,46 @@ export function BrowserSelectionTray({
 }) {
   if (!annotations.length && !processing && !error) return null
   return (
-    <section className="browser-selection-tray" aria-label="Selected browser elements">
+    <section className={`browser-selection-tray ${stylex.props(browserReferencesStyles.browserSelectionTray).className ?? ""}`} aria-label="Selected browser elements">
       {annotations.length ? (
-        <header className="browser-selection-tray__heading">
+        <header className={`browser-selection-tray__heading ${stylex.props(browserReferencesStyles.browserSelectionTrayHeading).className ?? ""}`}>
           <span>
             {annotations.length} selected element{annotations.length === 1 ? '' : 's'}
           </span>
-          <button type="button" aria-label="Remove page annotations" onClick={onClear}>
+          <button type="button" {...stylex.props(contextStyles.trayHeadingButton)} aria-label="Remove page annotations" onClick={onClear}>
             Clear
           </button>
         </header>
       ) : null}
-      {processing ? <p role="status">Preparing element preview…</p> : null}
-      {error ? <p role="status">{error}</p> : null}
-      <div className="browser-selection-tray__items">
+      {processing ? <p {...stylex.props(contextStyles.trayParagraph)} role="status">Preparing element preview…</p> : null}
+      {error ? <p {...stylex.props(contextStyles.trayParagraph)} role="status">{error}</p> : null}
+      <div className={`browser-selection-tray__items ${stylex.props(browserReferencesStyles.browserSelectionTrayItems).className ?? ""}`}>
         {annotations.map((annotation, index) => {
           const reference = annotationReference(annotation)
           return (
-            <article className="browser-selection-card" key={annotation.id}>
-              <header>
-                <button type="button" className="browser-selection-card__target" title={`Reveal ${reference.label} in browser`} onClick={() => onReveal?.(reference)} disabled={!onReveal}>
-                  <Crosshair size={12} />
-                  <span>{reference.label}</span>
+            <article className={`browser-selection-card ${stylex.props(browserReferencesStyles.browserSelectionCard).className ?? ""}`} key={annotation.id}>
+              <header {...stylex.props(contextStyles.cardHeader)}>
+                <button type="button" className={`browser-selection-card__target ${stylex.props(onReveal ? contextStyles.targetEnabled : contextStyles.targetDisabled, contextStyles.headerTarget).className ?? ""}`} title={`Reveal ${reference.label} in browser`} onClick={() => onReveal?.(reference)} disabled={!onReveal}>
+                  <Crosshair {...stylex.props(contextStyles.targetIcon)} size={12} />
+                  <span {...stylex.props(contextStyles.targetLabel)}>{reference.label}</span>
                 </button>
-                <button type="button" aria-label={`Remove annotation ${index + 1}`} onClick={() => onRemove(annotation.id)}>
+                <button type="button" {...stylex.props(contextStyles.headerLastButton)} aria-label={`Remove annotation ${index + 1}`} onClick={() => onRemove(annotation.id)}>
                   <X size={13} />
                 </button>
               </header>
               {annotation.preview ? (
-                <ImageParts images={[annotation.preview]} alt={`Selected ${reference.label}`} />
+                <ImageParts images={[annotation.preview]} alt={`Selected ${reference.label}`} xstyle={[contextStyles.trayPreview, contextStyles.imagePreviewFocus]} imageXstyle={contextStyles.trayImage} />
               ) : (
-                <div className="browser-selection-card__missing">Element details attached · no image</div>
+                <div className={`browser-selection-card__missing ${stylex.props(browserReferencesStyles.browserSelectionCardMissing).className ?? ""}`}>Element details attached · no image</div>
               )}
-              <small title={annotation.pageUrl}>{annotation.pageTitle || annotation.pageUrl}</small>
-              {annotation.stale ? <small>Page changed since capture</small> : null}
-              <details>
-                <summary>Element details</summary>
-                <code>{reference.selector}</code>
-                {annotation.comment ? <p>{annotation.comment}</p> : null}
+              <small {...stylex.props(contextStyles.referenceSmall)} title={annotation.pageUrl}>{annotation.pageTitle || annotation.pageUrl}</small>
+              {annotation.stale ? <small {...stylex.props(contextStyles.referenceSmall)}>Page changed since capture</small> : null}
+              <details {...stylex.props(contextStyles.cardDetails)}>
+                <summary {...stylex.props(contextStyles.cardSummary)}>Element details</summary>
+                <code {...stylex.props(contextStyles.cardDetailText)}>{reference.selector}</code>
+                {annotation.comment ? <p {...stylex.props(contextStyles.cardDetailText)}>{annotation.comment}</p> : null}
                 {annotation.source?.kind === 'resolved' ? (
-                  <small>
+                  <small {...stylex.props(contextStyles.cardDetailText)}>
                     {annotation.source.path}
                     {annotation.source.line ? `:${annotation.source.line}` : ''}
                   </small>

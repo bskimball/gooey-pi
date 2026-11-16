@@ -1,3 +1,4 @@
+import { styles as overlaysStyles } from './styles/overlays.stylex'
 import { Dialog } from '@astryxdesign/core/Dialog'
 import * as stylex from '@stylexjs/stylex'
 import { X } from './icons'
@@ -106,14 +107,14 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
       role="dialog"
       aria-labelledby={titleId}
       className="modal"
-      xstyle={styles.modalDialog}
+      xstyle={[overlaysStyles.modal, styles.modalDialog]}
     >
-      <div className={`modal__header ${headerStylex.className ?? ''}`.trim()} style={headerStylex.style}>
+      <div className={`modal__header ${stylex.props(overlaysStyles.modalHeader, styles.modalHeader).className ?? ""}`} style={headerStylex.style}>
         <h2 id={titleId} className={titleStylex.className} style={titleStylex.style}>{title}</h2>
         <IconButton label="Close" onClick={onClose}><X size={16} /></IconButton>
       </div>
-      <div className={`modal__body ${bodyStylex.className ?? ''}`.trim()} style={bodyStylex.style}>{children}</div>
-      {footer ? <div className={`modal__footer ${footerStylex.className ?? ''}`.trim()} style={footerStylex.style}>{footer}</div> : null}
+      <div className={`modal__body ${stylex.props(overlaysStyles.modalBody, styles.modalBody).className ?? ""}`} style={bodyStylex.style}>{children}</div>
+      {footer ? <div className={`modal__footer ${stylex.props(overlaysStyles.modalFooter, styles.modalFooter).className ?? ""}`} style={footerStylex.style}>{footer}</div> : null}
     </Dialog>,
     document.body,
   )

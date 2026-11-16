@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { useActorRef, useMachine, useSelector } from "@xstate/react";
 import type {
@@ -441,10 +443,10 @@ export function BrowserPanel({
 	).length;
 
 	return (
-		<div className="browser-panel">
+		<div className={`browser-panel ${stylex.props(inspectorStyles.browserPanel).className ?? ""}`}>
 			{agentTabs.length ? (
 				<div
-					className="browser-tabstrip"
+					className={`browser-tabstrip ${stylex.props(inspectorStyles.browserTabstrip).className ?? ""}`}
 					role="tablist"
 					aria-label="Browser tabs"
 				>
@@ -463,7 +465,7 @@ export function BrowserPanel({
 							role="tab"
 							tabIndex={0}
 							aria-selected={showAgentTab && tab.tabId === activeAgentTabId}
-							className={`browser-tabstrip__agent ${showAgentTab && tab.tabId === activeAgentTabId ? "is-active" : ""}`}
+							className={[`browser-tabstrip__agent ${showAgentTab && tab.tabId === activeAgentTabId ? "is-active" : ""}`, stylex.props(inspectorStyles.browserTabstripAgent, (showAgentTab && tab.tabId === activeAgentTabId) && inspectorStyles.browserTabstripAgentIsActive).className].filter(Boolean).join(' ')}
 							title={tab.url}
 							onClick={() => onSelectAgentTab?.(tab.tabId)}
 							onKeyDown={(event) => {
@@ -499,7 +501,7 @@ export function BrowserPanel({
 				className={`browser-preview ${showAgentTab ? "browser-preview--hidden" : ""}`}
 				inert={showAgentTab ? true : undefined}
 			>
-				<div className="browser-toolbar">
+				<div className={`browser-toolbar ${stylex.props(inspectorStyles.browserToolbar).className ?? ""}`}>
 					<IconButton
 						label="Back"
 						disabled={!canBack}
@@ -525,7 +527,7 @@ export function BrowserPanel({
 						{loading ? <X size={14} /> : <ArrowsClockwise size={14} />}
 					</IconButton>
 					<form
-						className="address-field"
+						className={`address-field ${stylex.props(inspectorStyles.addressField).className ?? ""}`}
 						onSubmit={(event) => {
 							event.preventDefault();
 							navigate(address);
@@ -561,7 +563,7 @@ export function BrowserPanel({
 					</IconButton>
 					<IconButton
 						className={
-							picking || pendingElement ? "is-active annotation-active" : ""
+							picking || pendingElement ? `is-active annotation-active ${stylex.props(inspectorStyles.annotationActive).className}` : ""
 						}
 						label={picking ? "Stop annotating" : "Annotate page"}
 						aria-pressed={picking}
@@ -577,7 +579,7 @@ export function BrowserPanel({
 					</IconButton>
 				</div>
 				{historyOpen ? (
-					<div className="browser-history">
+					<div className={`browser-history ${stylex.props(inspectorStyles.browserHistory).className ?? ""}`}>
 						<div>
 							<strong>Recent pages</strong>
 							<button
@@ -602,10 +604,10 @@ export function BrowserPanel({
 							))}
 					</div>
 				) : null}
-				<div className={`browser-viewport ${picking ? "is-annotating" : ""}`}>
+				<div className={[`browser-viewport ${picking ? "is-annotating" : ""}`, stylex.props(inspectorStyles.browserViewport, (picking) && inspectorStyles.browserViewportIsAnnotating).className].filter(Boolean).join(' ')}>
 					{webview}
 					{picking || capturingSelection ? (
-						<div className="annotation-hint" role="status">
+						<div className={`annotation-hint ${stylex.props(inspectorStyles.annotationHint).className ?? ""}`} role="status">
 							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : isDirectArmed ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}
 						</div>
 					) : null}
@@ -618,25 +620,25 @@ export function BrowserPanel({
 						/>
 					) : null}
 					{count ? (
-						<div className="annotation-count">
+						<div className={`annotation-count ${stylex.props(inspectorStyles.annotationCount).className ?? ""}`}>
 							<ChatCircleText size={12} /> {count} of {MAX_BROWSER_ANNOTATIONS}{" "}
 							annotation{count === 1 ? "" : "s"}
 							{staleCount ? ` · ${staleCount} from earlier pages` : ""}
 						</div>
 					) : null}
 					{notice ? (
-						<Banner status="warning" role="alert" className="annotation-notice" title={notice} />
+						<Banner xstyle={[inspectorStyles.annotationNotice]} status="warning" role="alert" className="annotation-notice" title={notice} />
 					) : null}
 					<AgentCursorOverlay pointerEvent={previewPointerEvent} />
 				</div>
 			</div>
 			{activeAgentTab && showExtensionTab && extension ? (
-				<div className="browser-agent-area browser-agent-area--extension">
+				<div className={`browser-agent-area browser-agent-area--extension ${stylex.props(inspectorStyles.browserAgentArea, inspectorStyles.browserAgentAreaExtension).className ?? ""}`}>
 					<ExtensionTabCard tab={activeAgentTab} extension={extension} />
 				</div>
 			) : showAgentTab && activeAgentTab ? (
-				<div className="browser-agent-area">
-					<div className="browser-agent-urlbar">
+				<div className={`browser-agent-area ${stylex.props(inspectorStyles.browserAgentArea).className ?? ""}`}>
+					<div className={`browser-agent-urlbar ${stylex.props(inspectorStyles.browserAgentUrlbar).className ?? ""}`}>
 						<IconButton
 							label="Back"
 							disabled={!activeAgentTab.canGoBack}
@@ -662,7 +664,7 @@ export function BrowserPanel({
 							<ArrowsClockwise size={14} />
 						</IconButton>
 						<form
-							className="address-field"
+							className={`address-field ${stylex.props(inspectorStyles.addressField).className ?? ""}`}
 							onSubmit={(event) => {
 								event.preventDefault();
 								agentAddressEditingRef.current = false;
@@ -691,7 +693,7 @@ export function BrowserPanel({
 						{extension?.status?.connected ? (
 							<button
 								type="button"
-								className="browser-pop-out"
+								className={`browser-pop-out ${stylex.props(inspectorStyles.browserPopOut).className ?? ""}`}
 								data-testid="browser-pop-out-button"
 								title="Move this tab into your browser, where the agent keeps driving it"
 								onClick={() => extension.popOut(activeAgentTab)}
@@ -702,7 +704,7 @@ export function BrowserPanel({
 						) : null}
 					</div>
 					<div
-						className="browser-agent-slot"
+						className={`browser-agent-slot ${stylex.props(inspectorStyles.browserAgentSlot).className ?? ""}`}
 						ref={slotRef}
 						aria-label="Agent-controlled browser tab"
 					/>

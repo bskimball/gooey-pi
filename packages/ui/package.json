@@ -11,6 +11,7 @@
     "./ui": "./src/ui.tsx",
     "./ErrorBoundary": "./src/ErrorBoundary.tsx",
     "./ExtensionUiModal": "./src/ExtensionUiModal.tsx",
+    "./styles/*": "./src/styles/*.ts",
     "./*": "./src/*"
   },
   "dependencies": {

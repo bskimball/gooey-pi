@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { createElement, memo, useEffect, useRef } from "react";
 import type { StampedPointerEvent } from "@/hooks/useAgentBrowserTabs";
 import { type AgentBrowserTabRecord, BROWSER_PARTITION } from "@/types/api";
@@ -47,7 +49,7 @@ export function AgentBrowserLayer({
 		: undefined;
 	return (
 		<div
-			className={`agent-browser-layer ${rect ? "is-visible" : ""}`}
+			className={[`agent-browser-layer ${rect ? "is-visible" : ""}`, stylex.props(inspectorStyles.agentBrowserLayer, (rect) && inspectorStyles.agentBrowserLayerIsVisible).className].filter(Boolean).join(' ')}
 			style={style}
 			aria-hidden={rect ? undefined : true}
 		>
@@ -192,11 +194,11 @@ export function AgentCursorOverlay({
 	);
 
 	return (
-		<div ref={overlayRef} className="agent-cursor-layer" aria-hidden>
-			<svg ref={trailRef} className="agent-cursor-trail" aria-hidden="true" />
-			<div ref={cursorRef} className="agent-cursor">
+		<div ref={overlayRef} className={`agent-cursor-layer ${stylex.props(inspectorStyles.agentCursorLayer).className ?? ""}`} aria-hidden>
+			<svg ref={trailRef} className={`agent-cursor-trail ${stylex.props(inspectorStyles.agentCursorTrail).className ?? ""}`} aria-hidden="true" />
+			<div ref={cursorRef} className={`agent-cursor ${stylex.props(inspectorStyles.agentCursor).className ?? ""}`}>
 				<svg
-					className="agent-cursor__arrow"
+					className={`agent-cursor__arrow ${stylex.props(inspectorStyles.agentCursorArrow).className ?? ""}`}
 					viewBox="0 0 20 22"
 					width="20"
 					height="22"
@@ -242,7 +244,7 @@ const AgentTabView = memo(function AgentTabView({
 	// src stays about:blank permanently: the main process drives all navigation,
 	// and rewriting src on re-render would reload the guest.
 	return (
-		<div className={`agent-browser-tab ${visible ? "is-visible" : ""}`}>
+		<div className={[`agent-browser-tab ${visible ? "is-visible" : ""}`, stylex.props(inspectorStyles.agentBrowserTab).className].filter(Boolean).join(' ')}>
 			{createElement("webview" as never, {
 				ref: (node: AgentWebviewElement | null) => {
 					viewRef.current = node;

@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
 import { SelectControl } from '@/components/ui'
 import type { AppSettings } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
@@ -7,22 +9,22 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
   return (
     <>
       <header><h1>General</h1><p>Choose how Apex behaves across projects.</p></header>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Window</h2>
         <SettingsToggle checked={settings.sidebarOpen} onChange={(sidebarOpen) => { void onUpdate({ sidebarOpen }) }} label="Show project sidebar" description="Keep projects and sessions visible when the app opens." />
         <SettingsToggle checked={settings.inspectorOpen} onChange={(inspectorOpen) => { void onUpdate({ inspectorOpen }) }} label="Open session inspector" description="Show the summary pane for newly opened sessions." />
         <SettingsToggle checked={settings.showFileChangesPopup} onChange={(showFileChangesPopup) => { void onUpdate({ showFileChangesPopup }) }} label="Show file changes popup" description="Show the review card above the composer when the workspace has uncommitted changes." />
       </section>
       {platform === 'darwin' ? (
-        <section className="settings-group">
+        <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
           <h2>Startup &amp; background</h2>
           <SettingsToggle checked={settings.keepRunningInBackground} onChange={(keepRunningInBackground) => { void onUpdate({ keepRunningInBackground }) }} label="Keep running after closing the app window" description="Keep scheduled work running from the menu bar until you quit the app." />
           <SettingsToggle checked={settings.launchAtLogin} onChange={(launchAtLogin) => { void onUpdate({ launchAtLogin }) }} label="Launch at login" description="Start the app in the background when you log in to this Mac." />
         </section>
       ) : null}
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Session defaults</h2>
-        <div className="settings-row">
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>Git checkout style</strong><small>Worktrees use separate folders for safe parallel tasks. Branches reuse the same folder and require a clean, idle project.</small></span>
           <SelectControl label="Git checkout style" value={settings.checkoutStrategy} onChange={(event) => {
             const checkoutStrategy = event.target.value
@@ -32,7 +34,7 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
             <option value="branch">Branches</option>
           </SelectControl>
         </div>
-        <div className="settings-row">
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>Default inspector tab</strong><small>The first detail surface shown in a session.</small></span>
           <SelectControl label="Default inspector tab" value={settings.defaultInspectorTab} onChange={(event) => { void onUpdate({ defaultInspectorTab: event.target.value as AppSettings['defaultInspectorTab'] }) }}>
             <option value="summary">Summary</option>

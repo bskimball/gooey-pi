@@ -1,3 +1,8 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { pathToFileUrl } from "@/lib/desktop-actions";
 import type {
@@ -23,7 +28,8 @@ import { SpecialistsPanel } from "./inspector/SpecialistsPanel";
 import { SummaryPanel } from "./inspector/SummaryPanel";
 import { createReadinessSelector } from "./inspector/readiness";
 import { createSessionSummarySelector } from "./inspector/session-summary";
-import { IconButton, useFocusTrap } from "./ui";
+import { IconButton } from "./ui";
+import { InspectorShell } from "./InspectorShell";
 
 export interface InspectorProps {
 	platform?: NodeJS.Platform;
@@ -130,7 +136,6 @@ export const Inspector = memo(function Inspector({
 	platform = "darwin",
 	homeDir,
 }: InspectorProps) {
-	const inspectorRef = useFocusTrap<HTMLElement>(overlay && visible, onClose);
 	const [browserVisited, setBrowserVisited] = useState(activeTab === "browser");
 	useEffect(() => { if (activeTab === "browser") setBrowserVisited(true); }, [activeTab]);
 	const [selectSummary] = useState(createSessionSummarySelector);
@@ -157,16 +162,9 @@ export const Inspector = memo(function Inspector({
 		);
 	};
 	return (
-		<aside
-			ref={inspectorRef}
-			className="inspector"
-			hidden={!visible}
-			inert={!visible}
-			aria-label="Session inspector"
-			tabIndex={overlay ? -1 : undefined}
-		>
+		<InspectorShell visible={visible} overlay={overlay} onClose={onClose} label="Session inspector">
 			<div
-				className="inspector__tabs"
+				className={`inspector__tabs ${stylex.props(inspectorStyles.inspectorTabs, [responsiveStyles.inspectorTabs, responsiveLayoutStyles.inspectorTabs]).className ?? ""}`}
 				role="tablist"
 				aria-label="Inspector views"
 			>
@@ -191,31 +189,31 @@ export const Inspector = memo(function Inspector({
 						title={tab.label}
 						onClick={() => onTabChange(tab.id)}
 					>
-						<tab.Icon size={15} aria-hidden="true" />
-						<span className="inspector__tab-label">{tab.label}</span>
-						{tab.id === "browser" && browserActive && activeTab !== "browser" ? <span className="inspector__browser-activity" aria-label="Browser activity" /> : null}
+						<tab.Icon size={16} aria-hidden="true" />
+						<span className={`inspector__tab-label ${stylex.props(inspectorStyles.inspectorTabLabel).className ?? ""}`}>{tab.label}</span>
+						{tab.id === "browser" && browserActive && activeTab !== "browser" ? <span className={`inspector__browser-activity ${stylex.props(inspectorStyles.inspectorBrowserActivity).className ?? ""}`} aria-label="Browser activity" /> : null}
 						{tab.id === "changes" && git.files.length ? (
-							<span className="inspector__tab-count">{git.files.length}</span>
+							<span className={`inspector__tab-count ${stylex.props(inspectorStyles.inspectorTabCount).className ?? ""}`}>{git.files.length}</span>
 						) : tab.id === "specialists" && specialistCount ? (
-							<span className="inspector__tab-count">{specialistCount}</span>
+							<span className={`inspector__tab-count ${stylex.props(inspectorStyles.inspectorTabCount).className ?? ""}`}>{specialistCount}</span>
 						) : null}
 					</button>
 				))}
-				<span className="inspector__tab-spacer" />
-				{onToggleExpanded && !overlay ? <IconButton label={expanded ? "Restore inspector width" : "Expand inspector"} onClick={onToggleExpanded}>{expanded ? <ArrowsInSimple size={15} /> : <ArrowsOutSimple size={15} />}</IconButton> : null}
-				<IconButton label="Close inspector" onClick={onClose}>
-					<SidebarRight size={15} />
-				</IconButton>
+				<span className={`inspector__tab-spacer ${stylex.props(inspectorStyles.inspectorTabSpacer).className ?? ""}`} />
+				{onToggleExpanded && !overlay ? <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label={expanded ? "Restore inspector width" : "Expand inspector"} onClick={onToggleExpanded}>{expanded ? <ArrowsInSimple size={16} /> : <ArrowsOutSimple size={16} />}</IconButton> : null}
+				{overlay ? <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label="Close inspector" onClick={onClose}>
+					<SidebarRight size={16} />
+				</IconButton> : null}
 			</div>
 			<div
 				id={`inspector-panel-${activeTab}`}
-				className="inspector__body"
+				className={`inspector__body ${stylex.props(inspectorStyles.inspectorBody).className ?? ""}`}
 				role="tabpanel"
 				aria-labelledby={`inspector-tab-${activeTab}`}
 				tabIndex={0}
 			>
 				{activeTab === "summary" ? (
-					<div className="inspector-scroll scroll-area">
+					<div className={`inspector-scroll scroll-area ${stylex.props(baseStyles.scrollArea, inspectorStyles.inspectorScroll).className ?? ""}`}>
 						<SummaryPanel
 							runtime={runtime}
 							behaviorMode={behaviorMode}
@@ -255,7 +253,7 @@ export const Inspector = memo(function Inspector({
 					/>
 				) : null}
 				{activeTab === "browser" || browserVisited ? (
-					<div className="inspector__browser-panel" hidden={activeTab !== "browser"} inert={activeTab !== "browser"}>
+					<div className={`inspector__browser-panel ${stylex.props(inspectorStyles.inspectorBrowserPanel).className ?? ""}`} hidden={activeTab !== "browser"} inert={activeTab !== "browser"}>
 					<BrowserPanel
 						visible={visible && activeTab === "browser"}
 						key={`${cwd ?? ''}:${agentSessionKey ?? ''}`}
@@ -291,6 +289,6 @@ export const Inspector = memo(function Inspector({
 					/>
 				) : null}
 			</div>
-		</aside>
+		</InspectorShell>
 	);
 });

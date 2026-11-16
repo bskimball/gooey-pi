@@ -207,7 +207,7 @@ describe('timeline part identity', () => {
     const counts = container.querySelector('.activity-tool__diff-counts')
     expect(counts?.textContent).toBe('+2−1')
     const lines = [...container.querySelectorAll('.activity-edit-diff__line')]
-    expect(lines.map((line) => line.className.replace('activity-edit-diff__line is-', ''))).toEqual(['context', 'remove', 'add', 'add', 'context'])
+    expect(lines.map((line) => [...line.classList].find((name) => name.startsWith('is-'))?.slice(3))).toEqual(['context', 'remove', 'add', 'add', 'context'])
     act(() => container.querySelector<HTMLButtonElement>('.activity-line--tool:last-child .activity-tool__summary')?.click())
     expect(container.querySelector('.activity-edit-diff')).toBeNull()
   })

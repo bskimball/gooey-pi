@@ -200,8 +200,9 @@ describe('session creation in App', () => {
     }
     await act(async () => root.render(<App />))
     await waitFor(() => container.querySelector('.sidebar__section-heading'))
-    await press(container.querySelector('.sidebar__title-actions [aria-label^="New session"]')!)
+    await press(await waitFor(() => container.querySelector('.conversation-column [aria-label^="New session"]')))
     await waitFor(() => vi.mocked(bridge.sessions.create).mock.calls.length || null)
+    expect(bridge.sessions.create).toHaveBeenCalledWith(projects[0].primaryFolder, 'pi')
     const textarea = container.querySelector<HTMLTextAreaElement>('.composer textarea')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Keep my image and prompt')

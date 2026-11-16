@@ -35,6 +35,7 @@ import type { AutomationService } from "./schedules/service";
 import type { BackgroundJobBridge } from "./background-jobs";
 import type { SessionHandoff } from "./session-handoff";
 import type { SessionService } from "./sessions";
+import { SpecialistRegistry, type SpecialistPush } from "./specialists";
 import type { SettingsService } from "./settings-schedules";
 import type { TerminalService } from "./terminal";
 import type { UpdateService } from "./updates";
@@ -416,6 +417,26 @@ export function registerIpc(
 	handle("sessions:read", async (_event, filePath) =>
 		(await sessionsForPath(filePath)).service.read(filePath),
 	);
+	const specialists = new SpecialistRegistry({
+		read: (filePath) => services.sessions.read(filePath),
+		requireSessionPath: (filePath) => services.sessions.requireSessionPath(filePath),
+	});
+	const specialistSender = (contents: WebContents) => (push: SpecialistPush): void => {
+		if (
+			!contents.isDestroyed() &&
+			authorized.get(contents.id) === contents &&
+			isTrustedRendererUrl(contents.getURL(), expectedRendererUrl) &&
+			isTrustedRendererUrl(contents.mainFrame.url, expectedRendererUrl)
+		)
+			contents.send(push.channel, push.payload);
+	};
+	handle("specialists:list", (_event, filePath) => specialists.list(filePath));
+	handle("specialists:track", (event, sessionFiles) =>
+		specialists.track(event.sender.id, specialistSender(event.sender), sessionFiles),
+	);
+	handle("specialists:watch-workers", (event, workerFiles) =>
+		specialists.watchWorkers(event.sender.id, specialistSender(event.sender), workerFiles),
+	);
 	handle("sessions:finish-review", (_event, runtimeId, filePath) => services.finishTask.review(runtimeId, filePath));
 	handle("sessions:finish-confirm", (_event, runtimeId, filePath, token, confirmation) => services.finishTask.finish(runtimeId, filePath, token, confirmation));
 	handle("sessions:finished-list", () => services.finishTask.list());
@@ -431,8 +452,11 @@ export function registerIpc(
 		await sessionsForPath(filePath);
 		return services.coordinator.followUp(filePath, message, intent);
 	});
-	handle("coordinator:open", async (event) => {
-		const attachment = await services.coordinator.open(event.sender.id);
+	handle("spaces:list", () => services.coordinator.listSpaces());
+	handle("spaces:create", (_event, input) => services.coordinator.createSpace(input));
+	handle("spaces:update", (_event, id, input) => services.coordinator.updateSpace(id, input));
+	handle("coordinator:open", async (event, spaceId) => {
+		const attachment = await services.coordinator.open(event.sender.id, spaceId);
 		try {
 			verify(event);
 			return attachment;
@@ -442,6 +466,7 @@ export function registerIpc(
 		}
 	});
 	handle("coordinator:close", (event, attachmentId) => services.coordinator.close(event.sender.id, attachmentId));
+	handle("coordinator:reset", (_event, spaceId) => services.coordinator.reset(spaceId));
 	handle("sessions:rename", async (_event, filePath, title) =>
 		(await sessionsForPath(filePath)).service.rename(filePath, title),
 	);
@@ -819,6 +844,7 @@ export function registerIpc(
 	handle("schedules:run-now", (_event, id) => services.schedules.runNow(requirePiScheduleId(id)));
 
 	const forwardSessionChange = (change: SessionChangeEvent): void => {
+		specialists.notifySessionChange(change);
 		for (const [id, contents] of authorized) {
 			if (contents.isDestroyed()) {
 				authorized.delete(id);
@@ -923,6 +949,7 @@ export function registerIpc(
 		},
 		revoke(webContentsId) {
 			authorized.delete(webContentsId);
+			specialists.release(webContentsId);
 			services.coordinator?.releaseOwner(webContentsId);
 			void services.terminals.killOwner(webContentsId).catch((error) => {
 				console.warn("Failed to stop revoked renderer terminals:", error);
@@ -936,6 +963,7 @@ export function registerIpc(
 			services.coordinator?.dispose();
 			unsubscribeExtensionStatus?.();
 			unsubscribeSessionChanges();
+			specialists.dispose();
 			if (typeof unsubscribeScheduleChanges === "function")
 				unsubscribeScheduleChanges();
 			if (typeof unsubscribeBrowserChanges === "function")

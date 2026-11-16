@@ -1,4 +1,16 @@
-import type { ITheme } from '@xterm/xterm'
+import type { ITheme, Terminal } from '@xterm/xterm'
+import * as stylex from '@stylexjs/stylex'
+import { contextStyles } from 'apex-ui/styles/terminal.stylex'
+
+export const applyTerminalStyles = (terminal: Terminal): void => {
+  const element = terminal.element
+  if (!element) return
+  const classes = stylex.props(contextStyles.xterm).className
+  if (classes) element.classList.add(...classes.split(' '))
+  const viewport = element.querySelector('.xterm-viewport')
+  const viewportClasses = stylex.props(contextStyles.viewport).className
+  if (viewport && viewportClasses) viewport.classList.add(...viewportClasses.split(' '))
+}
 
 export const terminalTheme = (): ITheme => {
   const computed = getComputedStyle(document.documentElement)

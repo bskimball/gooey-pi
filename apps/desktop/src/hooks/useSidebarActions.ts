@@ -15,10 +15,10 @@ type SidebarActions = Pick<SidebarProps,
   | 'onRenameSession'
   | 'onArchiveSession'
   | 'onContinueInVsCode'
-  | 'onToggleTerminal'
-  | 'onToggleVoice'
-  | 'onOpenInVsCode'
->
+> & {
+  onToggleTerminal?(): void
+  onOpenInVsCode?(path: string): void
+}
 
 export interface SidebarActionProxy {
   readonly callbacks: SidebarActions
@@ -44,7 +44,6 @@ export function createSidebarActionProxy(initialActions: SidebarActions): Sideba
       onArchiveSession: (session) => current.onArchiveSession(session),
       onContinueInVsCode: (session) => current.onContinueInVsCode?.(session),
       onToggleTerminal: () => current.onToggleTerminal?.(),
-      onToggleVoice: () => current.onToggleVoice?.(),
       onOpenInVsCode: (path) => current.onOpenInVsCode?.(path),
     },
     update(actions) { current = actions },

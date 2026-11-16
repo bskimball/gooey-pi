@@ -1,3 +1,10 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import * as stylex from '@stylexjs/stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useMachine } from '@xstate/react'
@@ -21,6 +28,9 @@ import type { AppSettings, ApexApi, VoiceCredentialProvider, VoiceTranscriptionP
 import type { SettingsSectionProps } from './contracts'
 import { voiceSettingsMachine } from './voiceSettingsMachine'
 
+const spin = stylex.keyframes({ to: { transform: 'rotate(360deg)' } })
+const styles = stylex.create({ spinning: { animationName: spin, animationDuration: '900ms', animationTimingFunction: 'linear', animationIterationCount: 'infinite' } })
+
 const CREDENTIALS: Array<{ id: VoiceCredentialProvider; name: string; monogram: string; detail: string }> = [
   { id: 'openai', name: 'OpenAI', monogram: 'OA', detail: 'Required for live dictation and the realtime orb.' },
   { id: 'groq', name: 'Groq', monogram: 'GQ', detail: 'Used only when Groq is your dictation provider.' },
@@ -43,9 +53,9 @@ function ModelSelect({ label, description, value, options, onChange }: { label: 
   const choices = optionsWithCurrent(options, value)
   const selected = choices.find((option) => option.value === value)
   return (
-    <label className="voice-choice-row">
+    <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
       <span><strong>{label}</strong><small>{description}</small></span>
-      <span className="voice-choice-control">
+      <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
         <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
           {choices.map((option) => <option key={option.value} value={option.value}>{option.label}{option.recommended ? ' · Recommended' : ''}</option>)}
         </select>
@@ -59,7 +69,7 @@ function PathInput({ label, description, placeholder, value, onCommit }: { label
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
-    <label className="voice-path-field">
+    <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
       <span><strong>{label}</strong><small>{description}</small></span>
       <input aria-label={label} value={draft} placeholder={placeholder} spellCheck={false} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft !== value) onCommit(draft) }} />
     </label>
@@ -165,58 +175,58 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
   return (
     <>
-      <header className="voice-settings-header">
-        <span className="voice-settings-header__icon"><MicrophoneStage size={19} /></span>
+      <header className={`voice-settings-header ${stylex.props(settingsStyles.voiceSettingsHeader).className ?? ""}`}>
+        <span className={`voice-settings-header__icon ${stylex.props(settingsStyles.voiceSettingsHeaderIcon).className ?? ""}`}><MicrophoneStage size={19} /></span>
         <div><h1>Voice</h1><p>Connect a speech service, choose a model, then use the microphone or realtime orb.</p></div>
       </header>
 
       {serviceState === 'restart-required' ? (
-        <div className="voice-bridge-notice" role="status">
+        <div className={`voice-bridge-notice ${stylex.props(settingsStyles.voiceBridgeNotice, [responsiveStyles.voiceBridgeNotice, responsiveLayoutStyles.voiceBridgeNotice]).className ?? ""}`} role="status">
           <ArrowsClockwise size={17} />
           <span><strong>Restart Apex to finish enabling Voice</strong><small>This app window is connected to an older desktop process without the Voice handlers. Quit Apex completely with {shortcutLabel(platform, ['Primary', 'Q'])}, then reopen it.</small></span>
         </div>
       ) : null}
 
-      <section className="voice-section" aria-labelledby="voice-connections-title">
-        <div className="voice-section__heading">
+      <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-connections-title">
+        <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
           <span><ShieldCheck size={15} /></span>
           <div><h2 id="voice-connections-title">Connections</h2><p>Add a key for any hosted service you want to use. Secure storage keeps keys encrypted between app sessions; otherwise they stay only in memory until Apex quits.</p></div>
         </div>
         {serviceState === 'ready' && status && !secureStorageAvailable ? (
-          <div className="voice-storage-notice" role="alert">
+          <div className={`voice-storage-notice ${stylex.props(settingsStyles.voiceStorageNotice).className ?? ""}`} role="alert">
             <ShieldWarning size={17} />
             <span><strong>Keys will work only until Apex quits</strong><small>{status.storage.message} You can still add a key for this session. Apex will keep it only in desktop memory and will not save it to disk.</small></span>
           </div>
         ) : null}
-        {voice ? <div className="voice-connection-grid">
+        {voice ? <div className={`voice-connection-grid ${stylex.props(settingsStyles.voiceConnectionGrid).className ?? ""}`}>
           {CONNECTION_CREDENTIALS.map((item) => {
             const configured = status?.configured[item.id] ?? false
             const source = status?.source[item.id]
             return (
-              <article className={`voice-connection-card${configured ? ' is-connected' : ''}`} key={item.id}>
-                <span className="voice-provider-mark" aria-hidden="true">{item.monogram}</span>
-                <div className="voice-connection-card__body">
-                  <span className="voice-connection-card__title"><strong>{item.name}</strong><i>{serviceState === 'checking' ? 'Checking…' : serviceState === 'restart-required' ? 'Restart required' : serviceState === 'error' ? 'Unavailable' : configured ? source === 'environment' ? 'Environment key' : source === 'session' ? 'Session only' : 'Connected' : source === 'saved' && !secureStorageAvailable ? 'Storage locked' : 'Not connected'}</i></span>
+              <article className={[`voice-connection-card${configured ? ' is-connected' : ''}`, stylex.props(settingsStyles.voiceConnectionCard, responsiveStyles.voiceConnectionCard).className].filter(Boolean).join(' ')} key={item.id}>
+                <span className={`voice-provider-mark ${stylex.props(settingsStyles.voiceProviderMark).className ?? ""}`} aria-hidden="true">{item.monogram}</span>
+                <div className={`voice-connection-card__body ${stylex.props(settingsStyles.voiceConnectionCardBody, [responsiveStyles.voiceConnectionCardBody, responsiveLayoutStyles.voiceConnectionCardBody]).className ?? ""}`}>
+                  <span className={`voice-connection-card__title ${stylex.props(settingsStyles.voiceConnectionCardTitle).className ?? ""}`}><strong>{item.name}</strong><i>{serviceState === 'checking' ? 'Checking…' : serviceState === 'restart-required' ? 'Restart required' : serviceState === 'error' ? 'Unavailable' : configured ? source === 'environment' ? 'Environment key' : source === 'session' ? 'Session only' : 'Connected' : source === 'saved' && !secureStorageAvailable ? 'Storage locked' : 'Not connected'}</i></span>
                   <small>{item.detail}</small>
                 </div>
                 {serviceState === 'ready' ? <ApexButton disabled={busy} icon={<Key size={13} />} onClick={() => openCredential(item.id)}>{configured ? 'Replace key' : 'Add key'}</ApexButton> : null}
-                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <IconButton className="button button--icon" label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash size={13} /></IconButton> : null}
+                {serviceState === 'ready' && (source === 'saved' || source === 'session') ? <IconButton xstyle={[workbenchStyles.button]} className="button button--icon" label={`Remove ${item.name} API key`} disabled={busy} onClick={() => void removeCredential(item.id)}><Trash size={13} /></IconButton> : null}
               </article>
             )
           })}
         </div> : null}
-        {failure && !credential ? <Banner status="error" role="alert" className="settings-error" title={failure} /> : null}
+        {failure && !credential ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={failure} /> : null}
       </section>
 
-      <section className="voice-section" aria-labelledby="voice-dictation-title">
-        <div className="voice-section__heading">
+      <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-dictation-title">
+        <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
           <span><Waves size={15} /></span>
           <div><h2 id="voice-dictation-title">Dictation</h2><p>This controls the microphone beside Send.</p></div>
         </div>
-        <div className="voice-setup-card">
-          <label className="voice-choice-row">
+        <div className={`voice-setup-card ${stylex.props(settingsStyles.voiceSetupCard).className ?? ""}`}>
+          <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
             <span><strong>Service</strong><small>Choose where your microphone audio is transcribed.</small></span>
-            <span className="voice-choice-control">
+            <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
               <select aria-label="Dictation service" value={settings.voiceTranscriptionProvider} onChange={(event) => update('voiceTranscriptionProvider', event.target.value as VoiceTranscriptionProvider)}>
                 {VOICE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}{option.recommended ? ' · Recommended' : ''}</option>)}
               </select>
@@ -229,72 +239,82 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
           {settings.voiceTranscriptionProvider === 'groq' ? <ModelSelect label="Dictation model" description="Choose speed or maximum Whisper accuracy." value={settings.voiceGroqTranscriptionModel} options={GROQ_MODELS} onChange={(value) => update('voiceGroqTranscriptionModel', value)} /> : null}
           {settings.voiceTranscriptionProvider === 'deepgram' ? <ModelSelect label="Dictation model" description="Choose a general or audio-specific Nova model." value={settings.voiceDeepgramTranscriptionModel} options={DEEPGRAM_MODELS} onChange={(value) => update('voiceDeepgramTranscriptionModel', value)} /> : null}
           {settings.voiceTranscriptionProvider === 'self-hosted' ? (
-            <div className="voice-self-hosted-setup">
-              <span className="voice-local-setup__intro"><HardDrives size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
-              <label className="voice-path-field">
+            <div className={`voice-self-hosted-setup ${stylex.props(settingsStyles.voiceSelfHostedSetup).className ?? ""}`}>
+              <span className={`voice-local-setup__intro ${stylex.props(settingsStyles.voiceLocalSetupIntro).className ?? ""}`}><HardDrives size={15} /><span><strong>Connect your transcription server</strong><small>Works with Parakeet, Whisper, and other servers that implement the OpenAI transcription API.</small></span></span>
+              <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
                 <span><strong>Server URL</strong><small>Enter the server base URL or its full /v1/audio/transcriptions endpoint.</small></span>
                 <input aria-label="Self-hosted server URL" type="url" value={selfHostedUrl} placeholder="http://127.0.0.1:9000" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_URL', value: event.target.value })} onBlur={() => { const value = selfHostedUrl.trim(); if (value !== settings.voiceSelfHostedUrl) update('voiceSelfHostedUrl', value) }} />
               </label>
-              <label className="voice-path-field">
+              <label className={`voice-path-field ${stylex.props(settingsStyles.voicePathField, [responsiveStyles.voicePathField, responsiveLayoutStyles.voicePathField]).className ?? ""}`}>
                 <span><strong>Model ID</strong><small>Optional. Leave blank to ask the server for its default English model.</small></span>
                 <input aria-label="Self-hosted model ID" value={selfHostedModel} placeholder="nvidia/parakeet-tdt-0.6b-v3" spellCheck={false} onChange={(event) => send({ type: 'SET_SELF_HOSTED_MODEL', value: event.target.value })} onBlur={() => { const value = selfHostedModel.trim(); if (value !== settings.voiceSelfHostedModel) update('voiceSelfHostedModel', value) }} />
               </label>
-              <div className="voice-self-hosted-auth">
+              <div className={`voice-self-hosted-auth ${stylex.props(settingsStyles.voiceSelfHostedAuth, [responsiveStyles.voiceSelfHostedAuth, responsiveLayoutStyles.voiceSelfHostedAuth]).className ?? ""}`}>
                 <span><strong>Access token</strong><small>Optional. Stored with the same OS-backed protection as your other voice keys.</small></span>
-                <span className="voice-self-hosted-auth__actions">
+                <span className={`voice-self-hosted-auth__actions ${stylex.props(settingsStyles.voiceSelfHostedAuthActions, responsiveStyles.voiceSelfHostedAuthActions).className ?? ""}`}>
                   <i>{status?.configured['self-hosted'] ? status.source['self-hosted'] === 'session' ? 'Session only' : status.source['self-hosted'] === 'environment' ? 'Environment token' : 'Token saved' : status?.source['self-hosted'] === 'saved' ? 'Storage locked' : 'No token'}</i>
                   {voice && serviceState === 'ready' ? <ApexButton disabled={busy} icon={<Key size={13} />} onClick={() => openCredential('self-hosted')}>{status?.configured['self-hosted'] ? 'Replace token' : 'Add token'}</ApexButton> : null}
-                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <IconButton className="button button--icon" label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash size={13} /></IconButton> : null}
+                  {voice && serviceState === 'ready' && (status?.source['self-hosted'] === 'saved' || status?.source['self-hosted'] === 'session') ? <IconButton xstyle={[workbenchStyles.button]} className="button button--icon" label="Remove self-hosted access token" disabled={busy} onClick={() => void removeCredential('self-hosted')}><Trash size={13} /></IconButton> : null}
                 </span>
               </div>
-              <div className="voice-self-hosted-connect">
+              <div className={`voice-self-hosted-connect ${stylex.props(settingsStyles.voiceSelfHostedConnect, [responsiveStyles.voiceSelfHostedConnect, responsiveLayoutStyles.voiceSelfHostedAuth]).className ?? ""}`}>
                 <span><strong>Connection check</strong><small>Uploads a tenth of a second of silence to verify the actual transcription route and model.</small></span>
-                <ApexButton variant="primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} icon={selfHostedTestState === 'testing' ? <CircleNotch className="is-spinning" size={13} /> : <HardDrives size={13} />} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</ApexButton>
+                <ApexButton variant="primary" disabled={!voice || !selfHostedUrl.trim() || selfHostedTestState === 'testing'} icon={selfHostedTestState === 'testing' ? <CircleNotch {...stylex.props(styles.spinning)} size={13} /> : <HardDrives size={13} />} onClick={() => void testSelfHosted()}>{selfHostedTestState === 'testing' ? 'Testing…' : 'Connect & test'}</ApexButton>
               </div>
-              {selfHostedMessage ? <p className={`voice-self-hosted-result is-${selfHostedTestState}`} role={selfHostedTestState === 'error' ? 'alert' : 'status'}>{selfHostedTestState === 'connected' ? <Check size={13} /> : <ShieldWarning size={13} />}{selfHostedMessage}</p> : null}
-              <p className="voice-self-hosted-note">Plain HTTP is allowed on this computer and private-network addresses. Use HTTPS for public hosts.</p>
+              {selfHostedMessage ? <p className={[`voice-self-hosted-result is-${selfHostedTestState}`, stylex.props(settingsStyles.voiceSelfHostedResult, ((snapshot.matches({
+  selfHostedTest: 'testing'
+}) ? false : snapshot.matches({
+  selfHostedTest: 'connected'
+}))) && settingsStyles.voiceSelfHostedResultIsConnected, ((snapshot.matches({
+  selfHostedTest: 'testing'
+}) ? false : snapshot.matches({
+  selfHostedTest: 'connected'
+}) ? false : snapshot.matches({
+  selfHostedTest: 'error'
+}))) && settingsStyles.voiceSelfHostedResultIsError).className].filter(Boolean).join(' ')} role={selfHostedTestState === 'error' ? 'alert' : 'status'}>{selfHostedTestState === 'connected' ? <Check size={13} /> : <ShieldWarning size={13} />}{selfHostedMessage}</p> : null}
+              <p className={`voice-self-hosted-note ${stylex.props(settingsStyles.voiceSelfHostedNote).className ?? ""}`}>Plain HTTP is allowed on this computer and private-network addresses. Use HTTPS for public hosts.</p>
             </div>
           ) : null}
           {settings.voiceTranscriptionProvider === 'local-whisper' ? (
-            <div className="voice-local-setup">
-              <span className="voice-local-setup__intro"><Laptop size={15} /><span><strong>Local whisper.cpp setup</strong><small>These are file paths because Apex runs your installed whisper.cpp directly. Hosted services do not need them.</small></span></span>
+            <div className={`voice-local-setup ${stylex.props(settingsStyles.voiceLocalSetup).className ?? ""}`}>
+              <span className={`voice-local-setup__intro ${stylex.props(settingsStyles.voiceLocalSetupIntro).className ?? ""}`}><Laptop size={15} /><span><strong>Local whisper.cpp setup</strong><small>These are file paths because Apex runs your installed whisper.cpp directly. Hosted services do not need them.</small></span></span>
               <PathInput label="whisper-cli executable" description="Path to the whisper.cpp command-line program." placeholder="/opt/homebrew/bin/whisper-cli" value={settings.voiceLocalWhisperExecutable} onCommit={(value) => update('voiceLocalWhisperExecutable', value)} />
               <PathInput label="GGML model file" description="Path to the downloaded whisper.cpp model." placeholder="/path/to/ggml-large-v3-turbo.bin" value={settings.voiceLocalWhisperModel} onCommit={(value) => update('voiceLocalWhisperModel', value)} />
             </div>
           ) : null}
 
           {settings.voiceTranscriptionProvider === 'self-hosted' ? (
-            <div className={`voice-requirement${selfHostedUrl.trim() ? ' is-ready' : ''}`}>
+            <div className={[`voice-requirement${selfHostedUrl.trim() ? ' is-ready' : ''}`, stylex.props(settingsStyles.voiceRequirement).className].filter(Boolean).join(' ')}>
               <span>{selfHostedUrl.trim() ? <Check size={13} /> : <HardDrives size={13} />}{selfHostedUrl.trim() ? 'Self-hosted server configured' : 'Server URL required'}</span>
             </div>
           ) : selectedCredential ? (
-            <div className={`voice-requirement${selectedConfigured ? ' is-ready' : ''}`}>
+            <div className={[`voice-requirement${selectedConfigured ? ' is-ready' : ''}`, stylex.props(settingsStyles.voiceRequirement).className].filter(Boolean).join(' ')}>
               <span>{selectedConfigured ? <Check size={13} /> : <Key size={13} />}{selectedConfigured ? `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} is connected` : `${CREDENTIALS.find((item) => item.id === selectedCredential)?.name} key required`}</span>
               {!selectedConfigured && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential(selectedCredential)}>Add key</button> : null}
             </div>
-          ) : <div className="voice-requirement is-ready"><span><Check size={13} />Runs locally with no API key</span></div>}
+          ) : <div className={`voice-requirement is-ready ${stylex.props(settingsStyles.voiceRequirement, settingsStyles.voiceRequirementIsReady).className ?? ""}`}><span><Check size={13} />Runs locally with no API key</span></div>}
         </div>
       </section>
 
-      <section className="voice-section" aria-labelledby="voice-realtime-title">
-        <div className="voice-section__heading">
+      <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-realtime-title">
+        <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
           <span><Broadcast size={15} /></span>
           <div><h2 id="voice-realtime-title">Realtime orb</h2><p>The draggable voice agent. It uses your OpenAI connection.</p></div>
         </div>
-        <div className="voice-setup-card">
+        <div className={`voice-setup-card ${stylex.props(settingsStyles.voiceSetupCard).className ?? ""}`}>
           <ModelSelect label="Realtime model" description="Handles conversation, web search, and task delegation." value={settings.voiceRealtimeModel} options={REALTIME_MODELS} onChange={(value) => update('voiceRealtimeModel', value)} />
           <ModelSelect label="Speaking voice" description="The voice you hear when the orb responds." value={settings.voiceRealtimeVoice} options={REALTIME_VOICES} onChange={(value) => update('voiceRealtimeVoice', value)} />
-          <div className={`voice-requirement${status?.configured.openai ? ' is-ready' : ''}`}>
+          <div className={[`voice-requirement${status?.configured.openai ? ' is-ready' : ''}`, stylex.props(settingsStyles.voiceRequirement).className].filter(Boolean).join(' ')}>
             <span>{status?.configured.openai ? <Check size={13} /> : <Key size={13} />}{status?.configured.openai ? 'OpenAI is connected' : 'OpenAI key required'}</span>
             {!status?.configured.openai && voice && serviceState === 'ready' ? <button type="button" onClick={() => openCredential('openai')}>Add key</button> : null}
           </div>
-          {secureStorageAvailable ? <p className="voice-realtime-note">Saved API keys are encrypted using your operating system’s internal keychain. When you open the voice agent, your system may ask for your password to retrieve the key.</p> : null}
+          {secureStorageAvailable ? <p className={`voice-realtime-note ${stylex.props(settingsStyles.voiceRealtimeNote).className ?? ""}`}>Saved API keys are encrypted using your operating system’s internal keychain. When you open the voice agent, your system may ask for your password to retrieve the key.</p> : null}
         </div>
       </section>
 
       {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton variant="quiet" disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
-        <p className="modal-intro">{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
-        {failure ? <Banner status="error" role="alert" className="settings-error" title={failure} /> : null}
+        <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
+        {failure ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={failure} /> : null}
         <TextInput
           label={credential === 'self-hosted' ? 'Access token' : 'API key'}
           hasAutoFocus

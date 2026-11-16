@@ -10,17 +10,17 @@ describe('chat Markdown rendering', () => {
       text: '## Result\n\n**Done** with `code`.\n\n- one\n- two\n\n```ts\nconst ok = true\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |',
     }))
 
-    expect(html).toContain('<h2 dir="auto">Result</h2>')
-    expect(html).toContain('<strong>Done</strong>')
-    expect(html).toContain('<ul dir="auto">')
-    expect(html).toContain('<pre dir="ltr"><code class="language-ts" dir="ltr">')
-    expect(html).toContain('<table>')
+    expect(html).toMatch(/<h2\b[^>]*dir="auto"[^>]*>Result<\/h2>/)
+    expect(html).toMatch(/<strong\b[^>]*>Done<\/strong>/)
+    expect(html).toMatch(/<ul\b[^>]*dir="auto"/)
+    expect(html).toMatch(/<pre\b[^>]*dir="ltr"[^>]*><code\b[^>]*class="language-ts\b/)
+    expect(html).toMatch(/<table\b/)
   })
 
   it('preserves local file URLs as clickable links without enabling unsafe schemes', () => {
     const url = 'file:///C:/Users/bskim/Work/output/holt-logistics/Holt-Logistics-IBMi-Migration-Plan-v0.1.docx'
     const html = renderToStaticMarkup(createElement(MarkdownText, { text: `[Migration plan](${url})` }))
-    expect(html).toContain(`<a href="${url}"`)
+    expect(html).toContain(`href="${url}"`)
     expect(html).not.toContain('markdown-link-unsupported')
     for (const href of ['javascript:alert(1)', 'data:text/html,bad', 'vbscript:bad']) {
       const unsafe = renderToStaticMarkup(createElement(MarkdownText, { text: `[Unsafe](${href})` }))
@@ -32,7 +32,7 @@ describe('chat Markdown rendering', () => {
     const html = renderToStaticMarkup(createElement(MarkdownText, {
       text: 'Option A\n\n```html\n<section><h1>Mineral</h1></section>\n```\n\n<script>bad()</script>',
     }))
-    expect(html).toContain('class="html-preview"')
+    expect(html).toMatch(/class="html-preview(?:\s|")/)
     expect(html).toContain('sandbox=""')
     expect(html).toContain('Mineral')
     expect(html).toContain('default-src &#x27;none&#x27;')

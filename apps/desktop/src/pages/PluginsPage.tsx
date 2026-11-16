@@ -1,3 +1,11 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { styles as pluginsStyles } from 'apex-ui/styles/plugins.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { styles as pagesStyles } from 'apex-ui/styles/pages.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { ArrowLeft, ArrowsClockwise, BookOpen, CaretRight, Check, FileCode, FileText, GitFork, Globe, MagicWand, MagnifyingGlass, Package, Palette, Plus, ShieldCheck, SlidersHorizontal, Sparkle, Trash, Warning, X } from '@/components/icons'
 import * as stylex from '@stylexjs/stylex'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -8,16 +16,9 @@ import { useMemo, useState } from 'react'
 import type { CapabilityMutationInput, ExtensionInstallInput, HarnessId, McpConnectionInput, McpStateInput, PluginWarning, SkillRecord } from '@/types/api'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { NETWORK_MCP_UNAVAILABLE_DETAIL } from '@/lib/mcp-policy'
-import { ApexButton, EmptyState, Modal, SelectControl } from '@/components/ui'
+import { ApexButton, EmptyState, IconButton, Modal, SelectControl } from '@/components/ui'
 import { type McpScope, useAddCapabilityFlow } from './addCapabilityMachine'
 import { usePluginOperation } from './pluginOperationMachine'
-
-const searchControlStyles = stylex.create({
-  control: {
-    minWidth: 0,
-    width: '100%',
-  },
-})
 
 const MCP_STDIO_HELP: Record<HarnessId, string> = {
   pi: 'Pi starts this stdio MCP server through the pi-mcp-adapter extension (pi install npm:pi-mcp-adapter) in each new session.',
@@ -208,14 +209,14 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
     if (skill.kind === 'mcp' && skill.availability?.available === false) {
       const external = skill.availability.detail.includes('managed outside Apex')
       const label = external ? `Externally managed ${skill.name}` : harness === 'pi' ? `Pi MCP Adapter required for ${skill.name}` : `Unavailable ${skill.name}`
-      return <span className="plugin-toggle" role="img" aria-label={label} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
+      return <span className={`plugin-toggle ${stylex.props(pluginsStyles.pluginToggle).className ?? ""}`} role="img" aria-label={label} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
     }
     if (harness === 'pi' && skill.kind === 'mcp' && !piMcpAdapterInstalled) {
-      return <span className="plugin-toggle" role="img" aria-label={`Pi MCP Adapter required for ${skill.name}`} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
+      return <span className={`plugin-toggle ${stylex.props(pluginsStyles.pluginToggle).className ?? ""}`} role="img" aria-label={`Pi MCP Adapter required for ${skill.name}`} aria-describedby={capabilityDetailId(skill)}><ShieldCheck aria-hidden="true" size={14}/></span>
     }
     const isBrowser = skill.id === 'apex-browser'
     const actionable = skill.id === 'gooeypi-ask-user' || isBrowser || skill.id === 'gooeypi-computer-use' || skill.id === MCP_SUPPORT_SKILL_ID || skill.kind === 'mcp' || skill.kind === 'package'
-    if (!actionable) return <span className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} aria-label={`${skill.enabled ? 'Enabled' : 'Unavailable'} ${skill.name}`}>{skill.enabled ? <Check size={14}/> : <Plus size={14}/>}</span>
+    if (!actionable) return <span className={[skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle', stylex.props(pluginsStyles.pluginToggle, skill.enabled && pluginsStyles.pluginToggleIsEnabled).className].filter(Boolean).join(' ')} aria-label={`${skill.enabled ? 'Enabled' : 'Unavailable'} ${skill.name}`}>{skill.enabled ? <Check size={14}/> : <Plus size={14}/>}</span>
     const updating = operation.busyId === skill.id
     const enable = () => {
       if (skill.id === 'gooeypi-ask-user') return setAskUser(skill, true)
@@ -225,64 +226,64 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
       if (skill.kind === 'package') return mutate(skill, 'enable')
       return setMcp(skill, true)
     }
-    return <ApexButton variant="quiet" aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} onClick={() => { if (skill.enabled) operation.requestDisable(skill); else void enable() }}>{updating ? <ArrowsClockwise className="spin" size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className="plugin-toggle__disable" size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</ApexButton>
+    return <IconButton size="small" xstyle={[pluginsStyles.pluginToggle, skill.enabled && pluginsStyles.pluginToggleIsEnabled]} label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`} aria-pressed={skill.enabled} disabled={busy} title={skill.availability?.detail} className={skill.enabled ? 'plugin-toggle is-enabled' : 'plugin-toggle'} onClick={() => { if (skill.enabled) operation.requestDisable(skill); else void enable() }}><span className="plugin-toggle__icons">{updating ? <ArrowsClockwise className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={14}/> : skill.enabled ? <><Check className="plugin-toggle__check" size={14}/><X className={`plugin-toggle__disable ${stylex.props(pluginsStyles.pluginToggleDisable).className ?? ""}`} size={14}/></> : <Plus className="plugin-toggle__plus" size={14}/>}</span></IconButton>
   }
 
   return (
-    <div className="page plugin-page scroll-area">
-      <div className="page-container plugin-container">
-        <header className="plugin-header">
+    <div className={`page plugin-page scroll-area ${stylex.props(baseStyles.scrollArea, pagesStyles.page).className ?? ""}`}>
+      <div className={`page-container plugin-container ${stylex.props(pagesStyles.pageContainer, pluginsStyles.pluginContainer, [responsiveStyles.pageContainer, responsiveLayoutStyles.pageContainerPageContainer]).className ?? ""}`}>
+        <header className={`plugin-header ${stylex.props(pluginsStyles.pluginHeader, [responsiveStyles.pluginHeader, responsiveLayoutStyles.pluginHeader]).className ?? ""}`}>
           <div><span className="eyebrow">{HARNESS_SHORT_NAMES[harness]} capabilities</span><h1>Extend {HARNESS_SHORT_NAMES[harness]}</h1><p>Manage packages, extensions, MCP servers, and reusable skills for this harness.</p></div>
           <div>
-            <ApexButton onClick={() => void onRefresh()}><ArrowsClockwise className={loading ? 'spin' : ''} size={13}/> Refresh</ApexButton>
-            <ApexButton onClick={() => setFilter('installed')}><SlidersHorizontal size={13}/> Manage</ApexButton>
-            <ApexButton variant="primary" onClick={openAdd}><Plus size={14}/> Add</ApexButton>
+            <ApexButton icon={<ArrowsClockwise className={[loading ? 'spin' : '', stylex.props((loading) && activityStyles.spin, (loading) && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={13}/>} onClick={() => void onRefresh()}>Refresh</ApexButton>
+            <ApexButton icon={<SlidersHorizontal size={13}/>} onClick={() => setFilter('installed')}>Manage</ApexButton>
+            <ApexButton variant="primary" icon={<Plus size={14}/>} onClick={openAdd}>Add</ApexButton>
           </div>
         </header>
-        <TabList value={tab} onChange={(value) => setTab(value as DirectoryTab)} role="tablist" size="sm" className="directory-tabs"><Tab value="plugins" label="Capabilities" /><Tab value="skills" label="Skills" /></TabList>
-        <div className="directory-tools">
-          <TextInput label={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} isLabelHidden placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} startIcon={<MagnifyingGlass size={14}/>} value={query} onChange={setQuery} containerClassName="page-search" controlXstyle={searchControlStyles.control} />
+        <TabList xstyle={[pluginsStyles.directoryTabs]} value={tab} onChange={(value) => setTab(value as DirectoryTab)} role="tablist" size="sm" className="directory-tabs"><Tab value="plugins" label="Capabilities" /><Tab value="skills" label="Skills" /></TabList>
+        <div className={`directory-tools ${stylex.props(pluginsStyles.directoryTools, [responsiveStyles.directoryTools, responsiveLayoutStyles.directoryTools]).className ?? ""}`}>
+          <TextInput label={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} isLabelHidden placeholder={`Search ${tab === 'plugins' ? 'capabilities' : 'skills'}`} startIcon={<MagnifyingGlass size={14}/>} value={query} onChange={setQuery} containerClassName="page-search" containerXstyle={pagesStyles.pageSearch} controlXstyle={pagesStyles.pageSearchControl} />
           <SelectControl label="Directory filter" value={filter} onChange={(event) => setFilter(event.target.value)}>
             <option value="all">All sources</option><option value="installed">Installed</option><option value="bundled">Bundled</option><option value="user">Personal</option><option value="project">Project</option><option value="system">System</option>
           </SelectControl>
         </div>
         {warnings.map((warning) => (
-          <Banner key={`${warning.scope}:${warning.path}`} status="error" role="alert" className="page-inline-error" title={`${warning.scope === 'project' ? 'Project' : 'Personal'} ${warning.message} (${warning.path})`} />
+          <Banner xstyle={[inspectorStyles.pageInlineError]} key={`${warning.scope}:${warning.path}`} status="error" role="alert" className="page-inline-error" title={`${warning.scope === 'project' ? 'Project' : 'Personal'} ${warning.message} (${warning.path})`} />
         ))}
-        {capabilityAlert ? <Banner status="error" role="alert" className="page-inline-error" title={capabilityAlert} /> : null}
-        {computerUseAlert ? <Banner status="error" role="alert" className="page-inline-error" title={computerUseAlert} /> : null}
-        {harness === 'pi' && mcpSupportAlert ? <Banner status="error" role="alert" className="page-inline-error" title={mcpSupportAlert} /> : null}
-        {harness === 'pi' && mcpSupportNotice ? <Banner status="warning" role="status" className="connection-warning" title={mcpSupportNotice} /> : null}
-        {harness === 'pi' && !piMcpAdapterInstalled ? <Banner status="warning" className="connection-warning" title="Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers." /> : null}
-        <Banner status="warning" className="connection-warning" title={NETWORK_MCP_UNAVAILABLE_DETAIL} />
-        <div className="directory-heading"><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span>{visible.length} shown</span></div>
+        {capabilityAlert ? <Banner xstyle={[inspectorStyles.pageInlineError]} status="error" role="alert" className="page-inline-error" title={capabilityAlert} /> : null}
+        {computerUseAlert ? <Banner xstyle={[inspectorStyles.pageInlineError]} status="error" role="alert" className="page-inline-error" title={computerUseAlert} /> : null}
+        {harness === 'pi' && mcpSupportAlert ? <Banner xstyle={[inspectorStyles.pageInlineError]} status="error" role="alert" className="page-inline-error" title={mcpSupportAlert} /> : null}
+        {harness === 'pi' && mcpSupportNotice ? <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" role="status" className="connection-warning" title={mcpSupportNotice} /> : null}
+        {harness === 'pi' && !piMcpAdapterInstalled ? <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title="Pi core has no MCP client. Enable Pi MCP Adapter below before adding servers." /> : null}
+        <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title={NETWORK_MCP_UNAVAILABLE_DETAIL} />
+        <div className={`directory-heading ${stylex.props(pluginsStyles.directoryHeading).className ?? ""}`}><h2>{filter === 'installed' ? 'Installed' : tab === 'plugins' ? 'Capabilities' : 'Skills'}</h2><span>{visible.length} shown</span></div>
         {visible.length ? (
-          <div className="directory-list">{visible.map((skill) => {
+          <div className={`directory-list ${stylex.props(pluginsStyles.directoryList, [responsiveStyles.directoryList, responsiveLayoutStyles.directoryList]).className ?? ""}`}>{visible.map((skill) => {
             const statusDetail = mcpStatusDetail(skill)
             return <article key={skill.id}>
-              <span className={`directory-icon directory-icon--${skill.kind}`}><SkillIcon skill={skill}/></span>
+              <span className={[`directory-icon directory-icon--${skill.kind}`, stylex.props(pluginsStyles.directoryIcon, ((skill.kind === "mcp")) && pluginsStyles.directoryIconMcp, ((skill.kind === "prompt")) && pluginsStyles.directoryIconPrompt).className].filter(Boolean).join(' ')}><SkillIcon skill={skill}/></span>
               <div><div><h3>{skill.name}</h3><span>{skill.location}</span></div><p id={statusDetail ? capabilityDetailId(skill) : undefined}>{skill.description}{statusDetail ? ` ${statusDetail}` : ''}</p></div>
               <div className="capability-actions">
-                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <button type="button" className="plugin-remove" aria-label={`Remove ${skill.name}`} disabled={busy} onClick={() => operation.requestRemove(skill)}><Trash size={13}/></button> : null}
+                {skill.kind === 'package' || skill.kind === 'mcp' && skill.location !== 'bundled' && skill.location !== 'system' && skill.definitionRemovalAvailable !== false ? <IconButton size="small" className="plugin-remove" label={`Remove ${skill.name}`} disabled={busy} onClick={() => operation.requestRemove(skill)}><Trash size={13}/></IconButton> : null}
                 {capabilityControl(skill)}
               </div>
             </article>
           })}</div>
         ) : <EmptyState icon={<Sparkle size={23}/>} title="Nothing here yet">Try another filter or add a capability package supported by {HARNESS_SHORT_NAMES[harness]}.</EmptyState>}
 
-        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className="modal-intro">Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
-        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className="modal-intro">Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
+        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
+        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
 
         {addOpen ? (
           <Modal
             title={addDraft.kind ? `Add ${addDraft.kind === 'mcp' ? 'MCP server' : addDraft.kind === 'extension' ? 'extension' : PACKAGE_LABELS[harness].toLowerCase()}` : `Add a ${HARNESS_SHORT_NAMES[harness]} capability`}
             onClose={() => sendAdd({ type: 'CLOSE' })}
             footer={addDraft.kind
-              ? <><ApexButton onClick={() => sendAdd({ type: 'BACK' })}><ArrowLeft size={13}/> Back</ApexButton><ApexButton variant="primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</ApexButton></>
+              ? <><ApexButton icon={<ArrowLeft size={13}/>} onClick={() => sendAdd({ type: 'BACK' })}>Back</ApexButton><ApexButton variant="primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</ApexButton></>
               : <ApexButton variant="quiet" onClick={() => sendAdd({ type: 'CLOSE' })}>Cancel</ApexButton>}
           >
             {addDraft.kind === null ? (
-              <div className="capability-choice-list">
+              <div className={`capability-choice-list ${stylex.props(pluginsStyles.capabilityChoiceList).className ?? ""}`}>
                 <button type="button" disabled={!piMcpAdapterInstalled} onClick={() => sendAdd({ type: 'CHOOSE', kind: 'mcp' })}>
                   <span><Globe size={17}/></span><span><strong>Add MCP</strong><small>{!piMcpAdapterInstalled ? 'Enable Pi MCP Adapter first' : 'Add a local stdio server; network servers stay externally managed'}</small></span><CaretRight size={15}/>
                 </button>
@@ -292,34 +293,34 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
                 <button type="button" onClick={() => sendAdd({ type: 'CHOOSE', kind: 'extension' })}>
                   <span><FileCode size={17}/></span><span><strong>Add Extension</strong><small>Install one local JavaScript or TypeScript extension module for {HARNESS_SHORT_NAMES[harness]}.</small></span><CaretRight size={15}/>
                 </button>
-                <p className="capability-compatibility-note"><Warning size={13}/><span>Not every third-party package, plugin, or extension will work in Apex. If something fails, <button type="button" onClick={() => onOpenExternal(GITHUB_ISSUES_URL)}>create a GitHub issue</button>.</span></p>
+                <p className={`capability-compatibility-note ${stylex.props(pluginsStyles.capabilityCompatibilityNote).className ?? ""}`}><Warning size={13}/><span>Not every third-party package, plugin, or extension will work in Apex. If something fails, <button type="button" onClick={() => onOpenExternal(GITHUB_ISSUES_URL)}>create a GitHub issue</button>.</span></p>
               </div>
             ) : addDraft.kind === 'bundle' ? (
-              <div className="add-tool-form">
-                <p className="modal-intro">{PACKAGE_HELP[harness]} This installs executable code; it does not connect to an arbitrary MCP endpoint.</p>
+              <div className={`add-tool-form ${stylex.props(pluginsStyles.addToolForm).className ?? ""}`}>
+                <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>{PACKAGE_HELP[harness]} This installs executable code; it does not connect to an arbitrary MCP endpoint.</p>
                 <TextInput label={`${PACKAGE_LABELS[harness]} source`} value={addDraft.source} hasAutoFocus onChange={(value) => setAddField('source', value)} placeholder="npm:@scope/package" containerClassName="field" />
-                <small className="field-help">Examples: a Git URL, <code>npm:@scope/package</code>, or an absolute local folder path.</small>
+                <small className={`field-help ${stylex.props(pluginsStyles.fieldHelp).className ?? ""}`}>Examples: a Git URL, <code>npm:@scope/package</code>, or an absolute local folder path.</small>
               </div>
             ) : addDraft.kind === 'extension' ? (
-              <div className="add-tool-form">
-                <p className="modal-intro">Pi records a standalone local extension file through its native package manager. The original file remains the source of truth.</p>
+              <div className={`add-tool-form ${stylex.props(pluginsStyles.addToolForm).className ?? ""}`}>
+                <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Pi records a standalone local extension file through its native package manager. The original file remains the source of truth.</p>
                 <TextInput label="Extension file" value={addDraft.source} hasAutoFocus onChange={(value) => setAddField('source', value)} placeholder="/absolute/path/to/my-extension.ts" containerClassName="field" />
-                <small className="field-help">Choose an absolute local <code>.ts</code>, <code>.js</code>, <code>.mjs</code>, or <code>.cjs</code> file. Extensions run with your user permissions.</small>
-                <div className="field"><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
-                <Banner status="warning" className="connection-warning" title="Extension APIs differ between harnesses. Apex installs the file correctly, but CLI-specific UI may not render in the desktop app." />
+                <small className={`field-help ${stylex.props(pluginsStyles.fieldHelp).className ?? ""}`}>Choose an absolute local <code>.ts</code>, <code>.js</code>, <code>.mjs</code>, or <code>.cjs</code> file. Extensions run with your user permissions.</small>
+                <div className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
+                <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title="Extension APIs differ between harnesses. Apex installs the file correctly, but CLI-specific UI may not render in the desktop app." />
               </div>
             ) : (
-              <div className="add-tool-form">
-                <p className="modal-intro">Add a local stdio server to pi-mcp-adapter’s configuration. HTTP/SSE servers and OAuth are managed outside Apex.</p>
+              <div className={`add-tool-form ${stylex.props(pluginsStyles.addToolForm).className ?? ""}`}>
+                <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Add a local stdio server to pi-mcp-adapter’s configuration. HTTP/SSE servers and OAuth are managed outside Apex.</p>
                 <TextInput label="Server name" value={addDraft.mcpName} hasAutoFocus onChange={(value) => setAddField('mcpName', value)} placeholder="my-local-tools" containerClassName="field" />
-                <p className="field-help">{MCP_STDIO_HELP[harness]}</p>
+                <p className={`field-help ${stylex.props(pluginsStyles.fieldHelp).className ?? ""}`}>{MCP_STDIO_HELP[harness]}</p>
                 <TextInput label="Executable" value={addDraft.mcpCommand} onChange={(value) => setAddField('mcpCommand', value)} placeholder="npx" containerClassName="field" />
                 <TextArea label="Arguments (one per line)" value={addDraft.mcpArgs} onChange={(value) => setAddField('mcpArgs', value)} rows={3} placeholder={'-y\n@modelcontextprotocol/server-filesystem\n/path/to/project'} containerClassName="field" />
-                <div className="field"><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
-                <Banner status="warning" className="connection-warning" title="Only connect servers you trust. MCP tools can read data or run actions with your user permissions." />
+                <div className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Available in</span><SelectControl label="Available in" value={addDraft.scope} onChange={(event) => setAddField('scope', event.target.value)}><option value="user">All projects (personal)</option><option value="project" disabled={!activeProjectPath}>Current project</option></SelectControl></div>
+                <Banner xstyle={[pluginsStyles.connectionWarning]} status="warning" className="connection-warning" title="Only connect servers you trust. MCP tools can read data or run actions with your user permissions." />
               </div>
             )}
-            {addDraft.output ? <pre className="install-output" role="status">{addDraft.output}</pre> : null}
+            {addDraft.output ? <pre className={`install-output ${stylex.props(pluginsStyles.installOutput).className ?? ""}`} role="status">{addDraft.output}</pre> : null}
           </Modal>
         ) : null}
       </div>

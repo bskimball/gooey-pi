@@ -474,12 +474,117 @@ test.describe('Prime Work desktop smoke', () => {
     currentFixture = undefined
   })
 
+  test('runs interactive chat previews without desktop or network access', async () => {
+    let requests = 0
+    const server = createServer((_request, response) => { requests += 1; response.end('unexpected') })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Fixture server did not bind')
+    const remote = `http://127.0.0.1:${address.port}/preview-leak`
+    try {
+      const html = `<button id="choose">Try blue</button><p id="result">Choose a color</p><button id="navigate">Try navigation</button><script>
+        document.getElementById('choose').onclick=()=>{document.getElementById('result').textContent='Blue selected';parent.postMessage({type:'apex:feedback',text:'Use the blue option'},'*')};
+        document.getElementById('navigate').onclick=()=>{document.body.dataset.navigationAttempted='yes';location.href=${JSON.stringify(remote)}};
+        </script>`
+      appendFileSync(fixtureSessionFile, `${JSON.stringify({ type: 'message', id: 'interactive-preview-fixture', parentId: null, message: { role: 'assistant', content: [{ type: 'text', text: `\`\`\`html\n${html}\n\`\`\`` }] } })}\n`)
+      await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+      const preview = page.frameLocator('iframe[title="Interactive HTML preview"]')
+      await expect.poll(() => preview.locator('#choose').evaluate((button) => typeof (button as HTMLButtonElement).onclick)).toBe('function')
+      // Keyboard input reaches sandboxed child frames in hidden Electron windows.
+      await preview.getByRole('button', { name: 'Try blue' }).press('Enter')
+      await expect(preview.locator('#result'), JSON.stringify(actionableErrors)).toHaveText('Blue selected')
+      await expect(page.getByRole('textbox', { name: 'Feedback', exact: true })).toHaveValue('Use the blue option')
+      await expect(page.getByText('Preview choice prepared. Review it before sending.')).toBeVisible()
+      const frame = page.frames().find((candidate) => candidate.url().startsWith('apex-preview:'))
+      if (!frame) throw new Error('Preview frame was not loaded')
+      expect(await frame.evaluate(() => {
+        let canReadParent = false
+        try { canReadParent = Boolean(parent.document.body) } catch { /* Opaque sandbox origin. */ }
+        return { hasBridge: 'apex' in window, hasNode: 'require' in window, canReadParent }
+      })).toEqual({ hasBridge: false, hasNode: false, canReadParent: false })
+      await preview.getByRole('button', { name: 'Try navigation' }).press('Enter')
+      await expect.poll(() => frame.url()).toMatch(/^(apex-preview:|chrome-error:)/)
+      await page.getByRole('button', { name: 'Reset preview', exact: true }).click()
+      await expect(preview.locator('#result')).toHaveText('Choose a color')
+      expect(requests).toBe(0)
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())) }
+  })
+
+  test('creates and revisits conversation spaces', async () => {
+    await page.getByRole('button', { name: 'Activity', exact: true }).click()
+    await page.getByRole('button', { name: 'New space', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Name Required', exact: true }).fill('Conversation design')
+    await page.getByRole('textbox', { name: 'Objective', exact: true }).fill('Make decisions in context')
+    await page.getByRole('combobox', { name: 'Space project', exact: true }).click()
+    await page.getByRole('option', { name: 'Multi-folder fixture', exact: true }).click()
+    await page.getByRole('button', { name: 'Create space', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Conversation design', exact: true })).toBeVisible()
+    await expect(page.getByText('Project: Multi-folder fixture', { exact: true })).toBeVisible()
+    const inspector = page.getByRole('complementary', { name: 'Space details' })
+    if (!await inspector.isVisible()) await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
+    await inspector.getByRole('button', { name: 'Edit objective', exact: true }).click()
+    await inspector.getByRole('textbox', { name: 'Objective', exact: true }).fill('Keep decisions and results together')
+    await inspector.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect.poll(() => page.evaluate(async () => (await window.apex.spaces.list())[0]?.objective)).toBe('Keep decisions and results together')
+    await inspector.getByRole('button', { name: 'Manage linked threads', exact: true }).click()
+    await inspector.getByRole('button', { name: 'Link Primary workspace fixture', exact: true }).click()
+    await inspector.getByRole('button', { name: 'Done managing', exact: true }).click()
+    await expect(inspector).toContainText('1 linked thread')
+    await expect(inspector.getByText('Primary workspace fixture', { exact: true })).toHaveCount(0)
+    await page.reload()
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-ready', 'true')
+    await page.getByRole('button', { name: 'Activity', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Conversation design', exact: true })).toBeVisible()
+    await expect(inspector.getByText('Keep decisions and results together')).toBeVisible()
+    await expect(inspector).toContainText('1 linked thread')
+    await expect(inspector.getByText('Primary workspace fixture', { exact: true })).toHaveCount(0)
+    await inspector.getByRole('button', { name: 'Manage linked threads', exact: true }).click()
+    await expect(inspector.getByRole('button', { name: 'Unlink Primary workspace fixture', exact: true })).toBeVisible()
+    await inspector.getByRole('button', { name: 'Done managing', exact: true }).click()
+    await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
+    await expect(inspector).toBeHidden()
+    await expect(page.getByRole('combobox', { name: 'Message Chief of Staff' })).toBeVisible()
+    await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
+    await expect(inspector).toBeVisible()
+    const handle = page.getByRole('separator', { name: 'Resize inspector' })
+    const before = Number(await handle.getAttribute('aria-valuenow'))
+    await handle.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(async () => Number(await handle.getAttribute('aria-valuenow'))).toBeLessThan(before)
+    await page.getByRole('heading', { name: 'Conversation design', exact: true }).click()
+    await app!.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1) })
+    await page.screenshot({ path: test.info().outputPath('conversation-spaces.png'), scale: 'css', fullPage: true })
+    for (const panel of [page.getByRole('region', { name: 'Chief of Staff', exact: true }), inspector]) {
+      const bounds = await panel.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return { right: rect.right, bottom: rect.bottom, viewportWidth: innerWidth, viewportHeight: innerHeight }
+      })
+      expect(bounds.right, JSON.stringify(bounds)).toBeLessThanOrEqual(bounds.viewportWidth + 1)
+      expect(bounds.bottom, JSON.stringify(bounds)).toBeLessThanOrEqual(bounds.viewportHeight + 1)
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'dark' })
+    await page.screenshot({ path: test.info().outputPath('conversation-spaces-dark.png'), scale: 'css', fullPage: true })
+    await page.setViewportSize({ width: 900, height: 780 })
+    await expect(inspector).toBeHidden()
+    await page.getByRole('button', { name: 'Close sidebar', exact: true }).click({ position: { x: 450, y: 200 } })
+    await expect(page.locator('.sidebar')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
+    await expect(page.locator('.activity-main')).toHaveAttribute('inert', '')
+    await expect(inspector).toBeVisible()
+    await page.screenshot({ path: test.info().outputPath('conversation-spaces-compact.png'), scale: 'css', fullPage: true })
+    await page.keyboard.press('Escape')
+    await expect(inspector).toBeHidden()
+    await expect(page.locator('.activity-main')).not.toHaveAttribute('inert', '')
+  })
+
   test('steers the active turn with Ctrl+Enter', async () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
     const composer = page.getByRole('combobox', { name: 'Message Pi' })
     await composer.fill('stay busy while I steer')
     await composer.press('Enter')
     await expect(page.getByRole('button', { name: 'Stop Pi' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Running', exact: true }).locator('.sidebar-attention__row').filter({ hasText: 'Hermetic desktop fixture' })).toBeVisible()
+    await expect(page.locator('.project-group').filter({ has: page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }) }).getByRole('img', { name: 'Agent working' })).toBeVisible()
 
     await composer.fill('send this queued task now')
     await composer.press('Enter')
@@ -738,10 +843,9 @@ test.describe('Prime Work desktop smoke', () => {
     })
     expect(invalidSelfHostedTest).toMatch(/too short|Invalid URL/)
     await expect.poll(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every((window) => !window.isVisible()))).toBe(true)
-    await expect(page.locator('.sidebar__brand')).toHaveAttribute('aria-label', 'Pi Work')
-    await expect(page.locator('.sidebar__brand .pi-mark')).toBeVisible()
+    await expect(page.locator('.sidebar__brand')).toHaveCount(0)
     await expect(page.locator('.sidebar-update')).toHaveCount(0)
-    await expect(page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ })).toBeVisible()
+    await expect(page.locator('.app-rail').getByRole('button', { name: /^Settings/ })).toBeVisible()
     await page.locator('.session-row-wrap', { hasText: 'Hermetic desktop fixture' }).click()
     await expect.poll(async () => (await page.evaluate(() => window.apex.agent.list()))
       .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
@@ -749,24 +853,24 @@ test.describe('Prime Work desktop smoke', () => {
     await page.screenshot({ path: test.info().outputPath('sidebar-ready.png') })
   })
 
-  test('keeps the docked sidebar toggle on the toolbar for Linux and Windows chrome', async () => {
+  test('keeps the docked sidebar toggle in the rail for Linux and Windows chrome', async () => {
     const shell = page.locator('.app-shell')
     const sidebar = page.locator('.sidebar')
     const clearance = page.locator('.sidebar__titlebar .traffic-light-clearance')
-    const trigger = page.locator('.title-toolbar').getByRole('button', { name: /Hide sidebar/ })
+    const trigger = page.locator('.app-rail').getByRole('button', { name: /Hide sidebar/ })
     for (const platform of ['linux', 'win32']) {
       await shell.evaluate((node, value) => { node.setAttribute('data-platform', value) }, platform)
       await expect(clearance).toHaveCSS('display', 'none')
-      const offset = await trigger.evaluate((node) => node.getBoundingClientRect().left - node.closest('.title-toolbar')!.getBoundingClientRect().left)
-      // The toolbar's 14px left padding, where Show sidebar also sits.
-      expect(offset).toBeCloseTo(14, 1)
+      const offset = await trigger.evaluate((node) => node.getBoundingClientRect().left - node.closest('.app-rail')!.getBoundingClientRect().left)
+      // The 40px control is centered within the rail's 49px inner width.
+      expect(offset).toBeCloseTo(4.5, 1)
     }
     await expect(sidebar).toBeVisible()
     await expect(sidebar.locator('.sidebar__toggle')).toHaveCount(0)
   })
 
   test('opens General settings when the main process requests Settings', async () => {
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Appearance', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Theme' })).toBeVisible()
 
@@ -779,7 +883,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('uses the branch checkout picker after changing the global checkout style', async () => {
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     const checkoutStyle = page.getByRole('combobox', { name: 'Git checkout style' })
     await checkoutStyle.click()
     await page.getByRole('option', { name: 'Branches', exact: true }).click()
@@ -796,7 +900,7 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('returns from settings with its back button, New session, Escape, and Ctrl+W', async () => {
     const openSettings = async () => {
-      await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+      await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
       await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
     }
 
@@ -866,13 +970,13 @@ test.describe('Prime Work desktop smoke', () => {
     })
     expect(idlePetGap).toBeGreaterThanOrEqual(-8)
     expect(idlePetGap).toBeLessThanOrEqual(1)
-    await page.locator('.sidebar__footer').getByRole('button', { name: 'Open realtime voice' }).click()
+    await page.locator('.app-rail').getByRole('button', { name: 'Open realtime voice' }).click()
     await expect(page.getByRole('complementary', { name: 'Realtime voice session' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Orb, draggable Apex pet/ })).toBeVisible()
     await expect(page.locator('.voice-orb')).toHaveCount(0)
     await page.getByRole('complementary', { name: 'Realtime voice session' }).getByRole('button', { name: 'Close realtime voice' }).click()
 
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Pets', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Pets', exact: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: /^Orb Built/ })).toBeChecked()
@@ -903,7 +1007,7 @@ test.describe('Prime Work desktop smoke', () => {
 
     await expect(page.locator('.desktop-pet')).toHaveCount(0)
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
-    await page.locator('.sidebar__footer').getByRole('button', { name: 'Open realtime voice' }).click()
+    await page.locator('.app-rail').getByRole('button', { name: 'Open realtime voice' }).click()
     const realtimePet = page.getByRole('complementary', { name: 'Realtime voice session' })
     await expect(realtimePet.getByRole('button', { name: /Apex, draggable Apex pet/ })).toBeVisible()
     await expect(realtimePet.locator('.pet-sprite img')).toBeVisible()
@@ -946,7 +1050,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('persists a desktop-only Pi provider toggle and removes its models from the picker', async () => {
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     const voiceModelsBefore = await page.evaluate(async () => JSON.parse((await window.apex.voice.executeTool({ name: 'list_models', arguments: {} }, 'pi')).output) as { models: Array<{ name: string }> })
     expect(voiceModelsBefore.models.map((model) => model.name).sort()).toEqual(['Claude Fixture', 'GPT Fixture'])
@@ -969,7 +1073,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('persists a Pi model toggle and removes only that model from every picker', async () => {
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await page.getByRole('tab', { name: /Models/ }).click()
 
@@ -1005,7 +1109,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await page.getByRole('tab', { name: /Models/ }).click()
     const hiddenToggle = page.getByRole('checkbox', { name: 'Show GPT Fixture model' })
@@ -1019,7 +1123,7 @@ test.describe('Prime Work desktop smoke', () => {
 
 
   test('refreshes harness discovery through the live settings and preload path', async () => {
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await page.getByRole('button', { name: 'Harness', exact: true }).click()
 
     const refresh = page.getByRole('button', { name: 'Refresh harnesses' })
@@ -1060,8 +1164,10 @@ test.describe('Prime Work desktop smoke', () => {
 
     const primaryRow = page.locator('.session-row-wrap').filter({ hasText: 'Primary workspace fixture' })
     await expect(primaryRow).toHaveClass(/has-attention/)
-    const activityCount = page.locator('.sidebar__primary button[title="Activity"] .nav-count')
-    await expect(activityCount).toHaveText('1')
+    const needsYou = page.getByRole('region', { name: 'Needs you', exact: true })
+    const project = page.locator('.project-group').filter({ has: page.getByRole('button', { name: 'Multi-folder fixture', exact: true }) })
+    await expect(needsYou.locator('.sidebar-attention__row').filter({ hasText: 'Primary workspace fixture' })).toBeVisible()
+    await expect(project.getByRole('img', { name: '1 sessions need attention' })).toBeVisible()
     await expect(titles.nth(0)).toHaveText('Hermetic desktop fixture')
     await expect(primaryRow.locator('.session-row__trail .status-mark--failed')).toHaveCount(1)
 
@@ -1073,7 +1179,8 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(primaryRow).toHaveClass(/session-row-wrap--failed/)
     await expect(primaryRow.locator('.session-row .sr-only')).toHaveText('Failed:')
     await expect(primaryRow.locator('.session-row__trail .status-mark--failed')).toHaveCount(0)
-    await expect(activityCount).toHaveCount(0)
+    await expect(needsYou.locator('.sidebar-attention__row').filter({ hasText: 'Primary workspace fixture' })).toHaveCount(0)
+    await expect(project.getByRole('img', { name: '1 sessions need attention' })).toHaveCount(0)
     appendFileSync(primaryFile, `${JSON.stringify({
       type: 'message', id: 'primary-new-user', parentId: 'primary-background-assistant', timestamp: '2028-01-01T00:00:00.000Z',
       message: { role: 'user', content: 'Move this thread now.' },
@@ -1081,13 +1188,12 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(titles.nth(0)).toHaveText('Primary workspace fixture')
   })
 
-  test('coordinates a project in Activity without exposing its session or answering human approvals', async () => {
+  test('coordinates authorized projects in Activity without exposing its session or answering human approvals', async () => {
     await page.getByRole('button', { name: 'Activity', exact: true }).click()
-    await page.getByRole('button', { name: 'Chief of Staff', exact: true }).click()
     const coordinator = page.getByRole('region', { name: 'Chief of Staff', exact: true })
-    await expect(coordinator).toContainText('Select a granted project')
-    await page.getByRole('combobox', { name: 'Activity project', exact: true }).selectOption('multi-folder-project')
-    const input = coordinator.getByRole('textbox', { name: 'Message Chief of Staff' })
+    await expect(page.locator('.activity-main').getByText('All authorized projects', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Activity inbox/i })).toHaveCount(0)
+    const input = coordinator.getByRole('combobox', { name: 'Message Chief of Staff' })
     await expect(input).toBeEnabled()
     const first = await page.evaluate(async () => {
       const sessions = await window.apex!.sessions.list()
@@ -1096,27 +1202,25 @@ test.describe('Prime Work desktop smoke', () => {
       return { filePath: owner.filePath, runtimeId: (await window.apex!.agent.list()).find((runtime) => runtime.sessionFile === owner.filePath)?.runtimeId }
     })
     expect(first.runtimeId).toBeTruthy()
-    await expect(page.locator('.activity-row').filter({ hasText: 'Chief of Staff' })).toHaveCount(0)
     await expect(page.locator('.session-row').filter({ hasText: 'Chief of Staff' })).toHaveCount(0)
 
     await input.fill('stay busy tool while monitoring implementors')
     await input.press('Enter')
-    await expect(coordinator.getByRole('button', { name: 'Stop coordinator' })).toBeVisible()
+    await expect(coordinator.getByRole('button', { name: 'Stop Pi' })).toBeVisible()
     await expect(coordinator).toContainText('bash')
-    await expect(page.locator('.activity-section--running .activity-row').filter({ hasText: 'Chief of Staff' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Peek', exact: true }).click()
-    await page.getByRole('button', { name: 'Chief of Staff', exact: true }).click()
-    await expect(coordinator.getByRole('button', { name: 'Stop coordinator' })).toBeVisible()
+    await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+    await page.getByRole('button', { name: 'Activity', exact: true }).click()
+    await expect(coordinator.getByRole('button', { name: 'Stop Pi' })).toBeVisible()
     expect(await page.evaluate(async (filePath) => (await window.apex!.agent.list()).find((runtime) => runtime.sessionFile === filePath)?.runtimeId, first.filePath)).toBe(first.runtimeId)
-    await coordinator.getByRole('button', { name: 'Stop coordinator' }).click()
-    await expect(coordinator.getByRole('button', { name: 'Stop coordinator' })).toHaveCount(0)
+    await coordinator.getByRole('button', { name: 'Stop Pi' }).click()
+    await expect(coordinator.getByRole('button', { name: 'Stop Pi' })).toHaveCount(0)
 
     await input.fill('activity confirm question')
     await input.press('Enter')
     await expect(coordinator.locator('.activity-question-card')).toContainText('Approve background deployment?')
     expect(existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(false)
-    await page.getByRole('button', { name: 'Peek', exact: true }).click()
-    await page.getByRole('button', { name: 'Chief of Staff', exact: true }).click()
+    await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+    await page.getByRole('button', { name: 'Activity', exact: true }).click()
     await expect(coordinator.locator('.activity-question-card')).toContainText('Approve background deployment?')
     expect(existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(false)
     expect(await coordinator.evaluate((element) => Math.round(element.getBoundingClientRect().right - innerWidth))).toBeLessThanOrEqual(1)
@@ -1124,44 +1228,11 @@ test.describe('Prime Work desktop smoke', () => {
     await coordinator.locator('.activity-question-card__yes').click()
     await expect.poll(() => existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(true)
     expect(JSON.parse(readFileSync(join(fixtureRoot, 'activity-confirm-response.json'), 'utf8'))).toMatchObject({ confirmed: true })
-    await coordinator.getByRole('button', { name: 'Stop coordinator' }).click()
-    await page.getByRole('button', { name: 'Peek', exact: true }).click()
-    await page.keyboard.press('j')
-    await page.keyboard.press('r')
-    await expect(page.locator('.activity-peek .activity-reply__input')).toBeFocused()
-    await page.keyboard.press('Escape')
-    await expect(page.locator('.activity-peek .activity-reply__input')).not.toBeFocused()
+    await coordinator.getByRole('button', { name: 'Stop Pi' }).click()
     expect(actionableErrors).toEqual([])
   })
 
-  test('clears individual and all Activity notifications persistently', async () => {
-    await page.getByRole('button', { name: 'Activity', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
-    const primaryActivity = page.locator('.activity-row').filter({ hasText: 'Primary workspace fixture' })
-    const fixtureActivity = page.locator('.activity-row').filter({ hasText: 'Hermetic desktop fixture' })
-    await expect(primaryActivity).toBeVisible()
-    await expect(fixtureActivity).toBeVisible()
-
-    const clearPrimary = primaryActivity.getByRole('button', { name: 'Mark Primary workspace fixture reviewed' })
-    await primaryActivity.hover()
-    await expect(clearPrimary).toHaveCSS('opacity', '1')
-    await clearPrimary.click()
-    await expect(primaryActivity).toHaveCount(0)
-    await expect(fixtureActivity).toBeVisible()
-    await expect.poll(() => page.evaluate(() => {
-      const cleared = JSON.parse(window.localStorage.getItem('prime-work.cleared-activity') ?? '{}') as Record<string, string>
-      return cleared['primary-session']
-    })).toBeTruthy()
-
-    await page.reload()
-    await expect(page.locator('.app-shell')).toHaveAttribute('data-ready', 'true')
-    await page.getByRole('button', { name: 'Activity', exact: true }).click()
-    await expect(page.locator('.activity-row').filter({ hasText: 'Primary workspace fixture' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Mark all reviewed' }).click()
-    await expect(page.getByRole('heading', { name: 'You’re all caught up' })).toBeVisible()
-  })
-
-  test('removes archived chats from Activity and clears their notifications', async () => {
+  test('clears sidebar notifications when a chat is archived', async () => {
     const primaryFile = join(fixtureSessionFile, '..', 'primary.jsonl')
     appendFileSync(primaryFile, `${JSON.stringify({
       type: 'message', id: 'primary-archive-failure', parentId: 'primary-message', timestamp: '2027-01-01T00:00:00.000Z',
@@ -1170,106 +1241,22 @@ test.describe('Prime Work desktop smoke', () => {
 
     const primaryRow = page.locator('.session-row-wrap').filter({ hasText: 'Primary workspace fixture' })
     await expect(primaryRow).toHaveClass(/has-attention/)
-    const activityCount = page.locator('.sidebar__primary button[title="Activity"] .nav-count')
-    await expect(activityCount).toHaveText('1')
+    const needsYou = page.getByRole('region', { name: 'Needs you', exact: true })
+    const project = page.locator('.project-group').filter({ has: page.getByRole('button', { name: 'Multi-folder fixture', exact: true }) })
+    await expect(needsYou.locator('.sidebar-attention__row').filter({ hasText: 'Primary workspace fixture' })).toBeVisible()
+    await expect(project.getByRole('img', { name: '1 sessions need attention' })).toBeVisible()
 
     await primaryRow.hover()
     await primaryRow.getByTitle('Archive Primary workspace fixture').click()
     await primaryRow.getByTitle('Confirm archive Primary workspace fixture').click()
     await expect(primaryRow).toHaveCount(0)
-    await expect(activityCount).toHaveCount(0)
+    await expect(needsYou.locator('.sidebar-attention__row').filter({ hasText: 'Primary workspace fixture' })).toHaveCount(0)
+    await expect(project.getByRole('img', { name: '1 sessions need attention' })).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => {
       const cleared = JSON.parse(window.localStorage.getItem('prime-work.cleared-session-attention') ?? '{}') as Record<string, string>
       return cleared['primary-session']
     })).toBeTruthy()
 
-    await page.getByRole('button', { name: 'Activity', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
-    await expect(page.getByText('Primary workspace fixture', { exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Archived', exact: true })).toHaveCount(0)
-  })
-
-  test('triages background questions, live tail, steer, stop confirm, and keyboard navigation in Activity peek', async () => {
-    const primaryFile = join(fixtureSessionFile, '..', 'primary.jsonl')
-    const primaryProject = currentFixture!.project
-    const statusPill = page.locator('.activity-status-pill')
-    await expect(statusPill).toHaveCount(0)
-
-    // Start a background runtime on primary.jsonl that asks a confirm question
-    await page.evaluate(async ({ cwd, sessionPath }) => {
-      const runtime = await window.apex!.agent.start({
-        cwd,
-        sessionPath,
-        harness: 'pi',
-      })
-      await window.apex!.agent.command(runtime.runtimeId, {
-        type: 'prompt',
-        message: 'activity confirm question',
-      })
-    }, { cwd: primaryProject, sessionPath: primaryFile })
-
-    // From SESSION view, the toolbar pill shows 1 needs you and clicking it opens Activity
-    await expect(statusPill).toBeVisible()
-    await expect(statusPill).toHaveAttribute('aria-label', '1 session needs your attention. Open Activity')
-    await statusPill.click()
-    await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
-
-    // Default selection chooses Needs you ("Primary workspace fixture") and displays the question card
-    const peek = page.locator('.activity-peek')
-    await expect(peek).toBeVisible()
-    await expect(peek.locator('.activity-question-card')).toContainText('Approve background deployment?')
-    await expect(page.locator('.activity-section--needs-you .activity-row')).toContainText('Primary workspace fixture')
-
-    // Answer the confirm question inline from the peek without opening the session
-    await peek.locator('.activity-question-card__yes').click()
-    await expect.poll(() => existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(true)
-    const confirmPayload = JSON.parse(readFileSync(join(fixtureRoot, 'activity-confirm-response.json'), 'utf8')) as { confirmed?: boolean }
-    expect(confirmPayload.confirmed).toBe(true)
-
-    // Session leaves Needs you and moves to Running; pill updates to 1 running; live tail updates with running tool
-    await expect(page.locator('.activity-section--needs-you')).toHaveCount(0)
-    await expect(page.locator('.activity-section--running .activity-row')).toContainText('Primary workspace fixture')
-    await expect(statusPill).toHaveAttribute('aria-label', '1 session running. Open Activity')
-    await expect(peek).toContainText('▶ bash · npm run verify')
-    await expect(peek.locator('.activity-peek__tail')).toContainText('Deployment approved. Running verification suite.')
-
-    // Send a steer from the peek reply box to the running background session
-    await page.keyboard.press('r')
-    const replyInput = peek.locator('.activity-reply__input')
-    await expect(replyInput).toBeFocused()
-    await replyInput.fill('switch to lint')
-    await replyInput.press('Enter')
-
-    await expect.poll(() => existsSync(join(fixtureRoot, 'steer-args.json'))).toBe(true)
-    const steerPayload = JSON.parse(readFileSync(join(fixtureRoot, 'steer-args.json'), 'utf8')) as { type?: string; message?: string }
-    expect(steerPayload).toMatchObject({ type: 'steer', message: 'switch to lint' })
-    await expect(peek).toContainText('▶ bash · npm run lint')
-    await expect(peek.locator('.activity-peek__tail')).toContainText('Switching to lint pass as requested.')
-
-    // Blur reply input with Escape, then test Stop confirmation in peek ('x' opens confirm, Escape cancels, then confirm stops)
-    await replyInput.press('Escape')
-    await page.keyboard.press('x')
-    await expect(peek.getByRole('group', { name: 'Confirm stopping run' })).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(peek.getByRole('group', { name: 'Confirm stopping run' })).toHaveCount(0)
-
-    await peek.getByRole('button', { name: 'Stop run' }).click()
-    await peek.locator('.activity-stop-confirm__confirm').click()
-    await expect.poll(() => existsSync(join(fixtureRoot, 'abort-args.json'))).toBe(true)
-    await expect(statusPill).toHaveCount(0)
-
-    // Keyboard navigation: j/k selects Ready to review session, 'e' marks reviewed, j + Enter opens recent session
-    await expect(page.locator('.activity-section--review .activity-row').first()).toBeVisible()
-    await page.keyboard.press('j')
-    await expect(peek.locator('.activity-peek__title')).toHaveText('Hermetic desktop fixture')
-    await page.keyboard.press('k')
-    await expect(peek.locator('.activity-peek__title')).toHaveText('Primary workspace fixture')
-    await page.keyboard.press('e')
-    await expect(page.locator('.activity-section--review')).toHaveCount(0)
-    await page.keyboard.press('j')
-    await expect(peek.locator('.activity-peek__title')).toHaveText('Hermetic desktop fixture')
-    await page.keyboard.press('Enter')
-    await expect(page.locator('.conversation-pane')).toBeVisible()
   })
 
   test('selects visual Preview references, preserves the guest across views, and destroys it on archive', async () => {
@@ -1348,7 +1335,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(preview).toHaveCount(1)
     await page.getByRole('tab', { name: 'Browser', exact: true }).click()
     expect(await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).toBe(guestId)
-    await page.getByRole('button', { name: 'Close inspector', exact: true }).click()
+    await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
     await expect(preview).toHaveCount(1)
     await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
     expect(await preview.evaluate((node) => (node as HTMLElement & { getWebContentsId(): number }).getWebContentsId())).toBe(guestId)
@@ -1720,7 +1707,7 @@ test.describe('Prime Work desktop smoke', () => {
         await addDialog.getByRole('button', { name: 'Close' }).click()
       }
     }
-    await page.locator('.sidebar__footer').getByRole('button', { name: /^Settings/ }).click()
+    await page.locator('.app-rail').getByRole('button', { name: /^Settings/ }).click()
     await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
     await page.getByRole('button', { name: 'Providers', exact: true }).click()
     await expect(page.getByLabel('Search providers')).toBeVisible()
@@ -2005,14 +1992,14 @@ test.describe('Prime Work desktop smoke', () => {
       await expect(page.locator('.inspector')).toBeHidden()
     }
     await expect(page.locator('.workbench')).not.toHaveAttribute('inert')
-    await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
+    await expect(page.locator('.app-rail')).not.toHaveAttribute('inert')
     const inspectorToggle = page.getByRole('button', { name: 'Toggle inspector' })
     await inspectorToggle.focus()
     await inspectorToggle.press('Enter')
     await expect.poll(() => page.locator('.inspector').evaluate((node) => getComputedStyle(node).position)).toBe('fixed')
     await expect(page.locator('.sidebar')).toHaveCount(0)
     await expect(page.locator('.panel-scrim--inspector')).toBeVisible()
-    await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
+    await expect(page.locator('.app-rail')).not.toHaveAttribute('inert')
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeHidden()
     await inspectorToggle.click()
@@ -2021,8 +2008,8 @@ test.describe('Prime Work desktop smoke', () => {
     const showSidebar = page.getByRole('button', { name: /Show sidebar/ })
     const showBox = await showSidebar.boundingBox()
     await showSidebar.click()
-    const hideSidebar = page.locator('.sidebar').getByRole('button', { name: /Hide sidebar/ })
-    // Poll past the sidebar-in slide so the settled position is compared.
+    const hideSidebar = page.locator('.app-rail').getByRole('button', { name: /Hide sidebar/ })
+    // The rail toggle stays in place when compact navigation opens.
     await expect.poll(async () => {
       const hideBox = await hideSidebar.boundingBox()
       return Math.max(Math.abs((hideBox?.x ?? 0) - (showBox?.x ?? 0)), Math.abs((hideBox?.y ?? 0) - (showBox?.y ?? 0)))
@@ -2042,7 +2029,7 @@ test.describe('Prime Work desktop smoke', () => {
     await page.getByRole('button', { name: /^New session/ }).first().click()
     await page.setViewportSize({ width: 1800, height: 900 })
     if (await page.locator('.inspector').isVisible()) {
-      await page.locator('.inspector').getByRole('button', { name: 'Close inspector' }).click()
+      await page.getByRole('button', { name: 'Toggle inspector', exact: true }).click()
       await expect(page.locator('.inspector')).toBeHidden()
     }
     const measure = () => page.evaluate(() => {
@@ -2095,7 +2082,7 @@ test.describe('Prime Work desktop smoke', () => {
     const inspectorToggle = page.getByRole('button', { name: 'Toggle inspector' })
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeVisible()
-    await expect(page.locator('.title-toolbar')).not.toHaveAttribute('inert')
+    await expect(page.locator('.app-rail')).not.toHaveAttribute('inert')
     await inspectorToggle.click()
     await expect(page.locator('.inspector')).toBeHidden()
     await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).inspectorOpen)).toBe(false)
@@ -2192,6 +2179,7 @@ test.describe('Prime Work desktop smoke', () => {
     const drawer = page.locator('.terminal-drawer')
     const terminalHandle = page.getByRole('separator', { name: 'Resize terminal' })
     await expect(terminalHandle).toBeVisible()
+    await drawer.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)) })
     const terminalBefore = await drawer.boundingBox()
     expect(terminalBefore).not.toBeNull()
     await expect.poll(async () => Number(await terminalHandle.getAttribute('aria-valuemax'))).toBeGreaterThan(terminalBefore!.height + 44)

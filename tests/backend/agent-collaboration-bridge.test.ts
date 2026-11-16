@@ -130,6 +130,7 @@ async function fixture(
   waitClock?: FakeCollaborationWaitClock,
   projects?: ConstructorParameters<typeof AgentCollaborationBridge>[0]['projects'],
   global = false,
+  onSessionCreated?: ConstructorParameters<typeof AgentCollaborationBridge>[0]['onSessionCreated'],
 ) {
   const records = [source, target, foreign, child, archived]
   const apexSessions = service(records, {
@@ -141,6 +142,7 @@ async function fixture(
   const apexManager = manager(targetRuntime, () => records.push(created))
   const bridge = new AgentCollaborationBridge({
     extensionPath: '/app/extensions/apex-collaboration.ts',
+    onSessionCreated,
     ...(global ? { globalCoordinatorPath: () => source.filePath, authorizedProjects: () => [{ id: 'a', name: 'A', primaryFolder: '/project' }, { id: 'b', name: 'B', primaryFolder: '/other' }] } : {}),
     sessions: { pi: apexSessions },
     agents: { pi: apexManager as unknown as AgentRpcManager },
@@ -474,7 +476,8 @@ describe('AgentCollaborationBridge', () => {
   })
 
   it('lists GUI-visible models and creates a readable peer with the selected model and reasoning', async () => {
-    const { bridge, call, apexManager } = await fixture()
+    const onSessionCreated = vi.fn(async () => undefined)
+    const { bridge, call, apexManager } = await fixture(true, defaultTargetTranscript, undefined, undefined, false, onSessionCreated)
     const createdEnvironment = bridge.environmentFor({ cwd: '/project', harness: 'pi' })
     bridge.bindSession(createdEnvironment.GOOEYPI_COLLABORATION_TOKEN, undefined, 'runtime-created')
     const models = await call('models', { query: 'GPT five six sol' })
@@ -491,6 +494,7 @@ describe('AgentCollaborationBridge', () => {
       prompt: 'Review the model integration.', title: 'Model reviewer', model: 'GPT five six sol', reasoning: 'very high', fast: true,
     })
     expect(response.status).toBe(200)
+    expect(onSessionCreated).toHaveBeenCalledWith(source.filePath, expect.objectContaining({ id: created.id }), undefined)
     expect(response.body.result).toMatchObject({
       created: true,
       session: { id: created.id, harness: 'pi', title: 'Model reviewer', live: true },

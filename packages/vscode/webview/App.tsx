@@ -1,3 +1,10 @@
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import * as stylex from '@stylexjs/stylex'
+import { styles } from './session-controls.stylex'
+import { styles as webview } from './webview.stylex'
 import { Badge } from '@astryxdesign/core/Badge'
 import { Banner } from '@astryxdesign/core/Banner'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -154,49 +161,52 @@ export function App() {
   const selectedModel = state?.models.find((model) => model.key === state.model)
   const platform = detectRendererPlatform()
 
-  return <div className="app-shell apex-shell" data-platform={platform} data-ready={state ? 'true' : 'false'}>
-    <div className="workbench">
-      <header className="title-toolbar apex-toolbar">
+  return <div className={`app-shell apex-shell ${stylex.props(workbenchStyles.appShell, webview.shell).className ?? ""}`} data-platform={platform} data-ready={state ? 'true' : 'false'}>
+    <div className={`workbench ${stylex.props(workbenchStyles.workbench).className ?? ""}`}>
+      <header className={`title-toolbar apex-toolbar ${stylex.props(workbenchStyles.titleToolbar, responsiveStyles.titleToolbar, webview.toolbar).className ?? ""}`}>
         <SessionPicker
           status={state?.status}
           busy={busy}
           sessionName={state?.sessionName}
           onNotice={pushNotice}
         />
-        {state?.connection === 'desktop' ? <span className="apex-toolbar__workspace" title="Desktop owns the runtime. Prompts and controls go to the same session.">Desktop connected</span> : null}
-        {state?.cwd ? <span className="apex-toolbar__workspace" title={state.cwd}>{folderName(state.cwd)}</span> : null}
+        {state?.connection === 'desktop' ? <span className={`apex-toolbar__workspace ${stylex.props(webview.workspace).className}`} title="Desktop owns the runtime. Prompts and controls go to the same session.">Desktop connected</span> : null}
+        {state?.cwd ? <span className={`apex-toolbar__workspace ${stylex.props(webview.workspace).className}`} title={state.cwd}>{folderName(state.cwd)}</span> : null}
         <ApexButton
           variant="quiet"
           compact
+          xstyle={[styles.chip, webview.agentsTrigger, specialistsOpen && webview.agentsActive, runningSpecialists > 0 && webview.agentsRunning]}
           className={`permissions-chip apex-agents-trigger${specialistsOpen ? ' is-active' : ''}${runningSpecialists > 0 ? ' is-running' : ''}`}
           aria-pressed={specialistsOpen}
           aria-label={specialists.length ? `Sub-agents (${specialists.length})` : 'Sub-agents'}
           title={specialists.length ? `${specialists.length} sub-${specialists.length === 1 ? 'agent' : 'agents'} in this session` : 'View sub-agents in this session'}
           onClick={() => setSpecialistsOpen((open) => !open)}
         >
-          {runningSpecialists > 0 ? <CircleNotch className="spin" size={13} /> : <Robot size={13} />}
-          <span className="apex-agents-trigger__label">Agents</span>
-          {specialists.length > 0 ? <Badge label={String(specialists.length)} className="apex-agents-trigger__count" /> : null}
+          {runningSpecialists > 0 ? <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={13} /> : <Robot size={13} />}
+          <span className={`apex-agents-trigger__label ${stylex.props(webview.agentsLabel).className}`}>Agents</span>
+          {specialists.length > 0 ? <Badge label={String(specialists.length)} className="apex-agents-trigger__count" xstyle={[webview.agentsCount, runningSpecialists > 0 && webview.agentsRunningCount]} /> : null}
         </ApexButton>
       </header>
-      <div className="workbench__content">
-        <div className="session-workspace">
-          <div className="conversation-column">
-            <main className="conversation-pane" data-specialists-open={specialistsOpen ? 'true' : 'false'}>
+      <div className={`workbench__content ${stylex.props(workbenchStyles.workbenchContent).className ?? ""}`}>
+        <div className={`session-workspace ${stylex.props(workbenchStyles.sessionWorkspace).className ?? ""}`}>
+          <div className={`conversation-column ${stylex.props(workbenchStyles.conversationColumn).className ?? ""}`}>
+            <main className={`conversation-pane ${stylex.props(workbenchStyles.conversationPane, webview.conversation).className ?? ""}`} data-specialists-open={specialistsOpen ? 'true' : 'false'}>
               {state?.status === 'exited' ? (
                 <Banner
                   status="error"
                   role="alert"
                   className="apex-banner"
-                  title={<pre>{state.error ?? 'Pi stopped.'}</pre>}
+                  xstyle={webview.banner}
+                  title={<pre {...stylex.props(webview.bannerMessage)}>{state.error ?? 'Pi stopped.'}</pre>}
                   endContent={
-                    <ApexButton compact onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>
+                    <ApexButton compact xstyle={webview.bannerButton} onClick={() => postToHost({ type: 'command', action: { type: 'restart' } })}>
                       {state?.connection === 'desktop' ? 'Reconnect to Desktop' : 'Restart Pi'}
                     </ApexButton>
                   }
                 />
               ) : null}
               <Transcript
+                hidden={specialistsOpen}
                 messages={messages}
                 git={git}
                 harness="pi"
@@ -210,13 +220,13 @@ export function App() {
                 queuedMessageCount={queuedMessages.length}
               />
               {specialistsOpen ? (
-                <section className="apex-specialists-pane" aria-label="Sub-agents">
-                  <div className="apex-specialists-pane__bar">
-                    <span className="apex-specialists-pane__title">
-                      <Robot size={13} aria-hidden="true" />
+                <section className={`apex-specialists-pane ${stylex.props(webview.specialistsPane).className}`} aria-label="Sub-agents">
+                  <div className={`apex-specialists-pane__bar ${stylex.props(webview.specialistsBar).className}`}>
+                    <span className={`apex-specialists-pane__title ${stylex.props(webview.specialistsTitle).className}`}>
+                      <Robot {...stylex.props(webview.specialistsIcon)} size={13} aria-hidden="true" />
                       <span>Sub-agents</span>
                     </span>
-                    <ApexButton compact className="apex-specialists-pane__close" onClick={() => setSpecialistsOpen(false)}>
+                    <ApexButton compact className="apex-specialists-pane__close" xstyle={webview.specialistsClose} onClick={() => setSpecialistsOpen(false)}>
                       Back to chat
                     </ApexButton>
                   </div>
@@ -231,16 +241,16 @@ export function App() {
                   />
                 </section>
               ) : null}
-              <div className="conversation-bottom-dock">
-                <div className="apex-editor-context" data-included={attachEditor ? 'true' : 'false'} role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
-                  {state?.connection === 'desktop' && Boolean(state.pendingCount) ? <span className="apex-editor-context__detail">{state.pendingCount} queued in Desktop</span> : null}
-                  <span className="apex-editor-context__label">Editor</span>
-                  <span className="apex-editor-context__file">{editorFile?.name ?? 'No active text file'}</span>
-                  {editorFile?.dirty ? <span className="apex-editor-context__detail">Unsaved</span> : null}
-                  {editorFile?.selection ? <span className="apex-editor-context__detail">
+              <div className={`conversation-bottom-dock ${stylex.props(workbenchStyles.conversationBottomDock, webview.dock).className ?? ""}`}>
+                <div className={`apex-editor-context ${stylex.props(webview.editorContext).className}`} data-included={attachEditor ? 'true' : 'false'} role="status" aria-live="polite" aria-atomic="true" title={editorFile ? `${editorFile.path}\nEditor context is captured when you send a message.` : 'Open a text file to include its editor context.'}>
+                  {state?.connection === 'desktop' && Boolean(state.pendingCount) ? <span className={`apex-editor-context__detail ${stylex.props(webview.editorDetail).className}`}>{state.pendingCount} queued in Desktop</span> : null}
+                  <span className={`apex-editor-context__label ${stylex.props(webview.editorLabel).className}`}>Editor</span>
+                  <span className={`apex-editor-context__file ${stylex.props(webview.editorFile, !attachEditor && webview.editorFileExcluded).className}`}>{editorFile?.name ?? 'No active text file'}</span>
+                  {editorFile?.dirty ? <span className={`apex-editor-context__detail ${stylex.props(webview.editorDetail).className}`}>Unsaved</span> : null}
+                  {editorFile?.selection ? <span className={`apex-editor-context__detail ${stylex.props(webview.editorDetail).className}`}>
                     {selectionLabel(editorFile.selection)}
                   </span> : null}
-                  <ApexButton variant="quiet" compact className="apex-editor-context__toggle" aria-pressed={attachEditor} aria-label="Include editor context" title={attachEditor ? 'Editor context will be sent' : 'Editor context will not be sent'} onClick={() => setAttachEditor(current => !current)}>
+                  <ApexButton variant="quiet" compact className="apex-editor-context__toggle" xstyle={[webview.editorToggle, attachEditor && webview.editorToggleIncluded]} aria-pressed={attachEditor} aria-label="Include editor context" title={attachEditor ? 'Editor context will be sent' : 'Editor context will not be sent'} onClick={() => setAttachEditor(current => !current)}>
                     {attachEditor ? 'On' : 'Off'}
                   </ApexButton>
                 </div>

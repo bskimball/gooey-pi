@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as workbenchStyles } from './styles/workbench.stylex'
 import { Archive as PhArchive } from '@phosphor-icons/react/dist/csr/Archive'
 import { ArrowClockwise as PhArrowClockwise } from '@phosphor-icons/react/dist/csr/ArrowClockwise'
 import { ArrowCounterClockwise as PhArrowCounterClockwise } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise'
@@ -119,7 +121,7 @@ function createPhosphorIcon(
           ref={ref}
           weight={weight}
           mirrored={mirrored}
-          className={classes}
+          className={[classes, stylex.props(workbenchStyles.phIcon).className].filter(Boolean).join(' ')}
           aria-hidden={ariaHidden}
           focusable="false"
           {...props}

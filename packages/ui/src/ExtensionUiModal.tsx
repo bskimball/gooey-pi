@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as overlaysStyles } from './styles/overlays.stylex'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
@@ -266,19 +268,19 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   )
   const questionnaireContent = questionnaire ? (
         <div ref={questionnaireRef} className="extension-questionnaire" onKeyDown={handleQuestionnaireKeyDown}>
-          {inline ? <h2 className="extension-questionnaire__inline-title">{activeQuestion?.title ?? request.title}</h2> : null}
-          {!questionnaire.complete ? <p className="modal-intro">Preparing questions…</p> : null}
+          {inline ? <h2 className={`extension-questionnaire__inline-title ${stylex.props(overlaysStyles.extensionQuestionnaireInlineTitle).className ?? ""}`}>{activeQuestion?.title ?? request.title}</h2> : null}
+          {!questionnaire.complete ? <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Preparing questions…</p> : null}
           {questionnaire.complete ? (
             <>
               {remainingSeconds !== undefined ? (
-                <div className="extension-questionnaire__timer" role="timer" aria-live="polite">
+                <div className={`extension-questionnaire__timer ${stylex.props(overlaysStyles.extensionQuestionnaireTimer).className ?? ""}`} role="timer" aria-live="polite">
                   <span>Time remaining</span>
                   <strong aria-label={`${remainingSeconds} seconds remaining`}>
                     {remainingSeconds}s
                   </strong>
                 </div>
               ) : null}
-              <div className="extension-questionnaire__progress" aria-label="Question progress">
+              <div className={`extension-questionnaire__progress ${stylex.props(overlaysStyles.extensionQuestionnaireProgress).className ?? ""}`} aria-label="Question progress">
                 {questionnaire.questions.map((question, index) => (
                   <button type="button" key={question.id} aria-current={questionIndex === index ? 'step' : undefined} className={questionIndex === index ? 'is-active' : ''} onClick={() => navigateQuestion(index)}>
                     {wizardContext.answeredByQuestion[question.id] ? '✓' : '○'} {index + 1}
@@ -288,9 +290,9 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
               </div>
               {activeQuestion ? (
                 <div className="extension-questionnaire__question">
-                  <p className="modal-intro">Question {questionIndex + 1} of {questionnaire.questions.length}</p>
+                  <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Question {questionIndex + 1} of {questionnaire.questions.length}</p>
                   {inline ? null : <h3>{activeQuestion.title}</h3>}
-                  <div className="extension-question__options" role="listbox" aria-label={activeQuestion.title}>
+                  <div className={`extension-question__options ${stylex.props(overlaysStyles.extensionQuestionOptions).className ?? ""}`} role="listbox" aria-label={activeQuestion.title}>
                     {activeQuestion.options.map((option, index) => {
                       const isSelected = activeSelected === index
                       return <button
@@ -301,12 +303,12 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                         key={`${option}-${index}`}
                         onClick={() => commitQuestion(index)}
                       >
-                        <span className="extension-question__option-index">{index + 1}</span>
+                        <span className={`extension-question__option-index ${stylex.props(overlaysStyles.extensionQuestionOptionIndex).className ?? ""}`}>{index + 1}</span>
                         <span>{option}</span>
                       </button>
                     })}
                   </div>
-                  <label className="field extension-questionnaire__context">
+                  <label className={`field extension-questionnaire__context ${stylex.props(overlaysStyles.field, overlaysStyles.extensionQuestionnaireContext).className ?? ""}`}>
                     <span>Type to add context</span>
                     <input
                       ref={(element) => { contextInputRefs.current[activeQuestion.id] = element }}
@@ -316,10 +318,10 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                       onChange={(event) => dispatchWizard({ type: 'TYPE_CONTEXT', text: event.target.value })}
                     />
                   </label>
-                  <p className="extension-questionnaire__hint">{shortcutLabel(platform, ['Primary', 'ArrowLeft'])} / {shortcutLabel(platform, ['Primary', 'ArrowRight'])} or PgUp/PgDn questions · ↑ ↓ choices · 1–9 select · Enter continue</p>
+                  <p className={`extension-questionnaire__hint ${stylex.props(overlaysStyles.extensionQuestionnaireHint).className ?? ""}`}>{shortcutLabel(platform, ['Primary', 'ArrowLeft'])} / {shortcutLabel(platform, ['Primary', 'ArrowRight'])} or PgUp/PgDn questions · ↑ ↓ choices · 1–9 select · Enter continue</p>
                 </div>
               ) : (
-                <div className="extension-questionnaire__submit" role="listbox" aria-label="Submit answers">
+                <div className={`extension-questionnaire__submit ${stylex.props(overlaysStyles.extensionQuestionnaireSubmit).className ?? ""}`} role="listbox" aria-label="Submit answers">
                   {questionnaire.questions.map((question) => {
                     const answer = questionnaireAnswer(question, wizardContext.selectedByQuestion[question.id] ?? 0, wizardContext.contexts)
                     return <p key={question.id}><strong>{question.index + 1}.</strong> {answer?.answer ?? 'Not answered'}</p>
@@ -332,9 +334,9 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   ) : null
 
   if (inline) {
-    return <section className="extension-questionnaire-inline" aria-label={request.title}>
+    return <section className={`extension-questionnaire-inline ${stylex.props(overlaysStyles.extensionQuestionnaireInline).className ?? ""}`} aria-label={request.title}>
       {questionnaireContent}
-      <div className="extension-questionnaire-inline__footer">{footer}</div>
+      <div className={`extension-questionnaire-inline__footer ${stylex.props(overlaysStyles.extensionQuestionnaireInlineFooter).className ?? ""}`}>{footer}</div>
     </section>
   }
 
@@ -343,9 +345,9 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
       {questionnaireContent}
       {selectRequest ? (
         <div className="extension-question">
-          <p className="modal-intro">Choose an option to let the agent continue.</p>
+          <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Choose an option to let the agent continue.</p>
           {searchable ? (
-            <label className="field extension-question__search">
+            <label className={`field extension-question__search ${stylex.props(overlaysStyles.field, overlaysStyles.extensionQuestionSearch).className ?? ""}`}>
               <span>Search {selectRequest.options.length} options</span>
               <input
                 ref={searchInputRef}
@@ -362,7 +364,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
             </label>
           ) : null}
           {selectOptions.length ? (
-            <div id={selectListId} className="extension-question__options" role="listbox" aria-label={selectRequest.title} onKeyDown={handleOptionsKeyDown}>
+            <div id={selectListId} className={`extension-question__options ${stylex.props(overlaysStyles.extensionQuestionOptions).className ?? ""}`} role="listbox" aria-label={selectRequest.title} onKeyDown={handleOptionsKeyDown}>
               {selectOptions.map(({ option, index }, position) => (
                 <button
                   type="button"
@@ -375,18 +377,18 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                   onClick={() => { setSelected(position); onRespond({ value: option }) }}
                   onFocus={() => setSelected(position)}
                 >
-                  {searchable ? null : <span className="extension-question__option-index">{index + 1}</span>}
+                  {searchable ? null : <span className={`extension-question__option-index ${stylex.props(overlaysStyles.extensionQuestionOptionIndex).className ?? ""}`}>{index + 1}</span>}
                   <span>{option}</span>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="extension-question__empty" role="status">No options match “{query.trim()}”. Clear the search to see all {selectRequest.options.length}.</p>
+            <p className={`extension-question__empty ${stylex.props(overlaysStyles.extensionQuestionEmpty).className ?? ""}`} role="status">No options match “{query.trim()}”. Clear the search to see all {selectRequest.options.length}.</p>
           )}
-          {searchable ? <p className="extension-questionnaire__hint">{selectOptions.length} of {selectRequest.options.length} · ↑ ↓ choose · Enter select · Esc cancel</p> : null}
+          {searchable ? <p className={`extension-questionnaire__hint ${stylex.props(overlaysStyles.extensionQuestionnaireHint).className ?? ""}`}>{selectOptions.length} of {selectRequest.options.length} · ↑ ↓ choose · Enter select · Esc cancel</p> : null}
         </div>
       ) : null}
-      {request.method === 'confirm' ? <p className="modal-intro extension-question__message">{request.message}</p> : null}
+      {request.method === 'confirm' ? <p className={`modal-intro extension-question__message ${stylex.props(overlaysStyles.modalIntro, overlaysStyles.extensionQuestionMessage).className ?? ""}`}>{request.message}</p> : null}
       {request.method === 'input' ? (
         <TextInput
           label="Response"

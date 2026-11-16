@@ -601,14 +601,10 @@ describe('sidebar brand header', () => {
     })
   }
 
-  it('renders a static Pi brand header without a harness switcher dropdown', async () => {
+  it('renders no brand header or harness switcher dropdown in the sidebar', async () => {
     await renderSidebar()
 
-    const brand = container.querySelector<HTMLElement>('.sidebar__brand')
-    expect(brand).not.toBeNull()
-    expect(brand!.getAttribute('aria-label')).toBe('Pi Work')
-    expect(brand!.textContent).toBe('')
-    expect(brand!.querySelector('.pi-mark')).not.toBeNull()
+    expect(container.querySelector('.sidebar__brand')).toBeNull()
     expect(container.querySelector('.brand-switcher__trigger')).toBeNull()
     expect(container.querySelector('[role="menu"]')).toBeNull()
     expect([...container.querySelectorAll('nav.sidebar__primary button span')].map((item) => item.textContent)).toContain('Scheduled')

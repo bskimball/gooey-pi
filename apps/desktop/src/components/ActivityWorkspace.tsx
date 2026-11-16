@@ -1,0 +1,66 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex'
+import type { CSSProperties, ReactNode, Ref } from 'react'
+import { ArrowsInSimple, ArrowsOutSimple, SidebarRight } from './icons'
+import { InspectorShell } from './InspectorShell'
+import { ResizeHandle } from './ResizeHandle'
+import { IconButton } from './ui'
+import { INSPECTOR_MIN } from '@/hooks/usePanelLayout'
+
+interface ActivityWorkspaceProps {
+  rowRef: Ref<HTMLDivElement>
+  inspectorVisible: boolean
+  compact: boolean
+  width: number
+  maxWidth: number
+  defaultWidth: number
+  expanded: boolean
+  onWidthChange(value: number): void
+  onToggleExpanded(): void
+  onClose(): void
+  children(renderInspector: (content: ReactNode) => ReactNode): ReactNode
+}
+
+const styles = stylex.create({ header: { alignItems: 'center', fontSize: 12 } })
+
+export function ActivityWorkspace({ rowRef, inspectorVisible, compact, width, maxWidth, defaultWidth, expanded, onWidthChange, onToggleExpanded, onClose, children }: ActivityWorkspaceProps) {
+  const renderInspector = (content: ReactNode) => (
+    <>
+      {inspectorVisible && !compact ? <ResizeHandle orientation="vertical" label="Resize inspector" value={width} min={INSPECTOR_MIN} max={maxWidth} defaultValue={defaultWidth} onChange={onWidthChange} /> : null}
+      <InspectorShell visible={inspectorVisible} overlay={compact} onClose={onClose} label="Space details">
+        <div className={`inspector__tabs ${stylex.props(inspectorStyles.inspectorTabs, [responsiveStyles.inspectorTabs, responsiveLayoutStyles.inspectorTabs], styles.header).className ?? ''}`}>
+          <strong>Space details</strong>
+          <span className={`inspector__tab-spacer ${stylex.props(inspectorStyles.inspectorTabSpacer).className ?? ''}`} />
+          {!compact ? (
+            <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label={expanded ? 'Restore inspector width' : 'Expand inspector'} onClick={onToggleExpanded}>
+              {expanded ? <ArrowsInSimple size={16} /> : <ArrowsOutSimple size={16} />}
+            </IconButton>
+          ) : null}
+          {compact ? (
+            <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label="Close inspector" onClick={onClose}>
+              <SidebarRight size={16} />
+            </IconButton>
+          ) : null}
+        </div>
+        <div className={`inspector__body ${stylex.props(inspectorStyles.inspectorBody).className ?? ''}`}>{content}</div>
+      </InspectorShell>
+      {inspectorVisible ? (
+        <button
+          type="button"
+          className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ''}`}
+          aria-label="Close inspector"
+          onClick={onClose}
+        />
+      ) : null}
+    </>
+  )
+  return (
+    <div ref={rowRef} className={`session-workspace ${stylex.props(workbenchStyles.sessionWorkspace).className ?? ''}`} style={{ '--inspector-width': `${width}px` } as CSSProperties}>
+      {children(renderInspector)}
+    </div>
+  )
+}

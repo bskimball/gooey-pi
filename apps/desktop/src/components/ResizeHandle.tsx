@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { useEffect, useRef } from 'react'
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
@@ -5,6 +7,9 @@ type Orientation = 'vertical' | 'horizontal'
 
 interface ResizeHandleProps {
   orientation: Orientation
+  edge?: 'start' | 'end'
+  cssVariable?: string
+  scopeSelector?: string
   label: string
   value: number
   min: number
@@ -15,9 +20,10 @@ interface ResizeHandleProps {
 
 const clamp = (value: number, min: number, max: number) => Math.round(Math.min(Math.max(min, max), Math.max(min, value)))
 
-export function ResizeHandle({ orientation, label, value, min, max, defaultValue, onChange }: ResizeHandleProps) {
+export function ResizeHandle({ orientation, edge = 'start', cssVariable = orientation === 'vertical' ? '--inspector-width' : '--terminal-height', scopeSelector = '.session-workspace', label, value, min, max, defaultValue, onChange }: ResizeHandleProps) {
   const cleanupRef = useRef<(() => void) | null>(null)
   const safeMax = Math.max(min, max)
+  const direction = edge === 'end' ? 1 : -1
   const readCoordinate = (event: Pick<PointerEvent, 'clientX' | 'clientY'>) => orientation === 'vertical' ? event.clientX : event.clientY
 
   useEffect(() => () => cleanupRef.current?.(), [])
@@ -27,10 +33,10 @@ export function ResizeHandle({ orientation, label, value, min, max, defaultValue
     let next: number | undefined
     if (event.key === 'Home') next = min
     if (event.key === 'End') next = safeMax
-    if (orientation === 'vertical' && event.key === 'ArrowLeft') next = value + step
-    if (orientation === 'vertical' && event.key === 'ArrowRight') next = value - step
-    if (orientation === 'horizontal' && event.key === 'ArrowUp') next = value + step
-    if (orientation === 'horizontal' && event.key === 'ArrowDown') next = value - step
+    if (orientation === 'vertical' && event.key === 'ArrowLeft') next = value - direction * step
+    if (orientation === 'vertical' && event.key === 'ArrowRight') next = value + direction * step
+    if (orientation === 'horizontal' && event.key === 'ArrowUp') next = value - direction * step
+    if (orientation === 'horizontal' && event.key === 'ArrowDown') next = value + direction * step
     if (next === undefined) return
     event.preventDefault()
     onChange(clamp(next, min, safeMax))
@@ -44,8 +50,7 @@ export function ResizeHandle({ orientation, label, value, min, max, defaultValue
     const pointerId = event.pointerId
     const startCoordinate = readCoordinate(event.nativeEvent)
     const startValue = value
-    const workspace = target.closest<HTMLElement>('.session-workspace')
-    const cssVariable = orientation === 'vertical' ? '--inspector-width' : '--terminal-height'
+    const workspace = target.closest<HTMLElement>(scopeSelector)
     let latestValue = startValue
     target.dataset.resizing = 'true'
     document.body.classList.add(`is-resizing-${orientation}`)
@@ -54,7 +59,7 @@ export function ResizeHandle({ orientation, label, value, min, max, defaultValue
     const move = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return
       moveEvent.preventDefault()
-      latestValue = clamp(startValue - (readCoordinate(moveEvent) - startCoordinate), min, safeMax)
+      latestValue = clamp(startValue + direction * (readCoordinate(moveEvent) - startCoordinate), min, safeMax)
       workspace?.style.setProperty(cssVariable, `${latestValue}px`)
     }
     const finish = (finishEvent?: PointerEvent, commit = true) => {
@@ -78,7 +83,7 @@ export function ResizeHandle({ orientation, label, value, min, max, defaultValue
 
   return (
     <div
-      className={`resize-handle resize-handle--${orientation}`}
+      className={[`resize-handle resize-handle--${orientation}${edge === 'end' ? ' resize-handle--end' : ''}`, stylex.props(workbenchStyles.resizeHandle, ((orientation === "vertical")) && workbenchStyles.resizeHandleVertical, ((orientation === "horizontal")) && workbenchStyles.resizeHandleHorizontal, edge === 'end' && orientation === 'vertical' && workbenchStyles.resizeHandleVerticalEnd).className].filter(Boolean).join(' ')}
       role="separator"
       aria-label={label}
       aria-orientation={orientation}

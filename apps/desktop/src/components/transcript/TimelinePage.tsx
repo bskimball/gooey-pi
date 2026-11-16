@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CaretRight } from '../icons'
 
@@ -33,14 +35,14 @@ export function TimelinePage({ recent, start, count, children }: { recent: boole
     setRetained(false)
   }, [recent, retained])
 
-  return <div className="timeline-page">
+  return <div className={`timeline-page ${stylex.props(transcriptStyles.timelinePage).className ?? ""}`}>
     {!recent ? <button
       type="button"
-      className="timeline-page__toggle"
+      className={`timeline-page__toggle ${stylex.props(transcriptStyles.timelinePageToggle).className ?? ""}`}
       aria-expanded={open}
       aria-controls={id}
       onClick={() => setExpanded(!open)}
-    ><CaretRight className="disclosure-caret" size={13} />{open ? 'Hide' : 'Show'} earlier activity (steps {start}-{start + count - 1})</button> : null}
+    ><CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />{open ? 'Hide' : 'Show'} earlier activity (steps {start}-{start + count - 1})</button> : null}
     <div
       id={id}
       ref={bodyRef}

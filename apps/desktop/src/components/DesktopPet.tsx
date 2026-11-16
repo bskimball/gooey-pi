@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as petContext, desktopPetMarker } from 'apex-ui/styles/pets-context.stylex'
+import { styles as petsStyles } from 'apex-ui/styles/pets.stylex'
 import { useMachine } from '@xstate/react'
 import { Microphone, MicrophoneSlash, Waveform, X } from './icons'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
@@ -201,14 +204,14 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
   return (
     <div
       ref={surfaceRef}
-      className={`desktop-pet desktop-pet--${activity}${voiceActive ? ' is-voice-active' : ''}${dismissArmed ? ' is-dismiss-armed' : ''}`}
+      className={[`desktop-pet desktop-pet--${activity}${voiceActive ? ' is-voice-active' : ''}${dismissArmed ? ' is-dismiss-armed' : ''}`, stylex.props(petsStyles.desktopPet, desktopPetMarker).className].filter(Boolean).join(' ')}
       style={{ left: position.x, top: position.y, '--pet-avatar-size': `${avatarSize}px`, '--pet-surface-width': `${surfaceWidth}px`, '--pet-surface-min-height': `${initialSurfaceHeight - 8}px` } as React.CSSProperties}
       role={voiceActive ? 'complementary' : undefined}
       aria-label={voiceActive ? 'Realtime voice session' : undefined}
       data-horizontal-edge={position.x > window.innerWidth / 2 ? 'right' : 'left'}
     >
       <div
-        className="desktop-pet__drag-target"
+        className={`desktop-pet__drag-target ${stylex.props(petsStyles.desktopPetDragTarget, activity === 'running-left' && petContext.runningLeft, activity === 'running-right' && petContext.runningRight, dismissArmed && petContext.dismissArmed, reduceMotion && dismissArmed && petContext.noTransition).className ?? ""}`}
         role="button"
         tabIndex={0}
         aria-label={`${pet.displayName}, draggable Apex pet`}
@@ -219,28 +222,28 @@ export function DesktopPet({ pets, petId, agentBusy, voiceActive, reduceMotion, 
         onPointerCancel={(event) => finishDrag(event, true)}
         onKeyDown={moveByKeyboard}
       >
-        <span className="desktop-pet__avatar">
+        <span className={`desktop-pet__avatar ${stylex.props(petsStyles.desktopPetAvatar).className ?? ""}`}>
           <PetAvatar pet={pet} pets={pets} activity={activity} size={avatarSize} reduceMotion={reduceMotion} />
         </span>
       </div>
-      {voiceActive && voiceStatus ? <span className="desktop-pet__voice-status" role="status">{voiceStatus}</span> : null}
-      <div className="desktop-pet__voice-controls" aria-label="Realtime voice controls">
-        {!voiceActive && onOpenVoice ? <button ref={voiceControlRef} type="button" aria-label="Open realtime voice" title="Open realtime voice" onClick={onOpenVoice}><Waveform size={15} /></button> : null}
-        {voiceActive && onToggleVoiceMute ? <button ref={voiceControlRef} type="button" aria-label={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} title={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={onToggleVoiceMute}>{voiceMuted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button> : null}
-        {voiceActive && onCloseVoice ? <button type="button" aria-label="Close realtime voice" title="Close realtime voice" onClick={onCloseVoice}><X size={16} /></button> : null}
+      {voiceActive && voiceStatus ? <span className={`desktop-pet__voice-status ${stylex.props(petsStyles.desktopPetVoiceStatus).className ?? ""}`} role="status">{voiceStatus}</span> : null}
+      <div className={`desktop-pet__voice-controls ${stylex.props(petsStyles.desktopPetVoiceControls, !voiceActive && petContext.inactiveVoiceControls).className ?? ""}`} aria-label="Realtime voice controls">
+        {!voiceActive && onOpenVoice ? <button {...stylex.props(petContext.voiceButton, petContext.openVoiceButton)} ref={voiceControlRef} type="button" aria-label="Open realtime voice" title="Open realtime voice" onClick={onOpenVoice}><Waveform size={15} /></button> : null}
+        {voiceActive && onToggleVoiceMute ? <button {...stylex.props(petContext.voiceButton)} ref={voiceControlRef} type="button" aria-label={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} title={voiceMuted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={onToggleVoiceMute}>{voiceMuted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button> : null}
+        {voiceActive && onCloseVoice ? <button {...stylex.props(petContext.voiceButton)} type="button" aria-label="Close realtime voice" title="Close realtime voice" onClick={onCloseVoice}><X size={16} /></button> : null}
       </div>
-      {voiceError ? <p className="desktop-pet__voice-error" role="alert">{voiceError}</p> : null}
+      {voiceError ? <p className={`desktop-pet__voice-error ${stylex.props(petsStyles.desktopPetVoiceError, position.x > window.innerWidth / 2 ? petContext.edgeRight : petContext.edgeLeft).className ?? ""}`} role="alert">{voiceError}</p> : null}
       {children}
       {onDismiss ? createPortal(
         <div
-          className={`pet-dismiss-drawer${dragging ? ' is-visible' : ''}${dismissArmed ? ' is-armed' : ''}`}
+          className={[`pet-dismiss-drawer${dragging ? ' is-visible' : ''}${dismissArmed ? ' is-armed' : ''}`, stylex.props(petsStyles.petDismissDrawer).className].filter(Boolean).join(' ')}
           role={dragging ? 'status' : undefined}
           aria-hidden={dragging ? undefined : true}
           aria-label={dragging ? (dismissArmed ? 'Release to hide desktop pet' : 'Drag here to hide desktop pet') : undefined}
         >
-          <span ref={dismissTargetRef} className="pet-dismiss-drawer__hitbox" aria-hidden="true" />
-          <span className="pet-dismiss-drawer__visual">
-            <span className="pet-dismiss-drawer__target"><X size={28} /></span>
+          <span ref={dismissTargetRef} className={`pet-dismiss-drawer__hitbox ${stylex.props(petsStyles.petDismissDrawerHitbox).className ?? ""}`} aria-hidden="true" />
+          <span className={`pet-dismiss-drawer__visual ${stylex.props(petsStyles.petDismissDrawerVisual, dragging && petContext.drawerVisible, reduceMotion && petContext.noTransition).className ?? ""}`}>
+            <span className={`pet-dismiss-drawer__target ${stylex.props(petsStyles.petDismissDrawerTarget, dismissArmed && petContext.drawerArmed, dismissArmed && petContext.drawerPulse, reduceMotion && petContext.drawerReduced).className ?? ""}`}><X size={28} /></span>
           </span>
         </div>,
         document.body,

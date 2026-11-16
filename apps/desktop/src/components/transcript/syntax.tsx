@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { Fragment, memo } from 'react'
 import { tokenizeSyntaxText, type SyntaxTokenKind } from '@/lib/syntax-text'
 
@@ -34,7 +36,7 @@ export function tokenizeSyntax(text: string): SyntaxToken[] {
 
 export const SyntaxText = memo(function SyntaxText({ text }: { text: string }) {
   return <>{tokenizeSyntax(text).map((token, index) => (
-    <span className={token.kind === 'plain' ? undefined : `syntax-${token.kind}`} key={`${index}-${token.text.slice(0, 8)}`}>{token.text}</span>
+    <span className={[token.kind === 'plain' ? undefined : `syntax-${token.kind}`, stylex.props(((token.kind === 'plain') ? (false) : (((token.kind === "key")))) && transcriptStyles.syntaxKey, ((token.kind === 'plain') ? (false) : (((token.kind === "string")))) && transcriptStyles.syntaxString, ((token.kind === 'plain') ? (false) : (((token.kind === "keyword")))) && transcriptStyles.syntaxKeyword, ((token.kind === 'plain') ? (false) : (((token.kind === "number")))) && transcriptStyles.syntaxNumber).className].filter(Boolean).join(' ')} key={`${index}-${token.text.slice(0, 8)}`}>{token.text}</span>
   ))}</>
 })
 

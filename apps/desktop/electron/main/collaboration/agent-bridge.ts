@@ -59,6 +59,7 @@ export interface AgentCollaborationBridgeOptions {
   disabledModels: Record<'pi', () => ReadonlySet<string>>
   waitClock?: CollaborationWaitClock
   projects?: Pick<ProjectService, 'collaborationScope'>
+  onSessionCreated?: (sourceSessionPath: string, session: SessionRecord, projectId?: string) => Promise<void>
   globalCoordinatorPath?: () => string | undefined
   authorizedProjects?: () => Array<{ id: string; name: string; primaryFolder: string; readOnly?: boolean }>
 }
@@ -477,6 +478,7 @@ export class AgentCollaborationBridge extends CapabilityBridge {
       await manager.stop(runtime.runtimeId).catch(() => false)
       throw new Error('The harness created a runtime but its session is not yet readable from Apex')
     }
+    await this.options.onSessionCreated?.(source.session.filePath, created, targetProjectId)
     return {
       created: true,
       session: {

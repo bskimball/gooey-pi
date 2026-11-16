@@ -1,3 +1,4 @@
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import * as stylex from '@stylexjs/stylex'
 import type { useTaskWorkflows } from '@/hooks/useTaskWorkflows'
 import { ArrowUUpLeft, ChatCircleDots, CheckCircle } from './icons'
@@ -38,7 +39,7 @@ export function TaskWorkflowNotice({ workflow }: { workflow: Workflow }) {
   if (!workflow.context.sessionFile || (!workflow.side && !workflow.pending && !workflow.error)) return null
   return <div {...stylex.props(styles.notice)}>
     {workflow.side ? <>
-      <span title={SIDE_DISCLAIMER} {...stylex.props(styles.sidePill)}><ChatCircleDots size={12} /> Side conversation · read/search-only tools<span className="sr-only">. {SIDE_DISCLAIMER}</span></span>
+      <span title={SIDE_DISCLAIMER} {...stylex.props(styles.sidePill)}><ChatCircleDots size={12} /> Side conversation · read/search-only tools<span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>. {SIDE_DISCLAIMER}</span></span>
       <span {...stylex.props(styles.muted)}>Select a reply to bring it back.</span>
     </> : null}
     {workflow.pending ? <span role="status">Preparing task action…</span> : null}

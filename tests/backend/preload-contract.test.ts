@@ -54,7 +54,16 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['projects', 'markSetupStarted', 'projects:mark-setup-started', ['project-id', 'npm install', 'omp']],
   ['projects', 'finishSetup', 'projects:finish-setup', ['project-id', 'npm install', 0, 'omp']],
   ['coordinator', 'open', 'coordinator:open', []],
+  ['coordinator', 'open', 'coordinator:open', ['space-id']],
+  ['spaces', 'list', 'spaces:list', []],
+  ['spaces', 'create', 'spaces:create', [{ name: 'Design', objective: 'Improve chat', projectId: 'project' }]],
+  ['spaces', 'update', 'spaces:update', ['space-id', { objective: 'Updated brief' }]],
   ['coordinator', 'close', 'coordinator:close', ['attachment-id']],
+  ['coordinator', 'reset', 'coordinator:reset', []],
+  ['coordinator', 'reset', 'coordinator:reset', ['space-id']],
+  ['specialists', 'list', 'specialists:list', ['/session.jsonl']],
+  ['specialists', 'track', 'specialists:track', [['/a.jsonl', '/b.jsonl']]],
+  ['specialists', 'watchWorkers', 'specialists:watch-workers', [['/worker.jsonl']]],
   ['sessions', 'create', 'sessions:create', ['/repo', 'pi']],
   ['sessions', 'list', 'sessions:list', ['/repo', true, 'omp', true]],
   ['sessions', 'read', 'sessions:read', ['/session.jsonl']],
@@ -154,6 +163,8 @@ const SUBSCRIPTION_CASES: Array<[domain: string, method: string, channel: string
   ['browser', 'onPointer', 'browser:pointer'],
   ['browser', 'onActivity', 'browser:activity'],
   ['schedules', 'onChanged', 'schedules:changed'],
+  ['specialists', 'onChanged', 'specialists:changed'],
+  ['specialists', 'onWorkerChanged', 'specialists:worker-changed'],
 ]
 
 describe('preload bridge contract', () => {

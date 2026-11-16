@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as sidebarStyles } from 'apex-ui/styles/sidebar.stylex'
 import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { isSessionRunning } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
@@ -11,9 +13,9 @@ import { StatusMark } from './activity/StatusMark'
 export function SessionStatusGlyph({ session, attention, live }: { session: SessionRecord; attention: boolean; live?: SessionLive }) {
   const mark = isSessionRunning(session, live) ? <StatusMark state="running" size={14} />
     : session.status === 'failed' && attention ? <StatusMark state="failed" size={14} />
-      : attention || session.status === 'waiting' ? <span className="session-row__dot" />
+      : attention || session.status === 'waiting' ? <span className={`session-row__dot ${stylex.props(sidebarStyles.sessionRowDot).className ?? ""}`} />
         : null
-  return <span className="session-row__trail" aria-hidden="true">{mark}</span>
+  return <span className={`session-row__trail ${stylex.props(sidebarStyles.sessionRowTrail).className ?? ""}`} aria-hidden="true">{mark}</span>
 }
 
 interface SidebarAttentionGroupsProps {
@@ -41,14 +43,14 @@ type AttentionGroupProps = Omit<SidebarAttentionGroupsProps, 'attention' | 'runn
 function AttentionGroup({ label, sessions, attention, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
   return (
     <section className="sidebar-attention" aria-label={label}>
-      <h2 className="sidebar__label">{label} <span className="n">{sessions.length}</span></h2>
+      <h2 className={`sidebar__label ${stylex.props(sidebarStyles.sidebarLabel).className ?? ""}`}>{label} <span className="n">{sessions.length}</span></h2>
       {sessions.map((session) => {
         const project = projects.find((candidate) => candidate.path === session.projectPath || candidate.folders.includes(session.projectPath))
         const selected = activeSessionId === session.id && activeView === 'session'
         return (
-          <button key={session.id} type="button" title={session.title} className={`sidebar-attention__row ${selected ? 'is-selected' : ''}`} onClick={() => onOpenSession(session, project?.id)}>
-            <span className="sidebar-attention__title">{session.title}</span>
-            <span className="sidebar-attention__project">{project?.name ?? session.projectPath.split(/[\\/]/).pop()}</span>
+          <button key={session.id} type="button" title={session.title} className={[`sidebar-attention__row ${selected ? 'is-selected' : ''}`, stylex.props(sidebarStyles.sidebarAttentionRow, (selected) && sidebarStyles.sidebarAttentionRowIsSelected).className].filter(Boolean).join(' ')} onClick={() => onOpenSession(session, project?.id)}>
+            <span className={`sidebar-attention__title ${stylex.props(sidebarStyles.sidebarAttentionTitle).className ?? ""}`}>{session.title}</span>
+            <span className={`sidebar-attention__project ${stylex.props(sidebarStyles.sidebarAttentionProject).className ?? ""}`}>{project?.name ?? session.projectPath.split(/[\\/]/).pop()}</span>
             <SessionStatusGlyph session={session} attention={attention} live={liveBySession?.[session.filePath]} />
           </button>
         )

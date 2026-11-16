@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as terminalStyles, contextStyles as terminalContext } from 'apex-ui/styles/terminal.stylex'
 import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -5,7 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { BackgroundJob } from '@/types/api'
 import type { BackgroundJobOutput } from '@/hooks/useBackgroundJobs'
 import { terminalLinkOpensExternally } from '@/lib/terminal-links'
-import { terminalTheme } from './terminalTheme'
+import { applyTerminalStyles, terminalTheme } from './terminalTheme'
 
 interface BackgroundJobViewProps {
   job: BackgroundJob
@@ -51,6 +53,7 @@ export function BackgroundJobView({ job, output, visible, onOpenLink }: Backgrou
     terminal.loadAddon(fit)
     terminal.loadAddon(new WebLinksAddon((event, uri) => onOpenLinkRef.current?.(uri, terminalLinkOpensExternally(event))))
     terminal.open(container)
+    applyTerminalStyles(terminal)
     terminalRef.current = terminal
     fitRef.current = fit
     try { fit.fit() } catch { /* initial layout is not ready */ }
@@ -95,5 +98,5 @@ export function BackgroundJobView({ job, output, visible, onOpenLink }: Backgrou
     requestAnimationFrame(() => { try { fitRef.current?.fit() } catch { /* tab is transitioning */ } })
   }, [visible])
 
-  return <div className="terminal-surface" ref={containerRef} hidden={!visible}/>
+  return <div className={`terminal-surface ${stylex.props(terminalStyles.terminalSurface, !visible && terminalContext.hidden).className ?? ""}`} ref={containerRef} hidden={!visible}/>
 }

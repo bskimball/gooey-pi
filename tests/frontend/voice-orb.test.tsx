@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from '../../apps/desktop/src/components/Sidebar'
+import { AppRail } from '../../apps/desktop/src/components/AppRail'
 import { TitleToolbar } from '../../apps/desktop/src/components/TitleToolbar'
 import { VoiceOrb } from '../../apps/desktop/src/components/VoiceOrb'
 import type { PetDefinition, ApexApi, ProjectRecord } from '../../apps/desktop/src/types/api'
@@ -50,21 +51,32 @@ describe('realtime voice surface', () => {
     localStorage.clear()
   })
 
-  it('places the waveform toggle immediately before the terminal button in the sidebar footer', () => {
-    act(() => root.render(<Sidebar projects={[]} sessions={[]} activeView="session" voiceOpen terminalOpen={false} onSelectProject={vi.fn()} onSelectSession={vi.fn()} onNavigate={vi.fn()} onNewSession={vi.fn()} onAddProject={vi.fn()} onRemoveProject={vi.fn()} onClose={vi.fn()} onOpenPalette={vi.fn()} onRenameSession={async () => undefined} onArchiveSession={async () => undefined} onToggleVoice={vi.fn()} onToggleTerminal={vi.fn()} />))
-    const labels = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')].map((button) => button.getAttribute('aria-label'))
-    expect(labels).toEqual(['Settings (⌘,)', 'Close realtime voice', 'Toggle terminal (⌘J)'])
+  it('places the active waveform toggle between terminal and settings in every view', () => {
+    for (const view of ['session', 'settings'] as const) {
+      act(() => root.render(<AppRail onNavigate={vi.fn()} view={view} voiceOpen onToggleVoice={vi.fn()} onToggleTerminal={vi.fn()} sidebarOpen onToggleSidebar={vi.fn()} />))
+      const voice = container.querySelector<HTMLButtonElement>('[aria-label="Close realtime voice"]')!
+      expect(voice.getAttribute('aria-pressed')).toBe('true')
+      expect(voice.classList.contains('is-active')).toBe(true)
+      expect(voice.previousElementSibling?.getAttribute('aria-label')).toContain('Toggle terminal')
+      const settings = container.querySelector('[aria-label="Settings (⌘,)"]')!
+      expect(settings.getAttribute('aria-label')).toBe('Settings (⌘,)')
+      expect(settings.classList.contains('is-active')).toBe(view === 'settings')
+      expect(settings.getAttribute('aria-current')).toBe(view === 'settings' ? 'page' : null)
+      expect(voice.nextElementSibling).toBe(settings)
+      expect(settings.nextElementSibling).toBeNull()
+    }
   })
 
   it('uses Linux shortcut labels on Linux', () => {
     act(() => root.render(<>
-      <Sidebar platform="linux" projects={[]} sessions={[]} activeView="session" terminalOpen={false} onSelectProject={vi.fn()} onSelectSession={vi.fn()} onNavigate={vi.fn()} onNewSession={vi.fn()} onAddProject={vi.fn()} onRemoveProject={vi.fn()} onClose={vi.fn()} onOpenPalette={vi.fn()} onRenameSession={async () => undefined} onArchiveSession={async () => undefined} onToggleTerminal={vi.fn()} />
-      <TitleToolbar platform="linux" view="session" sidebarOpen inspectorOpen onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onOpenBrowser={vi.fn()} />
+      <Sidebar platform="linux" projects={[]} sessions={[]} activeView="session" onSelectProject={vi.fn()} onSelectSession={vi.fn()} onNavigate={vi.fn()} onNewSession={vi.fn()} onAddProject={vi.fn()} onRemoveProject={vi.fn()} onClose={vi.fn()} onOpenPalette={vi.fn()} onRenameSession={async () => undefined} onArchiveSession={async () => undefined} />
+      <AppRail onNavigate={vi.fn()} platform="linux" onToggleTerminal={vi.fn()} view="session" sidebarOpen onToggleSidebar={vi.fn()} voiceOpen={false} onToggleVoice={vi.fn()} />
     </>))
-    const footerLabels = [...container.querySelectorAll<HTMLButtonElement>('.sidebar__footer button')].map((button) => button.getAttribute('aria-label'))
-    const toolbarLabels = [...container.querySelectorAll<HTMLButtonElement>('.title-toolbar__actions button')].map((button) => button.getAttribute('aria-label'))
-    expect(footerLabels).toContain('Toggle terminal (Ctrl+J)')
-    expect(toolbarLabels).toContain('Open browser (Ctrl+Shift+B)')
+    const toolbarLabels = [...container.querySelectorAll<HTMLButtonElement>('.app-rail__bottom button')].map((button) => button.getAttribute('aria-label'))
+    expect(container.querySelector('.sidebar__footer')).toBeNull()
+    expect(toolbarLabels).toContain('Settings (Ctrl+,)')
+    expect(toolbarLabels).toContain('Toggle terminal (Ctrl+J)')
+    expect(toolbarLabels).toContain('Open realtime voice')
   })
 
   it('prefers the live git branch for the session toolbar pill', () => {
@@ -83,7 +95,7 @@ describe('realtime voice surface', () => {
       readOnly: true,
       gitBranch: 'record-branch',
     }
-    act(() => root.render(<TitleToolbar project={project} gitBranch="live-branch" view="session" sidebarOpen inspectorOpen onToggleSidebar={vi.fn()} onToggleInspector={vi.fn()} onOpenBrowser={vi.fn()} />))
+    act(() => root.render(<TitleToolbar project={project} gitBranch="live-branch" view="session" />))
     expect(container.querySelector('.branch-pill')?.textContent).toContain('live-branch')
     expect(container.querySelector('.branch-pill')?.textContent).not.toContain('record-branch')
   })

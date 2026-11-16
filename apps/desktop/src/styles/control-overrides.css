@@ -3,8 +3,6 @@
    primitive's own font-size, min-height, border, and background. */
 .activity-stop-confirm .button--compact { min-height: 22px; padding-inline: 7px; font-size: var(--fs-meta); }
 .activity-peek__actions .button--compact { min-height: 28px; gap: 5px; padding-inline: 9px; font-size: var(--fs-meta); }
-.annotation-source .button { justify-self: start; min-height: 32px; }
-.annotation-popover .button { min-height: 26px; font-size: var(--fs-meta); }
 .project-run-menu > footer .button { min-height: 28px; font-size: var(--fs-meta); }
 .changes-toolbar > .button { font-size: var(--fs-meta); }
 
@@ -32,3 +30,29 @@
 	color: var(--danger);
 	background: var(--danger-soft);
 }
+
+.activity-row:has(.activity-row__clear):is(:hover, :focus-within, .is-selected) .activity-meta, .activity-row--running.is-confirming-stop .activity-meta { opacity: 0; pointer-events: none; }
+.activity-row:hover .activity-row__clear, .activity-row:focus-within .activity-row__clear, .activity-row.is-selected .activity-row__clear { opacity: 1; pointer-events: auto; }
+
+/* StyleX hides message actions until hover; the reveal must sit after the `stylex` layer to win. */
+.message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
+
+/* Chief of Staff reads as a conversation, not a working thread: your prompts sit right in tinted
+   bubbles, its replies sit left in raised ones, and turns are spaced like messages. */
+.transcript--chat .message { margin-bottom: 14px; }
+.transcript--chat .message ~ .message--user { margin-top: 22px; }
+.transcript--chat .message--user { display: flex; justify-content: flex-end; align-items: flex-end; gap: 6px; padding: 0; border-left: 0; background: none; }
+.transcript--chat .message--user > .user-bubble { max-width: min(78%, 560px); padding: 9px 14px; border-radius: 18px 18px 4px 18px; background: color-mix(in srgb, var(--apex) 16%, var(--surface-raised)); }
+/* Copy and turn state sit beside the bubble, so they add no height between a prompt and its reply. */
+.transcript--chat .message--user > .message__turn-status,
+.transcript--chat .message--user > .message-actions { order: -1; flex: none; margin: 0 0 4px; }
+/* The reply's footer carries a finished turn's duration and the typing bubble shows a live one; only a failed turn badges the prompt. */
+.transcript--chat .message--user > .message__turn-status:not(.is-failed) { display: none; }
+.transcript--chat .message--assistant { display: flex; flex-direction: column; align-items: flex-start; }
+.transcript--chat .message--assistant > .message__content,
+.transcript--chat .transcript-active-placeholder > .streaming-state { position: relative; max-width: min(85%, 640px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 18px 18px 18px 4px; background: var(--surface-raised); }
+.transcript--chat .message--assistant > .message__content > .message-actions { position: absolute; bottom: 0; left: 100%; margin: 0 0 0 4px; }
+
+/* Back-to-back collapsed work groups (separate tool calls with no prose between) stack as one list. */
+.work-group:has(+ .work-group) { margin-bottom: 2px; }
+.work-group + .work-group { margin-top: 0; }

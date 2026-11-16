@@ -301,6 +301,30 @@ export interface ApexEventEnvelope {
   sequence?: number
 }
 
+/** One sub-agent a session delegated to, as the main process reads it from the session's task_* receipts. */
+export interface SpecialistRosterEntry {
+  id: string
+  agent: string
+  mission: string
+  status: 'running' | 'waiting' | 'done' | 'error' | 'stopped' | 'closed'
+  /** Last activity the parent recorded for a live worker. */
+  activity?: string
+  model?: string
+  sessionFile?: string
+  instanceId?: string
+}
+
+export interface SpecialistRosterChange {
+  /** The session path exactly as the window passed it to `specialists.track`. */
+  filePath: string
+  specialists: SpecialistRosterEntry[]
+}
+
+export interface SpecialistWorkerChange {
+  /** The worker transcript path exactly as the window passed it to `specialists.watchWorkers`. */
+  workerFile: string
+}
+
 export interface SessionChangeEvent {
   filePath?: string
   /** Harness whose session catalog changed; absent events predate harness scoping. */
@@ -875,6 +899,17 @@ export type RewindResult =
   | { kind: 'rewound'; sessionFile: string; sessionId: string; prompt: string; files: 'kept' | 'restored' }
   | { kind: 'restore-failed'; sessionFile: string; sessionId: string; prompt: string; error: string; filesMayBePartial: boolean }
 
+export interface SpaceRecord {
+  id: string
+  name: string
+  objective: string
+  projectId: string
+  sessionIds: string[]
+  coordinatorSession?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface CoordinatorAttachment {
   attachmentId: string
   eventSequence: number
@@ -885,9 +920,16 @@ export interface CoordinatorAttachment {
 }
 
 export interface ApexApi {
+  spaces: {
+    list(): Promise<SpaceRecord[]>
+    create(input: { name: string; objective: string; projectId: string; sessionIds?: string[] }): Promise<SpaceRecord>
+    update(id: string, input: { name?: string; objective?: string; sessionIds?: string[]; addSessionIds?: string[]; removeSessionIds?: string[] }): Promise<SpaceRecord>
+  }
   coordinator: {
-    open(): Promise<CoordinatorAttachment>
+    open(spaceId?: string): Promise<CoordinatorAttachment>
     close(attachmentId: string): Promise<boolean>
+    /** Archives the saved Chief of Staff session so the next open starts a fresh chat. */
+    reset(spaceId?: string): Promise<boolean>
   }
   app: { getMeta(): Promise<AppMeta>; refreshHarnesses(): Promise<{ meta: AppMeta; settings: AppSettings }>; openExternal(url: string): Promise<boolean>; revealPath(path: string): Promise<boolean>; openInVsCode(path: string, line?: number): Promise<boolean>; resolveBrowserSource(cwd: string, hint: BrowserSourceHint): Promise<BrowserSourceResult>; readWorkspaceImage(cwd: string, path: string): Promise<PromptImage>; popupMenu(menu: ApplicationMenuName, x: number, y: number): Promise<boolean>; setTitleBarTheme(theme: Exclude<ThemeMode, 'system'>): Promise<boolean>; onOpenSettings(callback: () => void): () => void; /** Absolute path of a dropped or picked file; empty for clipboard data that never existed on disk. */ pathForFile(file: File): string }
   updates: {
@@ -934,6 +976,16 @@ export interface ApexApi {
     runtimeOwners(): Promise<RuntimeOwnerView[]>
     /** Transfers an idle session to VS Code by default; attach keeps Desktop's runtime running. */
     continueInVsCode(filePath: string, mode?: 'transfer' | 'attach'): Promise<void>
+  }
+  /** Sub-agents per session, owned by the main process and pushed on change. */
+  specialists: {
+    list(sessionFile: string): Promise<SpecialistRosterEntry[]>
+    /** Replaces this window's tracked sessions (at most 64) and returns their current rosters keyed by the given paths. */
+    track(sessionFiles: string[]): Promise<Record<string, SpecialistRosterEntry[]>>
+    /** Replaces the worker transcripts this window is showing (at most 8); changes arrive through onWorkerChanged. */
+    watchWorkers(workerFiles: string[]): Promise<void>
+    onChanged(callback: (event: SpecialistRosterChange) => void): () => void
+    onWorkerChanged(callback: (event: SpecialistWorkerChange) => void): () => void
   }
   runtime: {
     /** Instruction files, skill directories, and injected extensions a run in an authorized project path will pick up. */

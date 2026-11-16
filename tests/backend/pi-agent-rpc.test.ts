@@ -18,7 +18,7 @@ import { AgentRpcManager, PI_RPC_ADAPTER } from '../../apps/desktop/electron/mai
 import type { ProviderCatalog } from '../../apps/desktop/electron/main/agent-rpc'
 import type { ApexModelDescriptor } from '../../apps/desktop/src/types/api'
 import { waitUntil } from '../helpers/wait'
-import { ActivityCoordinatorService } from '../../apps/desktop/electron/main/collaboration/coordinator'
+import { ActivityCoordinatorService, linkSpaceSession } from '../../apps/desktop/electron/main/collaboration/coordinator'
 import { ProjectService } from '../../apps/desktop/electron/main/projects'
 
 vi.mock('electron', () => ({ dialog: { showOpenDialog: vi.fn() } }))
@@ -738,6 +738,63 @@ describe('pi RPC handshake', () => {
         reopenedControl.dispose()
         await reopenedStore.beginShutdown()
       }
+      const worker = await sessions.create(cwd)
+      const space = await control.createSpace({ name: 'Release', objective: 'Ship safely', projectId: 'project', sessionIds: [worker.id] })
+      await expect(control.createSpace({ name: 'Invalid', objective: '', projectId: 'missing' })).rejects.toThrow()
+      await expect(control.updateSpace(space.id, { sessionIds: ['unknown'] })).rejects.toThrow()
+      const spaceChief = await control.open(4, space.id)
+      expect(spaceChief.session.filePath).not.toBe(first.session.filePath)
+      expect((await sessions.list()).find((item) => item.filePath === spaceChief.session.filePath)?.role).toBe('coordinator')
+      expect((await control.open(5, space.id)).session.filePath).toBe(spaceChief.session.filePath)
+      const secondWorker = await sessions.create(cwd)
+      let releaseAuthorization!: () => void
+      let signalAuthorization!: () => void
+      const authorizationStarted = new Promise<void>((resolve) => { signalAuthorization = resolve })
+      const authorizationGate = new Promise<void>((resolve) => { releaseAuthorization = resolve })
+      const authorizeCwd = projects.authorizeCwd.bind(projects)
+      const authorizationSpy = vi.spyOn(projects, 'authorizeCwd').mockImplementationOnce(async (path) => {
+        signalAuthorization()
+        await authorizationGate
+        return authorizeCwd(path)
+      })
+      const objectiveUpdate = control.updateSpace(space.id, { objective: 'Ship and verify' })
+      await authorizationStarted
+      await linkSpaceSession(store, spaceChief.session.filePath, secondWorker, 'project')
+      releaseAuthorization()
+      await objectiveUpdate
+      authorizationSpy.mockRestore()
+      await expect(linkSpaceSession(store, spaceChief.session.filePath, secondWorker, 'other')).rejects.toThrow()
+      await linkSpaceSession(store, first.session.filePath, secondWorker, 'project')
+      expect(control.listSpaces()[0].sessionIds).toEqual([worker.id, secondWorker.id])
+      await linkSpaceSession(store, spaceChief.session.filePath, secondWorker, 'project')
+      await linkSpaceSession(store, spaceChief.session.filePath, secondWorker, 'project')
+      const thirdWorker = await sessions.create(cwd)
+      const memberAuthorizationStarted = new Promise<void>((resolve) => { signalAuthorization = resolve })
+      const memberAuthorizationGate = new Promise<void>((resolve) => { releaseAuthorization = resolve })
+      const memberAuthorizationSpy = vi.spyOn(projects, 'authorizeCwd').mockImplementationOnce(async (path) => {
+        signalAuthorization()
+        await memberAuthorizationGate
+        return authorizeCwd(path)
+      })
+      const memberUpdate = control.updateSpace(space.id, { sessionIds: [worker.id] })
+      await memberAuthorizationStarted
+      await linkSpaceSession(store, spaceChief.session.filePath, thirdWorker, 'project')
+      releaseAuthorization()
+      await memberUpdate
+      memberAuthorizationSpy.mockRestore()
+      // A UI that read [worker, thirdWorker] before this link removes worker by ID.
+      const fourthWorker = await sessions.create(cwd)
+      await linkSpaceSession(store, spaceChief.session.filePath, fourthWorker, 'project')
+      await control.updateSpace(space.id, { removeSessionIds: [worker.id], addSessionIds: [secondWorker.id] })
+      await expect(control.updateSpace(space.id, { sessionIds: [], addSessionIds: [worker.id] })).rejects.toThrow()
+      await expect(control.updateSpace(space.id, { addSessionIds: [worker.id], removeSessionIds: [worker.id] })).rejects.toThrow()
+      await expect(control.updateSpace(space.id, { addSessionIds: ['unknown'] })).rejects.toThrow()
+      const persistedSpaces = new JsonStateStore(statePath)
+      await persistedSpaces.ready()
+      expect(persistedSpaces.snapshot().spaces).toMatchObject([{ id: space.id, sessionIds: [thirdWorker.id, fourthWorker.id, secondWorker.id], objective: 'Ship and verify', coordinatorSession: spaceChief.session.filePath }])
+      await persistedSpaces.beginShutdown()
+      control.releaseOwner(4)
+      control.releaseOwner(5)
       await expect(control.followUp(legacy.filePath, 'Legacy follow-up', 'queue')).resolves.toBe(true)
       await store.update((draft) => { draft.coordinatorSessions = { other: legacy.filePath } })
       await expect(control.followUp(legacy.filePath, 'Wrong project', 'queue')).rejects.toThrow('coordinator project grant is no longer valid')
@@ -756,6 +813,39 @@ describe('pi RPC handshake', () => {
       expect(store.getCoordinatorSessions().project).toBe(legacy.filePath)
     } finally {
       unsubscribe()
+      control.dispose()
+      await store.beginShutdown()
+    }
+  }, 60_000)
+
+  it('clears the coordinator chat by archiving its session and opening a fresh one', async () => {
+    const fake = fakePiAgent()
+    const cwd = realpathSync(fake.cwd)
+    const store = new JsonStateStore(join(cwd, 'coordinator-reset-state.json'))
+    const info = lstatSync(cwd, { bigint: true })
+    await store.update((draft) => { draft.projects.push({
+      id: 'project', harness: 'pi', name: 'Project', path: cwd, folders: [cwd], primaryFolder: cwd, pinned: false,
+      createdAt: new Date().toISOString(), lastOpenedAt: new Date().toISOString(),
+      folderIdentities: { [cwd]: { dev: info.dev.toString(), ino: info.ino.toString(), birthtimeNs: info.birthtimeNs.toString() } },
+    }) })
+    const projects = new ProjectService(store, () => null)
+    const sessions = new SessionService(store, () => null, 5000, piSessionServiceOptions(join(cwd, 'sessions')))
+    const manager = new AgentRpcManager(fake.executable, (path) => projects.authorizeCwd(path), (path) => sessions.requireSessionPath(path))
+    managers.push(manager)
+    const control = new ActivityCoordinatorService(store, projects, sessions, manager)
+    try {
+      await expect(control.reset()).resolves.toBe(false)
+      const first = await control.open(1)
+      await expect(control.reset()).resolves.toBe(true)
+      expect(store.snapshot().globalCoordinatorSession).toBeUndefined()
+      expect(control.close(1, first.attachmentId)).toBe(false)
+      expect(manager.getForSession(first.session.filePath)).toBeUndefined()
+      expect(store.getArchivedSessions()).toContain(first.session.filePath)
+      const fresh = await control.open(2)
+      expect(fresh.session.filePath).not.toBe(first.session.filePath)
+      expect(fresh.messages).toEqual([])
+      await expect(control.reset('missing-space')).rejects.toThrow('Space not found')
+    } finally {
       control.dispose()
       await store.beginShutdown()
     }

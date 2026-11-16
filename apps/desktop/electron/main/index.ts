@@ -52,7 +52,7 @@ import { SideConversations } from "./side-conversations";
 import { FinishTaskService } from "./finish-task";
 import { WorktreeProvenance } from "./worktree-provenance";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
-import { ActivityCoordinatorService, COORDINATOR_INSTRUCTIONS } from "./collaboration/coordinator";
+import { ActivityCoordinatorService, COORDINATOR_INSTRUCTIONS, linkSpaceSession } from "./collaboration/coordinator";
 import { BackgroundJobBridge } from "./background-jobs";
 import {
 	configureGooeyPiAgentMessageSigning,
@@ -112,8 +112,11 @@ import {
 } from "./updates";
 import { VoiceService, voiceSecretStorageStatus } from "./voice";
 import { isAllowedRendererAudioPermission } from "./voice-permissions";
+import { installInteractivePreviews, isAllowedRendererFrameUrl } from "./interactive-previews";
+import { INTERACTIVE_PREVIEW_SCHEME } from "apex-core/interactive-preview";
 
 protocol.registerSchemesAsPrivileged([
+	{ scheme: INTERACTIVE_PREVIEW_SCHEME, privileges: { standard: true, secure: true } },
 	{
 		scheme: "prime-work",
 		privileges: { standard: true, secure: true, supportFetchAPI: true },
@@ -171,7 +174,7 @@ function appIconPath(): string {
 // One policy for every surface that serves renderer content: the app protocol
 // response headers and the packaged browser-session header rewrite.
 const RENDERER_CONTENT_SECURITY_POLICY =
-	"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
+	"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' apex-preview:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 
 const rendererContentTypes: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -339,10 +342,10 @@ export function hardenRenderer(
 	// Server redirects and sub-frame navigations bypass will-navigate; hold them
 	// to the same trusted-renderer predicate the IPC gate uses.
 	window.webContents.on("will-redirect", (event) => {
-		if (!isTrustedRendererUrl(event.url, trustedUrl())) event.preventDefault();
+		if (event.isMainFrame === false ? !isAllowedRendererFrameUrl(event.url) : !isTrustedRendererUrl(event.url, trustedUrl())) event.preventDefault();
 	});
 	window.webContents.on("will-frame-navigate", (event) => {
-		if (!isTrustedRendererUrl(event.url, trustedUrl())) event.preventDefault();
+		if (event.isMainFrame === false ? !isAllowedRendererFrameUrl(event.url) : !isTrustedRendererUrl(event.url, trustedUrl())) event.preventDefault();
 	});
 }
 
@@ -1175,6 +1178,7 @@ async function bootstrap(): Promise<void> {
 		skillPath: browserSkillPath,
 	});
 	const collaborationBridge = new AgentCollaborationBridge({
+    onSessionCreated: (sourcePath, session, projectId) => linkSpaceSession(stateStore, sourcePath, session, projectId),
 		globalCoordinatorPath: () => stateStore.snapshot().globalCoordinatorSession,
 		authorizedProjects: () => stateStore.getProjects(),
 		extensionPath: collaborationExtensionPath,
@@ -1256,7 +1260,9 @@ async function bootstrap(): Promise<void> {
 	// Pi runtimes receive the capability extensions shipped in assets/extensions.
 	piManager.setRuntimeEnvironmentProvider((scope) => {
 		const sessionPath = scope.sessionPath;
-		const globalCoordinator = stateStore.snapshot().globalCoordinatorSession;
+		const coordinatorState = stateStore.snapshot();
+		const globalCoordinator = coordinatorState.globalCoordinatorSession;
+		const space = sessionPath && coordinatorState.spaces?.find((item) => item.coordinatorSession && resolve(item.coordinatorSession) === resolve(sessionPath));
 		const isCoordinator = sessionPath && globalCoordinator && resolve(globalCoordinator) === resolve(sessionPath);
 		return {
 			...desktopLink?.editor.environmentFor(scope),
@@ -1270,7 +1276,9 @@ async function bootstrap(): Promise<void> {
 				stateStore.getSettings().browserEnabled,
 			),
 			...collaborationBridge.environmentFor({ ...scope, harness: "pi" }),
-			GOOEYPI_COORDINATOR_INSTRUCTIONS: isCoordinator ? COORDINATOR_INSTRUCTIONS : undefined,
+			GOOEYPI_COORDINATOR_INSTRUCTIONS: space ? `${COORDINATOR_INSTRUCTIONS.replace("app-wide Chief of Staff", "Space Chief of Staff").replace("Coordinate only currently authorized projects. Use gooeypi_session_projects to find an explicit cwd before creating a session.", "Coordinate only sessions in this Space project. Your access covers the whole project, not only linked sessions.")}
+Space name: ${JSON.stringify(space.name)}
+Space objective: ${JSON.stringify(space.objective)}` : isCoordinator ? COORDINATOR_INSTRUCTIONS : undefined,
 			...jobsBridge.environmentFor(scope),
 			GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: piFastModeExtensionPath,
 			GOOEYPI_CUA_DRIVER_PATH: stateStore.getSettings().computerUseEnabled
@@ -1440,6 +1448,7 @@ else
 	void app
 		.whenReady()
 		.then(async () => {
+			installInteractivePreviews(session.defaultSession);
 			// Parsed from the first instance's own argv only: a second-instance command
 			// line must never be able to make a running application write a marker and quit.
 			const requestedSmokeMarker = packagedSmokeMarkerPath(process.argv);
@@ -1506,6 +1515,10 @@ else
 			browserProfile.setPermissionCheckHandler(() => false);
 			if (app.isPackaged) {
 				browserSession.webRequest.onHeadersReceived((details, callback) => {
+					if (details.url.startsWith(`${INTERACTIVE_PREVIEW_SCHEME}:`)) {
+						callback({ responseHeaders: details.responseHeaders });
+						return;
+					}
 					callback({
 						responseHeaders: {
 							...details.responseHeaders,

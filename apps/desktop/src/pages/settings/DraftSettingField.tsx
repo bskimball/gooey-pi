@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ApexButton } from '@/components/ui'
@@ -81,7 +84,7 @@ export function DraftSettingField({
   const errorId = `${id}-error`
 
   return (
-    <div className="settings-row settings-row--stack">
+    <div className={`settings-row settings-row--stack ${stylex.props(settingsStyles.settingsRow, settingsStyles.settingsRowStack).className ?? ""}`}>
       <span>
         <label htmlFor={id}><strong>{label}</strong></label>
         <small>{description}</small>
@@ -96,7 +99,7 @@ export function DraftSettingField({
         onBlur={() => { void commit() }}
         onKeyDown={onKeyDown}
       />
-      {state.error ? <Banner id={errorId} status="error" role="alert" className="settings-error" title={state.error} /> : null}
+      {state.error ? <Banner xstyle={[inspectorStyles.settingsError]} id={errorId} status="error" role="alert" className="settings-error" title={state.error} /> : null}
       <ApexButton
         disabled={!state.dirty || Boolean(state.error) || isCommitting}
         onClick={() => { void commit() }}

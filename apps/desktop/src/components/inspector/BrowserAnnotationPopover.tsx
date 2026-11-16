@@ -1,3 +1,7 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as annotationContextStyles } from 'apex-ui/styles/annotation-source-context.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { styles as annotationSourceStyles } from 'apex-ui/styles/annotation-source.stylex'
 import { useCallback, useEffect, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import type { BrowserAnnotationElement, BrowserSourceResult } from '@/types/api'
@@ -48,9 +52,9 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
   const save = () => source.kind !== 'checking' && text.trim().length > 0 && onSave(source)
 
   return (
-    <div className="annotation-layer">
+    <div className={`annotation-layer ${stylex.props(inspectorStyles.annotationLayer).className ?? ""}`}>
       <div
-        className="annotation-popover"
+        className={`annotation-popover ${stylex.props(inspectorStyles.annotationPopover, annotationContextStyles.popoverWithSource).className ?? ""}`}
         role="dialog"
         aria-label="Comment on selected element"
         onKeyDown={(event) => {
@@ -69,22 +73,22 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
             <X size={13} />
           </IconButton>
         </div>
-        <section className="annotation-source" aria-label="Selected element source" aria-live="polite">
+        <section className={`annotation-source ${stylex.props(annotationSourceStyles.annotationSource).className ?? ""}`} aria-label="Selected element source" aria-live="polite">
           {element.component ? (
-            <p>
+            <p {...stylex.props(annotationContextStyles.sourceParagraph)}>
               Component reported by page: <strong>{element.component}</strong>
             </p>
           ) : null}
-          {source.kind === 'checking' ? <p>Checking source…</p> : null}
+          {source.kind === 'checking' ? <p {...stylex.props(annotationContextStyles.sourceParagraph)}>Checking source…</p> : null}
           {source.kind === 'unknown' ? (
             <>
               <strong>Source unknown</strong>
-              <p>{source.reason}</p>
+              <p {...stylex.props(annotationContextStyles.sourceParagraph)}>{source.reason}</p>
               <details>
                 <summary>Source metadata support</summary>
-                <p>
-                  The picker reads source stamps on this element: Astro attributes, Svelte development metadata, or explicit <code>data-source-file</code> and optional 1-based{' '}
-                  <code>data-source-line</code>. Paths must be local and inside the active workspace. React component names alone do not establish an original source location.
+                <p {...stylex.props(annotationContextStyles.sourceParagraph)}>
+                  The picker reads source stamps on this element: Astro attributes, Svelte development metadata, or explicit <code {...stylex.props(annotationContextStyles.sourceCode)}>data-source-file</code> and optional 1-based{' '}
+                  <code {...stylex.props(annotationContextStyles.sourceCode)}>data-source-line</code>. Paths must be local and inside the active workspace. React component names alone do not establish an original source location.
                 </p>
               </details>
             </>
@@ -92,12 +96,13 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
           {source.kind === 'resolved' ? (
             <>
               <strong>Page-reported source</strong>
-              <code>
+              <code {...stylex.props(annotationContextStyles.sourceCode)}>
                 {source.path}
                 {source.line === undefined ? '' : `:${source.line}`}
               </code>
-              <p>{source.evidence} metadata · file checked in this workspace. Recorded positions may be stale after edits.</p>
+              <p {...stylex.props(annotationContextStyles.sourceParagraph)}>{source.evidence} metadata · file checked in this workspace. Recorded positions may be stale after edits.</p>
               <ApexButton
+                xstyle={[annotationContextStyles.sourceButton, annotationContextStyles.popoverButton]}
                 disabled={opening}
                 onClick={openSource}
               >
@@ -105,9 +110,10 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
               </ApexButton>
             </>
           ) : null}
-          {error ? <p role="alert">{error}</p> : null}
+          {error ? <p {...stylex.props(annotationContextStyles.sourceParagraph, annotationContextStyles.sourceAlert)} role="alert">{error}</p> : null}
         </section>
         <textarea
+          {...stylex.props(annotationContextStyles.commentFocus)}
           autoFocus
           aria-label="Element comment"
           maxLength={MAX_COMMENT_LENGTH}
@@ -120,7 +126,7 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
           }}
           placeholder="Describe what should change…"
         />
-        <p className="annotation-popover__hints">
+        <p className={`annotation-popover__hints ${stylex.props(inspectorStyles.annotationPopoverHints, annotationSourceStyles.annotationPopoverHints).className ?? ""}`}>
           <span>
             <kbd>{platform === 'darwin' ? '↩' : 'Enter'}</kbd> add to chat
           </span>
@@ -129,10 +135,10 @@ export function BrowserAnnotationPopover({ element, cwd, index, platform, text, 
           </span>
         </p>
         <div>
-          <ApexButton onClick={onCancel}>
+          <ApexButton xstyle={annotationContextStyles.popoverButton} onClick={onCancel}>
             Cancel
           </ApexButton>
-          <ApexButton variant="primary" disabled={!text.trim() || source.kind === 'checking'} onClick={save}>
+          <ApexButton xstyle={annotationContextStyles.popoverButton} variant="primary" disabled={!text.trim() || source.kind === 'checking'} onClick={save}>
             Add comment
           </ApexButton>
         </div>

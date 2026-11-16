@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ChatCircleDots, Check, CheckCircle, Clock, Square, WarningCircle } from '@/components/icons'
 import { ApexButton, IconButton } from '@/components/ui'
@@ -157,13 +159,13 @@ export function ActivityRow({
   return (
     <div
       ref={rowRef}
-      className={`activity-row activity-row--${section} ${selected ? 'is-selected' : ''} ${confirmingStop ? 'is-confirming-stop' : ''}`}
+      className={[`activity-row activity-row--${section} ${selected ? 'is-selected' : ''} ${confirmingStop ? 'is-confirming-stop' : ''}`, stylex.props(activityStyles.activityRow, ((section === "recent")) && activityStyles.activityRowRecent, (selected) && activityStyles.activityRowIsSelected).className].filter(Boolean).join(' ')}
       data-session-id={session.id}
       data-selected={selected ? 'true' : undefined}
     >
       <button
         type="button"
-        className="activity-row__main"
+        className={`activity-row__main ${stylex.props(activityStyles.activityRowMain).className ?? ""}`}
         aria-current={selected ? 'true' : undefined}
         aria-label={onSelect ? `Select ${session.title}` : `Open ${session.title}`}
         onClick={() => {
@@ -174,7 +176,7 @@ export function ActivityRow({
           if (onSelect) onOpen(session)
         }}
       >
-        <span className={`activity-icon activity-icon--${iconTone}`}>
+        <span className={[`activity-icon activity-icon--${iconTone}`, stylex.props(activityStyles.activityIcon, ((isRunning)) && activityStyles.activityIconRunning, ((isRunning ? false : isQuestion)) && activityStyles.activityIconWaiting, ((isRunning ? false : isQuestion ? false : isFailed)) && activityStyles.activityIconFailed, ((isRunning ? false : isQuestion ? false : isFailed ? false : isReview)) && activityStyles.activityIconReview, ((isRunning ? false : isQuestion ? false : isFailed ? false : !isReview)) && activityStyles.activityIconRecent).className].filter(Boolean).join(' ')}>
           {isRunning ? (
             <StatusMark state="running" size={15} />
           ) : isQuestion ? (
@@ -186,48 +188,48 @@ export function ActivityRow({
           )}
         </span>
 
-        <span className="activity-main">
-          <span className="activity-main__header">
-            <strong className="activity-main__title">{session.title}</strong>
-            <span className="activity-main__project">{projectName}</span>
-            {quiet ? <span className="activity-tag activity-tag--quiet">{quiet}</span> : null}
+        <span className={`activity-main ${stylex.props(activityStyles.activityMain).className ?? ""}`}>
+          <span className={`activity-main__header ${stylex.props(activityStyles.activityMainHeader).className ?? ""}`}>
+            <strong className={`activity-main__title ${stylex.props(activityStyles.activityMainTitle).className ?? ""}`}>{session.title}</strong>
+            <span className={`activity-main__project ${stylex.props(activityStyles.activityMainProject).className ?? ""}`}>{projectName}</span>
+            {quiet ? <span className={`activity-tag activity-tag--quiet ${stylex.props(activityStyles.activityTag, activityStyles.activityTagQuiet).className ?? ""}`}>{quiet}</span> : null}
             {isRunning && live?.queuedCount ? (
-              <span className="activity-tag activity-tag--queued">{live.queuedCount} queued</span>
+              <span className={`activity-tag activity-tag--queued ${stylex.props(activityStyles.activityTag, activityStyles.activityTagQueued).className ?? ""}`}>{live.queuedCount} queued</span>
             ) : null}
           </span>
 
-          <span className="activity-main__status">
+          <span className={`activity-main__status ${stylex.props(activityStyles.activityMainStatus).className ?? ""}`}>
             {isRunning && phase ? (
-              <span className={`activity-status-line ${phase.isTool ? 'activity-status-line--tool mono' : 'activity-status-line--phase'}`}>
+              <span className={[`activity-status-line ${phase.isTool ? 'activity-status-line--tool mono' : 'activity-status-line--phase'}`, stylex.props((phase.isTool) && activityStyles.mono, activityStyles.activityStatusLine, (phase.isTool) && activityStyles.activityStatusLineTool, !(phase.isTool) && activityStyles.activityStatusLinePhase).className].filter(Boolean).join(' ')}>
                 {phase.text}
               </span>
             ) : isQuestion ? (
-              <span className="activity-status-line activity-status-line--question">
+              <span className={`activity-status-line activity-status-line--question ${stylex.props(activityStyles.activityStatusLine, activityStyles.activityStatusLineQuestion).className ?? ""}`}>
                 {attention.title}
               </span>
             ) : isFailed ? (
-              <span className="activity-status-line activity-status-line--failed">
+              <span className={`activity-status-line activity-status-line--failed ${stylex.props(activityStyles.activityStatusLine, activityStyles.activityStatusLineFailed).className ?? ""}`}>
                 {(attention?.kind === 'failed' ? attention.error : undefined) ?? live?.lastError ?? session.preview ?? 'Session ended with an error'}
               </span>
             ) : (
-              <span className="activity-status-line activity-status-line--preview">
+              <span className={`activity-status-line activity-status-line--preview ${stylex.props(activityStyles.activityStatusLine).className ?? ""}`}>
                 {session.preview ?? 'Open session to view details'}
               </span>
             )}
           </span>
         </span>
 
-        <span className="activity-meta">
+        <span className={`activity-meta ${stylex.props(activityStyles.activityMeta).className ?? ""}`}>
           {isRunning ? (
             <>
               {live?.contextUsage ? (
-                <span className="activity-meta__ring">
+                <span className={`activity-meta__ring ${stylex.props(activityStyles.activityMetaRing).className ?? ""}`}>
                   <ContextUsageRing contextUsage={live.contextUsage} sessionUsage={live.sessionUsage} />
                 </span>
               ) : null}
-              {displayCost ? <span className="activity-meta__cost tabular">{displayCost}</span> : null}
+              {displayCost ? <span className={`activity-meta__cost tabular ${stylex.props(activityStyles.tabular, activityStyles.activityMetaCost).className ?? ""}`}>{displayCost}</span> : null}
               {elapsedText ? (
-                <span className="activity-meta__elapsed tabular" aria-label={`Elapsed ${elapsedText}`}>
+                <span className={`activity-meta__elapsed tabular ${stylex.props(activityStyles.tabular, activityStyles.activityMetaElapsed).className ?? ""}`} aria-label={`Elapsed ${elapsedText}`}>
                   <Clock size={11} />
                   {elapsedText}
                 </span>
@@ -236,16 +238,16 @@ export function ActivityRow({
           ) : isQuestion ? (
             <>
               {countdown ? (
-                <span className="activity-badge activity-badge--deadline tabular" title="Time remaining to respond">
+                <span className={`activity-badge activity-badge--deadline tabular ${stylex.props(activityStyles.tabular, activityStyles.activityBadge, activityStyles.activityBadgeDeadline).className ?? ""}`} title="Time remaining to respond">
                   <Clock size={11} />
                   {countdown}
                 </span>
               ) : (
-                <span className="activity-badge activity-badge--waiting">Needs input</span>
+                <span className={`activity-badge activity-badge--waiting ${stylex.props(activityStyles.activityBadge, activityStyles.activityBadgeWaiting).className ?? ""}`}>Needs input</span>
               )}
             </>
           ) : (
-            <span className="activity-meta__time tabular">
+            <span className={`activity-meta__time tabular ${stylex.props(activityStyles.tabular, activityStyles.activityMetaTime).className ?? ""}`}>
               <Clock size={11} />
               {formatRelative(session.updatedAt)}
             </span>
@@ -254,17 +256,17 @@ export function ActivityRow({
       </button>
 
       {isRunning || reviewable ? (
-        <div className="activity-row__actions">
+        <div className={`activity-row__actions ${stylex.props(activityStyles.activityRowActions).className ?? ""}`}>
           {isRunning ? (
             confirmingStop ? (
               <div
                 ref={confirmBoxRef}
-                className="activity-stop-confirm"
+                className={`activity-stop-confirm ${stylex.props(activityStyles.activityStopConfirm).className ?? ""}`}
                 role="group"
                 aria-label={`Confirm stopping ${session.title}`}
                 onKeyDown={handleConfirmKeyDown}
               >
-                <span className="activity-stop-confirm__prompt">Stop this run?</span>
+                <span className={`activity-stop-confirm__prompt ${stylex.props(activityStyles.activityStopConfirmPrompt).className ?? ""}`}>Stop this run?</span>
                 <ApexButton
                   ref={cancelStopRef}
                   type="button"
@@ -288,7 +290,7 @@ export function ActivityRow({
                 </ApexButton>
               </div>
             ) : (
-              <IconButton
+              <IconButton xstyle={[activityStyles.activityRowStop]}
                 ref={stopTriggerRef}
                 size="small"
                 className="activity-row__stop"
@@ -300,7 +302,7 @@ export function ActivityRow({
               </IconButton>
             )
           ) : (
-            <ApexButton
+            <ApexButton xstyle={[activityStyles.activityRowClear]}
               type="button"
               className={`activity-row__clear activity-row__clear--${session.status}`}
               aria-label={`Mark ${session.title} reviewed`}

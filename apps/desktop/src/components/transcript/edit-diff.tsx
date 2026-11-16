@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { useState } from 'react'
 import type { MessagePart } from '@/types/api'
 
@@ -75,15 +78,15 @@ const SIGNS: Record<DiffLine['kind'], string> = { add: '+', remove: '−', conte
 export function EditDiff({ diff, id }: { diff: DiffLine[]; id?: string }) {
   const [expanded, setExpanded] = useState(false)
   const shown = diff.slice(0, expanded ? MAX_RENDERED_LINES : PREVIEW_LINES)
-  return <div className="activity-edit-diff" id={id}>
-    <pre className="activity-edit-diff__lines">
-      {shown.map((line, index) => <span key={index} className={`activity-edit-diff__line is-${line.kind}`}>
-        <span className="activity-edit-diff__sign" aria-hidden="true">{SIGNS[line.kind]}</span>
-        <span className="sr-only">{line.kind === 'add' ? 'added: ' : line.kind === 'remove' ? 'removed: ' : ''}</span>
+  return <div className={`activity-edit-diff ${stylex.props(transcriptStyles.activityEditDiff).className ?? ""}`} id={id}>
+    <pre className={`activity-edit-diff__lines ${stylex.props(transcriptStyles.activityEditDiffLines).className ?? ""}`}>
+      {shown.map((line, index) => <span key={index} className={[`activity-edit-diff__line is-${line.kind}`, stylex.props(transcriptStyles.activityEditDiffLine, ((line.kind === "add")) && transcriptStyles.activityEditDiffLineIsAdd, ((line.kind === "remove")) && transcriptStyles.activityEditDiffLineIsRemove, ((line.kind === "gap")) && transcriptStyles.activityEditDiffLineIsGap).className].filter(Boolean).join(' ')}>
+        <span className={`activity-edit-diff__sign ${stylex.props(transcriptStyles.activityEditDiffSign).className ?? ""}`} aria-hidden="true">{SIGNS[line.kind]}</span>
+        <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{line.kind === 'add' ? 'added: ' : line.kind === 'remove' ? 'removed: ' : ''}</span>
         {line.text || ' '}
       </span>)}
     </pre>
-    {diff.length > PREVIEW_LINES && !expanded ? <button type="button" className="activity-edit-diff__more" onClick={() => setExpanded(true)}>Show all {diff.length} diff lines ▸</button> : null}
-    {expanded && diff.length > MAX_RENDERED_LINES ? <p className="activity-edit-diff__note">{diff.length - MAX_RENDERED_LINES} more lines not shown</p> : null}
+    {diff.length > PREVIEW_LINES && !expanded ? <button type="button" className={`activity-edit-diff__more ${stylex.props(transcriptStyles.activityEditDiffMore).className ?? ""}`} onClick={() => setExpanded(true)}>Show all {diff.length} diff lines ▸</button> : null}
+    {expanded && diff.length > MAX_RENDERED_LINES ? <p className={`activity-edit-diff__note ${stylex.props(transcriptStyles.activityEditDiffNote).className ?? ""}`}>{diff.length - MAX_RENDERED_LINES} more lines not shown</p> : null}
   </div>
 }

@@ -1,8 +1,16 @@
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { useEffect, useState, type RefObject } from 'react'
+import * as stylex from '@stylexjs/stylex'
 import { ArrowUp } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import { isOverlayOpen } from '@/lib/app-shortcuts'
 import { shortcutLabel, detectRendererPlatform } from '@/lib/platform-shortcuts'
+
+const styles = stylex.create({
+  inline: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, color: 'var(--text-secondary)' },
+  prompt: { flex: '1 1 auto' },
+  jump: { flexShrink: 0 },
+})
 
 interface CurrentTurn {
   index: number
@@ -32,7 +40,7 @@ function jumpToTurn(scroller: HTMLElement, direction: -1 | 1): void {
  * Keeps the prompt that owns the visible output pinned above a long turn, and lets
  * Primary+Alt+Arrow keys step between prompts the way a terminal's scrollback marks do.
  */
-export function TurnNavigator({ scrollRef, active }: { scrollRef: RefObject<HTMLDivElement | null>; active: boolean }) {
+export function TurnNavigator({ scrollRef, active, inline = false }: { scrollRef: RefObject<HTMLDivElement | null>; active: boolean; inline?: boolean }) {
   const [current, setCurrent] = useState<CurrentTurn | null>(null)
   const [isLast, setIsLast] = useState(false)
 
@@ -94,12 +102,10 @@ export function TurnNavigator({ scrollRef, active }: { scrollRef: RefObject<HTML
   const jumpHint = `${shortcutLabel(platform, ['Primary'])}${mac ? '⌥' : '+Alt+'}↑`
   const running = active && isLast
   return (
-    <div className="turn-header" role="navigation" aria-label="Current turn">
-      <span className="turn-header__prompt" title={current.text}>{current.text}</span>
-      {running ? <span className="turn-header__state"><StatusMark state="running" size={12} /> running</span> : null}
+    <div className={`${inline ? '' : 'turn-header'} ${stylex.props(inline ? styles.inline : transcriptStyles.turnHeader).className}`} role="navigation" aria-label="Current turn">
       <button
         type="button"
-        className="turn-header__jump"
+        className={`turn-header__jump ${stylex.props(transcriptStyles.turnHeaderJump, styles.jump).className}`}
         aria-label={`Scroll to this prompt (${jumpHint} for previous)`}
         title={`Scroll to this prompt · ${jumpHint} / ↓ steps between prompts`}
         onClick={() => {
@@ -109,6 +115,8 @@ export function TurnNavigator({ scrollRef, active }: { scrollRef: RefObject<HTML
       >
         <ArrowUp size={12} />
       </button>
+      <span className={`turn-header__prompt ${stylex.props(transcriptStyles.turnHeaderPrompt, styles.prompt).className}`} title={current.text}>{current.text}</span>
+      {running ? <span className={`turn-header__state ${stylex.props(transcriptStyles.turnHeaderState).className}`}><StatusMark state="running" size={12} /> running</span> : null}
     </div>
   )
 }

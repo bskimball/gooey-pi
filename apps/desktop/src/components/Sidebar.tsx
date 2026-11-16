@@ -1,6 +1,13 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as sidebarStyles } from 'apex-ui/styles/sidebar.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
 import {
   Archive,
-  Bell,
+  Stack,
   CalendarDots,
   CaretDown,
   CaretRight,
@@ -12,17 +19,14 @@ import {
   Folder,
   FolderPlus,
   FunnelSimple,
-  Gear,
   MagnifyingGlass,
   NotePencil,
   Package,
   PushPin,
   SidebarLeft,
-  Terminal,
   Trash,
-  Waveform,
 } from './icons'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
 import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type SideConversation, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
@@ -32,12 +36,15 @@ import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { isSessionRunning, isSessionWaiting, sessionAttentionSignature, signatureCleared } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
-import { Badge } from '@astryxdesign/core/Badge'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { ApexButton, EmptyState, IconButton, Modal, PiMark, useFocusTrap } from './ui'
+import { ApexButton, EmptyState, IconButton, Modal, useFocusTrap } from './ui'
 import { StatusMark } from './activity/StatusMark'
 import { SessionStatusGlyph, SidebarAttentionGroups } from './SidebarAttention'
 import { useTaskWorkflowContext } from '@/lib/task-context'
+import type { SpecialistRosters } from '@/hooks/useSpecialistRosters'
+import { SidebarSubagents } from './SidebarSubagents'
+
+const sidebarLayoutStyles = stylex.create({ windowsOverlayTitlebar: { columnGap: 2 } })
 
 const PROJECT_SORT_LABEL_KEYS = { recent: 'projects.sort.recent', alphabetical: 'projects.sort.alphabetical' } as const satisfies Record<ProjectSortMode, MessageKey>
 
@@ -52,6 +59,11 @@ export interface SidebarProps {
   clearedAttention?: Record<string, string>
   /** Live phase and pending questions keyed by session file path; running means live or stored status. */
   liveBySession?: SessionLiveMap
+  /** Sub-agents per session file path, for the open session and sessions with live work. */
+  specialistRosters?: SpecialistRosters
+  /** The sub-agent the Agents panel is showing for the open session. */
+  openSpecialistId?: string | null
+  onOpenSpecialist?(session: SessionRecord, specialistId: string): void
   onSelectProject(project: ProjectRecord): void
   onSelectSession(session: SessionRecord): void
   onNavigate(view: WorkspaceView): void
@@ -70,11 +82,6 @@ export interface SidebarProps {
   onContinueInVsCode?(session: SessionRecord): void
   sideConversations?: readonly SideConversation[]
   onOpenSideConversation?(sessionFile: string): void
-  terminalOpen?: boolean
-  voiceOpen?: boolean
-  onToggleTerminal?(): void
-  onToggleVoice?(): void
-  onOpenInVsCode?(path: string): void
   overlay?: boolean
   platform?: NodeJS.Platform
 }
@@ -84,6 +91,7 @@ const statusLabel: Record<SessionRecord['status'], string> = {
 }
 
 const NO_LIVE: SessionLiveMap = {}
+const NO_ROSTERS: SpecialistRosters = {}
 
 /** Concise meta text for a session row: live owner when idle/complete, otherwise narrow recency. */
 function sessionRowMeta(session: SessionRecord, owner?: RuntimeOwnerView, live?: SessionLive): string {
@@ -173,7 +181,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, terminalOpen = false, voiceOpen = false, onToggleTerminal, onToggleVoice, onOpenInVsCode, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, specialistRosters = NO_ROSTERS, openSpecialistId = null, onOpenSpecialist, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const workflow = useTaskWorkflowContext()
   const [query, setQuery] = useState('')
@@ -220,12 +228,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
     if (projectId) revealProject(projectId)
     onSelectSession(session)
   }
-  const unreadCount = activeSessions.reduce((count, session) => count + Number(needsAttention(session)), 0)
-  const activeProject = useMemo(() => projects.find((project) => project.id === activeProjectId), [projects, activeProjectId])
-  const newSessionShortcut = shortcutLabel(platform, ['Primary', 'N'])
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
-  const settingsShortcut = shortcutLabel(platform, ['Primary', ','])
-  const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
   useEffect(() => {
     if (!projectMenu) return
     const dismiss = (event: PointerEvent) => { if (!(event.target instanceof Element) || !event.target.closest('.project-group')) setProjectMenu(null) }
@@ -286,34 +289,28 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const visibleProjects = projectSections.flatMap((section) => section.projects)
 
   return (
-    <aside ref={sidebarRef} className="sidebar" aria-label="Project and session navigation" tabIndex={overlay ? -1 : undefined}>
-      <div className="sidebar__titlebar drag-region">
-        <div className="traffic-light-clearance" aria-hidden="true" />
-        {/* The toolbar owns the toggle; an overlay sidebar covers the toolbar, so it carries its own. */}
-        {overlay ? <IconButton className="sidebar__toggle no-drag" label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton> : null}
-        <div className="sidebar__brand no-drag" aria-label={HARNESS_PRODUCT_NAMES.pi}>
-          <PiMark size={24} />
-        </div>
-        <div className="sidebar__title-actions no-drag">
-          <IconButton className="sidebar__new-session" label={`New session (${newSessionShortcut})`} onClick={() => onNewSession()}><NotePencil size={16} /></IconButton>
-        </div>
+    <aside ref={sidebarRef} className={`sidebar ${stylex.props(sidebarStyles.sidebar, [responsiveStyles.sidebar, responsiveLayoutStyles.sidebar]).className ?? ""}`} aria-label="Project and session navigation" tabIndex={overlay ? -1 : undefined}>
+      <div className={`sidebar__titlebar drag-region ${stylex.props(baseStyles.dragRegion, sidebarStyles.sidebarTitlebar, overlay && platform === 'win32' && sidebarLayoutStyles.windowsOverlayTitlebar).className ?? ""}`}>
+        <div className={`traffic-light-clearance ${stylex.props(workbenchStyles.trafficLightClearance).className ?? ""}`} aria-hidden="true" />
+        {/* Compact navigation also provides a close button within its focus trap. */}
+        {overlay ? <IconButton className={`sidebar__toggle no-drag ${stylex.props(baseStyles.noDrag).className}`}  label={`Hide sidebar (${sidebarShortcut})`} onClick={onClose}><SidebarLeft size={16} /></IconButton> : null}
       </div>
 
-      <nav className="sidebar__primary" aria-label="Primary">
-        <div className="sidebar-search">
+      <nav className={`sidebar__primary ${stylex.props(sidebarStyles.sidebarPrimary).className ?? ""}`} aria-label="Primary">
+        <div className={`sidebar-search ${stylex.props(sidebarStyles.sidebarSearch).className ?? ""}`}>
           <MagnifyingGlass size={13} />
           <input id="session-search" value={query} onChange={(event) => { setQuery(event.target.value); setSearchLimits({}) }} onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} placeholder="Search projects and sessions" aria-label="Search projects and sessions" />
           {query ? <IconButton size="small" label="Clear search" onClick={() => setQuery('')}>×</IconButton> : null}
         </div>
-        <div className="sidebar__destinations">
-          <ApexButton variant="quiet" title={t('nav.projects')} className={activeView === 'projects' ? 'is-active' : ''} onClick={() => onNavigate('projects')}><Folder size={16} /><span className="sr-only">{t('nav.projects')}</span></ApexButton>
-          <ApexButton variant="quiet" title={t('nav.activity')} className={activeView === 'activity' ? 'is-active' : ''} onClick={() => onNavigate('activity')}><Bell size={16} /><span className="sr-only">{t('nav.activity')}</span>{unreadCount ? <Badge variant="orange" label={String(unreadCount)} className="nav-count" /> : null}</ApexButton>
-          <ApexButton variant="quiet" title={t('nav.scheduled')} className={activeView === 'scheduled' ? 'is-active' : ''} onClick={() => onNavigate('scheduled')}><CalendarDots size={16} /><span className="sr-only">{t('nav.scheduled')}</span></ApexButton>
-          <ApexButton variant="quiet" title={t('nav.capabilities')} className={activeView === 'plugins' ? 'is-active' : ''} onClick={() => onNavigate('plugins')}><Package size={16} /><span className="sr-only">{t('nav.capabilities')}</span></ApexButton>
+        <div className={`sidebar__destinations ${stylex.props(sidebarStyles.sidebarDestinations).className ?? ""}`}>
+          <button type="button" title={t('nav.projects')} className={`${activeView === 'projects' ? 'is-active' : ''} ${stylex.props(sidebarStyles.destinationButton).className ?? ""}`} onClick={() => onNavigate('projects')}><Folder size={16} /><span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{t('nav.projects')}</span></button>
+          <button type="button" title={t('nav.activity')} className={`${activeView === 'activity' ? 'is-active' : ''} ${stylex.props(sidebarStyles.destinationButton).className ?? ""}`} onClick={() => onNavigate('activity')}><Stack size={16} /><span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{t('nav.activity')}</span></button>
+          <button type="button" title={t('nav.scheduled')} className={`${activeView === 'scheduled' ? 'is-active' : ''} ${stylex.props(sidebarStyles.destinationButton).className ?? ""}`} onClick={() => onNavigate('scheduled')}><CalendarDots size={16} /><span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{t('nav.scheduled')}</span></button>
+          <button type="button" title={t('nav.capabilities')} className={`${activeView === 'plugins' ? 'is-active' : ''} ${stylex.props(sidebarStyles.destinationButton).className ?? ""}`} onClick={() => onNavigate('plugins')}><Package size={16} /><span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{t('nav.capabilities')}</span></button>
         </div>
       </nav>
 
-      <div className="sidebar__scroll scroll-area">
+      <div className={`sidebar__scroll scroll-area ${stylex.props(baseStyles.scrollArea, sidebarStyles.sidebarScroll).className ?? ""}`}>
         {normalized ? null : (
           <SidebarAttentionGroups
             attention={attentionSessions}
@@ -325,12 +322,12 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
             onOpenSession={openSession}
           />
         )}
-        <div className="sidebar__section-heading"><span>{normalized ? 'Search results' : 'Projects'}</span><span className="sidebar__section-heading-actions">{!normalized ? <IconButton size="small" label="Collapse all projects" onClick={() => { setProjectMenu(null); setCollapsed(Object.fromEntries(projects.map((project) => [project.id, true]))) }}><CaretRight size={13} /></IconButton> : null}<IconButton size="small" className={`sidebar__sort-toggle ${projectSortMode !== 'recent' ? 'is-sorted' : ''}`} aria-haspopup="menu" aria-expanded={projectSortMenuOpen} label={t('projects.sort')} onClick={() => setProjectSortMenuOpen((open) => !open)}><FunnelSimple size={13} /></IconButton><IconButton size="small" label="Add project" onClick={onAddProject}><FolderPlus size={13} /></IconButton>{projectSortMenuOpen ? <div className="sidebar__sort-menu" role="menu" aria-label={t('projects.sort.menu')}><div className="sidebar-menu__label" aria-hidden="true">{t('projects.sort.menu')}</div>{PROJECT_SORT_MODES.map((mode) => <button key={mode} type="button" role="menuitemradio" aria-checked={projectSortMode === mode} className={projectSortMode === mode ? 'is-active' : ''} onClick={() => { setProjectSortMenuOpen(false); onSetProjectSortMode(mode) }}>{t(PROJECT_SORT_LABEL_KEYS[mode])}{projectSortMode === mode ? <Check size={12} aria-hidden="true" /> : null}</button>)}</div> : null}</span></div>
+        <div className={`sidebar__section-heading ${stylex.props(sidebarStyles.sidebarSectionHeading).className ?? ""}`}><span>{normalized ? 'Search results' : 'Projects'}</span><span className={`sidebar__section-heading-actions ${stylex.props(sidebarStyles.sidebarSectionHeadingActions).className ?? ""}`}>{!normalized ? <IconButton size="small" label="Collapse all projects" onClick={() => { setProjectMenu(null); setCollapsed(Object.fromEntries(projects.map((project) => [project.id, true]))) }}><CaretRight size={13} /></IconButton> : null}<IconButton xstyle={[(projectSortMode !== 'recent') && sidebarStyles.sidebarSortToggleIsSorted]} size="small" className={`sidebar__sort-toggle ${projectSortMode !== 'recent' ? 'is-sorted' : ''}`} aria-haspopup="menu" aria-expanded={projectSortMenuOpen} label={t('projects.sort')} onClick={() => setProjectSortMenuOpen((open) => !open)}><FunnelSimple size={13} /></IconButton><IconButton size="small" label="Add project" onClick={onAddProject}><FolderPlus size={13} /></IconButton>{projectSortMenuOpen ? <div className={`sidebar__sort-menu ${stylex.props(sidebarStyles.sidebarSortMenu).className ?? ""}`} role="menu" aria-label={t('projects.sort.menu')}><div className={`sidebar-menu__label ${stylex.props(sidebarStyles.sidebarMenuLabel).className ?? ""}`} aria-hidden="true">{t('projects.sort.menu')}</div>{PROJECT_SORT_MODES.map((mode) => <button key={mode} type="button" role="menuitemradio" aria-checked={projectSortMode === mode} className={projectSortMode === mode ? 'is-active' : ''} onClick={() => { setProjectSortMenuOpen(false); onSetProjectSortMode(mode) }}>{t(PROJECT_SORT_LABEL_KEYS[mode])}{projectSortMode === mode ? <Check size={12} aria-hidden="true" /> : null}</button>)}</div> : null}</span></div>
         {loading ? <div className="compact-state" role="status"><EmptyState title="Loading sessions…">{null}</EmptyState></div> : null}
       {!loading && visibleProjects.length === 0 ? <div className="compact-state"><EmptyState title={normalized ? 'No matching projects or sessions' : 'No projects yet'}>{null}</EmptyState></div> : null}
         {projectSections.filter((section) => section.projects.length > 0).map((section) => (
           <section key={section.id} className="sidebar__project-section" aria-label={section.label}>
-            {normalized ? <h2 className="sidebar__group-heading">{section.label}</h2> : null}
+            {normalized ? <h2 className={`sidebar__group-heading ${stylex.props(sidebarStyles.sidebarGroupHeading).className ?? ""}`}>{section.label}</h2> : null}
             {section.projects.map((project) => {
               const allSessions = sessionsByProject.get(project.id) ?? []
               const projectSessions = normalized ? matchingSessions.get(project.id) ?? [] : allSessions
@@ -345,39 +342,41 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
               const attentionCount = allSessions.filter(needsAttention).length
               const rowId = `${section.id}:${project.id}`
               return (
-                <div className="project-group" key={project.id}>
+                <div className={`project-group ${stylex.props(sidebarStyles.projectGroup).className ?? ""}`} key={project.id}>
                   <div
-                    className={`project-row ${activeProjectId === project.id && activeView === 'session' ? 'is-selected' : ''} ${projectMenu === rowId ? 'is-menu-open' : ''}`}
+                    className={[`project-row ${activeProjectId === project.id && activeView === 'session' ? 'is-selected' : ''} ${projectMenu === rowId ? 'is-menu-open' : ''}`, stylex.props(sidebarStyles.projectRow, (projectMenu === rowId) && sidebarStyles.projectRowIsMenuOpen).className].filter(Boolean).join(' ')}
                     onContextMenu={(event) => { event.preventDefault(); setProjectMenu(rowId) }}
                   >
-                    {!normalized ? <button className="project-row__collapse" type="button" aria-expanded={!isCollapsed} aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} title={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} onClick={() => { setProjectMenu(null); setCollapsed((value) => ({ ...value, [project.id]: !isCollapsed })) }}>
+                    {!normalized ? <button className={`project-row__collapse ${stylex.props(sidebarStyles.projectRowCollapse).className ?? ""}`} type="button" aria-expanded={!isCollapsed} aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} title={`${isCollapsed ? 'Expand' : 'Collapse'} ${project.name}`} onClick={() => { setProjectMenu(null); setCollapsed((value) => ({ ...value, [project.id]: !isCollapsed })) }}>
                       <CaretDown size={12} />
                     </button> : null}
-                    <button className="project-row__main" type="button" onClick={() => { setProjectMenu(null); setQuery(''); revealProject(project.id); onSelectProject(project) }} title={project.path}>
+                    <button className={`project-row__main ${stylex.props(sidebarStyles.projectRowMain).className ?? ""}`} type="button" onClick={() => { setProjectMenu(null); setQuery(''); revealProject(project.id); onSelectProject(project) }} title={project.path}>
                       <span>{project.name}</span>
                     </button>
-                    <IconButton size="small" className="project-row__new-session row-action" label={`New session in ${project.name}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={13} /></IconButton>
-                    {running ? <span className="project-working" role="img" aria-label="Agent working" title="Agent working"><StatusMark state="running" size={14} /></span> : null}
-                    {attentionCount ? <span className="project-attention" role="img" aria-label={`${attentionCount} sessions need attention`} title={`${attentionCount} sessions need attention`}>{attentionCount}</span> : null}
-                    {project.pinned ? <PushPin className="project-row__pin" size={11} /> : null}
-                    {projectMenu === rowId ? <div className="project-row__menu" role="menu" aria-label={`Project options for ${project.name}`}>{!project.inferred ? <button type="button" role="menuitem" onClick={() => { setProjectMenu(null); onTogglePinProject(project) }}><PushPin size={12} /> {t(project.pinned ? 'projects.unpin' : 'projects.pin')}</button> : null}<button type="button" role="menuitem" className="is-danger" onClick={() => { setProjectMenu(null); setRemoveTarget(project) }}><Trash size={12} /> Remove project</button></div> : null}
+                    <IconButton xstyle={[sidebarStyles.rowAction, sidebarStyles.projectRowNewSession]} size="small" className="project-row__new-session row-action" label={`New session in ${project.name}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={13} /></IconButton>
+                    {running ? <span className={`project-working ${stylex.props(sidebarStyles.projectWorking).className ?? ""}`} role="img" aria-label="Agent working" title="Agent working"><StatusMark state="running" size={14} /></span> : null}
+                    {attentionCount ? <span className={`project-attention ${stylex.props(sidebarStyles.projectAttention).className ?? ""}`} role="img" aria-label={`${attentionCount} sessions need attention`} title={`${attentionCount} sessions need attention`}>{attentionCount}</span> : null}
+                    {project.pinned ? <PushPin className={`project-row__pin ${stylex.props(sidebarStyles.projectRowPin).className ?? ""}`} size={11} /> : null}
+                    {projectMenu === rowId ? <div className={`project-row__menu ${stylex.props(sidebarStyles.projectRowMenu).className ?? ""}`} role="menu" aria-label={`Project options for ${project.name}`}>{!project.inferred ? <button type="button" role="menuitem" onClick={() => { setProjectMenu(null); onTogglePinProject(project) }}><PushPin size={12} /> {t(project.pinned ? 'projects.unpin' : 'projects.pin')}</button> : null}<button type="button" role="menuitem" className="is-danger" onClick={() => { setProjectMenu(null); setRemoveTarget(project) }}><Trash size={12} /> Remove project</button></div> : null}
                   </div>
                   {!isCollapsed ? (
-                    <div className="session-list">
+                    <div className={`session-list ${stylex.props(sidebarStyles.sessionList).className ?? ""}`}>
                       {visibleSessions.map((session) => {
                         const isSelected = activeSessionId === session.id && activeView === 'session'
                         const hasAttn = needsAttention(session)
+                        const roster = onOpenSpecialist ? specialistRosters[session.filePath] : undefined
                         return (
-                          <div key={session.id} className={`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`}>
-                            <button type="button" title={session.title} aria-current={isSelected ? 'page' : undefined} className="session-row" onClick={() => openSession(session, project.id)} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
-                              <span className="sr-only">{statusLabel[session.status]}: </span>
-                              <span className="session-row__text"><span className="session-row__title">{session.title}{workflow?.finished.has(session.filePath) ? <span className="task-finished-badge">Finished</span> : null}</span><span className="session-row__meta" title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
+                          <Fragment key={session.id}>
+                          <div className={[`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${sessionMenu === session.id ? 'is-menu-open' : ''}`, stylex.props(sidebarStyles.sessionRowWrap, (sessionMenu === session.id) && sidebarStyles.sessionRowWrapIsMenuOpen, (isSelected) && sidebarStyles.sessionRowWrapIsSelected).className].filter(Boolean).join(' ')}>
+                            <button type="button" title={session.title} aria-current={isSelected ? 'page' : undefined} className={`session-row ${stylex.props(sidebarStyles.sessionRow).className ?? ""}`} onClick={() => openSession(session, project.id)} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
+                              <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{statusLabel[session.status]}: </span>
+                              <span className={`session-row__text ${stylex.props(sidebarStyles.sessionRowText).className ?? ""}`}><span className={`session-row__title ${stylex.props(sidebarStyles.sessionRowTitle).className ?? ""}`}>{session.title}{workflow?.finished.has(session.filePath) ? <span className={`task-finished-badge ${stylex.props(taskWorkflowsStyles.taskFinishedBadge).className ?? ""}`}>Finished</span> : null}</span><span className={`session-row__meta ${stylex.props(sidebarStyles.sessionRowMeta).className ?? ""}`} title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
                               <SessionStatusGlyph session={session} attention={hasAttn} live={liveBySession[session.filePath]} />
                             </button>
-                            <IconButton
-                              size="small"
-                              className={`session-row__archive ${archiveTarget?.id === session.id ? 'is-confirming' : ''}`}
-                              label={archiveTarget?.id === session.id ? `Confirm archive ${session.title}` : `Archive ${session.title}`}
+                            <button type="button"
+                              className={`icon-button icon-button--small session-row__archive ${archiveTarget?.id === session.id ? 'is-confirming' : ''} ${stylex.props(sidebarStyles.rowIconButton, sidebarStyles.sessionRowArchive, (archiveTarget?.id === session.id) && sidebarStyles.sessionRowArchiveIsConfirming).className ?? ""}`}
+                              aria-label={archiveTarget?.id === session.id ? `Confirm archive ${session.title}` : `Archive ${session.title}`}
+                              title={archiveTarget?.id === session.id ? `Confirm archive ${session.title}` : `Archive ${session.title}`}
                               data-archive-confirming={archiveTarget?.id === session.id}
                               onClick={() => {
                                 setSessionMenu(null)
@@ -385,9 +384,9 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                                 setArchiveTarget(null)
                                 void onArchiveSession(session)
                               }}
-                            >{archiveTarget?.id === session.id ? <Check size={13} /> : <Archive size={13}/>}</IconButton>
-                            <IconButton size="small" className="session-row__more" aria-expanded={sessionMenu === session.id} label={`Session options for ${session.title}`} onClick={() => setSessionMenu((current) => current === session.id ? null : session.id)}><DotsThree size={13}/></IconButton>
-                            {sessionMenu === session.id ? <div className="session-row__menu" aria-label="Session options">
+                            >{archiveTarget?.id === session.id ? <Check size={13} /> : <Archive size={13}/>}</button>
+                            <button type="button" className={`icon-button icon-button--small session-row__more ${stylex.props(sidebarStyles.rowIconButton, sidebarStyles.sessionRowMore).className ?? ""}`} aria-expanded={sessionMenu === session.id} aria-label={`Session options for ${session.title}`} title={`Session options for ${session.title}`} onClick={() => setSessionMenu((current) => current === session.id ? null : session.id)}><DotsThree size={13}/></button>
+                            {sessionMenu === session.id ? <div className={`session-row__menu ${stylex.props(sidebarStyles.sessionRowMenu).className ?? ""}`} aria-label="Session options">
                               <button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> Copy session UUID</button>
                               <button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><NotePencil size={12}/> Rename</button>
                               {onContinueInVsCode && !runtimeOwners?.has(session.filePath) ? <button
@@ -399,10 +398,12 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                               {workflow?.sessionFile === session.filePath && onOpenSideConversation ? sideConversations?.map((side, index) => <button key={side.sessionFile} type="button" disabled={workflow.pending} onClick={() => { setSessionMenu(null); onOpenSideConversation(side.sessionFile) }}><ChatCircleDots size={12} /> Open side conversation {index + 1}</button>) : null}
                             </div> : null}
                           </div>
+                          {roster?.length && onOpenSpecialist ? <SidebarSubagents session={session} specialists={roster} selected={isSelected} openSpecialistId={isSelected ? openSpecialistId : null} onOpen={onOpenSpecialist} /> : null}
+                          </Fragment>
                         )
                       })}
-                      {remaining > 0 ? <button type="button" className="session-row session-row--empty" onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
-                      {projectSessions.length === 0 ? <button type="button" title={`New session in ${project.name}`} className="session-row session-row--empty" onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button> : null}
+                      {remaining > 0 ? <button type="button" className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
+                      {projectSessions.length === 0 ? <button type="button" title={`New session in ${project.name}`} className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button> : null}
                     </div>
                   ) : null}
                 </div>
@@ -410,13 +411,6 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
             })}
           </section>
         ))}
-      </div>
-
-      <div className="sidebar__footer" role="toolbar" aria-label="Workspace tools">
-        <IconButton className={activeView === 'settings' ? 'is-active' : ''} label={`${t('nav.settings')} (${settingsShortcut})`} onClick={() => onNavigate('settings')}><Gear size={16} /></IconButton>
-        {onToggleVoice ? <IconButton className={voiceOpen ? 'is-active voice-toggle--active' : ''} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} onClick={onToggleVoice}><Waveform size={16} /></IconButton> : null}
-        {onToggleTerminal ? <IconButton className={terminalOpen && activeView === 'session' ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} onClick={onToggleTerminal}><Terminal size={16} /></IconButton> : null}
-        {onOpenInVsCode ? <IconButton label={activeProject ? `Open ${activeProject.name} in VS Code` : 'Open in VS Code'} disabled={!activeProject} onClick={() => { if (activeProject) onOpenInVsCode(activeProject.path) }}><Code size={16} /></IconButton> : null}
       </div>
 
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
@@ -434,6 +428,9 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.activeHarness === next.activeHarness
     && previous.clearedAttention === next.clearedAttention
     && previous.liveBySession === next.liveBySession
+    && previous.specialistRosters === next.specialistRosters
+    && previous.openSpecialistId === next.openSpecialistId
+    && previous.onOpenSpecialist === next.onOpenSpecialist
     && previous.onSelectProject === next.onSelectProject
     && previous.onSelectSession === next.onSelectSession
     && previous.onNavigate === next.onNavigate
@@ -451,11 +448,6 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onContinueInVsCode === next.onContinueInVsCode
     && previous.sideConversations === next.sideConversations
     && previous.onOpenSideConversation === next.onOpenSideConversation
-    && previous.terminalOpen === next.terminalOpen
-    && previous.voiceOpen === next.voiceOpen
-    && previous.onToggleTerminal === next.onToggleTerminal
-    && previous.onToggleVoice === next.onToggleVoice
-    && previous.onOpenInVsCode === next.onOpenInVsCode
     && previous.overlay === next.overlay
     && previous.platform === next.platform
 }

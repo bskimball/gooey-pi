@@ -1,3 +1,8 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import * as stylex from '@stylexjs/stylex'
@@ -122,15 +127,15 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
   })()
 
   return (
-    <div className="settings-page">
-      <nav className="settings-nav" aria-label={t('settings.sections')}>
+    <div className={`settings-page ${stylex.props(settingsStyles.settingsPage, [responsiveStyles.settingsPage, responsiveLayoutStyles.settingsPage]).className ?? ""}`}>
+      <nav className={`settings-nav ${stylex.props(settingsStyles.settingsNav, [responsiveStyles.settingsNav, responsiveLayoutStyles.settingsNav]).className ?? ""}`} aria-label={t('settings.sections')}>
         <AstryxButton
           label="Back to session"
           variant="ghost"
           size="sm"
           icon={<ArrowLeft size={14} />}
           className="settings-nav__close"
-          xstyle={[navStyles.item, navStyles.close]}
+          xstyle={[settingsStyles.settingsNavClose, navStyles.item, navStyles.close, responsiveStyles.settingsNavClose]}
           onClick={onClose}
         >
           <span>Back to session</span>
@@ -155,7 +160,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           )
         })}
       </nav>
-      <div className="settings-content scroll-area"><div className="settings-content__inner">{content}</div></div>
+      <div className={`settings-content scroll-area ${stylex.props(baseStyles.scrollArea, settingsStyles.settingsContent).className ?? ""}`}><div className={`settings-content__inner ${stylex.props(settingsStyles.settingsContentInner, [responsiveStyles.settingsContentInner, responsiveLayoutStyles.settingsContentInner]).className ?? ""}`}>{content}</div></div>
       {confirmReset ? (
         <Modal
           title="Clear browser data?"
@@ -168,7 +173,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           )}
         >
           <p>This signs you out of websites opened in Apex and removes history, cache, cookies, and saved permissions. This cannot be undone.</p>
-          {resetError ? <Banner status="error" role="alert" className="settings-error" title={resetError} /> : null}
+          {resetError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={resetError} /> : null}
         </Modal>
       ) : null}
     </div>

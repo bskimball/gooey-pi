@@ -1,5 +1,8 @@
-import { isValidElement, memo, useEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
-import type { Components, UrlTransform } from 'react-markdown'
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as markdownStyles } from 'apex-ui/styles/markdown.stylex'
+import { cloneElement, createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react'
+import type { Components, ExtraProps, UrlTransform } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openExternalUrl } from '@/lib/desktop-actions'
@@ -10,7 +13,12 @@ interface MarkdownTextProps {
   text: string
   /** Actively streaming text throttles Markdown re-parses to a coherent committed snapshot. */
   streaming?: boolean
+  variant?: 'body' | 'reasoning' | 'note' | 'compact' | 'muted' | 'workOrder' | 'prompt' | 'report'
 }
+
+export const MarkdownScopeContext = createContext<'default' | 'specialist' | 'specialist-assistant'>('default')
+
+const MarkdownRenderContext = createContext<{ streaming: boolean; variant: NonNullable<MarkdownTextProps['variant']>; specialist: boolean; assistant: boolean }>({ streaming: false, variant: 'body', specialist: false, assistant: false })
 
 async function openMarkdownLink(event: MouseEvent<HTMLAnchorElement>, href: string): Promise<string | null> {
   event.preventDefault()
@@ -27,10 +35,10 @@ async function openMarkdownLink(event: MouseEvent<HTMLAnchorElement>, href: stri
 function MarkdownLink({ href, children, ...props }: ComponentProps<'a'>) {
   const [failure, setFailure] = useState<string | null>(null)
   if (!href || !/^(https?:|mailto:|file:|#)/i.test(href)) {
-    return <span className="markdown-link-unsupported" title={href ? `Project-relative link: ${href}` : undefined}>{children}</span>
+    return <span className={`markdown-link-unsupported ${stylex.props(transcriptStyles.markdownLinkUnsupported).className ?? ""}`} title={href ? `Project-relative link: ${href}` : undefined}>{children}</span>
   }
   return <>
-    <a {...props} href={href} rel="noreferrer" onClick={(event) => { void openMarkdownLink(event, href).then(setFailure) }}><bdi>{children}</bdi></a>
+    <a {...props} className={[props.className, stylex.props(markdownStyles.link).className].filter(Boolean).join(' ')} href={href} rel="noreferrer" onClick={(event) => { void openMarkdownLink(event, href).then(setFailure) }}><bdi {...stylex.props(markdownStyles.linkText)}>{children}</bdi></a>
     {failure ? <span role="alert"> {failure}</span> : null}
   </>
 }
@@ -58,28 +66,103 @@ function htmlFenceSource(children: ReactNode): string | undefined {
   return typeof body === 'string' ? body : undefined
 }
 
+type MarkdownAstNode = { type: string; tagName?: string; data?: Record<string, unknown>; children?: MarkdownAstNode[] }
+
+function markdownEdges() {
+  return (tree: { children: MarkdownAstNode[] }) => {
+    const blocks = tree.children.filter((node) => node.type === 'element')
+    const first = blocks[0]
+    const last = blocks.at(-1)
+    if (first) first.data = { ...first.data, proseFirst: true }
+    if (!last) return
+    last.data = { ...last.data, proseLast: true }
+    let cursor: MarkdownAstNode | undefined = last
+    if (last.tagName === 'ul' || last.tagName === 'ol') cursor = last.children?.filter((node) => node.tagName === 'li').at(-1)
+    else if (['pre', 'table', 'hr'].includes(last.tagName ?? '')) cursor = undefined
+    if (cursor) cursor.data = { ...cursor.data, proseCursor: true }
+  }
+}
+
+const markdownRehypePlugins = [markdownEdges]
+
+type MarkdownBlockTag = 'p' | 'blockquote' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'ul' | 'ol' | 'li' | 'pre' | 'table' | 'td' | 'th' | 'hr' | 'strong'
+
+function useMarkdownStyles(Tag: MarkdownBlockTag, node?: ExtraProps['node']): stylex.StyleXStyles {
+  const rendering = useContext(MarkdownRenderContext)
+  const block = ['p', 'ul', 'ol', 'blockquote', 'pre', 'table'].includes(Tag)
+  const heading = ['h1', 'h2', 'h3', 'h4'].includes(Tag)
+  const anyHeading = heading || Tag === 'h5' || Tag === 'h6'
+  const reasoning = rendering.variant === 'reasoning'
+  const workOrder = rendering.variant === 'workOrder'
+  return [
+    block && markdownStyles.block,
+    Tag === 'p' && markdownStyles.paragraph,
+    heading && markdownStyles.heading,
+    Tag === 'h1' && markdownStyles.h1,
+    Tag === 'h2' && markdownStyles.h2,
+    (Tag === 'h3' || Tag === 'h4') && markdownStyles.h3,
+    (Tag === 'ul' || Tag === 'ol') && markdownStyles.list,
+    Tag === 'li' && markdownStyles.item,
+    Tag === 'blockquote' && markdownStyles.quote,
+    Tag === 'pre' && markdownStyles.pre,
+    Tag === 'table' && markdownStyles.table,
+    (Tag === 'td' || Tag === 'th') && markdownStyles.cell,
+    Tag === 'th' && markdownStyles.headerCell,
+    Tag === 'hr' && markdownStyles.rule,
+    rendering.streaming && (Tag === 'p' || heading) && markdownStyles.streamingText,
+    reasoning && block && Tag !== 'table' && markdownStyles.reasoningBlock,
+    reasoning && anyHeading && markdownStyles.reasoningHeading,
+    reasoning && Tag === 'strong' && markdownStyles.reasoningStrong,
+    rendering.assistant && block && markdownStyles.specialistBlock,
+    workOrder && block && markdownStyles.specialistUserBlock,
+    workOrder && heading && markdownStyles.specialistUserHeading,
+    workOrder && Tag === 'pre' && markdownStyles.specialistUserPre,
+    rendering.specialist && (Tag === 'pre' || Tag === 'table') && markdownStyles.specialistScroll,
+    node?.data && 'proseFirst' in node.data && node.data.proseFirst === true && markdownStyles.firstBlock,
+    node?.data && 'proseLast' in node.data && node.data.proseLast === true && markdownStyles.lastBlock,
+    rendering.streaming && rendering.variant === 'body' && node?.data && 'proseCursor' in node.data && node.data.proseCursor === true && markdownStyles.cursor,
+  ]
+}
+
+function MarkdownBlock({ as: Tag, node, className, ...props }: HTMLAttributes<HTMLElement> & ExtraProps & { as: MarkdownBlockTag }) {
+  const applied = stylex.props(useMarkdownStyles(Tag, node))
+  const direction = Tag === 'pre' ? 'ltr' : 'auto'
+  const preserveDirection = Tag === 'table' || Tag === 'hr' || Tag === 'strong'
+  return <Tag {...props} className={[className, applied.className].filter(Boolean).join(' ')} dir={preserveDirection ? undefined : direction} />
+}
+
+function MarkdownCode({ node: _node, block = false, className, ...props }: ComponentProps<'code'> & ExtraProps & { block?: boolean }) {
+  return <code {...props} className={[className, stylex.props(markdownStyles.code, block && markdownStyles.blockCode).className].filter(Boolean).join(' ')} dir="ltr" />
+}
+
+function MarkdownPre({ node, children, ...props }: ComponentProps<'pre'> & ExtraProps) {
+  const sourceXstyle = useMarkdownStyles('pre')
+  const source = htmlFenceSource(children)
+  if (source !== undefined) return <HtmlFence source={source} sourceXstyle={sourceXstyle} xstyle={[node?.data && 'proseFirst' in node.data && node.data.proseFirst === true && markdownStyles.firstBlock, node?.data && 'proseLast' in node.data && node.data.proseLast === true && markdownStyles.lastBlock]} />
+  return <MarkdownBlock {...props} node={node} as="pre">{isValidElement<{ block?: boolean }>(children) ? cloneElement(children, { block: true }) : children}</MarkdownBlock>
+}
+
 const markdownComponents: Components = {
   a: ({ node: _node, ...props }) => <MarkdownLink {...props} />,
-  blockquote: ({ node: _node, ...props }) => <blockquote {...props} dir="auto" />,
-  code: ({ node: _node, children, ...props }) => <code {...props} dir="ltr">{children}</code>,
-  h1: ({ node: _node, ...props }) => <h1 {...props} dir="auto" />,
-  h2: ({ node: _node, ...props }) => <h2 {...props} dir="auto" />,
-  h3: ({ node: _node, ...props }) => <h3 {...props} dir="auto" />,
-  h4: ({ node: _node, ...props }) => <h4 {...props} dir="auto" />,
-  h5: ({ node: _node, ...props }) => <h5 {...props} dir="auto" />,
-  h6: ({ node: _node, ...props }) => <h6 {...props} dir="auto" />,
+  blockquote: (props) => <MarkdownBlock {...props} as="blockquote" />,
+  code: MarkdownCode,
+  h1: (props) => <MarkdownBlock {...props} as="h1" />,
+  h2: (props) => <MarkdownBlock {...props} as="h2" />,
+  h3: (props) => <MarkdownBlock {...props} as="h3" />,
+  h4: (props) => <MarkdownBlock {...props} as="h4" />,
+  h5: (props) => <MarkdownBlock {...props} as="h5" />,
+  h6: (props) => <MarkdownBlock {...props} as="h6" />,
   img: ({ node: _node, ...props }) => <WorkspaceImage {...props} />,
-  li: ({ node: _node, ...props }) => <li {...props} dir="auto" />,
-  ol: ({ node: _node, ...props }) => <ol {...props} dir="auto" />,
-  p: ({ node: _node, ...props }) => <p {...props} dir="auto" />,
-  pre: ({ node: _node, children, ...props }) => {
-    const source = htmlFenceSource(children)
-    if (source !== undefined) return <HtmlFence source={source} />
-    return <pre {...props} dir="ltr">{children}</pre>
-  },
-  td: ({ node: _node, ...props }) => <td {...props} dir="auto" />,
-  th: ({ node: _node, ...props }) => <th {...props} dir="auto" />,
-  ul: ({ node: _node, ...props }) => <ul {...props} dir="auto" />,
+  li: (props) => <MarkdownBlock {...props} as="li" />,
+  ol: (props) => <MarkdownBlock {...props} as="ol" />,
+  p: (props) => <MarkdownBlock {...props} as="p" />,
+  pre: MarkdownPre,
+  table: (props) => <MarkdownBlock {...props} as="table" />,
+  td: (props) => <MarkdownBlock {...props} as="td" />,
+  th: (props) => <MarkdownBlock {...props} as="th" />,
+  ul: (props) => <MarkdownBlock {...props} as="ul" />,
+  hr: (props) => <MarkdownBlock {...props} as="hr" />,
+  strong: (props) => <MarkdownBlock {...props} as="strong" />,
 }
 
 export const STREAMING_PARSE_INTERVAL_MS = 100
@@ -130,7 +213,9 @@ export function advanceStreamingParse(
 }
 
 /** Render model-authored Markdown without enabling raw HTML or remote images. */
-export const MarkdownText = memo(function MarkdownText({ text, streaming = false }: MarkdownTextProps) {
+export const MarkdownText = memo(function MarkdownText({ text, streaming = false, variant = 'body' }: MarkdownTextProps) {
+  const scope = useContext(MarkdownScopeContext)
+  const rendering = useMemo(() => ({ streaming, variant, specialist: scope !== 'default', assistant: scope === 'specialist-assistant' }), [streaming, variant, scope])
   const parseStateRef = useRef<StreamingParseState>({ boundary: text.length, lastParseAt: Date.now() })
   const [, setParseRevision] = useState(0)
 
@@ -170,8 +255,22 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
   // unparsed suffix as a sibling block makes punctuation and partial words
   // jump onto separate lines while tokens are still arriving.
   const markdown = useMemo(
-    () => <ReactMarkdown remarkPlugins={markdownPlugins} skipHtml urlTransform={markdownUrlTransform} components={markdownComponents}>{parsedText}</ReactMarkdown>,
+    () => <ReactMarkdown remarkPlugins={markdownPlugins} rehypePlugins={markdownRehypePlugins} skipHtml urlTransform={markdownUrlTransform} components={markdownComponents}>{parsedText}</ReactMarkdown>,
     [parsedText],
   )
-  return <div className={streaming ? 'prose is-streaming' : 'prose'}>{markdown}</div>
+  const applied = stylex.props(
+    transcriptStyles.prose,
+    streaming && markdownStyles.tightRoot,
+    variant === 'reasoning' && markdownStyles.reasoningRoot,
+    variant === 'compact' && markdownStyles.compactRoot,
+    variant === 'note' && markdownStyles.noteRoot,
+    variant === 'muted' && markdownStyles.mutedRoot,
+    rendering.assistant && markdownStyles.specialistRoot,
+    variant === 'workOrder' && markdownStyles.specialistUserRoot,
+    variant === 'prompt' && markdownStyles.promptRoot,
+    variant === 'report' && markdownStyles.reportRoot,
+    rendering.specialist && variant === 'note' && markdownStyles.specialistNoteRoot,
+    rendering.specialist && variant === 'reasoning' && markdownStyles.specialistReasoningRoot,
+  )
+  return <MarkdownRenderContext.Provider value={rendering}><div className={[streaming ? 'prose is-streaming' : 'prose', applied.className].filter(Boolean).join(' ')}>{markdown}</div></MarkdownRenderContext.Provider>
 })

@@ -5,6 +5,8 @@ import { inspectorRestoreMachine } from './inspectorRestoreMachine'
 
 export const INSPECTOR_MIN = 340
 export const INSPECTOR_DEFAULT = 410
+export const SIDEBAR_MIN = 200
+export const SIDEBAR_DEFAULT = 252
 export const CHAT_MIN = 360
 export const TERMINAL_MIN = 170
 export const TERMINAL_DEFAULT = 310
@@ -21,6 +23,7 @@ const readSavedPanelSize = (key: string): number | null => {
 }
 
 const readPanelSize = (key: string, fallback: number) => readSavedPanelSize(key) ?? fallback
+const getSidebarMax = () => Math.max(SIDEBAR_MIN, Math.min(480, Math.round(window.innerWidth * 0.4)))
 
 export const getInitialInspectorWidth = (rowWidth: number, maxWidth: number) => {
   if (rowWidth <= 0) return Math.min(maxWidth, Math.max(INSPECTOR_MIN, INSPECTOR_DEFAULT))
@@ -53,12 +56,14 @@ export function usePanelLayout({
   const [smallestLayout, setSmallestLayout] = useState(() => window.matchMedia(`(max-width: ${SMALLEST_LAYOUT_BREAKPOINT}px)`).matches)
   const [smallestSidebarAllowed, setSmallestSidebarAllowed] = useState(false)
   const [smallestInspectorAllowed, setSmallestInspectorAllowed] = useState(false)
+  const [sidebarMax, setSidebarMax] = useState(getSidebarMax)
+  const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(getSidebarMax(), Math.max(SIDEBAR_MIN, readPanelSize('prime-work.sidebar-width', SIDEBAR_DEFAULT))))
   const savedInspectorWidthRef = useRef(readSavedPanelSize('prime-work.inspector-width') !== null)
   const [inspectorWidth, setInspectorWidth] = useState(() => readPanelSize('prime-work.inspector-width', INSPECTOR_DEFAULT))
   const savedBrowserWidthRef = useRef(readSavedPanelSize('prime-work.browser-width') !== null)
   const [browserWidth, setBrowserWidth] = useState(() => readPanelSize('prime-work.browser-width', INSPECTOR_DEFAULT))
   const [inspectorExpanded, setInspectorExpanded] = useState(false)
-  const browserSelected = inspectorTab === 'browser'
+  const browserSelected = view === 'session' && inspectorTab === 'browser'
   const changeInspectorWidth = useCallback((width: number) => {
     setInspectorExpanded(false)
     if (browserSelected) setBrowserWidth(width)
@@ -86,6 +91,7 @@ export function usePanelLayout({
       const smallestLayout = window.innerWidth <= SMALLEST_LAYOUT_BREAKPOINT
       setCompactLayout(window.innerWidth <= 980)
       setSmallestLayout(smallestLayout)
+      setSidebarMax(getSidebarMax())
       if (smallestLayout) {
         setSmallestSidebarAllowed(false)
         setSmallestInspectorAllowed(false)
@@ -121,17 +127,9 @@ export function usePanelLayout({
   }, [compactLayout, inspectorOpen, setInspectorOpen, visibleInspectorOpen, visibleSidebarOpen])
 
   useEffect(() => {
-    if (!compactLayout || !visibleInspectorOpen) return
-    // The title toolbar stays live so the toggle that opened the drawer can also close it.
-    const targets = [...document.querySelectorAll<HTMLElement>('.conversation-pane, .terminal-drawer, .session-workspace > .resize-handle')]
-    for (const target of targets) target.inert = true
-    return () => { for (const target of targets) target.inert = false }
-  }, [compactLayout, terminalOpen, visibleInspectorOpen])
-
-  useEffect(() => {
     const row = workspaceRowRef.current
-    const workspace = sessionWorkspaceRef.current
-    if (!row || !workspace) return
+    if (!row) return
+    const workspace = sessionWorkspaceRef.current ?? row
     const syncBounds = () => {
       if (!window.matchMedia('(max-width: 980px)').matches) {
         const nextMax = Math.max(INSPECTOR_MIN, row.clientWidth - CHAT_MIN)
@@ -159,6 +157,8 @@ export function usePanelLayout({
     setBrowserWidth((value) => Math.min(inspectorMax, Math.max(INSPECTOR_MIN, value)))
   }, [inspectorMax])
   useEffect(() => setTerminalHeight((value) => Math.min(terminalMax, Math.max(TERMINAL_MIN, value))), [terminalMax])
+  useEffect(() => setSidebarWidth((value) => Math.min(sidebarMax, Math.max(SIDEBAR_MIN, value))), [sidebarMax])
+  useEffect(() => { window.localStorage.setItem('prime-work.sidebar-width', String(sidebarWidth)) }, [sidebarWidth])
   useEffect(() => { window.localStorage.setItem('prime-work.inspector-width', String(inspectorWidth)) }, [inspectorWidth])
   useEffect(() => { window.localStorage.setItem('prime-work.browser-width', String(browserWidth)) }, [browserWidth])
   useEffect(() => { window.localStorage.setItem('prime-work.terminal-height', String(terminalHeight)) }, [terminalHeight])
@@ -166,6 +166,9 @@ export function usePanelLayout({
   const selectedInspectorWidth = browserSelected ? browserWidth : inspectorWidth
   return {
     compactLayout,
+    sidebarWidth,
+    setSidebarWidth,
+    sidebarMax,
     sidebarSuppressed,
     inspectorSuppressed,
     setSmallestSidebarAllowed,

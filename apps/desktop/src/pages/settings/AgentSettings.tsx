@@ -1,3 +1,8 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { ArrowsClockwise, Keyboard, Robot, ShieldCheck } from '@/components/icons'
@@ -32,19 +37,19 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
   return (
     <>
       <header><h1>Pi</h1><p>Runtime discovery, model providers, and workspace permissions.</p></header>
-      <section className="settings-group">
-        <div className="settings-group__heading">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
+        <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}>
           <h2>Runtime</h2>
-          <ApexButton compact disabled={refreshing} icon={<ArrowsClockwise className={refreshing ? 'spin' : ''} size={13} />} onClick={() => { void refreshHarnesses() }}>
+          <ApexButton compact disabled={refreshing} icon={<ArrowsClockwise className={[refreshing ? 'spin' : '', stylex.props((refreshing) && activityStyles.spin, (refreshing) && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={13} />} onClick={() => { void refreshHarnesses() }}>
             {refreshing ? 'Refreshing…' : 'Refresh harnesses'}
           </ApexButton>
         </div>
-        {refreshError ? <Banner status="error" role="alert" className="settings-error" title={refreshError} /> : null}
+        {refreshError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={refreshError} /> : null}
         {HARNESS_IDS.map((harness) => {
           const name = HARNESS_AGENT_NAMES[harness]
           const status = meta?.harnesses[harness]
           return (
-            <div className="runtime-card" key={harness}>
+            <div className={`runtime-card ${stylex.props(settingsStyles.runtimeCard).className ?? ""}`} key={harness}>
               <span className={status?.path ? 'is-online' : ''}><Robot size={17} /></span>
               <div>
                 <strong>{status?.path ? `${name} is ready` : `${name} not detected`}</strong>
@@ -54,7 +59,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
             </div>
           )
         })}
-        <p className="settings-group__description">Discovery checks a saved override first, then the harness environment variable, bundled files, PATH, and standard install directories. Refreshing updates future sessions without restarting Apex.</p>
+        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Discovery checks a saved override first, then the harness environment variable, bundled files, PATH, and standard install directories. Refreshing updates future sessions without restarting Apex.</p>
         {HARNESS_IDS.map((harness) => <DraftSettingField
           key={harness}
           id={`runtime-path-${harness}`}
@@ -69,14 +74,14 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
           }}
         />)}
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Transcript</h2>
         <SettingsToggle checked={settings.showReasoningSummaries} onChange={(showReasoningSummaries) => { void onUpdate({ showReasoningSummaries }) }} label="Show reasoning summaries" description="Display reasoning summaries and traces, during and after a turn. Each Thought can be folded." />
         <SettingsToggle checked={settings.showToolCalls} onChange={(showToolCalls) => { void onUpdate({ showToolCalls }) }} label="Show tool calls" description="Display compact tool activity, arguments, and expandable results." />
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Message shortcuts</h2>
-        <div className="settings-row">
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>Primary Enter action while an agent is working</strong><small>{oppositeActionShortcut} always uses the opposite action. {newLineShortcut} adds a new line.</small></span>
           <SegmentedControl
             label="Primary Enter action"
@@ -85,7 +90,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
             onChange={(next) => {
               if (next === 'queue' || next === 'steer') void onUpdate({ messageEnterAction: next })
             }}
-            className="shortcut-choice"
+            className={`shortcut-choice ${stylex.props(settingsStyles.shortcutChoice).className ?? ""}`}
           >
             {(['queue', 'steer'] as const).map((action) => (
               <SegmentedControlItem
@@ -97,12 +102,12 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
             ))}
           </SegmentedControl>
         </div>
-        <div className="shortcut-row"><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Queue message' : 'Steer current turn'}</span><kbd>Enter</kbd></div>
-        <div className="shortcut-row"><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Steer current turn' : 'Queue message'}</span><kbd>{oppositeActionShortcut}</kbd></div>
+        <div className={`shortcut-row ${stylex.props(settingsStyles.shortcutRow).className ?? ""}`}><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Queue message' : 'Steer current turn'}</span><kbd>Enter</kbd></div>
+        <div className={`shortcut-row ${stylex.props(settingsStyles.shortcutRow).className ?? ""}`}><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Steer current turn' : 'Queue message'}</span><kbd>{oppositeActionShortcut}</kbd></div>
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Permissions</h2>
-        <div className="info-row"><ShieldCheck size={15} /><div><strong>Workspace access</strong><small>The active agent only receives the project folders attached to a session.</small></div></div>
+        <div className={`info-row ${stylex.props(settingsStyles.infoRow).className ?? ""}`}><ShieldCheck size={15} /><div><strong>Workspace access</strong><small>The active agent only receives the project folders attached to a session.</small></div></div>
       </section>
     </>
   )

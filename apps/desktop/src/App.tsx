@@ -1,19 +1,31 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as pagesStyles } from 'apex-ui/styles/pages.stylex'
+import { styles as terminalStyles } from 'apex-ui/styles/terminal.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import { Sidebar } from '@/components/Sidebar'
+import { ChiefOfStaffOpening } from '@/components/activity/ChiefOfStaffOpening'
 import { useTaskWorkflowCommands } from '@/hooks/useTaskWorkflowCommands'
 import { TaskWorkflowContext } from '@/lib/task-context'
 import { TaskWorkflowFinished, TaskWorkflowNotice } from '@/components/TaskWorkflowChrome'
+import { AppRail } from '@/components/AppRail'
 import { TitleToolbar } from '@/components/TitleToolbar'
+import { SessionControls } from '@/components/SessionControls'
 import type { ProjectScriptKind } from '@/components/ProjectRunControl'
 import { Composer } from '@/components/Composer'
+import { InteractiveChatProvider } from '@/components/InteractiveChatContext'
 import type { TerminalCommandOutcome, TerminalDrawerHandle } from '@/components/TerminalDrawer'
 import { ResizeHandle } from '@/components/ResizeHandle'
+import { ActivityWorkspace } from '@/components/ActivityWorkspace'
 import { AppToast } from '@/components/AppToast'
 import { useAppShortcuts, usePreviousSession } from '@/hooks/useAppShortcuts'
 import { RuntimeOwnerNotice, useRuntimeOwners } from '@/components/RuntimeOwnerNotice'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
-import { activityNotificationSignature, readClearedActivity, readClearedAttention, sessionCompanionNotificationSignature } from '@/app/session-attention'
+import { readClearedAttention, sessionCompanionNotificationSignature } from '@/app/session-attention'
 import { errorMessage } from '@/lib/errors'
 import { I18nProvider } from '@/lib/i18n'
 import { openExternalUrl, openInVsCode, revealPath } from '@/lib/desktop-actions'
@@ -39,7 +51,7 @@ import type { BrowserReference } from '@/lib/browser-annotations'
 import { useExtensionUi } from '@/hooks/useExtensionUi'
 import { useActivityControls } from '@/hooks/useActivityControls'
 import { useSessionLive } from '@/hooks/useSessionLive'
-import { INSPECTOR_MIN, TERMINAL_DEFAULT, TERMINAL_MIN, usePanelLayout } from '@/hooks/usePanelLayout'
+import { INSPECTOR_MIN, SIDEBAR_DEFAULT, SIDEBAR_MIN, TERMINAL_DEFAULT, TERMINAL_MIN, usePanelLayout } from '@/hooks/usePanelLayout'
 import { usePluginSkills } from '@/hooks/usePluginSkills'
 import { useProviderCatalog } from '@/hooks/useProviderCatalog'
 import { useSidebarActions } from '@/hooks/useSidebarActions'
@@ -49,6 +61,7 @@ import { useComposerCommands } from '@/hooks/useComposerCommands'
 import type { SettingsSection } from '@/pages/settings/contracts'
 import { useWorkspaceActions } from '@/hooks/useWorkspaceActions'
 import { useWorkspaceRuntime } from '@/hooks/useWorkspaceRuntime'
+import { nextLiveSpecialistId, useOpenSessionSpecialist, useSpecialistRosters } from '@/hooks/useSpecialistRosters'
 import { HARNESS_IDS, type CheckoutAction, type CheckoutCatalog, type GitStatus, type HarnessId, type InspectorTab, type ApexModelDescriptor, type ApexProviderDescriptor, type ProjectRecord, type AutomationScheduleRecord, type QueuedPrompt, type ScheduleTiming, type SessionRecord, type TerminalPromptContext, type TranscriptMessage, type VoiceTaskStarted, type WorkspaceView } from '@/types/api'
 
 const TaskWorkflowDialogs = lazy(() => import('@/components/TaskWorkflowDialogs').then((module) => ({ default: module.TaskWorkflowDialogs })))
@@ -76,8 +89,8 @@ const EMPTY_MESSAGES: TranscriptMessage[] = []
 const HARNESS_PROVIDER_DOCS: Record<HarnessId, string> = {
   pi: 'https://pi.dev',
 }
-const LoadingPanel = ({ label }: { label: string }) => <div className="empty-state" role="status">Loading {label}…</div>
-const TerminalLoadingPanel = () => <div className="terminal-drawer terminal-drawer--loading" role="status">Loading terminal…</div>
+const LoadingPanel = ({ label }: { label: string }) => <div className={`empty-state ${stylex.props(pagesStyles.emptyState).className ?? ""}`} role="status">Loading {label}…</div>
+const TerminalLoadingPanel = () => <div className={`terminal-drawer terminal-drawer--loading ${stylex.props(terminalStyles.terminalDrawer, terminalStyles.terminalDrawerLoading, [responsiveStyles.terminalDrawer, responsiveLayoutStyles.terminalDrawer]).className ?? ""}`} role="status">Loading terminal…</div>
 
 interface TerminalSessionMount {
   id: string
@@ -94,7 +107,6 @@ export default function App() {
   const initialProject = bridge ? undefined : SAMPLE_PROJECTS[0]
   const initialSession = bridge ? undefined : SAMPLE_SESSIONS[0]
   const [clearedAttention, setClearedAttention] = useState<Record<string, string>>(() => readClearedAttention())
-  const [clearedActivity, setClearedActivity] = useState<Record<string, string>>(() => readClearedActivity())
   const [schedules, setSchedules] = useState<AutomationScheduleRecord[]>(() => bridge ? [] : SAMPLE_SCHEDULES)
   const [scheduleFocusId, setScheduleFocusId] = useState<string | null>(null)
   const [selectedSpecialist, setSelectedSpecialist] = useState<{ sessionKey: string; id: string } | null>(null)
@@ -149,35 +161,11 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem('prime-work.cleared-session-attention', JSON.stringify(clearedAttention))
   }, [clearedAttention])
-  useEffect(() => {
-    window.localStorage.setItem('prime-work.cleared-activity', JSON.stringify(clearedActivity))
-  }, [clearedActivity])
   const clearSessionAttention = useCallback((session: SessionRecord) => {
     const signature = sessionCompanionNotificationSignature(session)
     if (!signature) return
     setClearedAttention((current) => current[session.id] === signature ? current : { ...current, [session.id]: signature })
   }, [])
-  const clearActivity = useCallback((activitySessions: SessionRecord[]) => {
-    if (!activitySessions.length) return
-    const ids = new Set(activitySessions.map((session) => session.id))
-    setClearedActivity((current) => {
-      const next = { ...current }
-      for (const session of activitySessions) {
-        const signature = activityNotificationSignature(session)
-        if (signature) next[session.id] = signature
-      }
-      return next
-    })
-    setClearedAttention((current) => {
-      const next = { ...current }
-      for (const session of activitySessions) {
-        const signature = sessionCompanionNotificationSignature(session)
-        if (signature) next[session.id] = signature
-      }
-      return next
-    })
-    setSessions((items) => items.map((session) => ids.has(session.id) ? { ...session, unread: false } : session))
-  }, [setSessions])
   const workspace = useWorkspaceRuntime({
     bridge, harness: activeHarness, initialProject, initialSession, sessions: chatSessions,
     initialMessages: bridge ? [] : SAMPLE_TRANSCRIPT, reportError,
@@ -417,6 +405,8 @@ export default function App() {
     layout.setSmallestInspectorAllowed(true)
     openInspectorTab('specialists')
   }, [terminalSessionKey, layout.setSmallestInspectorAllowed, openInspectorTab])
+  const specialistRosters = useSpecialistRosters(chatSessions, workspace.activeSessionId, liveBySession)
+  const openSessionSpecialist = useOpenSessionSpecialist({ activeSessionId: workspace.activeSessionId, loadingSession: workspace.loadingSession, isSessionView: view === 'session', selectSession, openSpecialist })
   const composerCommands = useComposerCommands({
     bridge, runtimeId: workspace.runtime?.runtimeId, projectId: activeProject?.id, activeSession, sessions: chatSessions, messages: workspace.messages,
     newSession: () => newSession(), selectSession, renameSession, openInspectorTab, setToast,
@@ -655,6 +645,10 @@ export default function App() {
     setRestorePetVoiceFocus(false)
     setVoiceOrbOpen(nextOpen)
   }, [voiceOrbOpen])
+  const handleToggleVoice = useCallback(() => {
+    if (layout.compactLayout && sidebarVisible && !voiceOrbOpen) toggleSidebar()
+    toggleVoice()
+  }, [layout.compactLayout, sidebarVisible, voiceOrbOpen, toggleSidebar, toggleVoice])
   const sidebarActions = useSidebarActions({
     onSelectProject: selectProject, onSelectSession: selectSession, onNavigate: navigate, onNewSession: newSession,
     onAddProject: () => { void addProject() }, onRemoveProject: (project) => { void removeProject(project) },
@@ -667,12 +661,19 @@ export default function App() {
       if (layout.compactLayout && sidebarVisible && !terminalOpen) toggleSidebar()
       void toggleTerminal()
     },
-    onToggleVoice: () => { if (layout.compactLayout && sidebarVisible && !voiceOrbOpen) toggleSidebar(); toggleVoice() },
     onOpenInVsCode: openPathInVsCode,
   })
 
   const selectPreviousSession = usePreviousSession(workspace.activeSessionId, chatSessions, (session) => void selectSession(session), () => setToast('There is no previous session to return to yet.'))
   const showInspectorTab = (tab: InspectorTab) => { setView('session'); openInspectorTab(tab) }
+  // With the Agents panel already showing, its shortcut steps through the live agents.
+  const showAgentsOrNextLive = () => {
+    const next = view === 'session' && inspectorVisible && settingsState.inspectorTab === 'specialists' && activeSessionFilePath
+      ? nextLiveSpecialistId(specialistRosters[activeSessionFilePath] ?? [], selectedSpecialist?.sessionKey === terminalSessionKey ? selectedSpecialist.id : null)
+      : undefined
+    if (next) openSpecialist(next)
+    else showInspectorTab('specialists')
+  }
   useAppShortcuts({
     'open-palette': () => setPaletteOpen(true),
     'new-session': () => newSession(),
@@ -683,7 +684,7 @@ export default function App() {
     'close-palette': () => setPaletteOpen(false),
     'close-settings': () => navigate('session'),
     'previous-session': selectPreviousSession,
-    'inspector-changes': () => showInspectorTab('changes'), 'inspector-summary': () => showInspectorTab('summary'), 'inspector-specialists': () => showInspectorTab('specialists'), 'inspector-files': () => showInspectorTab('files'), 'inspector-browser': () => openBrowser(),
+    'inspector-changes': () => showInspectorTab('changes'), 'inspector-summary': () => showInspectorTab('summary'), 'inspector-specialists': showAgentsOrNextLive, 'inspector-files': () => showInspectorTab('files'), 'inspector-browser': () => openBrowser(),
   }, view === 'settings')
 
   const busy = Boolean(
@@ -713,7 +714,7 @@ export default function App() {
   const dockedQuestion = view === 'session' && !activeOwner && extension.extensionUi?.request.method === 'questionnaire'
     && extension.extensionUi.runtimeId === workspace.runtime?.runtimeId ? extension.extensionUi : null
   const page = view === 'projects' ? <ProjectsPage projects={projects} sortMode={settingsState.settings.projectSortMode} onAdd={() => void addProject()} onOpen={selectProject} onRemove={(project) => void removeProject(project)} onTogglePin={(project) => void togglePinProject(project)} />
-    : view === 'activity' ? <ActivityPage showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} bridge={bridge} sessions={sessions} projects={projects} clearedActivity={clearedActivity} liveBySession={liveBySession} controls={activityControls} onOpen={selectSession} onClear={clearActivity} onStop={(session, runtimeId) => void stopRuntime(runtimeId, session.filePath)} />
+
     : view === 'scheduled' ? <ScheduledPage harness={activeHarness} schedules={schedules} projects={projects} sessions={chatSessions} models={provider.catalog?.models ?? EMPTY_MODELS} lastSelectedModel={provider.model} error={scheduleError} initialProjectId={activeProject?.id} initialSessionId={activeSession?.id} selectedScheduleId={scheduleFocusId} onCreate={createSchedule} onUpdate={updateSchedule} onPause={(id: string) => mutateSchedule(() => bridge!.schedules.pause(id))} onResume={(id: string) => mutateSchedule(() => bridge!.schedules.resume(id))} onDelete={(id: string) => mutateSchedule(() => bridge!.schedules.delete(id))} onRunNow={(id: string) => mutateSchedule(() => bridge!.schedules.runNow(id))} onPreview={async (timing: ScheduleTiming) => bridge ? bridge.schedules.preview(timing, 3) : { timing, occurrences: [] }} onOpenSession={openScheduledSession} />
     : view === 'plugins' ? <PluginsPage harness={activeHarness} skills={pluginSkills.skills} warnings={pluginSkills.warnings} loading={pluginSkills.loading} activeProjectPath={activeProject?.primaryFolder} askUserEnabled={settingsState.settings.askUserEnabled} onSetAskUserEnabled={(enabled) => settingsState.updateSettings({ askUserEnabled: enabled })} browserEnabled={settingsState.settings.browserEnabled} onSetBrowserEnabled={(enabled) => settingsState.updateSettings({ browserEnabled: enabled })} computerUseEnabled={settingsState.settings.computerUseEnabled} onSetComputerUseEnabled={(enabled) => settingsState.updateSettings({ computerUseEnabled: enabled })} onOpenExternal={openExternal} onRefresh={pluginSkills.refresh} onInstall={installSkill} onInstallExtension={installExtension} onSetMcpSupport={setMcpSupport} onConnectMcp={connectMcp} onSetMcpEnabled={setMcpEnabled} onMutateCapability={mutateCapability} />
     : view === 'settings' ? <SettingsPage initialSection={settingsSectionRequest.section} initialSectionRequestId={settingsSectionRequest.id} settings={settingsState.settings} meta={meta} providerCatalog={provider.catalog} voice={bridge?.voice ?? null} pets={bridge?.pets ?? null} updateState={appUpdates.state} onCheckForUpdates={appUpdates.check} onClose={() => navigate('session')} onUpdate={settingsState.updateSettings} onRefreshHarnesses={refreshDetectedHarnesses} onRefreshProviders={() => provider.refresh(true)} onSetProviderEnabled={provider.setEnabled} onSetAllProvidersEnabled={provider.setAllEnabled} onSetAllProvidersDisabled={provider.setAllDisabled} onSetModelEnabled={provider.setModelEnabled} onResetBrowser={async () => {
@@ -722,27 +723,35 @@ export default function App() {
         setBrowserGeneration((value) => value + 1)
       }} onOpenDocs={() => openExternal(HARNESS_PROVIDER_DOCS[activeHarness])} /> : null
 
-  return <I18nProvider preference={settingsState.settings.locale}><TaskWorkflowContext.Provider value={taskWorkflow.context}><div className="app-shell" aria-busy={!initialized} data-platform={platform} data-ready={initialized ? 'true' : 'false'}>
-    {sidebarVisible ? <Sidebar sideConversations={taskWorkflow.children} onOpenSideConversation={taskWorkflow.navigate} projects={projects} sessions={chatSessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} onOpenInVsCode={bridge ? sidebarActions.onOpenInVsCode : undefined} terminalOpen={terminalOpen} voiceOpen={voiceOrbOpen} overlay={layout.compactLayout} platform={platform} /> : null}
-    {sidebarVisible ? <button type="button" className="panel-scrim panel-scrim--sidebar" aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
-    <div className="workbench" inert={layout.compactLayout && sidebarVisible ? true : undefined}>
-      <TitleToolbar sessionActions={<TaskWorkflowFinished workflow={taskWorkflow} />} project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} sidebarOpen={sidebarVisible} inspectorOpen={inspectorVisible} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} projectSetupError={projectScript.context.setupFailure?.projectId === activeProject?.id ? projectScript.context.setupFailure?.error : undefined} sessions={chatSessions} liveBySession={liveBySession} clearedActivity={clearedActivity} onOpenActivity={() => navigate('activity')} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} onToggleSidebar={toggleSidebar} onToggleInspector={toggleInspector} onOpenBrowser={openBrowser} platform={platform} />
-      <div className="workbench__content">{view === 'session' ? <div ref={layout.workspaceRowRef} className="session-workspace" style={{ '--inspector-width': `${layout.inspectorWidth}px`, '--terminal-height': `${layout.terminalHeight}px` } as CSSProperties}>
-        <div ref={layout.sessionWorkspaceRef} className="conversation-column">
+  return <I18nProvider preference={settingsState.settings.locale}><TaskWorkflowContext.Provider value={taskWorkflow.context}><div className={`app-shell ${stylex.props(workbenchStyles.appShell).className ?? ""}`} style={{ '--sidebar-width': `${layout.sidebarWidth}px` } as CSSProperties} aria-busy={!initialized} data-platform={platform} data-ready={initialized ? 'true' : 'false'}>
+    <AppRail onNavigate={navigate} vscodeProject={activeProject} terminalOpen={terminalOpen} onToggleTerminal={sidebarActions.onToggleTerminal} onOpenInVsCode={bridge ? sidebarActions.onOpenInVsCode : undefined} sidebarOpen={sidebarVisible} onToggleSidebar={toggleSidebar} voiceOpen={voiceOrbOpen} onToggleVoice={handleToggleVoice} view={view} platform={platform} />
+    {sidebarVisible ? <Sidebar sideConversations={taskWorkflow.children} onOpenSideConversation={taskWorkflow.navigate} projects={projects} sessions={chatSessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} specialistRosters={specialistRosters} openSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey && inspectorVisible && settingsState.inspectorTab === 'specialists' ? selectedSpecialist.id : null} onOpenSpecialist={openSessionSpecialist} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} overlay={layout.compactLayout} platform={platform} /> : null}
+    {sidebarVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" edge="end" cssVariable="--sidebar-width" scopeSelector=".app-shell" label="Resize sidebar" value={layout.sidebarWidth} min={SIDEBAR_MIN} max={layout.sidebarMax} defaultValue={SIDEBAR_DEFAULT} onChange={layout.setSidebarWidth} /> : null}
+    {sidebarVisible ? <button type="button" className={`panel-scrim panel-scrim--sidebar ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimSidebar).className ?? ""}`} aria-label="Close sidebar" onClick={toggleSidebar} /> : null}
+    <div className={`workbench ${stylex.props(workbenchStyles.workbench).className ?? ""}`} inert={layout.compactLayout && sidebarVisible ? true : undefined}>
+      <TitleToolbar sessionActions={<TaskWorkflowFinished workflow={taskWorkflow} />} project={view === 'session' ? activeProject : undefined} gitBranch={git.branch} view={view} productName={HARNESS_PRODUCT_NAMES[activeHarness]} activeProjectScriptKind={activeProjectScriptKind(activeProjectScriptRun, activeProject?.id)} projectSetupError={projectScript.context.setupFailure?.projectId === activeProject?.id ? projectScript.context.setupFailure?.error : undefined} onRunProjectScript={startProjectScript} onStopProjectScript={stopProjectScript} onSaveProjectScripts={saveProjectScripts} inspectorOpen={inspectorVisible} onToggleInspector={toggleInspector} platform={platform} />
+      <div className={`workbench__content ${stylex.props(workbenchStyles.workbenchContent).className ?? ""}`}>{view === 'session' ? <div ref={layout.workspaceRowRef} className={`session-workspace ${stylex.props(workbenchStyles.sessionWorkspace).className ?? ""}`} style={{ '--inspector-width': `${layout.inspectorWidth}px`, '--terminal-height': `${layout.terminalHeight}px` } as CSSProperties}>
+        <div ref={layout.sessionWorkspaceRef} inert={layout.compactLayout && inspectorVisible ? true : undefined} className={`conversation-column ${stylex.props(workbenchStyles.conversationColumn).className ?? ""}`}>
           <TaskWorkflowNotice workflow={taskWorkflow} />
-          <main className="conversation-pane">
-            <Suspense fallback={<LoadingPanel label="conversation" />}><Transcript key={workspace.activeSessionId ?? 'new-session'} messages={workspace.messages} git={git} cwd={activeCwd} onRevealBrowserReference={revealBrowserReference} harness={activeHarness} loading={workspace.loadingSession} active={busy || activeSession?.status === 'running'} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} onOpenChanges={openChanges} onOpenSpecialist={openSpecialist} onSuggestion={(prompt) => { void sendPrompt(prompt).catch(() => undefined) }} suggestionsDisabled={!activeProject || workspace.loadingSession || submitting} showPinnedChanges={false} queuedMessageCount={queuedMessages.length} onOpenSessionReference={handleOpenSessionReference} /></Suspense>
-            <div className="conversation-bottom-dock">{activeOwner ? <RuntimeOwnerNotice owner={activeOwner} /> : null}
+          <main className={`conversation-pane ${stylex.props(workbenchStyles.conversationPane, [responsiveStyles.conversationPane, responsiveLayoutStyles.conversationPane]).className ?? ""}`}>
+            <InteractiveChatProvider key={activeSession?.filePath ?? 'no-session'} sessionKey={activeSession?.filePath ?? 'no-session'} disabled={!bridge || !activeSession || workspace.loadingSession || Boolean(activeOwner)} onSendFeedback={async (text) => {
+              if (!bridge || !activeSession) throw new Error('Open a session to send feedback.')
+              const accepted = await bridge.sessions.followUp(activeSession.filePath, text, 'queue')
+              if (!accepted) throw new Error('The session did not accept feedback.')
+            }}>
+            <Suspense fallback={<LoadingPanel label="conversation" />}><Transcript key={workspace.activeSessionId ?? 'new-session'} sessionActions={<SessionControls projects={projects} sessions={chatSessions} activeSessionId={workspace.activeSessionId} platform={platform} onNewSession={newSession} onSelectSession={selectSession} />} messages={workspace.messages} git={git} cwd={activeCwd} onRevealBrowserReference={revealBrowserReference} harness={activeHarness} loading={workspace.loadingSession} active={busy || activeSession?.status === 'running'} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} onOpenChanges={openChanges} onOpenSpecialist={openSpecialist} onSuggestion={(prompt) => { void sendPrompt(prompt).catch(() => undefined) }} suggestionsDisabled={!activeProject || workspace.loadingSession || submitting} showPinnedChanges={false} queuedMessageCount={queuedMessages.length} onOpenSessionReference={handleOpenSessionReference} /></Suspense>
+            </InteractiveChatProvider>
+            <div className={`conversation-bottom-dock ${stylex.props(workbenchStyles.conversationBottomDock, [responsiveStyles.conversationBottomDock, responsiveLayoutStyles.conversationBottomDock]).className ?? ""}`}>{activeOwner ? <RuntimeOwnerNotice owner={activeOwner} /> : null}
               {dockedQuestion ? <Suspense fallback={<LoadingPanel label="request" />}><ExtensionUiModal presentation="inline" request={dockedQuestion.request} deadline={dockedQuestion.deadline} onRespond={(response) => void extension.respondToExtensionUi(response, dockedQuestion.runtimeId)} platform={platform} /></Suspense> : null}
               <Composer onCreateSide={taskWorkflow.createSideWithQuestion} onReviewFinish={taskWorkflow.reviewFinish} insertDraft={taskWorkflow.insertDraft} onDraftInserted={taskWorkflow.draftInserted} key={workspace.workspaceGeneration} draftKey={workspace.activeSessionId ? `${activeProject?.id ?? 'no-project'}:${workspace.activeSessionId}` : `${activeProject?.id ?? 'no-project'}:new`} busy={busy} admitting={submitting || isSubmissionAdmitting(agentTurn)} loading={workspace.loadingSession} disabled={!activeProject || Boolean(activeOwner)} messageEnterAction={settingsState.settings.messageEnterAction} voice={bridge?.voice} transcriptionProvider={settingsState.settings.voiceTranscriptionProvider} model={provider.model} effort={provider.effort} modelsByProvider={provider.modelsByProvider} providers={provider.catalog?.providers ?? EMPTY_PROVIDERS} reasoningLevels={provider.reasoningLevels} fast={provider.fast} fastSupported={provider.selectedModel?.fastModeSupported ?? false} fastAvailable={workspace.runtime?.fastModeAvailable !== false} agentName={HARNESS_AGENT_NAMES[activeHarness]} shortName={HARNESS_SHORT_NAMES[activeHarness]} harness={activeHarness} imageInputSupported={Boolean(provider.selectedModel?.input.includes('image'))} skills={pluginSkills.skills} sessions={mentionableSessions} fileRoot={activeCwd} runtimeCommands={composerCommands.runtimeCommands} onCommand={composerCommands.runCommand} annotations={browserAnnotations.annotations} focusSignal={browserAnnotations.focusSignal} onRevealBrowserReference={revealBrowserReference} extensionTab={activeAgentTabs.find((tab) => tab.backend === 'extension' && tab.active && tab.selection) ?? activeAgentTabs.find((tab) => tab.backend === 'extension' && tab.selection) ?? activeAgentTabs.find((tab) => tab.backend === 'extension' && tab.active) ?? activeAgentTabs.find((tab) => tab.backend === 'extension')} browserExtension={agentBrowser.extension} terminalSelection={terminalSelection} queuedMessages={queuedMessages} onDeleteQueuedMessage={removeQueuedMessage} onEditQueuedMessage={removeQueuedMessage} sendSignal={browserAnnotations.sendSignal} onModelChange={provider.changeModel} onEffortChange={provider.changeEffort} onFastChange={provider.changeFast} contextUsage={workspace.runtime?.contextUsage} sessionUsage={workspace.runtime?.sessionUsage} executingModel={workspace.runtime?.executingModel} checkoutCatalog={checkoutCatalog} checkoutLabel={git.branch ?? activeProject?.gitBranch} checkoutsLoading={checkoutsLoading} onExecuteCheckout={bridge && activeProject && !activeProject.inferred && checkoutCatalog ? executeCheckout : undefined} onSend={sendPrompt} onStop={stopRuntime} onRemoveAnnotation={browserAnnotations.remove} onClearAnnotations={browserAnnotations.clear} onClearTerminalSelection={clearTerminalSelection} />
             </div>
           </main>
           {terminalSessions.map((terminal) => <Suspense key={terminal.id} fallback={terminal.id === activeTerminalSession?.id ? <TerminalLoadingPanel /> : null}><TerminalDrawer ref={(handle) => { if (handle) terminalDrawerRefs.current.set(terminal.id, handle); else terminalDrawerRefs.current.delete(terminal.id) }} visible={terminal.id === activeTerminalSession?.id} cwd={terminal.cwd} sessionPath={terminal.sessionPath} shell={settingsState.settings.terminalShell} initialCommand={terminal.initialCommand} startEmpty={terminal.startEmpty} jobs={backgroundJobs.jobs.filter((job) => jobInFolder(job, terminal.cwd))} jobOutput={backgroundJobs.output} onStopJob={(key) => { void bridge?.backgroundJobs.stop(key).catch(reportError) }} onDismissJob={(key) => { void bridge?.backgroundJobs.dismiss(key).catch(reportError) }} height={layout.terminalHeight} minHeight={TERMINAL_MIN} maxHeight={layout.terminalMax} defaultHeight={TERMINAL_DEFAULT} onHeightChange={layout.setTerminalHeight} onClose={() => closeTerminal(terminal.id)} onError={reportError} onInitialCommandConsumed={() => setTerminalSessions((current) => current.map((item) => item.id === terminal.id ? { ...item, initialCommand: undefined } : item))} onOpenLink={openTerminalLink} onReady={() => setTerminalDrawerRevision((revision) => revision + 1)} onSelectionChange={(selection) => { if (terminal.id === activeTerminalSession?.id) setTerminalSelection(selection) }} /></Suspense>)}
         </div>
-          {inspectorVisible ? <ResizeHandle orientation="vertical" label="Resize inspector" value={layout.inspectorWidth} min={INSPECTOR_MIN} max={layout.inspectorMax} defaultValue={layout.inspectorDefaultWidth} onChange={layout.setInspectorWidth} /> : null}
+          {inspectorVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" label="Resize inspector" value={layout.inspectorWidth} min={INSPECTOR_MIN} max={layout.inspectorMax} defaultValue={layout.inspectorDefaultWidth} onChange={layout.setInspectorWidth} /> : null}
           <Suspense fallback={inspectorVisible ? <LoadingPanel label="inspector" /> : null}><Inspector visible={inspectorVisible} expanded={layout.inspectorExpanded} onToggleExpanded={layout.toggleInspectorExpanded} browserActive={Boolean(busy && agentBrowser.activityEvent && (agentBrowser.activityEvent.sessionFile === activeRuntimeSessionFile || agentBrowser.activityEvent.sessionFile === activeSessionFilePath))} key={`inspector-${browserGeneration}`} selectedSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey ? selectedSpecialist.id : null} onSelectSpecialist={openSpecialist} activeTab={settingsState.inspectorTab} onTabChange={settingsState.selectInspectorTab} onClose={toggleInspector} agentName={HARNESS_AGENT_NAMES[activeHarness]} shortName={HARNESS_SHORT_NAMES[activeHarness]} project={activeProject} cwd={activeCwd} runtime={workspace.runtime} behaviorMode={activeSession?.behaviorMode} messages={settingsState .inspectorTab === 'summary' || settingsState.inspectorTab === 'specialists' ? workspace.messages : EMPTY_MESSAGES} git={git} automations={inspectorAutomations} onOpenAutomation={openAutomation} browserHome={settingsState.settings.browserHome} browserNavigationRequest={browserNavigationRequest} onBrowserNavigationRequestHandled={handleBrowserNavigationRequest} browserAnnotations={browserAnnotations} agentBrowserTabs={activeAgentTabs} activeAgentTabId={activeAgentTabId} agentPreviewSelected={agentPreviewSelected} onSelectAgentTab={selectAgentTab} onCloseAgentTab={agentBrowser.close} onShowBrowserPreview={showBrowserPreview} onAgentSlotRect={setAgentSlotRect} agentSessionKey={activeRuntimeSessionFile ?? activeSessionFilePath} onPreviewContext={previewContext} previewPointerEvent={agentBrowser.pointerEvent?.tabId === 'preview' ? agentBrowser.pointerEvent : null} onNavigateAgentTab={navigateAgentTab} agentBrowserExtension={agentBrowser.extension} onRefreshGit={refreshGit} onOpenExternal={openExternal} onRevealPath={revealInFileManager} onGrantProject={grantActiveProject} overlay={layout.compactLayout} platform={platform} homeDir={meta?.homeDir} /></Suspense>
-          {inspectorVisible ? <button type="button" className="panel-scrim panel-scrim--inspector" aria-label="Close inspector" onClick={toggleInspector} /> : null}
-      </div> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
+          {inspectorVisible ? <button type="button" className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ""}`} aria-label="Close inspector" onClick={toggleInspector} /> : null}
+      </div> : view === 'activity' ? <ActivityWorkspace rowRef={layout.workspaceRowRef} inspectorVisible={inspectorVisible} compact={layout.compactLayout} width={layout.inspectorWidth} maxWidth={layout.inspectorMax} defaultWidth={layout.inspectorDefaultWidth} expanded={layout.inspectorExpanded} onWidthChange={layout.setInspectorWidth} onToggleExpanded={layout.toggleInspectorExpanded} onClose={toggleInspector}>{(renderInspector) => <Suspense fallback={<ChiefOfStaffOpening />}><ActivityPage contentInert={layout.compactLayout && inspectorVisible} contentRef={layout.sessionWorkspaceRef} renderInspector={renderInspector} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} bridge={bridge} sessions={sessions} projects={projects} controls={activityControls} /></Suspense>}</ActivityWorkspace> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
     </div>
     {voiceOrbOpen && bridge ? <Suspense fallback={null}><VoiceOrb voice={bridge.voice} harness={activeHarness} onClose={() => { setFocusPetVoiceControl(false); setVoiceOrbOpen(false); setRestorePetVoiceFocus(settingsState.settings.petEnabled) }} onTaskStarted={handleVoiceTaskStarted} pet={{ pets: bridge.pets, petId: settingsState.settings.petId, petSize: settingsState.settings.petSize, agentBusy: busy, reduceMotion: settingsState.settings.reduceMotion }} focusPetControl={focusPetVoiceControl} onPetControlFocused={() => setFocusPetVoiceControl(false)} /></Suspense> : null}
     {settingsState.settings.petEnabled && bridge && !voiceOrbOpen ? <Suspense fallback={null}><DesktopPet pets={bridge.pets} petId={settingsState.settings.petId} petSize={settingsState.settings.petSize} agentBusy={busy} voiceActive={false} reduceMotion={settingsState.settings.reduceMotion} focusVoiceControl={restorePetVoiceFocus} onVoiceControlFocused={() => setRestorePetVoiceFocus(false)} onDismiss={() => { setRestorePetVoiceFocus(false); void settingsState.updateSettings({ petEnabled: false }) }} onOpenVoice={() => { setRestorePetVoiceFocus(false); setFocusPetVoiceControl(true); setVoiceOrbOpen(true) }} /></Suspense> : null}

@@ -1,3 +1,4 @@
+import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
 import { useEffect, useState, type ReactNode } from 'react'
 import * as stylex from '@stylexjs/stylex'
 import type { FinishReview, RunHistoricalContent, RunHistoricalFile } from '@/types/api'
@@ -105,7 +106,7 @@ function HistoricalContent({ content, path, version, runId }: { content: RunHist
   if (content.binary) return <p>{version}: binary file · {content.size.toLocaleString()} bytes</p>
   const text = new TextDecoder().decode(Uint8Array.from(atob(content.base64), (character) => character.charCodeAt(0)))
   const { lines, truncated } = boundLines(text, 2 * 1024 * 1024, 4_000)
-  return <section><h4>{version}</h4><ContextExcerpt key={`${path}:${version}`} source={`Run ${runId} · ${version}`} path={path} text={lines.join('\n')}><pre className="task-history-code">{lines.map((line, index) => <span key={index} data-context-line={index + 1}>{line}{'\n'}</span>)}</pre></ContextExcerpt>{truncated ? <p>File view truncated.</p> : null}</section>
+  return <section><h4>{version}</h4><ContextExcerpt key={`${path}:${version}`} source={`Run ${runId} · ${version}`} path={path} text={lines.join('\n')}><pre className={`task-history-code ${stylex.props(taskWorkflowsStyles.taskHistoryCode).className ?? ""}`}>{lines.map((line, index) => <span key={index} data-context-line={index + 1}>{line}{'\n'}</span>)}</pre></ContextExcerpt>{truncated ? <p>File view truncated.</p> : null}</section>
 }
 
 export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
@@ -125,7 +126,7 @@ export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
   }, [dialog, path])
   if (!dialog) return null
   if (dialog.kind === 'history') return <Modal title="Changes observed during this run" onClose={workflow.close} footer={<ApexButton onClick={workflow.close}>Close</ApexButton>}>
-    <div className="task-review">
+    <div className={`task-review ${stylex.props(taskWorkflowsStyles.taskReview).className ?? ""}`}>
       <p>Saved checkout snapshots, not current Git changes. These can include your edits and other processes, not only the agent's work.</p>
       <p>{new Date(dialog.receipt.startedAt).toLocaleString()} · {dialog.receipt.state}</p>
       {dialog.receipt.state === 'incomplete' ? <p role="alert">Incomplete snapshot: {dialog.receipt.error ?? 'The run did not finish recording its checkout.'}</p> : null}
@@ -138,7 +139,7 @@ export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
     </div>
   </Modal>
   return <Modal title={dialog.kind === 'rewind' ? 'Edit from here' : 'Finish task'} onClose={workflow.close} footer={<><ApexButton variant="quiet" disabled={workflow.pending} onClick={workflow.close}>Cancel</ApexButton><ApexButton variant={restore && dialog.kind === 'rewind' ? 'danger' : 'primary'} disabled={!workflow.idle || workflow.pending} onClick={() => workflow.confirm(restore)}>{workflow.pending ? 'Working…' : dialog.kind === 'finish' ? 'Confirm finish task' : restore ? 'Fork and restore files' : 'Fork and keep files'}</ApexButton></>}>
-    <div className="task-review">
+    <div className={`task-review ${stylex.props(taskWorkflowsStyles.taskReview).className ?? ""}`}>
       {workflow.error ? <p role="alert">{workflow.error}</p> : null}
       {dialog.kind === 'rewind' ? <>
         <p>Create a separate conversation from this prompt. The original conversation remains available. Nothing is sent automatically.</p>
@@ -146,7 +147,7 @@ export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
         <details open><summary>Recovered prompt</summary><pre>{dialog.preview.prompt}</pre></details>
         <p>{dialog.preview.warning}</p><p>Restoring files includes your own changes. External actions are not undone.</p>
         <p>Checkout: <code>{dialog.preview.checkout}</code> · {dialog.preview.worktree.primary ? 'primary' : dialog.preview.worktree.linked ? 'linked worktree' : 'unknown worktree'}</p>
-        {dialog.preview.restore.available ? <label className="task-review__checkbox"><input type="checkbox" checked={restore} onChange={(event) => setRestore(event.target.checked)} /> Restore files to the run start</label> : <p>Restore unavailable: {dialog.preview.restore.reason ?? 'No restore checkpoint is available.'}</p>}
+        {dialog.preview.restore.available ? <label className={`task-review__checkbox ${stylex.props(taskWorkflowsStyles.taskReviewCheckbox).className ?? ""}`}><input type="checkbox" checked={restore} onChange={(event) => setRestore(event.target.checked)} /> Restore files to the run start</label> : <p>Restore unavailable: {dialog.preview.restore.reason ?? 'No restore checkpoint is available.'}</p>}
         <p>{restore ? 'These paths will be restored:' : 'Files will be kept. Paths that a restore would change:'}</p>
         <ul>{dialog.preview.restore.changes.map((change) => <li key={change.path}><code>{change.path}</code> · {change.kind}</li>)}</ul>
       </> : <>

@@ -1,0 +1,92 @@
+import * as stylex from '@stylexjs/stylex'
+
+const menuIn = stylex.keyframes({ from: { opacity: 0, transform: 'translateY(-3px) scale(.98)' } })
+
+export const styles = stylex.create({
+  shell: { paddingTop: 0 },
+  conversation: { minWidth: 0 },
+  dock: { paddingTop: 0, paddingRight: 10, paddingBottom: 10, paddingLeft: 10 },
+  editorContext: {
+    display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingBlock: 5, paddingInline: 10,
+    borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--surface-raised)', color: 'var(--text-secondary)', fontSize: 'var(--fs-meta)', lineHeight: '18px',
+  },
+  editorLabel: { flex: '0 0 auto', color: 'var(--text-tertiary)' },
+  editorFile: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' },
+  editorFileExcluded: { color: 'var(--text-tertiary)', textDecoration: 'line-through' },
+  editorToggle: {
+    flex: '0 0 auto', paddingBlock: 0, paddingInline: 6,
+    borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: 'var(--radius-xs)',
+    backgroundColor: 'transparent', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit', cursor: 'pointer',
+  },
+  editorToggleIncluded: { color: 'var(--text)' },
+  editorDetail: { flex: '0 0 auto', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+  toolbar: { zIndex: 30, flex: '0 0 38px', paddingBlock: 0, paddingInline: 10 },
+  workspace: { flex: '0 1 auto', minWidth: 0, overflow: 'hidden', color: 'var(--text-tertiary)', fontSize: 'var(--fs-meta)', whiteSpace: 'nowrap', textOverflow: 'ellipsis' },
+  agentsTrigger: {
+    display: 'inline-flex', flex: '0 0 auto', height: 26, gap: 5, paddingBlock: 0, paddingInline: 8, cursor: 'pointer',
+    transition: 'color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out, transform 100ms ease-out',
+    ':hover': { color: 'var(--text)', borderColor: 'var(--border-strong)', backgroundColor: 'var(--surface-hover)' },
+    ':active': { transform: 'scale(0.96)' },
+  },
+  agentsActive: { color: 'var(--text)', borderColor: 'var(--border-strong)', backgroundColor: 'var(--surface-hover)' },
+  agentsRunning: { color: 'var(--apex)', borderColor: 'color-mix(in srgb, var(--apex) 35%, var(--border))' },
+  agentsLabel: { fontSize: 'var(--fs-ui)', fontWeight: 540 },
+  agentsCount: {
+    minWidth: 16, height: 16, display: 'inline-grid', placeItems: 'center', paddingBlock: 0, paddingInline: 4, borderRadius: 999,
+    backgroundColor: 'var(--surface-selected)', color: 'var(--text-secondary)', fontSize: 'var(--fs-micro)', fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+  },
+  agentsRunningCount: { backgroundColor: 'var(--apex-soft)', color: 'var(--apex)' },
+  specialistsPane: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  specialistsBar: {
+    flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingBlock: 6, paddingInline: 12,
+    borderBottomWidth: 1, borderBottomStyle: 'solid', borderBottomColor: 'var(--border-subtle)', backgroundColor: 'var(--surface-subtle)',
+  },
+  specialistsTitle: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontSize: 'var(--fs-ui)', fontWeight: 560 },
+  specialistsIcon: { color: 'var(--apex)' },
+  specialistsClose: {
+    height: 22, paddingBlock: 0, paddingInline: 8, borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--surface-raised)', color: 'var(--text-secondary)', fontSize: 'var(--fs-meta)', cursor: 'pointer',
+    transition: 'color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out',
+    ':hover': { color: 'var(--text)', borderColor: 'var(--border-strong)', backgroundColor: 'var(--surface-hover)' },
+  },
+  picker: { position: 'relative', minWidth: 0, flex: '1 1 auto', display: 'flex', alignItems: 'center' },
+  pickerTrigger: {
+    display: 'inline-flex', position: 'relative', minWidth: 0, maxWidth: '100%', height: 26, gap: 6, paddingBlock: 0, paddingInline: 8, cursor: 'pointer',
+    transition: 'color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out, transform 100ms ease-out',
+    '::after': { content: "''", position: 'absolute', insetBlock: -6, insetInline: 0 },
+    ':hover': { color: 'var(--text)', borderColor: 'var(--border-strong)', backgroundColor: 'var(--surface-hover)' },
+    ':active': { transform: 'scale(0.96)' },
+  },
+  pickerOpen: { color: 'var(--text)', borderColor: 'var(--border-strong)', backgroundColor: 'var(--surface-hover)' },
+  pickerIcon: { flex: '0 0 auto', transition: 'transform 140ms ease-out' },
+  pickerCaretOpen: { transform: 'rotate(180deg)' },
+  pickerLabel: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--fs-ui)', fontWeight: 540 },
+  pickerPopover: {
+    position: 'absolute', zIndex: 120, top: 'calc(100% + 6px)', left: 0, width: 'min(380px, calc(100vw - 20px))', padding: 4,
+    borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-strong)', borderRadius: 12, backgroundColor: 'var(--surface-raised)', boxShadow: 'var(--shadow-popover)',
+    animationName: menuIn, animationDuration: '120ms', animationTimingFunction: 'cubic-bezier(.2, 0, 0, 1)',
+  },
+  pickerHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 2, paddingRight: 4, paddingBottom: 3, paddingLeft: 4 },
+  pickerCount: { paddingBlock: 0, paddingInline: 4, color: 'var(--text-tertiary)', fontSize: 'var(--fs-micro)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+  pickerList: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 'min(360px, calc(100vh - 84px))', overflowY: 'auto' },
+  sessionRow: {
+    paddingTop: 6, paddingRight: 8, paddingBottom: 6, paddingLeft: 7,
+    ':focus-visible': { outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--focus)', outlineOffset: -2 },
+  },
+  sessionText: { display: 'grid', gap: 2 },
+  sessionMeta: { display: 'block' },
+  sessionActive: { color: 'var(--apex)', backgroundColor: 'var(--apex-soft)' },
+  sessionHeading: { minWidth: 0, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  sessionTitle: { minWidth: 0, flex: '1 1 auto' },
+  sessionTime: { flex: '0 0 auto', whiteSpace: 'nowrap', color: 'var(--text-tertiary)', fontSize: 'var(--fs-meta)', lineHeight: 1.25, fontVariantNumeric: 'tabular-nums' },
+  banner: {
+    position: 'relative', zIndex: 11, margin: 10, paddingBlock: 10, paddingInline: 12,
+    borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-strong)', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--danger-soft)', color: 'var(--text-primary)',
+  },
+  bannerMessage: { marginTop: 0, marginRight: 0, marginBottom: 8, marginLeft: 0, whiteSpace: 'pre-wrap', fontSize: 'var(--fs-ui)' },
+  bannerButton: {
+    paddingBlock: 4, paddingInline: 10, borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-strong)', borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer',
+  },
+})

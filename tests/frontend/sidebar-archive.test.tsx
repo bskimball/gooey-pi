@@ -424,10 +424,9 @@ describe('sidebar project context menu', () => {
       )
     })
 
-    expect(container.querySelector('.sidebar__title-actions .ph-note-pencil')).not.toBeNull()
+    expect(container.querySelector('.sidebar__titlebar [aria-label^="New session"]')).toBeNull()
     expect(container.querySelector('.project-row__new-session .ph-note-pencil')).not.toBeNull()
     expect(container.querySelector('.sidebar__section-heading .ph-folder-plus')).not.toBeNull()
-    expect(container.querySelector('.sidebar__title-actions button[title="New session (⌘N)"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="New session in Project"][title="New session in Project"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="Add project"][title="Add project"]')).not.toBeNull()
   })
@@ -455,7 +454,6 @@ describe('sidebar project context menu', () => {
       )
     })
 
-    expect(container.querySelector('.sidebar__title-actions button[title="New session (Ctrl+N)"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="Hide sidebar (Ctrl+B)"]')).not.toBeNull()
     expect(container.textContent).not.toContain('⌘')
   })

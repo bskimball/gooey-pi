@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { Keyboard } from '@/components/icons'
 import type { SettingsSectionProps } from './contracts'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
@@ -9,7 +12,7 @@ export function TerminalSettings({ settings, onUpdate, platform = 'darwin' }: Se
   return (
     <>
       <header><h1>Terminal</h1><p>Configure the interactive shell used for local projects.</p></header>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Shell</h2>
         <DraftSettingField
           id="terminal-shell"
@@ -18,13 +21,13 @@ export function TerminalSettings({ settings, onUpdate, platform = 'darwin' }: Se
           committedValue={settings.terminalShell}
           validate={terminalShellValidation}
           onCommit={(terminalShell) => onUpdate({ terminalShell })}
-          className="mono"
+          className={`mono ${stylex.props(activityStyles.mono).className ?? ""}`}
         />
         <SettingsToggle checked={settings.terminalOpen} onChange={(terminalOpen) => { void onUpdate({ terminalOpen }) }} label="Open terminal with new sessions" description="Show the terminal drawer when a new project session starts." />
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Keyboard shortcut</h2>
-        <div className="shortcut-row"><span><Keyboard size={14} />Toggle terminal</span><kbd>{shortcutLabel(platform, ['Primary', 'J'])}</kbd></div>
+        <div className={`shortcut-row ${stylex.props(settingsStyles.shortcutRow).className ?? ""}`}><span><Keyboard size={14} />Toggle terminal</span><kbd>{shortcutLabel(platform, ['Primary', 'J'])}</kbd></div>
       </section>
     </>
   )

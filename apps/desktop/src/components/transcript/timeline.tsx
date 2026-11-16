@@ -1,3 +1,8 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { Fragment, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
   Brain,
@@ -93,15 +98,15 @@ function ToolRun({ members, children }: { members: RunMember[]; children: ReactE
   const label = reads ? `Read ${plural(reads, 'file')}${searches ? `, ${plural(searches, 'search', 'searches')}` : ''}` : `Ran ${plural(searches, 'search', 'searches')}`
   const names = members.map((member) => member.label).filter(Boolean)
   return (
-    <div className={`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`}>
-      <button type="button" className="activity-run__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-        <span className="activity-line__icon">{running ? <StatusMark state="running" size={14} /> : toolIcon('file')}</span>
-        <span className="activity-run__label">{label}</span>
-        {names.length ? <span className="activity-run__names">{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
-        {failed ? <span className="activity-run__failed"><WarningCircle size={12} /> {failed} failed</span> : null}
-        <CaretRight className="disclosure-caret" size={13} />
+    <div className={[`activity-run activity-line--file ${failed ? 'is-error' : running ? 'is-running' : 'is-done'}`, stylex.props(transcriptStyles.activityRun).className].filter(Boolean).join(' ')}>
+      <button type="button" className={`activity-run__summary ${stylex.props(transcriptStyles.activityRunSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+        <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{running ? <StatusMark state="running" size={14} /> : toolIcon('file')}</span>
+        <span className={`activity-run__label ${stylex.props(transcriptStyles.activityRunLabel).className ?? ""}`}>{label}</span>
+        {names.length ? <span className={`activity-run__names ${stylex.props(transcriptStyles.activityRunNames).className ?? ""}`}>{names.slice(0, 3).join(', ')}{names.length > 3 ? '…' : ''}</span> : null}
+        {failed ? <span className={`activity-run__failed ${stylex.props(transcriptStyles.activityRunFailed).className ?? ""}`}><WarningCircle size={12} /> {failed} failed</span> : null}
+        <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
-      {open ? <div className="activity-run__items" id={bodyId}>{children}</div> : null}
+      {open ? <div className={`activity-run__items ${stylex.props(transcriptStyles.activityRunItems).className ?? ""}`} id={bodyId}>{children}</div> : null}
     </div>
   )
 }
@@ -122,15 +127,15 @@ function ReasoningPart({ part, live = false, streaming = false }: { part: Extrac
   const [open, setOpen] = useState(true)
   const bodyId = useId()
   if (live && !part.text.trim()) return null
-  const body = <MarkdownText text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} />
-  if (live) return <div className="activity-line activity-line--reasoning">{body}</div>
-  return <div className="activity-line activity-line--reasoning is-settled">
-    <button type="button" className="activity-thought__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className="activity-line__icon"><Brain size={14} /></span>
-      <span className="activity-line__kind">Thought</span>
-      <CaretRight className="disclosure-caret" size={13} />
+  const body = <MarkdownText variant="reasoning" text={boundText(part.text, 40_000, '\n… [Reasoning truncated in the desktop view.]')} streaming={streaming} />
+  if (live) return <div className={`activity-line activity-line--reasoning ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineReasoning).className ?? ""}`}>{body}</div>
+  return <div className={`activity-line activity-line--reasoning is-settled ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineReasoning, transcriptStyles.activityLineReasoningIsSettled).className ?? ""}`}>
+    <button type="button" className={`activity-thought__summary ${stylex.props(transcriptStyles.activityThoughtSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}><Brain size={14} /></span>
+      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>Thought</span>
+      <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
     </button>
-    {open ? <div className="activity-thought__body" id={bodyId}>{body}</div> : null}
+    {open ? <div className={`activity-thought__body ${stylex.props(transcriptStyles.activityThoughtBody).className ?? ""}`} id={bodyId}>{body}</div> : null}
   </div>
 }
 
@@ -143,15 +148,15 @@ export function ThinkingDots({ labelled = false }: { labelled?: boolean }) {
     reverse: Math.random() < 0.3,
   }))
   return (
-    <span className="thinking-dots" role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
+    <span className={`thinking-dots ${stylex.props(transcriptStyles.thinkingDots).className ?? ""}`} role={labelled ? 'status' : undefined} aria-label={labelled ? 'Pi is thinking' : undefined} aria-hidden={labelled ? undefined : true}>
       <svg width="24" height="10" viewBox="0 0 24 10" fill="none" aria-hidden="true" focusable="false">
         <defs><clipPath id={clipId}><rect x="-8" y="0" width="40" height="7" /></clipPath></defs>
         <g clipPath={`url(#${clipId})`}>
           <g transform={fin.reverse ? 'matrix(-1 0 0 1 24 0)' : undefined}>
-            <path className="thinking-dots__fin" style={{ animationDuration: fin.duration, animationDelay: fin.delay }} d="M4.4 7.2C3 5.2 2 2.4 1.2 1.8C1.3 3.9 .9 5.6 0 7.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path className={`thinking-dots__fin ${stylex.props(transcriptStyles.thinkingDotsFin).className ?? ""}`} style={{ animationDuration: fin.duration, animationDelay: fin.delay }} d="M4.4 7.2C3 5.2 2 2.4 1.2 1.8C1.3 3.9 .9 5.6 0 7.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
           </g>
         </g>
-        <path className="thinking-dots__wave" d="M0 7 Q2 4.75 4 7 T8 7 T12 7 T16 7 T20 7 T24 7 T28 7 T32 7" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+        <path className={`thinking-dots__wave ${stylex.props(transcriptStyles.thinkingDotsWave).className ?? ""}`} d="M0 7 Q2 4.75 4 7 T8 7 T12 7 T16 7 T20 7 T24 7 T28 7 T32 7" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       </svg>
     </span>
   )
@@ -173,7 +178,7 @@ export function LiveElapsed({ since }: { since?: string | number }) {
   }, [])
   const startedAt = timestamp(since)
   if (startedAt === undefined) return null
-  return <span className="live-elapsed" aria-hidden="true">{formatWorkedDuration(Math.max(0, now - startedAt))}</span>
+  return <span className={`live-elapsed ${stylex.props(transcriptStyles.liveElapsed).className ?? ""}`} aria-hidden="true">{formatWorkedDuration(Math.max(0, now - startedAt))}</span>
 }
 
 /** The last few lines of streamed output, shown under a running command like a terminal's live scrollback. */
@@ -241,30 +246,30 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
   }
 
   return (
-    <><div className={`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`}>
-      <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setToggled((value) => !value)} aria-expanded={canExpand ? open : undefined} aria-controls={canExpand && open ? detailsId : undefined}>
-        <span className="activity-line__icon">{command ? <Terminal size={14} /> : toolIcon(kind)}</span>
+    <><div className={[`activity-line activity-line--tool activity-line--${kind} is-${state}${command ? ' activity-line--shell' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineTool, classifyTool(part.name) === "question" && transcriptStyles.activityLineQuestion).className].filter(Boolean).join(' ')}>
+      <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setToggled((value) => !value)} aria-expanded={canExpand ? open : undefined} aria-controls={canExpand && open ? detailsId : undefined}>
+        <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{command ? <Terminal size={14} /> : toolIcon(kind)}</span>
         {command
-          ? <code className="activity-tool__command" title={command}><span className="activity-tool__prompt" aria-hidden="true">$</span> {boundText(command.replace(/\s+/g, ' ').trim(), 180, '…')}</code>
+          ? <code className={`activity-tool__command ${stylex.props(transcriptStyles.activityToolCommand).className ?? ""}`} title={command}><span className={`activity-tool__prompt ${stylex.props(transcriptStyles.activityToolPrompt).className ?? ""}`} aria-hidden="true">$</span> {boundText(command.replace(/\s+/g, ' ').trim(), 180, '…')}</code>
           : <>
-            <span className="activity-line__kind">{kind === 'question' ? 'Question' : part.name}</span>
-            {preview ? <code className="activity-tool__preview"><SyntaxText text={preview} /></code> : null}
-            {range ? <span className="activity-tool__range">{range}</span> : null}
+            <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>{kind === 'question' ? 'Question' : part.name}</span>
+            {preview ? <code className={`activity-tool__preview ${stylex.props(transcriptStyles.activityToolPreview).className ?? ""}`}><SyntaxText text={preview} /></code> : null}
+            {range ? <span className={`activity-tool__range ${stylex.props(transcriptStyles.activityToolRange).className ?? ""}`}>{range}</span> : null}
           </>}
-        {showDiff ? <span className="activity-tool__diff-counts"><span className="diff-count diff-count--add">+{additions}</span><span className="diff-count diff-count--remove">−{deletions}</span></span> : null}
-        <span className="activity-tool__state">{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><StatusMark state="running" size={12} /> running</>}</span>
-        {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
+        {showDiff ? <span className={`activity-tool__diff-counts ${stylex.props(transcriptStyles.activityToolDiffCounts).className ?? ""}`}><span className={`diff-count diff-count--add ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountAdd).className ?? ""}`}>+{additions}</span><span className={`diff-count diff-count--remove ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountRemove).className ?? ""}`}>−{deletions}</span></span> : null}
+        <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>{failed ? <><WarningCircle size={12} /> failed</> : finished ? <><Check size={12} /> done</> : kind === 'question' ? 'needs input' : <><StatusMark state="running" size={12} /> running</>}</span>
+        {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
       </button>
       {showDiff && open ? <EditDiff id={detailsId} diff={diff} /> : null}
-      {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <pre className={`activity-tool__tail${state === 'error' ? ' is-error' : ''}`}>{outputTail(output)}</pre> : null}
+      {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <pre className={[`activity-tool__tail${state === 'error' ? ' is-error' : ''}`, stylex.props(transcriptStyles.activityToolTail).className].filter(Boolean).join(' ')}>{outputTail(output)}</pre> : null}
       {open && visibleOutput ? (
-        <div className="activity-tool__details" id={detailsId}>
-          <div className="activity-tool__details-toolbar">
-            <button type="button" className="activity-tool__copy" aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
+        <div className={`activity-tool__details ${stylex.props(transcriptStyles.activityToolDetails).className ?? ""}`} id={detailsId}>
+          <div className={`activity-tool__details-toolbar ${stylex.props(transcriptStyles.activityToolDetailsToolbar).className ?? ""}`}>
+            <button type="button" className={`activity-tool__copy ${stylex.props(transcriptStyles.activityToolCopy).className ?? ""}`} aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
               {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          <pre className="activity-tool__contents"><SyntaxText text={visibleOutput} /></pre>
+          <pre className={`activity-tool__contents ${stylex.props(transcriptStyles.activityToolContents).className ?? ""}`}><SyntaxText text={visibleOutput} /></pre>
         </div>
       ) : null}
     </div>
@@ -273,20 +278,20 @@ const ToolPart = memo(function ToolPart({ part, result }: { part: Extract<Messag
 })
 
 function StandaloneToolResult({ part }: { part: Extract<MessagePart, { type: 'toolResult' }> }) {
-  return <><div className={`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`}><span className="activity-line__icon">{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div><ImageParts images={part.images} /></>
+  return <><div className={[`activity-line activity-line--result ${part.isError ? 'is-error' : ''}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, (part.isError) && transcriptStyles.activityLineResultIsError).className].filter(Boolean).join(' ')}><span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{part.isError ? <WarningCircle size={13} /> : <Check size={13} />}</span><span>{boundText(part.text, 2_000, '…')}</span></div><ImageParts images={part.images} /></>
 }
 
 function AgentActivityPart({ part }: { part: Extract<MessagePart, { type: 'agentMessage' }> }) {
   const [open, setOpen] = useState(false)
   const canExpand = Boolean(part.text)
-  return <div className="activity-line activity-line--agent">
-    <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className="activity-line__icon"><ChatCircle size={14} /></span>
-      <span className="activity-line__kind">Message from agent</span>
-      {part.agentName ? <span className="activity-agent__name">{part.agentName}</span> : null}
-      {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
+  return <div className={`activity-line activity-line--agent ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineAgent).className ?? ""}`}>
+    <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}><ChatCircle size={14} /></span>
+      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>Message from agent</span>
+      {part.agentName ? <span className={`activity-agent__name ${stylex.props(transcriptStyles.activityAgentName).className ?? ""}`}>{part.agentName}</span> : null}
+      {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open && part.text ? <div className="activity-agent__details"><MarkdownText text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></div> : null}
+    {open && part.text ? <div className={`activity-agent__details ${stylex.props(transcriptStyles.activityAgentDetails).className ?? ""}`}><MarkdownText variant="compact" text={boundText(part.text, 40_000, '\n… [Agent message truncated in the desktop view.]')} /></div> : null}
   </div>
 }
 
@@ -313,16 +318,16 @@ function CompactionPart({ part }: { part: Extract<MessagePart, { type: 'compacti
       : <><WarningCircle size={12} /> {part.status === 'cancelled' ? 'cancelled' : 'needs attention'}</>
   const details = part.error || part.summary
   const tokenLabel = part.tokensBefore === undefined ? '' : `${part.tokensBefore.toLocaleString()} tokens before`
-  return <div className={`activity-line activity-line--compaction is-${part.status}`}>
-    <button type="button" className="activity-tool__summary" disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
-      <span className="activity-line__icon">{part.status === 'running' ? <StatusMark state="running" size={14} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
-      <span className="activity-line__kind">{label}</span>
-      <span className="activity-compaction__reason">{compactionReasonLabel(part.reason)}</span>
-      {tokenLabel ? <span className="activity-compaction__tokens">{tokenLabel}</span> : null}
-      <span className="activity-tool__state">{state}</span>
-      {canExpand ? <CaretRight className="disclosure-caret" size={13} /> : null}
+  return <div className={[`activity-line activity-line--compaction is-${part.status}`, stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineCompaction, ((part.status === "running")) && transcriptStyles.activityLineCompactionIsRunning).className].filter(Boolean).join(' ')}>
+    <button type="button" className={`activity-tool__summary ${stylex.props(transcriptStyles.activityToolSummary, [responsiveStyles.activityToolSummary, responsiveLayoutStyles.activityToolSummary]).className ?? ""}`} disabled={!canExpand} onClick={() => setOpen((value) => !value)} aria-expanded={canExpand ? open : undefined}>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{part.status === 'running' ? <StatusMark state="running" size={14} /> : part.status === 'done' ? <Stack size={13} /> : <WarningCircle size={13} />}</span>
+      <span className={`activity-line__kind ${stylex.props(transcriptStyles.activityLineKind).className ?? ""}`}>{label}</span>
+      <span className={`activity-compaction__reason ${stylex.props(transcriptStyles.activityCompactionReason).className ?? ""}`}>{compactionReasonLabel(part.reason)}</span>
+      {tokenLabel ? <span className={`activity-compaction__tokens ${stylex.props(transcriptStyles.activityCompactionTokens).className ?? ""}`}>{tokenLabel}</span> : null}
+      <span className={`activity-tool__state ${stylex.props(transcriptStyles.activityToolState, [responsiveStyles.activityToolState, responsiveLayoutStyles.activityToolState]).className ?? ""}`}>{state}</span>
+      {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open && details ? <div className={`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`}><MarkdownText text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></div> : null}
+    {open && details ? <div className={[`activity-compaction__details ${part.status === 'done' ? '' : 'is-error'}`, stylex.props(transcriptStyles.activityCompactionDetails, !(part.status === 'done') && transcriptStyles.activityCompactionDetailsIsError).className].filter(Boolean).join(' ')}><MarkdownText variant="compact" text={boundText(details, 40_000, '\n… [Compaction details truncated in the desktop view.]')} /></div> : null}
   </div>
 }
 
@@ -368,7 +373,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} /> : <ImageParts key={key} images={part.images} />
     if (part.type === 'image') return <ImageParts key={key} images={[part]} />
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} />
-    if (part.type === 'text') return part.text.trim() || !streaming ? <div className="activity-line activity-line--note" key={key}><MarkdownText text={part.text} streaming={isTailPart} /></div> : null
+    if (part.type === 'text') return part.text.trim() || !streaming ? <div className={`activity-line activity-line--note ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineNote).className ?? ""}`} key={key}><MarkdownText variant="note" text={part.text} streaming={isTailPart} /></div> : null
     return null
   }).filter((row) => row !== null)
   // Back-to-back reads and searches fold into a single row; edits, commands, plans, and agents stay in the stream.
@@ -395,7 +400,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     const recent = index >= pageCount - RECENT_TIMELINE_PAGES || page.some((row) => row.key !== null && pendingKeys.has(String(row.key)))
     pages.push(<TimelinePage key={`page:${start}`} recent={recent} start={start + 1} count={page.length}>{page}</TimelinePage>)
   }
-  return <div className="work-timeline" id={id}>{pages}</div>
+  return <div className={`work-timeline ${stylex.props(transcriptStyles.workTimeline).className ?? ""}`} id={id}>{pages}</div>
 }
 
 const THINKING_STATUS_VERBS = [
@@ -442,8 +447,8 @@ export function LiveWorkVerb({ mode, prefix = '' }: { mode: 'Thinking' | 'Workin
   }, [verbs])
   const word = verbs[index] ?? verbs[0]
   return <>
-    <span className="sr-only">{`${prefix}${verbs[0]}`}</span>
-    <span key={word} className="live-work-verb" aria-hidden="true">{`${prefix}${word}`}</span>
+    <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{`${prefix}${verbs[0]}`}</span>
+    <span key={word} className={`live-work-verb ${stylex.props(transcriptStyles.liveWorkVerb).className ?? ""}`} aria-hidden="true">{`${prefix}${word}`}</span>
   </>
 }
 
@@ -482,11 +487,11 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
 /** The live run ledger: the turn's chronological stream (`children`) with the status row beneath it. */
 export function WorkDisclosure({ message, showReasoning, showTools, children }: { message: TranscriptMessage; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
   const activity = showTools ? activeWorkLabel(message.parts) : undefined
-  return <section className="work-disclosure is-running" aria-label="Agent work activity">
-    <div className="work-disclosure__live">
+  return <section className={`work-disclosure is-running ${stylex.props(transcriptStyles.workDisclosure, transcriptStyles.workDisclosureIsRunning).className ?? ""}`} aria-label="Agent work activity">
+    <div className={`work-disclosure__live ${stylex.props(transcriptStyles.workDisclosureLive).className ?? ""}`}>
       {children}
-      <div className="work-disclosure__status" role="status">
-        {activity ? <span className="work-disclosure__activity" title={activity}>{activity}</span> : <LiveWorkVerb mode={liveWorkStatus(message.parts, showReasoning, showTools)} />}
+      <div className={`work-disclosure__status ${stylex.props(transcriptStyles.workDisclosureStatus).className ?? ""}`} role="status">
+        {activity ? <span className={`work-disclosure__activity ${stylex.props(transcriptStyles.workDisclosureActivity).className ?? ""}`} title={activity}>{activity}</span> : <LiveWorkVerb mode={liveWorkStatus(message.parts, showReasoning, showTools)} />}
         <LiveElapsed since={message.startedAt ?? message.timestamp} /><ThinkingDots />
       </div>
     </div>

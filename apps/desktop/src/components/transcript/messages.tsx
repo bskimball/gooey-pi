@@ -1,5 +1,10 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { CaretRight, Check, Copy, Crosshair, X } from '../icons'
+import { CaretRight, Check, Copy, Crosshair, PencilSimple, X } from '../icons'
 import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { parseAnnotationReferences, splitAnnotationBlock } from '@/lib/browser-annotations'
 import { BrowserReferenceCards } from './BrowserReferenceCards'
@@ -10,7 +15,7 @@ import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { MarkdownText } from '../MarkdownText'
-import { ApexButton, PiMark } from '../ui'
+import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
@@ -68,6 +73,8 @@ export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: str
     if (group.activity && !group.pinned && condensed) {
       return <WorkGroup key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} live={streaming && index === groups.length - 1} subagents={subagents} />
     }
+    // Models often emit bare newlines between tool calls; rendering them leaves an empty gap between work rows.
+    if (!group.activity && group.parts.every((part) => part.type === 'text' && !part.text.trim())) return null
     return group.activity ? (
       <WorkTimeline key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} subagents={subagents} />
     ) : (
@@ -115,8 +122,8 @@ function CopyMessageButton({ message, text, className }: { message: TranscriptMe
   )
 }
 
-function MessageActions({ message, text = messageText(message) }: { message: TranscriptMessage; text?: string }) {
-  return text ? <div className="message-actions"><CopyMessageButton message={message} text={text} /></div> : null
+function MessageActions({ message, text = messageText(message), children }: { message: TranscriptMessage; text?: string; children?: ReactNode }) {
+  return text || children ? <div className={`message-actions ${stylex.props(transcriptStyles.messageActions).className ?? ""}`}>{text ? <CopyMessageButton message={message} text={text} /> : null}{children}</div> : null
 }
 
 function workedDuration(message: TranscriptMessage): string {
@@ -132,7 +139,7 @@ function timestampValue(value?: string | number): number | undefined {
 }
 
 export const AssistantMessage = memo(
-  function AssistantMessage({ message, harness = 'pi', showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; harness?: HarnessId; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
+  function AssistantMessage({ message, harness = 'pi', shortName = HARNESS_SHORT_NAMES[harness], showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; harness?: HarnessId; shortName?: string; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
     const counts = workCounts(message.parts)
     const hasVisibleActivity = message.parts.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
@@ -140,13 +147,13 @@ export const AssistantMessage = memo(
     const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || hasVisibleActivity || Boolean(git?.files.length))
     const copyableText = messageText(message)
     return (
-      <article className="message message--assistant">
-        <div className="message__content">
-          {message.errorMessage ? <div className="activity-line activity-line--result is-error" role="alert">{message.errorMessage}</div> : null}
+      <article className={`message message--assistant ${stylex.props(transcriptStyles.message, transcriptStyles.messageAssistant).className ?? ""}`}>
+        <div className={`message__content ${stylex.props(transcriptStyles.messageContent).className ?? ""}`}>
+          {message.errorMessage ? <div className={`activity-line activity-line--result is-error ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, transcriptStyles.activityLineResultIsError).className ?? ""}`} role="alert">{message.errorMessage}</div> : null}
           {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming, true, `Assistant response ${message.id}`)}
           {message.streaming && !hasVisibleActivity ? (
-            <div className="streaming-state" aria-live="polite">
-              <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${HARNESS_SHORT_NAMES[harness]} is `} />
+            <div className={`streaming-state ${stylex.props(transcriptStyles.streamingState).className ?? ""}`} aria-live="polite">
+              <ThinkingDots /> <LiveWorkVerb mode="streaming" prefix={`${shortName} is `} />
             </div>
           ) : null}
           {showReceipt ? (
@@ -157,14 +164,14 @@ export const AssistantMessage = memo(
               tools={counts.tools}
               git={git}
               onReviewChanges={onOpenChanges}
-              copy={copyableText ? <CopyMessageButton className="turn-receipt__action turn-receipt__copy" message={message} text={copyableText} /> : undefined}
+              copy={copyableText ? <CopyMessageButton className={`turn-receipt__action turn-receipt__copy ${stylex.props(transcriptStyles.turnReceiptAction, transcriptStyles.turnReceiptCopy).className ?? ""}`} message={message} text={copyableText} /> : undefined}
             />
           ) : !message.streaming ? <MessageActions message={message} text={copyableText} /> : null}
         </div>
       </article>
     )
   },
-  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git && previous.onOpenChanges === next.onOpenChanges,
+  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.shortName === next.shortName && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git && previous.onOpenChanges === next.onOpenChanges,
 )
 
 function SessionReferenceText({ text, references, onOpen }: { text: string; references: RoutedSessionReference[]; onOpen?(sessionId: string, harness: HarnessId): void }) {
@@ -193,7 +200,7 @@ function SessionReferenceText({ text, references, onOpen }: { text: string; refe
       parts.push(<button
         type="button"
         key={`${reference.harness}:${reference.sessionId}:${foundIndex}`}
-        className="session-reference"
+        className={`session-reference ${stylex.props(transcriptStyles.sessionReference).className ?? ""}`}
         aria-label={`Open session ${reference.label.slice(1)}`}
         onClick={() => onOpen?.(reference.sessionId, reference.harness)}
       >{reference.label}</button>)
@@ -224,16 +231,16 @@ function UserText({ text, images, onOpenSessionReference }: { text: string; imag
   return (
     <>
       {sessions.text && sessions.text !== '[Page annotations]' && sessions.text !== '[Terminal selection]' ? <SessionReferenceText text={sessions.text} references={references} onOpen={onOpenSessionReference} /> : null}
-      {task.block ? <details className="user-annotations"><summary>Selected context</summary><pre>{task.block}</pre></details> : null}
+      {task.block ? <details className={`user-annotations ${stylex.props(transcriptStyles.userAnnotations).className ?? ""}`}><summary>Selected context</summary><pre>{task.block}</pre></details> : null}
       {annotations.block ? <BrowserReferenceCards references={parseAnnotationReferences(annotations.block)} images={images} /> : null}
       {annotations.block ? (
-        <details className="user-annotations">
+        <details className={`user-annotations ${stylex.props(transcriptStyles.userAnnotations).className ?? ""}`}>
           <summary>{annotations.count > 0 ? `${annotations.count} page annotation${annotations.count === 1 ? '' : 's'}` : 'Page annotations'}</summary>
           <pre>{annotations.block}</pre>
         </details>
       ) : null}
       {terminal.selection ? (
-        <details className="user-annotations user-terminal-context">
+        <details className={`user-annotations user-terminal-context ${stylex.props(transcriptStyles.userAnnotations).className ?? ""}`}>
           <summary>{`Selected text from ${terminal.label ?? 'terminal'}`}</summary>
           <pre>{terminal.selection}</pre>
         </details>
@@ -250,28 +257,28 @@ export const UserMessage = memo(function UserMessage({ message, turnLabel, turnS
   const images = message.parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
   const referencedImages = new Set(message.parts.flatMap((part) => part.type === 'text' ? parseAnnotationReferences(splitAnnotationBlock(splitTerminalContextBlock(part.text).text).block ?? '').flatMap((reference) => reference.imageIndex === undefined ? [] : [reference.imageIndex]) : []))
   return (
-    <article className="message message--user">
-      <div className="user-bubble">
+    <article className={`message message--user ${stylex.props(transcriptStyles.message, transcriptStyles.messageUser, [responsiveStyles.messageUser, responsiveLayoutStyles.messageUser]).className ?? ""}`}>
+      <div className={`user-bubble ${stylex.props(transcriptStyles.userBubble).className ?? ""}`}>
         {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} images={images} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' && !referencedImages.has(images.indexOf(part)) ? renderImage(part, `user-${index}`) : null))}
       </div>
       {turnState ? (
-        <span className={`message__turn-status is-${turnState}`}>
-          <span aria-hidden="true">{turnState === 'running' ? <><span className="message__turn-dot" /> Running <LiveElapsed since={turnSince} /></> : turnState === 'failed' ? <><X size={11} /> Turn failed</> : <><Check size={11} /> {turnLabel}</>}</span>
-          <span className="sr-only">{turnState === 'running' ? 'Turn running' : turnState === 'failed' ? 'Turn failed' : `Turn took ${turnLabel}`}</span>
+        <span className={[`message__turn-status is-${turnState}`, stylex.props((turnState === 'done') && transcriptStyles.messageTurnStatusIsDone, (turnState === 'running') && transcriptStyles.messageTurnStatusIsRunning, (turnState === 'failed') && transcriptStyles.messageTurnStatusIsFailed).className].filter(Boolean).join(' ')}>
+          <span aria-hidden="true">{turnState === 'running' ? <><span className={`message__turn-dot ${stylex.props(transcriptStyles.messageTurnDot).className ?? ""}`} /> Running <LiveElapsed since={turnSince} /></> : turnState === 'failed' ? <><X size={11} /> Turn failed</> : <><Check size={11} /> {turnLabel}</>}</span>
+          <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{turnState === 'running' ? 'Turn running' : turnState === 'failed' ? 'Turn failed' : `Turn took ${turnLabel}`}</span>
         </span>
       ) : null}
-      {message.steerState ? <div className={`message__steer-state is-${message.steerState}`} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}
-      <MessageActions message={message} text={copyableText} />
-      {workflow ? <div className="task-message-actions">
-        <ApexButton compact variant="quiet" disabled={!workflow.idle || workflow.pending || !workflow.persistedUserIds.has(message.id)} title={!workflow.persistedUserIds.has(message.id) ? 'Waiting for the saved prompt entry' : !workflow.idle ? 'Available when this saved Pi session is idle' : undefined} onClick={() => workflow.edit(message.id)}>Edit from here</ApexButton>
-        {receipt && receipt.state !== 'open' ? <ApexButton compact variant="quiet" onClick={() => workflow.review(receipt)}>Review run{receipt.state === 'incomplete' ? ' · incomplete' : ''}</ApexButton> : null}
-      </div> : null}
+      {message.steerState ? <div className={[`message__steer-state is-${message.steerState}`, stylex.props(transcriptStyles.messageSteerState, ((message.steerState === "read")) && transcriptStyles.messageSteerStateIsRead).className].filter(Boolean).join(' ')} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}
+      {/* Workflow actions sit in the hover-revealed row beside Copy, styled like it. */}
+      <MessageActions message={message} text={copyableText}>
+        {workflow ? <button type="button" disabled={!workflow.idle || workflow.pending || !workflow.persistedUserIds.has(message.id)} title={!workflow.persistedUserIds.has(message.id) ? 'Waiting for the saved prompt entry' : !workflow.idle ? 'Available when this saved Pi session is idle' : undefined} onClick={() => workflow.edit(message.id)}><PencilSimple size={12} />Edit from here</button> : null}
+        {workflow && receipt && receipt.state !== 'open' ? <button type="button" onClick={() => workflow.review(receipt)}>Review run{receipt.state === 'incomplete' ? ' · incomplete' : ''}</button> : null}
+      </MessageActions>
     </article>
   )
 })
 
 export const SteerReadMarker = memo(function SteerReadMarker({ message }: { message: TranscriptMessage }) {
-  return <div className="message message--steer-read" role="status"><span>{messageText(message)}</span></div>
+  return <div className={`message message--steer-read ${stylex.props(transcriptStyles.message, transcriptStyles.messageSteerRead).className ?? ""}`} role="status"><span>{messageText(message)}</span></div>
 })
 
 export const ActivityMessage = memo(function ActivityMessage({ message, harness = 'pi' }: { message: TranscriptMessage; harness?: HarnessId }) {
@@ -287,7 +294,7 @@ export const ActivityMessage = memo(function ActivityMessage({ message, harness 
     part.type === 'toolResult' && sourceParts[index - 1]?.type !== 'toolCall' ? [{ type: 'toolCall' as const, id: `${message.id}-${index}`, name: part.name ?? 'Tool' }, part] : [part],
   )
   return (
-    <article className="message message--activity">
+    <article className={`message message--activity ${stylex.props(transcriptStyles.message, transcriptStyles.messageActivity).className ?? ""}`}>
       <WorkTimeline parts={parts} showReasoning showTools />
     </article>
   )
@@ -299,16 +306,16 @@ export const AgentMessage = memo(function AgentMessage({ message }: { message: T
   const text = messageText(message)
   const label = message.agentName ? `Message from agent: ${message.agentName}` : 'Message from agent'
   return (
-    <article className={`message message--agent ${open ? 'is-open' : ''}`}>
-      <button type="button" className="agent-message__summary" aria-expanded={open} aria-controls={contentId} aria-label={label} onClick={() => setOpen((value) => !value)}>
+    <article className={[`message message--agent ${open ? 'is-open' : ''}`, stylex.props(transcriptStyles.message, transcriptStyles.messageAgent).className].filter(Boolean).join(' ')}>
+      <button type="button" className={`agent-message__summary ${stylex.props(transcriptStyles.agentMessageSummary, [responsiveStyles.agentMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label={label} onClick={() => setOpen((value) => !value)}>
         <PiMark size={18} />
-        <span className="agent-message__label">Message from agent</span>
-        {message.agentName ? <span className="agent-message__name">{message.agentName}</span> : null}
-        <CaretRight className="agent-message__chevron disclosure-caret" size={13} />
+        <span className={`agent-message__label ${stylex.props(transcriptStyles.agentMessageLabel).className ?? ""}`}>Message from agent</span>
+        {message.agentName ? <span className={`agent-message__name ${stylex.props(transcriptStyles.agentMessageName).className ?? ""}`}>{message.agentName}</span> : null}
+        <CaretRight className={`agent-message__chevron disclosure-caret ${stylex.props(transcriptStyles.agentMessageChevron, transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
       {open ? (
-        <div className="agent-message__content" id={contentId}>
-          <MarkdownText text={boundText(text, 40_000, '\n… [Agent message truncated in the desktop view.]')} />
+        <div className={`agent-message__content ${stylex.props(transcriptStyles.agentMessageContent).className ?? ""}`} id={contentId}>
+          <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Agent message truncated in the desktop view.]')} />
           <MessageActions message={message} />
         </div>
       ) : null}
@@ -321,17 +328,17 @@ export const GoalMessage = memo(function GoalMessage({ message }: { message: Tra
   const contentId = useId()
   const text = messageText(message)
   return (
-    <article className={`message message--goal ${open ? 'is-open' : ''}`}>
-      <button type="button" className="goal-message__summary" aria-expanded={open} aria-controls={contentId} aria-label="Goal summary" onClick={() => setOpen((value) => !value)}>
-        <span className="goal-message__icon">
+    <article className={[`message message--goal ${open ? 'is-open' : ''}`, stylex.props(transcriptStyles.message, transcriptStyles.messageGoal).className].filter(Boolean).join(' ')}>
+      <button type="button" className={`goal-message__summary ${stylex.props(transcriptStyles.goalMessageSummary, [responsiveStyles.goalMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label="Goal summary" onClick={() => setOpen((value) => !value)}>
+        <span className={`goal-message__icon ${stylex.props(transcriptStyles.goalMessageIcon).className ?? ""}`}>
           <Crosshair size={15} />
         </span>
-        <span className="goal-message__label">Goal summary</span>
-        <CaretRight className="goal-message__chevron disclosure-caret" size={13} />
+        <span className={`goal-message__label ${stylex.props(transcriptStyles.goalMessageLabel).className ?? ""}`}>Goal summary</span>
+        <CaretRight className={`goal-message__chevron disclosure-caret ${stylex.props(transcriptStyles.goalMessageChevron, transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
       {open ? (
-        <div className="goal-message__content" id={contentId}>
-          <MarkdownText text={boundText(text, 40_000, '\n… [Goal summary truncated in the desktop view.]')} />
+        <div className={`goal-message__content ${stylex.props(transcriptStyles.goalMessageContent).className ?? ""}`} id={contentId}>
+          <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Goal summary truncated in the desktop view.]')} />
         </div>
       ) : null}
     </article>

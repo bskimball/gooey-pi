@@ -1,3 +1,6 @@
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
@@ -116,10 +119,10 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
   const searchLabel = view === 'providers' ? 'Search providers' : 'Search models'
 
   return (
-    <section className="settings-group provider-settings">
-      <div className="settings-group__heading"><h2>{agentName} catalogue</h2><div className="provider-heading-actions">{catalog && disabledCount < providerCount ? <ApexButton variant="danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</ApexButton> : null}{disabledCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</ApexButton> : null}<IconButton className="button button--icon" label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></IconButton></div></div>
-      <div className="provider-catalog-summary"><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in Apex; ${agentName} checks credentials when you launch one`}</small> : null}</div>
-      {catalog?.warning ? <Banner status="warning" role="status" className="provider-catalog-warning" title={catalog.warning} /> : null}
+    <section className={`settings-group provider-settings ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
+      <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}><h2>{agentName} catalogue</h2><div className={`provider-heading-actions ${stylex.props(settingsStyles.providerHeadingActions).className ?? ""}`}>{catalog && disabledCount < providerCount ? <ApexButton variant="danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</ApexButton> : null}{disabledCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</ApexButton> : null}<IconButton xstyle={[workbenchStyles.button]} className="button button--icon" label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></IconButton></div></div>
+      <div className={`provider-catalog-summary ${stylex.props(settingsStyles.providerCatalogSummary).className ?? ""}`}><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in Apex; ${agentName} checks credentials when you launch one`}</small> : null}</div>
+      {catalog?.warning ? <Banner xstyle={[settingsStyles.providerCatalogWarning]} status="warning" role="status" className="provider-catalog-warning" title={catalog.warning} /> : null}
       <TabList
         value={view}
         onChange={(next) => {
@@ -150,24 +153,24 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
         controlClassName="provider-search"
         controlXstyle={searchControlStyles.searchControl}
       />
-      {error ? <Banner status="error" role="alert" className="settings-error" title={error} /> : null}
-      {view === 'providers' ? <div className="provider-list">
+      {error ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={error} /> : null}
+      {view === 'providers' ? <div className={`provider-list ${stylex.props(settingsStyles.providerList).className ?? ""}`}>
         {providers.map((provider) => {
           const busy = busyProvider === provider.id
-          return <div className="provider-row" key={provider.id}>
+          return <div className={`provider-row ${stylex.props(settingsStyles.providerRow).className ?? ""}`} key={provider.id}>
             <CheckboxInput
               label=""
               aria-label={`Show ${provider.name} provider`}
               value={provider.enabled}
               isDisabled={busy}
               onChange={(checked) => void run(provider.id, () => onSetEnabled(provider.id, checked))}
-              className="provider-row__toggle"
+              className={`provider-row__toggle ${stylex.props(settingsStyles.providerRowToggle).className ?? ""}`}
             />
-            <div className="provider-row__identity"><strong>{provider.name}</strong><small>{`Credentials managed by the pi CLI · ${provider.availableModelCount.toLocaleString()} models`}</small></div>
-            <div className="provider-row__actions"><ApexButton icon={<ArrowSquareOut size={13} />} onClick={onOpenDocs}>Credential setup</ApexButton></div>
+            <div className={`provider-row__identity ${stylex.props(settingsStyles.providerRowIdentity).className ?? ""}`}><strong>{provider.name}</strong><small>{`Credentials managed by the pi CLI · ${provider.availableModelCount.toLocaleString()} models`}</small></div>
+            <div className={`provider-row__actions ${stylex.props(settingsStyles.providerRowActions).className ?? ""}`}><ApexButton icon={<ArrowSquareOut size={13} />} onClick={onOpenDocs}>Credential setup</ApexButton></div>
           </div>
         })}
-      </div> : <div className="provider-list provider-model-list">
+      </div> : <div className={`provider-list provider-model-list ${stylex.props(settingsStyles.providerList).className ?? ""}`}>
         {modelGroups.map(({ provider, models }) => {
           const collapsed = collapsedModelProviders.has(provider.id)
           const contentId = `provider-models-${provider.id.replace(/[^a-z0-9_-]/gi, '-')}`
@@ -179,16 +182,16 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
             aria-expanded={!collapsed}
             aria-controls={contentId}
             className="provider-model-group__heading"
-            xstyle={searchControlStyles.groupHeading}
-            endContent={<CaretRight className="provider-model-group__chevron" size={13} aria-hidden="true" />}
+            xstyle={[settingsStyles.providerModelGroupHeading, searchControlStyles.groupHeading]}
+            endContent={<CaretRight className={`provider-model-group__chevron ${stylex.props(settingsStyles.providerModelGroupChevron).className ?? ""}`} size={13} aria-hidden="true" />}
             onClick={() => toggleModelProvider(provider.id)}
           >
             <strong>{provider.name}</strong>
             <small>{models.filter((model) => model.enabled !== false).length.toLocaleString()} of {models.length.toLocaleString()} on</small>
           </AstryxButton>
-          <div id={contentId} className="provider-model-group__models" hidden={collapsed}>{models.map((model) => <div className={`provider-model-row${model.enabled === false ? ' is-disabled' : ''}`} key={model.key}>
-            <div className="provider-row__identity"><strong>{model.name}</strong><small>{model.id}</small></div>
-            <div className="provider-model-row__capabilities">
+          <div id={contentId} className="provider-model-group__models" hidden={collapsed}>{models.map((model) => <div className={[`provider-model-row${model.enabled === false ? ' is-disabled' : ''}`, stylex.props(settingsStyles.providerModelRow).className].filter(Boolean).join(' ')} key={model.key}>
+            <div className={`provider-row__identity ${stylex.props(settingsStyles.providerRowIdentity).className ?? ""}`}><strong>{model.name}</strong><small>{model.id}</small></div>
+            <div className={`provider-model-row__capabilities ${stylex.props(settingsStyles.providerModelRowCapabilities).className ?? ""}`}>
               {model.reasoning ? <span title={`${model.availableThinkingLevels.length} reasoning levels`}><Gauge size={11} /> Reasoning</span> : null}
               {model.fastModeSupported ? <span><Lightning size={11} /> Fast</span> : null}
               <span className={model.available && model.enabled !== false ? 'is-available' : ''}>{model.enabled === false ? 'Hidden' : 'Shown'}</span>
@@ -199,13 +202,13 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
               value={model.enabled !== false}
               isDisabled={busyProvider === `model:${model.key}`}
               onChange={(checked) => void run(`model:${model.key}`, () => onSetModelEnabled(model.key, checked))}
-              className="provider-row__toggle provider-model-row__toggle"
+              className={`provider-row__toggle provider-model-row__toggle ${stylex.props(settingsStyles.providerRowToggle, settingsStyles.providerModelRowToggle).className ?? ""}`}
             />
           </div>)}</div>
         </div>})}
       </div>}
-      {catalog && view === 'providers' && !providers.length ? <p className="settings-empty">No providers match your search.</p> : null}
-      {catalog && view === 'models' && !modelGroups.length ? <p className="settings-empty">No models match your search.</p> : null}
+      {catalog && view === 'providers' && !providers.length ? <p className={`settings-empty ${stylex.props(settingsStyles.settingsEmpty).className ?? ""}`}>No providers match your search.</p> : null}
+      {catalog && view === 'models' && !modelGroups.length ? <p className={`settings-empty ${stylex.props(settingsStyles.settingsEmpty).className ?? ""}`}>No models match your search.</p> : null}
     </section>
   )
 }

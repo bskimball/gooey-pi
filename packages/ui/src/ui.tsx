@@ -1,3 +1,8 @@
+import { styles as workbenchStyles } from './styles/workbench.stylex'
+import { styles as pagesStyles } from './styles/pages.stylex'
+import { styles as settingsStyles } from './styles/settings.stylex'
+import { motionMarker } from './styles/motion.stylex'
+import { styles as logosStyles } from './styles/logos.stylex'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import { ButtonGroup } from '@astryxdesign/core/ButtonGroup'
 import { EmptyState as AstryxEmptyState } from '@astryxdesign/core/EmptyState'
@@ -14,6 +19,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type ChangeEvent,
   type ReactNode,
@@ -35,6 +41,8 @@ const apexAstryxTheme = defineTheme({
 registerTheme(apexAstryxTheme)
 if (typeof document !== 'undefined') {
   document.documentElement.setAttribute('data-astryx-theme', 'apex')
+  const motionClass = stylex.props(motionMarker).className
+  if (motionClass) document.documentElement.classList.add(motionClass)
 }
 
 const styles = stylex.create({
@@ -43,8 +51,8 @@ const styles = stylex.create({
     display: 'inline-grid',
     placeItems: 'center',
     flex: '0 0 auto',
-    width: 28,
-    height: 28,
+    width: { default: 32, '@media (max-width: 720px)': 36 },
+    height: { default: 32, '@media (max-width: 720px)': 36 },
     minWidth: 0,
     minHeight: 0,
     padding: 0,
@@ -61,8 +69,8 @@ const styles = stylex.create({
     },
   },
   iconButtonSmall: {
-    width: 25,
-    height: 25,
+    width: { default: 26, '@media (max-width: 720px)': 36 },
+    height: { default: 26, '@media (max-width: 720px)': 36 },
   },
   button: {
     minHeight: 30,
@@ -78,14 +86,15 @@ const styles = stylex.create({
     borderColor: 'var(--border-strong)',
     borderRadius: 'var(--radius-md)',
     color: 'var(--text)',
-    backgroundColor: 'var(--surface-raised)',
+    // Gray tonal fill like the sidebar session actions, with a defined edge.
+    backgroundColor: 'var(--surface-hover)',
     backgroundImage: 'none',
-    boxShadow: '0 1px 2px rgba(2, 8, 18, 0.08)',
+    boxShadow: 'none',
     fontSize: 'var(--fs-body)',
     fontWeight: 550,
     cursor: 'pointer',
     ':hover': {
-      backgroundColor: 'var(--surface-hover)',
+      backgroundColor: 'var(--surface-selected)',
     },
   },
   buttonCompact: {
@@ -93,16 +102,16 @@ const styles = stylex.create({
     borderRadius: 'var(--radius-sm)',
     paddingInline: 9,
   },
+  // Primary stays in the same gray family, one step stronger than secondary.
   buttonPrimary: {
-    borderRadius: 999,
-    paddingInline: 14,
-    color: 'var(--primary-ink)',
-    backgroundColor: 'var(--primary-fill)',
-    borderColor: 'var(--primary-fill)',
+    color: 'var(--text)',
+    backgroundColor: 'var(--surface-selected)',
+    borderColor: 'var(--border-strong)',
+    fontWeight: 600,
     ':hover': {
-      color: 'var(--primary-ink)',
-      backgroundColor: 'color-mix(in srgb, var(--primary-fill) 86%, var(--canvas))',
-      borderColor: 'transparent',
+      color: 'var(--text)',
+      backgroundColor: 'color-mix(in srgb, var(--surface-selected) 82%, var(--text))',
+      borderColor: 'color-mix(in srgb, var(--border-strong) 80%, var(--text))',
     },
   },
   buttonDanger: {
@@ -142,7 +151,12 @@ const styles = stylex.create({
     color: 'var(--text-secondary)',
     backgroundColor: 'var(--surface-subtle)',
     cursor: 'pointer',
+    ':hover': { color: 'var(--text)', backgroundColor: 'var(--surface-hover)' },
+    ':focus-within': { color: 'var(--text)', borderColor: 'var(--focus)', outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--focus)', outlineOffset: 1 },
   },
+  selectRootOpen: { color: 'var(--text)', backgroundColor: 'var(--surface-hover)' },
+  selectRootDisabled: { opacity: 0.65, cursor: 'default' },
+  selectIcon: { display: 'inline-grid', placeItems: 'center', flex: '0 0 auto', pointerEvents: 'none' },
   selectRootCompact: {
     height: 26,
     borderRadius: 999,
@@ -173,6 +187,13 @@ const styles = stylex.create({
     position: 'static',
     minHeight: 0,
     minWidth: 0,
+    maxWidth: 122,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: 'var(--fs-meta)',
+    fontWeight: 550,
+    cursor: 'pointer',
     height: '100%',
     paddingInline: 0,
     paddingBlock: 0,
@@ -189,6 +210,7 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 'none',
     justifyContent: 'space-between',
+    fontSize: 'inherit',
   },
   segmentedGroup: {
     height: 28,
@@ -262,11 +284,12 @@ function useSyncedAstryxButtonDom(disabled: boolean | undefined, title: string |
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string
+  xstyle?: stylex.StyleXStyles
   size?: 'small' | 'regular'
   ref?: Ref<HTMLButtonElement>
 }
 
-export function IconButton({ label, size = 'regular', className = '', disabled, title, type = 'button', children, ref, ...props }: IconButtonProps) {
+export function IconButton({ label, xstyle, size = 'regular', className = '', disabled, title, type = 'button', children, ref, ...props }: IconButtonProps) {
   const buttonRef = useSyncedAstryxButtonDom(disabled, title ?? label, ref)
   // Extract HTML attributes Astryx BaseProps omits at the type level (`title`, `disabled`, etc.)
   const { form: _form, name: _name, value: _value, autoFocus: _autoFocus, ...safeProps } = props
@@ -282,7 +305,7 @@ export function IconButton({ label, size = 'regular', className = '', disabled, 
       isDisabled={disabled}
       icon={children}
       className={`icon-button icon-button--${size} ${className}`.trim()}
-      xstyle={[styles.iconButton, size === 'small' && styles.iconButtonSmall]}
+      xstyle={[workbenchStyles.iconButton, styles.iconButton, size === 'small' && styles.iconButtonSmall, xstyle]}
     />
   )
 }
@@ -344,14 +367,7 @@ export function ApexButton({
       icon={icon}
       endContent={endIcon}
       className={`button ${compact ? 'button--compact' : ''} ${variantClass} ${className}`.trim()}
-      xstyle={[
-        styles.button,
-        compact && styles.buttonCompact,
-        variant === 'primary' && styles.buttonPrimary,
-        variant === 'danger' && styles.buttonDanger,
-        variant === 'quiet' && styles.buttonQuiet,
-        xstyle,
-      ]}
+      xstyle={[(variant === 'primary' ? false : variant === 'danger' ? false : variant === 'quiet') && workbenchStyles.buttonQuiet, workbenchStyles.button, compact && workbenchStyles.buttonCompact, variant === 'primary' && workbenchStyles.buttonPrimary, (variant === 'primary' ? false : variant === 'danger') && workbenchStyles.buttonDanger, styles.button, compact && styles.buttonCompact, variant === 'primary' && styles.buttonPrimary, variant === 'danger' && styles.buttonDanger, variant === 'quiet' && styles.buttonQuiet, xstyle]}
     >
       {children}
     </AstryxButton>
@@ -374,6 +390,7 @@ interface SelectControlProps extends SelectHTMLAttributes<HTMLSelectElement> {
 export function SelectControl({ icon, compact, fullWidth = false, placement = 'below', xstyle, className = '', label, value, disabled, onChange, children }: SelectControlProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
   useEffect(() => {
     document.documentElement.setAttribute('data-astryx-theme', 'apex')
   }, [])
@@ -389,8 +406,11 @@ export function SelectControl({ icon, compact, fullWidth = false, placement = 'b
     const listbox = listboxId ? document.getElementById(listboxId) : null
     const popup = listbox?.closest<HTMLElement>('.astryx-selector-popup')
     const pane = root.closest<HTMLElement>('.conversation-pane')
-    if (!popup || !pane) return
-    const paneRect = pane.getBoundingClientRect()
+    if (!popup) return
+    const paneRect = pane?.getBoundingClientRect() ?? { width: window.innerWidth, height: window.innerHeight, top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 }
+    const layer = popup.closest<HTMLElement>('[data-astryx-layer-root]')
+    layer?.style.setProperty('--_astryx-layer-clearance', '12px')
+    if (layer) layer.style.maxWidth = `${Math.min(320, paneRect.width - 24)}px`
     if (paneRect.width <= 0 || paneRect.height <= 0) return
     const maxWidth = Math.max(160, Math.min(320, Math.floor(paneRect.width - 24)))
     popup.style.width = `${maxWidth}px`
@@ -414,7 +434,9 @@ export function SelectControl({ icon, compact, fullWidth = false, placement = 'b
     const trigger = triggerRef.current
     if (!trigger) return
     const syncClamp = () => {
-      if (trigger.getAttribute('aria-expanded') !== 'true') return
+      const expanded = trigger.getAttribute('aria-expanded') === 'true'
+      setOpen(expanded)
+      if (!expanded) return
       clampPopupToPane()
       requestAnimationFrame(() => {
         clampPopupToPane()
@@ -455,6 +477,8 @@ export function SelectControl({ icon, compact, fullWidth = false, placement = 'b
   const selectedValue = String(value ?? options[0]?.value ?? '')
   const rootStylex = stylex.props(
     styles.selectRoot,
+    open && styles.selectRootOpen,
+    disabled && styles.selectRootDisabled,
     compact && styles.selectRootCompact,
     fullWidth && styles.selectRootFullWidth,
     xstyle,
@@ -480,7 +504,7 @@ export function SelectControl({ icon, compact, fullWidth = false, placement = 'b
         isDisabled={disabled}
         value={selectedValue}
         options={options}
-        startIcon={icon ? <span className="select-control__icon" aria-hidden="true">{icon}</span> : undefined}
+        startIcon={icon ? <span {...stylex.props(styles.selectIcon)} aria-hidden="true">{icon}</span> : undefined}
         onChange={(nextValue) => {
           onChange?.({ target: { value: nextValue }, currentTarget: { value: nextValue } } as ChangeEvent<HTMLSelectElement>)
         }}
@@ -544,22 +568,22 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
 export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: string; children: ReactNode; action?: ReactNode }) {
   const textDescription = typeof children === 'string' || typeof children === 'number' ? String(children) : undefined
   const actionsSlot = textDescription !== undefined
-    ? (action ? <div className="empty-state__action">{action}</div> : undefined)
+    ? (action ? <div className={`empty-state__action ${stylex.props(pagesStyles.emptyStateAction).className ?? ""}`}>{action}</div> : undefined)
     : (
         <>
           <div>{children}</div>
-          {action ? <div className="empty-state__action">{action}</div> : null}
+          {action ? <div className={`empty-state__action ${stylex.props(pagesStyles.emptyStateAction).className ?? ""}`}>{action}</div> : null}
         </>
       )
   return (
     <AstryxEmptyState
       headingLevel={2}
       title={title}
-      icon={icon ? <div className="empty-state__icon">{icon}</div> : undefined}
+      icon={icon ? <div className={`empty-state__icon ${stylex.props(pagesStyles.emptyStateIcon).className ?? ""}`}>{icon}</div> : undefined}
       description={textDescription}
       actions={actionsSlot}
       className="empty-state"
-      xstyle={styles.emptyState}
+      xstyle={[pagesStyles.emptyState, styles.emptyState]}
     />
   )
 }
@@ -624,8 +648,8 @@ export function PiMark({ size = 24 }: { size?: number }) {
   // Option 2 ("The Apex Fang"): a razor-edged shark-tooth "A" silhouette with
   // a rolling wave-trough crossbar and under-crest accent.
   return (
-    <span className="pi-mark" style={{ width: size, height: size }} role="img" aria-label="Pi">
-      <svg viewBox="0 0 100 100" fill="none" focusable="false" aria-hidden="true">
+    <span className={`pi-mark ${stylex.props(workbenchStyles.piMark).className ?? ""}`} style={{ width: size, height: size }} role="img" aria-label="Pi">
+      <svg viewBox="0 0 100 100" fill="none" focusable="false" aria-hidden="true" {...stylex.props(logosStyles.markSvg)}>
         <path
           fillRule="evenodd"
           clipRule="evenodd"
@@ -646,20 +670,20 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
   // concentric Seigaiha ocean waves and a swept shark dorsal fin slicing upward.
   const clipId = useId()
   return (
-    <span className="pi-welcome-mark" style={{ width: size, height: size }} role="img" aria-label="Apex wave crest">
-      <svg viewBox="0 0 160 160" fill="none" focusable="false" aria-hidden="true">
+    <span className={`pi-welcome-mark ${stylex.props(workbenchStyles.piWelcomeMark).className ?? ""}`} style={{ width: size, height: size }} role="img" aria-label="Apex wave crest">
+      <svg viewBox="0 0 160 160" fill="none" focusable="false" aria-hidden="true" {...stylex.props(logosStyles.welcomeSvg)}>
         <defs>
           <clipPath id={clipId}>
-            <circle cx="80" cy="80" r="67" />
+            <circle cx="80" cy="80" r="67" {...stylex.props(logosStyles.shape)} />
           </clipPath>
         </defs>
-        <circle cx="80" cy="80" r="74" fill="#0b1119" />
-        <g clipPath={`url(#${clipId})`}>
-          <g className="pi-welcome-mark__moon">
-            <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" />
-            <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" />
+        <circle cx="80" cy="80" r="74" fill="#0b1119" {...stylex.props(logosStyles.shape)} />
+        <g clipPath={`url(#${clipId})`} {...stylex.props(logosStyles.shape)}>
+          <g className={`pi-welcome-mark__moon ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkMoon).className ?? ""}`}>
+            <circle cx="50" cy="48" r="13" fill="#38bdf8" fillOpacity="0.14" {...stylex.props(logosStyles.shape)} />
+            <circle cx="50" cy="48" r="9.5" stroke="#7dd3fc" strokeOpacity="0.45" strokeWidth="1.5" {...stylex.props(logosStyles.shape)} />
           </g>
-          <g className="pi-welcome-mark__fin">
+          <g className={`pi-welcome-mark__fin ${stylex.props(logosStyles.shape, logosStyles.fin).className ?? ""}`}>
             <path
               d="M42 106 C45 68 63 38 99 20 C90 42 87 63 95 83 L86 87 L96 104 Z"
               fill="currentColor"
@@ -677,34 +701,34 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
               strokeLinecap="round"
             />
           </g>
-          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--left">
-            <circle cx="34" cy="118" r="42" fill="#0b1119" />
-            <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
-            <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
-            <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
-            <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+          <g className={`pi-welcome-mark__wave pi-welcome-mark__wave--left ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkWaveLeft).className ?? ""}`}>
+            <circle cx="34" cy="118" r="42" fill="#0b1119" {...stylex.props(logosStyles.shape)} />
+            <circle cx="34" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" {...stylex.props(logosStyles.shape)} />
+            <circle cx="34" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" {...stylex.props(logosStyles.shape)} />
+            <circle cx="34" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" {...stylex.props(logosStyles.shape)} />
+            <circle cx="34" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" {...stylex.props(logosStyles.shape)} />
           </g>
-          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--right">
-            <circle cx="126" cy="118" r="42" fill="#0b1119" />
-            <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" />
-            <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" />
-            <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" />
-            <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" />
+          <g className={`pi-welcome-mark__wave pi-welcome-mark__wave--right ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkWaveRight).className ?? ""}`}>
+            <circle cx="126" cy="118" r="42" fill="#0b1119" {...stylex.props(logosStyles.shape)} />
+            <circle cx="126" cy="118" r="42" stroke="currentColor" strokeWidth="2.6" {...stylex.props(logosStyles.shape)} />
+            <circle cx="126" cy="118" r="33" stroke="#7dd3fc" strokeOpacity="0.85" strokeWidth="2" {...stylex.props(logosStyles.shape)} />
+            <circle cx="126" cy="118" r="24" stroke="#38bdf8" strokeOpacity="0.7" strokeWidth="1.8" {...stylex.props(logosStyles.shape)} />
+            <circle cx="126" cy="118" r="15" stroke="#38bdf8" strokeOpacity="0.5" strokeWidth="1.6" {...stylex.props(logosStyles.shape)} />
           </g>
-          <g className="pi-welcome-mark__wave pi-welcome-mark__wave--front">
-            <circle cx="80" cy="136" r="46" fill="#0b1119" />
-            <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" />
-            <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" />
-            <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" />
-            <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" />
-            <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" />
+          <g className={`pi-welcome-mark__wave pi-welcome-mark__wave--front ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkWaveFront).className ?? ""}`}>
+            <circle cx="80" cy="136" r="46" fill="#0b1119" {...stylex.props(logosStyles.shape)} />
+            <circle cx="80" cy="136" r="46" stroke="currentColor" strokeWidth="3" {...stylex.props(logosStyles.shape)} />
+            <circle cx="80" cy="136" r="37" stroke="#7dd3fc" strokeOpacity="0.9" strokeWidth="2.2" {...stylex.props(logosStyles.shape)} />
+            <circle cx="80" cy="136" r="28" stroke="#38bdf8" strokeOpacity="0.75" strokeWidth="2" {...stylex.props(logosStyles.shape)} />
+            <circle cx="80" cy="136" r="19" stroke="#38bdf8" strokeOpacity="0.6" strokeWidth="1.8" {...stylex.props(logosStyles.shape)} />
+            <circle cx="80" cy="136" r="10" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.6" {...stylex.props(logosStyles.shape)} />
           </g>
-          <circle className="pi-welcome-mark__spray" cx="105" cy="54" r="2.2" fill="currentColor" />
-          <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--late" cx="111" cy="62" r="1.6" fill="#7dd3fc" />
-          <circle className="pi-welcome-mark__spray pi-welcome-mark__spray--later" cx="36" cy="70" r="1.8" fill="#7dd3fc" />
+          <circle className={`pi-welcome-mark__spray ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkSpray).className ?? ""}`} cx="105" cy="54" r="2.2" fill="currentColor" />
+          <circle className={`pi-welcome-mark__spray pi-welcome-mark__spray--late ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkSpray, workbenchStyles.piWelcomeMarkSprayLate).className ?? ""}`} cx="111" cy="62" r="1.6" fill="#7dd3fc" />
+          <circle className={`pi-welcome-mark__spray pi-welcome-mark__spray--later ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkSpray, workbenchStyles.piWelcomeMarkSprayLater).className ?? ""}`} cx="36" cy="70" r="1.8" fill="#7dd3fc" />
         </g>
-        <circle cx="80" cy="80" r="73" stroke="currentColor" strokeWidth="3.5" />
-        <circle className="pi-welcome-mark__ring" cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
+        <circle cx="80" cy="80" r="73" stroke="currentColor" strokeWidth="3.5" {...stylex.props(logosStyles.shape)} />
+        <circle className={`pi-welcome-mark__ring ${stylex.props(logosStyles.shape, workbenchStyles.piWelcomeMarkRing).className ?? ""}`} cx="80" cy="80" r="67" stroke="currentColor" strokeOpacity="0.32" strokeWidth="1.25" />
       </svg>
     </span>
   )
@@ -712,8 +736,8 @@ export function PiWelcomeMark({ size = 88 }: { size?: number }) {
 
 export function GooeyPiMark({ size = 24 }: { size?: number }) {
   return (
-    <span className="gooeypi-mark" style={{ width: size, height: size }} role="img" aria-label="Apex">
-      <img src="/gooeypi-mascot.png" alt="" aria-hidden="true" />
+    <span className={`gooeypi-mark ${stylex.props(settingsStyles.gooeypiMark).className ?? ""}`} style={{ width: size, height: size }} role="img" aria-label="Apex">
+      <img src="/gooeypi-mascot.png" alt="" aria-hidden="true" {...stylex.props(logosStyles.gooeyImage)} />
     </span>
   )
 }

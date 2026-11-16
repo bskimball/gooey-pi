@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { useId } from 'react'
 
 export type StatusMarkState = 'pending' | 'running' | 'done' | 'failed' | 'stale'
@@ -20,7 +22,7 @@ export function StatusMark({ state, size = 14, className }: StatusMarkProps) {
   const maskId = useId()
   const classes = `status-mark status-mark--${state}${className ? ` ${className}` : ''}`
   return (
-    <svg className={classes} width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+    <svg className={[classes, stylex.props(activityStyles.statusMark, ((state === "pending")) && activityStyles.statusMarkPending, ((state === "stale")) && activityStyles.statusMarkStale, ((state === "running")) && activityStyles.statusMarkRunning, ((state === "done")) && activityStyles.statusMarkDone, ((state === "failed")) && activityStyles.statusMarkFailed).className].filter(Boolean).join(' ')} width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
       {state === 'running' ? (
         <>
           <circle cx="8" cy="8" r="2" fill="currentColor" />

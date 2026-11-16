@@ -121,14 +121,15 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('work-disclosure__rail')
     expect(html).not.toContain('assistant-mark')
     expect(html).toContain('work-disclosure__status')
-    expect(html).toContain('role="status"><span class="sr-only">Thinking</span><span class="live-work-verb" aria-hidden="true">Thinking</span>')
-    expect(html).toContain('Checking <strong>the workspace</strong> now.')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"]")].map(element => [element.querySelector(':scope > .sr-only:first-child')?.textContent, element.querySelector(':scope > .sr-only + .live-work-verb[aria-hidden="true"]')?.textContent])).toContainEqual(["Thinking", "Thinking"])
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.activity-line--reasoning .prose')?.textContent).toBe('Checking the workspace now.')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.activity-line--reasoning strong')?.textContent).toBe('the workspace')
     expect(html).not.toContain('**the workspace**')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('thinking-dots')
-    expect(html).toMatch(/class="thinking-dots"[^>]*><svg/)
-    expect(html.match(/class="thinking-dots__wave"/g)).toHaveLength(1)
-    expect(html.match(/class="thinking-dots__fin"/g)).toHaveLength(1)
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.thinking-dots > svg')).not.toBeNull()
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".thinking-dots__wave")]).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".thinking-dots__fin")]).toHaveLength(1)
   })
 
   it.each([
@@ -145,12 +146,12 @@ describe('transcript rendering', () => {
     // The live step replaces the previous one: a visible tool call folds the reasoning into the summary row.
     expect(html.includes('activity-line--reasoning')).toBe(!showTools)
     expect(html.includes('Checking the workspace.')).toBe(!showTools)
-    expect(html.includes('class="work-group__label">Thought</span>')).toBe(showTools)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].some(element => element.textContent === "Thought")).toBe(showTools)
     expect(html.includes('activity-line--tool')).toBe(showTools)
     if (activity) {
-      expect(html).toContain(`role="status"><span class="work-disclosure__activity" title="${activity}">${activity}</span>`)
+      expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__activity:first-child")].map(element => [element.getAttribute('title'), element.textContent])).toContainEqual([activity, activity])
       expect(html).not.toContain('live-work-verb')
-    } else expect(html).toContain('role="status"><span class="sr-only">Working</span><span class="live-work-verb" aria-hidden="true">Working</span>')
+    } else expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"]")].map(element => [element.querySelector(':scope > .sr-only:first-child')?.textContent, element.querySelector(':scope > .sr-only + .live-work-verb[aria-hidden="true"]')?.textContent])).toContainEqual(["Working", "Working"])
   })
 
   it('names a running subagent in the live status line', () => {
@@ -172,7 +173,7 @@ describe('transcript rendering', () => {
           { type: 'toolResult', name: 'read_file', text: 'done' },
         ],
       }], false, showTools)
-      expect(html).toContain(`role="status"><span class="sr-only">${status}</span>`)
+      expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain(status)
     },
   )
 
@@ -183,12 +184,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read_file' },
       { type: 'tool_execution_update', toolCallId: 'tool-1', toolName: 'read_file', partialResult: 'halfway' },
     ])
-    expect(render(updating, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
+    expect([...new DOMParser().parseFromString(render(updating, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Working")
 
     const finished = replayApexEvents(updating, [
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
-    expect(render(finished, false, false)).toContain('role="status"><span class="sr-only">Thinking</span>')
+    expect([...new DOMParser().parseFromString(render(finished, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Thinking")
 
     const ended = replayApexEvents(updating, [{ type: 'agent_end' }])
     expect(ended[0].parts.find((part) => part.type === 'toolResult')).toMatchObject({ streaming: false, isError: true })
@@ -203,12 +204,12 @@ describe('transcript rendering', () => {
       { type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read_file', result: 'done' },
     ])
     expect(reasoning[0].parts.map((part) => part.type)).toEqual(['thinking', 'toolCall', 'toolResult', 'thinking'])
-    expect(render(reasoning)).toContain('role="status"><span class="sr-only">Thinking</span>')
+    expect([...new DOMParser().parseFromString(render(reasoning), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Thinking")
 
     const narrative = replayApexEvents(reasoning, [
       { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Final answer.' } },
     ])
-    expect(render(narrative, false, false)).toContain('role="status"><span class="sr-only">Working</span>')
+    expect([...new DOMParser().parseFromString(render(narrative, false, false), 'text/html').querySelectorAll("[role=\"status\"] > .sr-only:first-child")].map(element => element.textContent)).toContain("Working")
   })
 
   it('keeps external active work readable until the whole agent turn is done', () => {
@@ -225,7 +226,7 @@ describe('transcript rendering', () => {
       ],
     }], true)
 
-    expect(html).toContain('class="work-group__label">Thought</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought")
     expect(html).not.toContain('Following the external session.')
     expect(html).toContain('Explaining the next step.')
     expect(html).toContain('read_file')
@@ -253,7 +254,7 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Turn finished in</span> 1s')
     // The prior turn's reasoning stays folded under its Thought summary rather than reopening as live work.
-    expect(html).toContain('class="work-group__label">Thought</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought")
     expect(html).not.toContain('Prior completed reasoning.')
     expect(html).toContain('transcript-active-placeholder')
     expect(html).toContain('Pi is working')
@@ -277,7 +278,7 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('Current response')
     expect(html).toContain('Pick this up')
-    expect(html.match(new RegExp(`<span class="sr-only">${shortName} is working</span>`, 'g'))).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.sr-only')].filter((element) => element.textContent === `${shortName} is working`)).toHaveLength(1)
     expect(html).not.toContain('transcript-active-placeholder')
   })
 
@@ -293,8 +294,8 @@ describe('transcript rendering', () => {
 
     expect(html).not.toContain('Worked for')
     expect(html).toContain('Turn finished in</span> 3s')
-    expect(html).toContain('class="work-group__label">Thought</span>')
-    expect(html).toContain('class="work-group__summary" aria-expanded="false"')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought")
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".work-group__summary[aria-expanded=\"false\"]")).not.toBeNull()
     expect(html).not.toContain('This stays visible after the turn.')
     expect(html).not.toContain('thinking-dots')
   })
@@ -311,8 +312,8 @@ describe('transcript rendering', () => {
       },
     ])
 
-    expect(html.match(/class="message message--assistant"/g)).toHaveLength(1)
-    expect(html.match(/class="turn-receipt"/g)).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".message.message--assistant")]).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".turn-receipt")]).toHaveLength(1)
     expect(html).toContain('Turn finished in</span> 4s')
   })
 
@@ -325,7 +326,7 @@ describe('transcript rendering', () => {
       onSuggestion: noop,
     }))
     expect(html).toContain('transcript-changes-pin')
-    expect(html.match(/class="changes-card"/g)).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".changes-card")]).toHaveLength(1)
     expect(html).toContain('1 file changed')
   })
 
@@ -382,7 +383,7 @@ describe('transcript rendering', () => {
     }])
     expect(html).toContain('Coordinate with ')
     expect(html).toContain('>@API owner</button>.')
-    expect(html).toContain('class="session-reference"')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".session-reference")).not.toBeNull()
     expect(html).toContain('type="button"')
     expect(html).toContain('aria-label="Open session API owner"')
     expect(html).not.toContain('secret-uuid')
@@ -417,7 +418,7 @@ describe('transcript rendering', () => {
     }])
 
     expect(html).toContain('The final answer stays visible.')
-    expect(html).toContain('class="work-group__label">1 agent message</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("1 agent message")
     expect(html).not.toContain('Late details.')
     expect(html).toContain('aria-label="Copy assistant message"')
   })
@@ -438,7 +439,7 @@ describe('transcript rendering', () => {
     expect(html).toContain('Turn finished in</span> 1s')
     expect(html).toContain('The primary final report stays visible.')
     // Both reasoning blocks fold into their own summary rows around the report.
-    expect(html.match(/class="work-group__label">Thought<\/span>/g)).toHaveLength(2)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].filter(element => element.textContent === "Thought")).toHaveLength(2)
     expect(html.indexOf('The primary final report stays visible.')).toBeGreaterThan(html.indexOf('work-group__label'))
     expect(html).not.toContain('Trailing lightweight reasoning.')
     expect(html).toContain('aria-label="Copy assistant message"')
@@ -467,7 +468,7 @@ describe('transcript rendering', () => {
     expect(report).toBeGreaterThan(html.indexOf('>Thought</span>'))
     expect(tool).toBeGreaterThan(report)
     expect(html.indexOf('Cleanup complete.')).toBeGreaterThan(tool)
-    expect(html).toContain('class="turn-receipt"')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".turn-receipt")).not.toBeNull()
     expect(html).toContain('1 tool')
     expect(html).not.toContain('Earlier reasoning.')
     // Copy rides on the receipt line instead of a separate actions row.
@@ -491,16 +492,16 @@ describe('transcript rendering', () => {
 
     expect(html).toContain('1/2 done')
     expect(html).toContain('Implement the lane')
-    expect(html.match(/class="subagent-lane /g)).toHaveLength(2)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane")]).toHaveLength(2)
     expect(html).toContain('>scout</span>')
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
-    expect(html).toContain('class="status-mark status-mark--running"')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".status-mark.status-mark--running")).not.toBeNull()
     // Report highlights hang off the lane's tree rail; the full report waits behind its toggle.
-    expect(html).toContain('├─</span><span class="subagent-lane__leaf">Transcript lives in messages.tsx</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane__leaf")].map(element => [element.previousElementSibling?.textContent, element.textContent])).toContainEqual(["├─", "Transcript lives in messages.tsx"])
     expect(html).toContain('View full report')
-    expect(html).toContain('╰─</span><span class="subagent-lane__leaf">Awaiting a recorded update…</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane__leaf")].map(element => [element.previousElementSibling?.textContent, element.textContent])).toContainEqual(["╰─", "Awaiting a recorded update…"])
   })
 
   it('folds a task_wait into the lane of the task it started and shows the settled report highlights', () => {
@@ -518,7 +519,7 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html.match(/class="subagent-lane /g)).toHaveLength(1)
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".subagent-lane")]).toHaveLength(1)
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('>Finished</span>')
     expect(html).toContain('>Findings</span>')
@@ -573,7 +574,7 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html).toContain('class="turn-receipt"')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector(".turn-receipt")).not.toBeNull()
     expect(html).toContain('1 agent')
   })
 
@@ -589,7 +590,7 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect(html).toContain('class="work-group__label">Thought, 1 agent message</span>')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought, 1 agent message")
     expect(html).toContain('activity-line--tool')
     expect(html).not.toContain('Detailed child-agent response.')
     expect(html).not.toContain('message--agent')

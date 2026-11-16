@@ -1,3 +1,9 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
+import { styles as filesPanelStyles } from 'apex-ui/styles/files-panel.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import {
   ArrowsClockwise,
   CaretDown,
@@ -239,12 +245,12 @@ function CurrentFilePreview({ node, harness, onOpen, onClose }: { node: FileTree
   return <Modal title={`Current file: ${node.path}`} onClose={onClose} footer={<>
     {onOpen ? <ApexButton onClick={() => onOpen(node.fullPath)}>Open external</ApexButton> : null}
     <ApexButton onClick={onClose}>Close</ApexButton>
-  </>}><div className="task-review">
+  </>}><div className={`task-review ${stylex.props(taskWorkflowsStyles.taskReview).className ?? ""}`}>
     <p>Current checkout contents, not a saved run snapshot. Select text to attach it to the composer.</p>
     <p>Root: <code>{node.root}</code></p>
     {error ? <><Banner status="error" role="alert" title={`Unable to preview file: ${error}`} /><ApexButton onClick={() => setRevision((value) => value + 1)}>Try again</ApexButton></> : !content ? <p role="status">Loading file…</p> : <>
       {content.truncated ? <p role="note">Preview truncated at 256 KiB. Only the displayed text can be selected. Open external to inspect the complete file.</p> : null}
-      {content.text.length ? <ContextExcerpt key={revision} source={`Current file in ${node.root}`} path={content.path} text={content.text} plainText><pre className="task-history-code">{content.text}</pre></ContextExcerpt> : <p>This file is empty.</p>}
+      {content.text.length ? <ContextExcerpt key={revision} source={`Current file in ${node.root}`} path={content.path} text={content.text} plainText><pre className={`task-history-code ${stylex.props(taskWorkflowsStyles.taskHistoryCode).className ?? ""}`}>{content.text}</pre></ContextExcerpt> : <p>This file is empty.</p>}
     </>}
   </div></Modal>
 }
@@ -354,9 +360,9 @@ export function FilesPanel({
   }
 
   return (
-    <div className="files-panel">
+    <div className={`files-panel ${stylex.props(filesPanelStyles.filesPanel).className ?? ""}`}>
       {selectedFile ? <CurrentFilePreview key={`${selectedFile.id}:${project.harness}`} node={selectedFile} harness={project.harness} onOpen={onOpen} onClose={() => setSelectedFile(null)} /> : null}
-      <div className="files-search">
+      <div className={`files-search ${stylex.props(filesPanelStyles.filesSearch).className ?? ""}`}>
         <TextInput label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
         {!isSearching && allDirIds.size > 0 ? (
           expandedIds.size > 0 ? (
@@ -370,14 +376,14 @@ export function FilesPanel({
           )
         ) : null}
         <IconButton size="small" label="Refresh project files" onClick={() => void load()}>
-          <ArrowsClockwise className={loading ? 'spin' : ''} size={13} />
+          <ArrowsClockwise className={[loading ? 'spin' : '', stylex.props((loading) && activityStyles.spin, (loading) && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={13} />
         </IconButton>
       </div>
 
-      <div className="file-tree scroll-area">
+      <div className={`file-tree scroll-area ${stylex.props(baseStyles.scrollArea, filesPanelStyles.fileTree).className ?? ""}`}>
         <button
           type="button"
-          className="tree-root"
+          className={`tree-root ${stylex.props(filesPanelStyles.treeRoot).className ?? ""}`}
           onClick={() => onReveal(project.primaryFolder)}
           title={project.primaryFolder}
         >
@@ -392,7 +398,7 @@ export function FilesPanel({
         {loading ? <div className="compact-state" role="status"><EmptyState title="Loading project files…">{null}</EmptyState></div> : null}
         {error ? <Banner status="error" role="alert" title={`Unable to list project files: ${error}`} /> : null}
         {!loading && !error && skipped > 0 ? (
-          <p className="file-tree__skipped">
+          <p className={`file-tree__skipped ${stylex.props(filesPanelStyles.fileTreeSkipped).className ?? ""}`}>
             {skipped} {skipped === 1 ? 'folder' : 'folders'} could not be read and{' '}
             {skipped === 1 ? 'was' : 'were'} skipped.
           </p>
@@ -415,10 +421,10 @@ export function FilesPanel({
                       : ''
 
               return (
-                <div key={node.id} className="file-tree__row">
+                <div key={node.id} className={`file-tree__row ${stylex.props(filesPanelStyles.fileTreeRow).className ?? ""}`}>
                   <button
                     type="button"
-                    className={`file-tree__item ${isDirectory ? 'is-directory' : 'is-file'}`}
+                    className={[`file-tree__item ${isDirectory ? 'is-directory' : 'is-file'}`, stylex.props(filesPanelStyles.fileTreeItem, (isDirectory) && filesPanelStyles.fileTreeItemIsDirectory).className].filter(Boolean).join(' ')}
                     style={{ paddingLeft: `${8 + node.depth * 14}px` }}
                     title={isDirectory ? node.path || node.name : node.path}
                     aria-expanded={isDirectory ? isExpanded : undefined}
@@ -439,31 +445,31 @@ export function FilesPanel({
                     }
                   >
                     {isDirectory ? (
-                      <span className="file-tree__chevron">
+                      <span className={`file-tree__chevron ${stylex.props(filesPanelStyles.fileTreeChevron).className ?? ""}`}>
                         {node.children.length > 0 ? (
                           isExpanded ? <CaretDown size={13} /> : <CaretRight size={13} />
                         ) : (
-                          <span className="file-tree__expander-placeholder" />
+                          <span className={`file-tree__expander-placeholder ${stylex.props(filesPanelStyles.fileTreeExpanderPlaceholder).className ?? ""}`} />
                         )}
                       </span>
                     ) : (
-                      <span className="file-tree__expander-placeholder" />
+                      <span className={`file-tree__expander-placeholder ${stylex.props(filesPanelStyles.fileTreeExpanderPlaceholder).className ?? ""}`} />
                     )}
-                    <span className="file-tree__icon">
+                    <span className={`file-tree__icon ${stylex.props(filesPanelStyles.fileTreeIcon).className ?? ""}`}>
                       {isDirectory ? (
                         isExpanded ? <FolderOpen size={13} /> : <Folder size={13} />
                       ) : (
                         getFileIcon(node.name)
                       )}
                     </span>
-                    <span className="file-tree__name">{node.name}</span>
+                    <span className={`file-tree__name ${stylex.props(filesPanelStyles.fileTreeName).className ?? ""}`}>{node.name}</span>
                     {status ? (
-                      <small className={`file-tree__status ${statusClassName}`}>{status}</small>
+                      <small className={[`file-tree__status ${statusClassName}`, stylex.props(filesPanelStyles.fileTreeStatus, (status === 'M') && filesPanelStyles.fileTreeStatusModified, ((status === 'M') ? (false) : ((status === 'A'))) && filesPanelStyles.fileTreeStatusAdded, ((status === 'M') ? (false) : (((status === 'A') ? (false) : ((status === 'D'))))) && filesPanelStyles.fileTreeStatusDeleted).className].filter(Boolean).join(' ')}>{status}</small>
                     ) : null}
                   </button>
                   <button
                     type="button"
-                    className="file-tree__reveal"
+                    className={`file-tree__reveal ${stylex.props(filesPanelStyles.fileTreeReveal).className ?? ""}`}
                     aria-label={`Reveal ${node.name} in ${managerName}`}
                     title={`Reveal in ${managerName}`}
                     onClick={() => onReveal(node.fullPath)}

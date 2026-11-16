@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as petContext } from 'apex-ui/styles/pets-context.stylex'
+import { styles as petsStyles } from 'apex-ui/styles/pets.stylex'
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { PetDefinition, ApexApi } from '@/types/api'
 
@@ -34,8 +37,9 @@ function SpritesheetPet({ dataUrl, activity, size, reduceMotion }: { dataUrl: st
   }, [activity, animation, reduceMotion])
   const height = Math.round(size * 208 / 192)
   return (
-    <span className="pet-sprite" style={{ width: size, height } as CSSProperties} aria-hidden="true">
+    <span className={`pet-sprite ${stylex.props(petsStyles.petSprite).className ?? ""}`} style={{ width: size, height } as CSSProperties} aria-hidden="true">
       <img
+        {...stylex.props(petContext.spriteImage)}
         src={dataUrl}
         alt=""
         draggable={false}
@@ -51,8 +55,8 @@ function SpritesheetPet({ dataUrl, activity, size, reduceMotion }: { dataUrl: st
 
 function OrbPet({ activity, size, reduceMotion }: { activity: PetActivity; size: number; reduceMotion: boolean }) {
   return (
-    <span className={`pet-orb pet-orb--${activity}${reduceMotion ? ' is-reduced-motion' : ''}`} style={{ width: size, height: size }} aria-hidden="true">
-      <i /><i /><i />
+    <span className={[`pet-orb pet-orb--${activity}${reduceMotion ? ' is-reduced-motion' : ''}`, stylex.props(petsStyles.petOrb, ((activity === "speaking")) && petsStyles.petOrbSpeaking, ((activity === "working")) && petsStyles.petOrbWorking, ((activity === "running-left")) && petsStyles.petOrbRunningLeft, ((activity === "running-right")) && petsStyles.petOrbRunningRight, ((activity === "jumping")) && petsStyles.petOrbJumping, ((activity === "failed")) && petsStyles.petOrbFailed, reduceMotion && petContext.orbReduced).className].filter(Boolean).join(' ')} style={{ width: size, height: size }} aria-hidden="true">
+      <i {...stylex.props(petContext.orbStripe)} /><i {...stylex.props(petContext.orbStripe, petContext.orbStripeSecond)} /><i {...stylex.props(petContext.orbStripe, petContext.orbStripeThird)} />
     </span>
   )
 }
@@ -74,5 +78,5 @@ export function PetAvatar({ pet, pets, activity = 'idle', size = 92, reduceMotio
   }, [pet.id, pet.kind, pets])
   if (pet.kind === 'orb') return <OrbPet activity={activity} size={size} reduceMotion={reduceMotion} />
   if (dataUrl) return <SpritesheetPet dataUrl={dataUrl} activity={activity} size={size} reduceMotion={reduceMotion} />
-  return <span className="pet-placeholder" style={{ width: size, height: Math.round(size * 208 / 192) }} aria-hidden="true" />
+  return <span className={`pet-placeholder ${stylex.props(petsStyles.petPlaceholder).className ?? ""}`} style={{ width: size, height: Math.round(size * 208 / 192) }} aria-hidden="true" />
 }

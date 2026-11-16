@@ -1,3 +1,10 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as petContext } from 'apex-ui/styles/pets-context.stylex'
+import { styles as petsStyles } from 'apex-ui/styles/pets.stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { ArrowsClockwise, PawPrint, Sparkle } from '@/components/icons'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
@@ -35,43 +42,43 @@ export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps 
   return (
     <>
       <header><h1>Pets</h1><p>Choose a companion that reacts while Pi works.</p></header>
-      <section className="pet-hero">
-        <div className="pet-hero__stage"><PetAvatar pet={selected} pets={pets} activity="speaking" size={Math.round(96 * settings.petSize / 100)} reduceMotion={settings.reduceMotion} /></div>
-        <div><span className="pet-kicker"><Sparkle size={12} /> Active companion</span><h2>{selected.displayName}</h2><p>{selected.description}</p><small>Drag the pet around the workspace. It runs while moving, reviews while an agent works, and waves during voice mode.</small></div>
+      <section className={`pet-hero ${stylex.props(petsStyles.petHero).className ?? ""}`}>
+        <div className={`pet-hero__stage ${stylex.props(petsStyles.petHeroStage).className ?? ""}`}><PetAvatar pet={selected} pets={pets} activity="speaking" size={Math.round(96 * settings.petSize / 100)} reduceMotion={settings.reduceMotion} /></div>
+        <div><span className={`pet-kicker ${stylex.props(petsStyles.petKicker).className ?? ""}`}><Sparkle size={12} /> Active companion</span><h2 {...stylex.props(petContext.heroHeading)}>{selected.displayName}</h2><p {...stylex.props(petContext.heroDescription)}>{selected.description}</p><small {...stylex.props(petContext.heroHint)}>Drag the pet around the workspace. It runs while moving, reviews while an agent works, and waves during voice mode.</small></div>
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Companion</h2>
         <SettingsToggle checked={settings.petEnabled} onChange={(petEnabled) => { void onUpdate({ petEnabled }) }} label="Show desktop pet" description="Keep your selected companion floating above the workspace." />
-        <div className="settings-row pet-size-row">
+        <div className={`settings-row pet-size-row ${stylex.props(petsStyles.petSizeRow, settingsStyles.settingsRow).className ?? ""}`}>
           <span><label htmlFor="pet-size"><strong>Pet size</strong></label><small>Scale the companion without shrinking its voice controls.</small></span>
-          <div className="pet-size-control">
-            <input id="pet-size" type="range" min="50" max="125" step="5" value={settings.petSize} style={{ '--pet-size-progress': `${(settings.petSize - 50) / .75}%` } as CSSProperties} onChange={(event) => { void onUpdate({ petSize: Number(event.target.value) }) }} />
-            <output htmlFor="pet-size">{settings.petSize}%</output>
+          <div className={`pet-size-control ${stylex.props(petsStyles.petSizeControl).className ?? ""}`}>
+            <input {...stylex.props(petContext.sizeInput, petContext.sizeTrack, petContext.sizeThumb)} id="pet-size" type="range" min="50" max="125" step="5" value={settings.petSize} style={{ '--pet-size-progress': `${(settings.petSize - 50) / .75}%` } as CSSProperties} onChange={(event) => { void onUpdate({ petSize: Number(event.target.value) }) }} />
+            <output {...stylex.props(petContext.sizeOutput)} htmlFor="pet-size">{settings.petSize}%</output>
           </div>
         </div>
-        <div className="pet-grid" role="radiogroup" aria-label="Desktop pet">
+        <div className={`pet-grid ${stylex.props(petsStyles.petGrid).className ?? ""}`} role="radiogroup" aria-label="Desktop pet">
           {available.map((pet) => (
             <button
               type="button"
               role="radio"
               aria-checked={pet.id === selected.id}
-              className={pet.id === selected.id ? 'pet-choice is-active' : 'pet-choice'}
+              className={[pet.id === selected.id ? 'pet-choice is-active' : 'pet-choice', stylex.props(petsStyles.petChoice, pet.id === selected.id && petsStyles.petChoiceIsActive).className].filter(Boolean).join(' ')}
               key={pet.id}
               onClick={() => { void onUpdate({ petId: pet.id, petEnabled: true }) }}
             >
-              <span className="pet-choice__art">
-                {pet.id === 'gooey-pi' ? <img src="/gooeypi-mascot.png" alt="" /> : pet.kind === 'orb' ? <PetAvatar pet={pet} pets={pets} size={48} reduceMotion={settings.reduceMotion} /> : <PawPrint size={24} />}
+              <span className={`pet-choice__art ${stylex.props(petsStyles.petChoiceArt).className ?? ""}`}>
+                {pet.id === 'gooey-pi' ? <img {...stylex.props(petContext.choiceImage)} src="/gooeypi-mascot.png" alt="" /> : pet.kind === 'orb' ? <PetAvatar pet={pet} pets={pets} size={48} reduceMotion={settings.reduceMotion} /> : <PawPrint size={24} />}
               </span>
-              <span><strong>{pet.displayName}</strong><small>{pet.source === 'built-in' ? 'Built into Apex' : 'Codex pet'}</small></span>
+              <span {...stylex.props(petContext.choiceCopy)}><strong {...stylex.props(petContext.choiceName)}>{pet.displayName}</strong><small {...stylex.props(petContext.choiceSource)}>{pet.source === 'built-in' ? 'Built into Apex' : 'Codex pet'}</small></span>
             </button>
           ))}
         </div>
       </section>
-      <section className="settings-group">
-        <div className="settings-group__heading"><h2>Codex Pets</h2><ApexButton compact disabled={!pets || loading} icon={<ArrowsClockwise size={12} className={loading ? 'spin' : ''} />} onClick={() => { void refresh() }}>Refresh</ApexButton></div>
-        <p className="settings-group__description">Apex safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and Apex are always bundled.</p>
-        <div className="settings-row"><span><strong>{codexCount ? `${codexCount} Codex ${codexCount === 1 ? 'pet' : 'pets'} found` : 'No additional Codex pets found'}</strong><small>{codexCount ? 'They are available in the companion picker above.' : 'Install or hatch pets later, then refresh this list.'}</small></span></div>
-        {loadError ? <Banner status="error" role="alert" className="settings-error" title={loadError} /> : null}
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
+        <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}><h2>Codex Pets</h2><ApexButton compact disabled={!pets || loading} icon={<ArrowsClockwise size={12} className={[loading ? 'spin' : '', stylex.props((loading) && activityStyles.spin, (loading) && overlaysStyles.spin).className].filter(Boolean).join(' ')} />} onClick={() => { void refresh() }}>Refresh</ApexButton></div>
+        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Apex safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and Apex are always bundled.</p>
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}><span><strong>{codexCount ? `${codexCount} Codex ${codexCount === 1 ? 'pet' : 'pets'} found` : 'No additional Codex pets found'}</strong><small>{codexCount ? 'They are available in the companion picker above.' : 'Install or hatch pets later, then refresh this list.'}</small></span></div>
+        {loadError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={loadError} /> : null}
       </section>
     </>
   )

@@ -10,6 +10,8 @@ import type {
 	ApexApi,
 	ScheduleChangeEvent,
 	SessionChangeEvent,
+	SpecialistRosterChange,
+	SpecialistWorkerChange,
 	TerminalDataEvent,
 	TerminalExitEvent,
 } from "../../src/types/api";
@@ -109,9 +111,15 @@ const api: ApexApi = {
 		finishSetup: (id, setup, exitCode, harness) =>
 			invoke("projects:finish-setup", id, setup, exitCode, harness),
 	},
+	spaces: {
+		list: () => invoke("spaces:list"),
+		create: (input) => invoke("spaces:create", input),
+		update: (id, input) => invoke("spaces:update", id, input),
+	},
 	coordinator: {
-		open: () => invoke("coordinator:open"),
+		open: (spaceId) => spaceId === undefined ? invoke("coordinator:open") : invoke("coordinator:open", spaceId),
 		close: (attachmentId) => invoke("coordinator:close", attachmentId),
+		reset: (spaceId) => spaceId === undefined ? invoke("coordinator:reset") : invoke("coordinator:reset", spaceId),
 	},
 	sessions: {
 		create: (projectPath, harness) => invoke("sessions:create", projectPath, harness),
@@ -139,6 +147,15 @@ const api: ApexApi = {
 		runtimeOwners: () => invoke("sessions:runtime-owners"),
 		continueInVsCode: (filePath, mode) =>
 			invoke("sessions:continue-in-vscode", filePath, mode),
+	},
+	specialists: {
+		list: (sessionFile) => invoke("specialists:list", sessionFile),
+		track: (sessionFiles) => invoke("specialists:track", sessionFiles),
+		watchWorkers: (workerFiles) => invoke("specialists:watch-workers", workerFiles),
+		onChanged: (callback) =>
+			subscribe<SpecialistRosterChange>("specialists:changed", callback),
+		onWorkerChanged: (callback) =>
+			subscribe<SpecialistWorkerChange>("specialists:worker-changed", callback),
 	},
 	runtime: {
 		effectiveConfig: (cwd) => invoke("runtime:effective-config", cwd),

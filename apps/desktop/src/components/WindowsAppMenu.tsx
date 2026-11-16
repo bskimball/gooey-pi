@@ -1,8 +1,11 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as sidebarStyles } from 'apex-ui/styles/sidebar.stylex'
 import { DropdownMenu } from '@astryxdesign/core/DropdownMenu'
 import { useRef, useState } from 'react'
 import type { ApplicationMenuName } from '@/types/api'
-import { DotsThree } from './icons'
-import { IconButton } from './ui'
+import { IconButton, PiMark } from './ui'
 
 const windowsMenus: ReadonlyArray<{ name: ApplicationMenuName; label: string }> = [
   { name: 'file', label: 'File' },
@@ -23,7 +26,7 @@ export function WindowsAppMenu() {
   }
 
   return (
-    <div ref={triggerWrapRef} className="windows-app-menu no-drag">
+    <div ref={triggerWrapRef} className={`windows-app-menu no-drag ${stylex.props(baseStyles.noDrag, workbenchStyles.windowsAppMenu).className ?? ""}`}>
       <DropdownMenu
         presentation="popover"
         placement="below"
@@ -38,10 +41,11 @@ export function WindowsAppMenu() {
         renderTrigger={(triggerProps) => (
           <IconButton
             {...triggerProps}
+            xstyle={sidebarStyles.brandMenuButton}
             className={open ? 'is-active' : ''}
             label="Application menu"
           >
-            <DotsThree size={18} />
+            <PiMark size={24} />
           </IconButton>
         )}
       />

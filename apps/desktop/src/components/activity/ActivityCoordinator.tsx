@@ -1,30 +1,55 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Composer } from '@/components/Composer'
 import { Transcript } from '@/components/Transcript'
+import { InteractiveChatProvider } from '@/components/InteractiveChatContext'
 import { ExtensionUiModal } from '@/components/ExtensionUiModal'
-import { ApexButton } from '@/components/ui'
+import { ApexButton, IconButton, Modal } from '@/components/ui'
 import { questionFromPendingExtensionUi } from '@/app/session-live'
 import { useCoordinatorRuntime } from '@/hooks/useCoordinatorRuntime'
 import { useProviderCatalog } from '@/hooks/useProviderCatalog'
 import { EMPTY_GIT_STATUS } from '@/lib/workspace'
 import type { ActivityControls } from '@/hooks/useActivityControls'
 import type { ApexApi } from '@/types/api'
-import { CircleNotch } from '@/components/icons'
+import { ArrowCounterClockwise, ChatCircleDots } from '@/components/icons'
 import { ActivityQuestionCard } from './ActivityQuestionCard'
+import { ChiefOfStaffOpening } from './ChiefOfStaffOpening'
+import { styles as chiefStyles } from './chief-of-staff.stylex'
 
 interface ActivityCoordinatorProps {
   bridge: ApexApi | null
   controls?: ActivityControls
   showReasoning?: boolean
   showTools?: boolean
+  spaceId?: string
+  projectName?: string
+  embedded?: boolean
+  /** Host toolbar slot for chat actions when embedded, so they sit inline instead of on their own row. */
+  actionsTarget?: HTMLElement | null
 }
 
-// Transcript requires both callbacks. Its welcome suggestions are hidden in this view,
-// and EMPTY_GIT_STATUS prevents it from rendering any changes action.
+const spaceStyles = stylex.create({
+  root: { backgroundColor: 'transparent' },
+  // Minimal single-line heading: title and scope share a row.
+  header: { paddingBlock: 8, paddingInline: 16, alignItems: 'center' },
+  identity: { flexDirection: 'row', alignItems: 'baseline', columnGap: 8 },
+  scope: { color: 'var(--text-tertiary)', fontSize: 'var(--fs-meta)' },
+  pane: { minWidth: 0, backgroundColor: 'transparent', backgroundImage: 'none' },
+  dock: { maxWidth: 800, paddingInline: 0, paddingBottom: 0 },
+  headerActions: { marginLeft: 'auto' },
+})
+
+// The empty coordinator has its own prompt; Transcript renders once messages exist.
+// EMPTY_GIT_STATUS prevents it from rendering any changes action.
 const unreachableTranscriptAction = () => undefined
 
-export function ActivityCoordinator({ bridge, controls, showReasoning, showTools }: ActivityCoordinatorProps) {
-  const coordinator = useCoordinatorRuntime(bridge, controls?.onRecoverQuestion)
+export function ActivityCoordinator({ bridge, controls, showReasoning, showTools, spaceId, projectName, embedded = false, actionsTarget }: ActivityCoordinatorProps) {
+  const coordinator = useCoordinatorRuntime(bridge, controls?.onRecoverQuestion, spaceId)
   const { state } = coordinator
   const ready = state.phase === 'ready'
   const runtime = ready ? state.attachment.runtime : null
@@ -36,6 +61,9 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
   const pending = livePending ?? coordinator.pending
   const respond = livePending && controls?.onRespondQuestion ? controls.onRespondQuestion : coordinator.respond
   const busy = Boolean(runtime?.isStreaming || runtime?.isCompacting)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const canClear = ready && state.messages.length > 0 && !busy && !coordinator.clearing
+  const clearButton = ready && state.messages.length > 0 ? <IconButton size="small" label={busy ? 'Stop the current run before clearing' : 'Clear chat'} disabled={!canClear} onClick={() => setConfirmClear(true)}><ArrowCounterClockwise size={14} /></IconButton> : null
 
   useEffect(() => {
     if (!pending?.deadline) return
@@ -44,25 +72,30 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
     return () => window.clearInterval(timer)
   }, [pending?.deadline])
 
-  return <section className="activity-coordinator" aria-label="Chief of Staff">
-    <header className="activity-peek__header"><div className="activity-peek__identity">
-      <h2 className="activity-peek__title">Chief of Staff</h2>
-      <span className="activity-coordinator__scope">All authorized projects</span>
-    </div></header>
-    <main className="conversation-pane activity-coordinator__conversation">
+  return <section className={`activity-coordinator ${stylex.props(activityStyles.activityCoordinator, embedded && spaceStyles.root).className ?? ""}`} aria-label="Chief of Staff">
+    {!embedded ? <header className={`activity-peek__header ${stylex.props(activityStyles.activityPeekHeader, spaceStyles.header).className ?? ""}`}><div className={`activity-peek__identity ${stylex.props(activityStyles.activityPeekIdentity, spaceStyles.identity).className ?? ""}`}>
+      <h2 className={`activity-peek__title ${stylex.props(activityStyles.activityPeekTitle).className ?? ""}`}>Chief of Staff</h2>
+      <span className={`activity-coordinator__scope ${stylex.props(activityStyles.activityCoordinatorScope, spaceStyles.scope).className ?? ""}`}>{spaceId ? `Project: ${projectName ?? "Unknown"}` : "All authorized projects"}</span>
+    </div>{clearButton ? <div {...stylex.props(spaceStyles.headerActions)}>{clearButton}</div> : null}</header> : clearButton && actionsTarget ? createPortal(clearButton, actionsTarget) : null}
+    {confirmClear ? <Modal title="Clear Chief of Staff chat?" onClose={() => setConfirmClear(false)} footer={<><ApexButton variant="quiet" onClick={() => setConfirmClear(false)}>Cancel</ApexButton><ApexButton variant="primary" onClick={() => { setConfirmClear(false); void coordinator.clear() }}>Clear chat</ApexButton></>}><p>This starts a fresh conversation. The current one is archived, not deleted, so you can still find it under archived sessions.</p></Modal> : null}
+    <main className={`conversation-pane activity-coordinator__conversation ${stylex.props(workbenchStyles.conversationPane, activityStyles.activityCoordinatorConversation, [responsiveStyles.conversationPane, responsiveLayoutStyles.conversationPane], embedded && spaceStyles.pane).className ?? ""}`}>
       {!bridge ? <p role="status">Chief of Staff requires the desktop app.</p> : null}
-      {state.phase === 'opening' ? <div className="activity-coordinator__loading" role="status"><CircleNotch className="spin" size={16} aria-hidden="true" />Opening Chief of Staff…</div> : null}
+      {state.phase === 'opening' ? <ChiefOfStaffOpening /> : null}
       {state.phase === 'error' ? <div role="alert"><p>{state.error}</p><ApexButton onClick={coordinator.reconnect}>Try again</ApexButton></div> : null}
       {ready && state.disconnected ? <div role="status"><p>The coordinator runtime has stopped. Its conversation is saved.</p><ApexButton onClick={coordinator.reconnect}>Reconnect</ApexButton></div> : null}
-      {ready ? <div className={`activity-coordinator__transcript ${state.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`}>
-        {state.messages.length === 0 ? <div className="activity-coordinator__empty">Ask Chief of Staff to check progress, direct a session, or launch work in a project.</div> : null}
-        <Transcript messages={state.messages} git={EMPTY_GIT_STATUS} cwd={runtime?.cwd} harness="pi" active={busy} showReasoning={showReasoning} showTools={showTools} onOpenChanges={unreachableTranscriptAction} onSuggestion={unreachableTranscriptAction} showPinnedChanges={false} />
+      {ready ? <div className={[`activity-coordinator__transcript ${state.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`, stylex.props(activityStyles.activityCoordinatorTranscript).className].filter(Boolean).join(' ')}>
+        {state.messages.length === 0 ? embedded ? <div className={`activity-coordinator__empty ${stylex.props(chiefStyles.empty).className ?? ''}`}>
+          <span {...stylex.props(chiefStyles.emptyIcon)}><ChatCircleDots size={22} /></span>
+          <h3 {...stylex.props(chiefStyles.emptyTitle, chiefStyles.enter)}>What should we move forward?</h3>
+          <p {...stylex.props(chiefStyles.emptyCopy, chiefStyles.enter)}>Plan the next step, check progress, or ask Chief of Staff to coordinate the work.</p>
+        </div> : <div className={`activity-coordinator__empty ${stylex.props(activityStyles.activityCoordinatorEmpty).className ?? ""}`}>Ask Chief of Staff to check progress, direct a session, or launch work in a project.</div> : null}
+        {state.messages.length > 0 ? <InteractiveChatProvider sessionKey={state.attachment.session.id} disabled={state.disconnected} onSendFeedback={async (text) => coordinator.send(text, [])}><Transcript messages={state.messages} git={EMPTY_GIT_STATUS} cwd={runtime?.cwd} harness="pi" active={busy} showReasoning={showReasoning} showTools={showTools} onOpenChanges={unreachableTranscriptAction} onSuggestion={unreachableTranscriptAction} showPinnedChanges={false} variant="chat" shortName="Chief of Staff" /></InteractiveChatProvider> : null}
       </div> : null}
       {pending && pending.request.method !== 'questionnaire' ? <ActivityQuestionCard question={questionFromPendingExtensionUi(pending)} pendingUi={pending} now={now} onRespond={respond} onOpenModal={() => setShowQuestionModal(true)} /> : null}
       {showQuestionModal && pending && pending.request.method !== 'questionnaire' ? <ExtensionUiModal request={pending.request} deadline={pending.deadline} onRespond={(response) => { setShowQuestionModal(false); void respond(pending.runtimeId, response) }} /> : null}
-      <div className="conversation-bottom-dock">
+      <div className={`conversation-bottom-dock ${stylex.props(workbenchStyles.conversationBottomDock, [responsiveStyles.conversationBottomDock, responsiveLayoutStyles.conversationBottomDock], embedded && spaceStyles.dock).className ?? ""}`}>
         {pending?.request.method === 'questionnaire' ? <ExtensionUiModal presentation="inline" request={pending.request} deadline={pending.deadline} onRespond={(response) => void respond(pending.runtimeId, response)} /> : null}
-        <Composer draftKey="activity:global-chief" isolatedDraft conversationOnly busy={busy} admitting={coordinator.sending} disabled={!ready || state.disconnected} model={provider.model} effort={provider.effort} modelsByProvider={provider.modelsByProvider} providers={provider.catalog?.providers ?? []} reasoningLevels={provider.reasoningLevels} fast={provider.fast} fastSupported={false} fastAvailable={runtime?.fastModeAvailable !== false} agentName="Chief of Staff" shortName="Chief of Staff" harness="pi" imageInputSupported={runtime?.imageInputSupported ?? Boolean(provider.selectedModel?.input.includes('image'))} skills={[]} taskExcerpts={[]} onModelChange={provider.changeModel} onEffortChange={provider.changeEffort} onFastChange={provider.changeFast} onSend={coordinator.send} onStop={coordinator.stop} />
+        <Composer draftKey={`activity:${spaceId ?? "global-chief"}`} isolatedDraft conversationOnly busy={busy} admitting={coordinator.sending} disabled={!ready || state.disconnected} model={provider.model} effort={provider.effort} modelsByProvider={provider.modelsByProvider} providers={provider.catalog?.providers ?? []} reasoningLevels={provider.reasoningLevels} fast={provider.fast} fastSupported={false} fastAvailable={runtime?.fastModeAvailable !== false} agentName="Chief of Staff" shortName="Chief of Staff" harness="pi" imageInputSupported={runtime?.imageInputSupported ?? Boolean(provider.selectedModel?.input.includes('image'))} skills={[]} taskExcerpts={[]} onModelChange={provider.changeModel} onEffortChange={provider.changeEffort} onFastChange={provider.changeFast} onSend={coordinator.send} onStop={coordinator.stop} />
         {coordinator.error ? <p role="alert">{coordinator.error}</p> : null}
       </div>
     </main>

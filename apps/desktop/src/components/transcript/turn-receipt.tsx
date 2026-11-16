@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { Fragment, useId, useState, type ReactNode } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
 import type { GitStatus, MessagePart } from '@/types/api'
@@ -40,27 +43,27 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
   const { additions, deletions } = changeTotals(files)
   const lineCounts = git?.lineCounts !== false
   const facts: Array<{ key: string; node: ReactNode }> = [
-    { key: 'outcome', node: <span className="turn-receipt__outcome">{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className="sr-only">{failed ? 'Turn failed after' : 'Turn finished in'}</span> {duration}</span> },
+    { key: 'outcome', node: <span className={`turn-receipt__outcome ${stylex.props(transcriptStyles.turnReceiptOutcome).className ?? ""}`}>{failed ? <WarningCircle size={12} /> : <Check size={12} />}<span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{failed ? 'Turn failed after' : 'Turn finished in'}</span> {duration}</span> },
   ]
   if (agents) facts.push({ key: 'agents', node: <span>{plural(agents, 'agent')}</span> })
   if (tools) facts.push({ key: 'tools', node: <span>{plural(tools, 'tool')}</span> })
   if (files.length) {
-    facts.push({ key: 'diff', node: <span className="turn-receipt__diff">
-      <button type="button" className="turn-receipt__action turn-receipt__diff-summary" aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>
+    facts.push({ key: 'diff', node: <span className={`turn-receipt__diff ${stylex.props(transcriptStyles.turnReceiptDiff).className ?? ""}`}>
+      <button type="button" className={`turn-receipt__action turn-receipt__diff-summary ${stylex.props(transcriptStyles.turnReceiptAction, transcriptStyles.turnReceiptDiffSummary).className ?? ""}`} aria-expanded={diffOpen} aria-controls={diffOpen ? diffId : undefined} onClick={() => setDiffOpen((open) => !open)}>
         {filesChangedLabel(files.length)}
         {lineCounts ? <>
-          <span className="diff-count diff-count--add">+{additions}</span>
-          <span className="diff-count diff-count--remove">−{deletions}</span>
+          <span className={`diff-count diff-count--add ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountAdd).className ?? ""}`}>+{additions}</span>
+          <span className={`diff-count diff-count--remove ${stylex.props(transcriptStyles.diffCount, transcriptStyles.diffCountRemove).className ?? ""}`}>−{deletions}</span>
         </> : null}
-        <CaretRight className="disclosure-caret" size={11} />
+        <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={11} />
       </button>
-      {onReviewChanges ? <button type="button" className="turn-receipt__action turn-receipt__review" onClick={onReviewChanges}>Review</button> : null}
+      {onReviewChanges ? <button type="button" className={`turn-receipt__action turn-receipt__review ${stylex.props(transcriptStyles.turnReceiptAction, transcriptStyles.turnReceiptReview).className ?? ""}`} onClick={onReviewChanges}>Review</button> : null}
     </span> })
   }
   if (copy) facts.push({ key: 'copy', node: copy })
-  return <div className={failed ? 'turn-receipt is-failed' : 'turn-receipt'}>
-    <div className="turn-receipt__line">
-      {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className="turn-receipt__separator" aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
+  return <div className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}>
+    <div className={`turn-receipt__line ${stylex.props(transcriptStyles.turnReceiptLine).className ?? ""}`}>
+      {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className={`turn-receipt__separator ${stylex.props(transcriptStyles.turnReceiptSeparator).className ?? ""}`} aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
     </div>
     {diffOpen ? <ChangedFilesList id={diffId} files={files} lineCounts={lineCounts} /> : null}
   </div>

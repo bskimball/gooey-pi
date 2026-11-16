@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { useEffect, useId, useState } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
 import type { EffectiveCapability, EffectiveInstructionSource, EffectiveRunConfig, RuntimeInfo } from '@/types/api'
@@ -72,46 +75,46 @@ export function RunConfigSection({ runtime, behaviorMode, cwd, sessionKey }: Run
   const presentExtensions = config ? config.injectedCapabilities.filter((item) => item.present).length : 0
   const missingExtensions = config ? config.injectedCapabilities.length - presentExtensions : 0
   return (
-    <section className={`summary-section run-config${open ? ' is-open' : ''}`}>
+    <section className={[`summary-section run-config${open ? ' is-open' : ''}`, stylex.props(inspectorStyles.summarySection, inspectorStyles.summarySectionRunConfig).className].filter(Boolean).join(' ')}>
       <h3 className="run-config__heading">
         <button
           type="button"
-          className="run-config__toggle"
+          className={`run-config__toggle ${stylex.props(inspectorStyles.runConfigToggle).className ?? ""}`}
           aria-expanded={open}
           aria-controls={open ? bodyId : undefined}
           onClick={() => setOpen((value) => !value)}
         >
-          <CaretRight size={12} className="disclosure-caret" aria-hidden="true" />
-          <span className="run-config__title">Run configuration</span>
-          <span className="run-config__summary" title={summaryParts.join(' · ') || undefined}>
+          <CaretRight size={12} className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} aria-hidden="true" />
+          <span className={`run-config__title ${stylex.props(inspectorStyles.runConfigTitle).className ?? ""}`}>Run configuration</span>
+          <span className={`run-config__summary ${stylex.props(inspectorStyles.runConfigSummary).className ?? ""}`} title={summaryParts.join(' · ') || undefined}>
             {summaryParts.length ? summaryParts.join(' · ') : NOT_REPORTED}
           </span>
           {missingExtensions > 0 ? (
-            <span className="run-config__alert" title={`${missingExtensions} bundled ${missingExtensions === 1 ? 'extension' : 'extensions'} missing`}>
+            <span className={`run-config__alert ${stylex.props(inspectorStyles.runConfigAlert).className ?? ""}`} title={`${missingExtensions} bundled ${missingExtensions === 1 ? 'extension' : 'extensions'} missing`}>
               <WarningCircle size={12} aria-hidden="true" />
             </span>
           ) : null}
         </button>
       </h3>
       {open ? (
-        <div id={bodyId} className="run-config__body">
-          <dl className="run-config__grid">
-            <div className="run-config__stat run-config__stat--wide">
+        <div id={bodyId} className={`run-config__body ${stylex.props(inspectorStyles.runConfigBody).className ?? ""}`}>
+          <dl className={`run-config__grid ${stylex.props(inspectorStyles.runConfigGrid).className ?? ""}`}>
+            <div className={`run-config__stat run-config__stat--wide ${stylex.props(inspectorStyles.runConfigStat, inspectorStyles.runConfigStatWide).className ?? ""}`}>
               <dt>Model</dt>
               <dd title={model ?? undefined}>{model ?? NOT_REPORTED}</dd>
             </div>
-            <div className="run-config__stat">
+            <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
               <dt>Effort</dt>
               <dd>{effort ?? NOT_REPORTED}</dd>
             </div>
-            <div className="run-config__stat">
+            <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
               <dt>Mode</dt>
               <dd>{behaviorMode ?? NOT_REPORTED}</dd>
             </div>
           </dl>
-          {config === undefined ? null : config === null ? <p className="run-config__empty">Loading…</p> : (
+          {config === undefined ? null : config === null ? <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>Loading…</p> : (
             <>
-              <div className="run-config__subhead">
+              <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
                 <h4>Instructions &amp; skills</h4>
                 <span>
                   {config.instructionSources.length} {config.instructionSources.length === 1 ? 'file' : 'files'}
@@ -119,28 +122,28 @@ export function RunConfigSection({ runtime, behaviorMode, cwd, sessionKey }: Run
                 </span>
               </div>
               {config.instructionSources.length || config.skillDirs.length ? (
-                <ul className="run-config__items">
+                <ul className={`run-config__items ${stylex.props(inspectorStyles.runConfigItems).className ?? ""}`}>
                   {config.instructionSources.map((source) => (
                     <li key={source.path} title={source.path}>
-                      <span className="run-config__path">{source.scope === 'user' ? source.kind : shortPath(source.path, cwd)}</span>
-                      <span className={`run-config__scope is-${source.scope}`}>{SCOPE_LABELS[source.scope]}</span>
+                      <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{source.scope === 'user' ? source.kind : shortPath(source.path, cwd)}</span>
+                      <span className={[`run-config__scope is-${source.scope}`, stylex.props(inspectorStyles.runConfigScope, source.scope === "project" && inspectorStyles.runConfigScopeIsProject).className].filter(Boolean).join(' ')}>{SCOPE_LABELS[source.scope]}</span>
                       <small>{formatBytes(source.bytes)}</small>
                     </li>
                   ))}
                   {config.skillDirs.map((dir) => (
                     <li key={dir.path} title={dir.path}>
-                      <span className="run-config__path">{shortPath(dir.path, cwd)}</span>
-                      <span className="run-config__scope is-skills">Skills</span>
+                      <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{shortPath(dir.path, cwd)}</span>
+                      <span className={`run-config__scope is-skills ${stylex.props(inspectorStyles.runConfigScope, inspectorStyles.runConfigScopeIsSkills).className ?? ""}`}>Skills</span>
                       <small>{dir.count}</small>
                     </li>
                   ))}
                 </ul>
-              ) : <p className="run-config__empty">No instruction files found</p>}
-              <div className="run-config__subhead">
+              ) : <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>No instruction files found</p>}
+              <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
                 <h4>Bundled extensions</h4>
                 <span>{presentExtensions}/{config.injectedCapabilities.length} bundled</span>
               </div>
-              <ul className="run-config__chips">
+              <ul className={`run-config__chips ${stylex.props(inspectorStyles.runConfigChips).className ?? ""}`}>
                 {config.injectedCapabilities.map((item) => (
                   <li key={item.capability} title={`${item.filename} (${item.present ? 'bundled' : 'missing'})`} className={item.present ? 'is-present' : 'is-missing'}>
                     {item.present ? <Check size={11} aria-hidden="true" /> : <WarningCircle size={11} aria-hidden="true" />}

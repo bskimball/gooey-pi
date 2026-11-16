@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { useEffect, useState } from 'react'
 import type { ApexApi, RuntimeOwnerView } from '@/types/api'
 import { Laptop } from './icons'
@@ -49,7 +51,7 @@ export function RuntimeOwnerNotice({ owner }: { owner: RuntimeOwnerView }) {
     ? 'To continue here, run “Apex: Continue in Apex Desktop” in that VS Code window.'
     : 'Stop its run or close it in that window to continue here.'
   return (
-    <div className="runtime-owner-notice" role="status">
+    <div className={`runtime-owner-notice ${stylex.props(workbenchStyles.runtimeOwnerNotice).className ?? ""}`} role="status">
       <Laptop size={14} aria-hidden="true" />
       <span><strong>Open in {owner.label}.</strong> {handOff}</span>
     </div>

@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import {
   useEffect,
   useLayoutEffect,
@@ -360,8 +363,8 @@ export function ActivityPeek({
 
   if (!item || !session) {
     return (
-      <aside className="activity-peek activity-peek--empty" aria-label="Session peek">
-        <div className="activity-peek__empty-state">
+      <aside className={`activity-peek activity-peek--empty ${stylex.props(activityStyles.activityPeek, activityStyles.activityPeekEmpty).className ?? ""}`} aria-label="Session peek">
+        <div className={`activity-peek__empty-state ${stylex.props(activityStyles.activityPeekEmptyState).className ?? ""}`}>
           <ChatCircleDots size={22} />
           <p>Select a session to peek at its live tail, answer questions, or send a steer.</p>
         </div>
@@ -377,48 +380,48 @@ export function ActivityPeek({
   const phase = isRunning ? runningPhaseLabel(item) : undefined
 
   return (
-    <aside className="activity-peek" aria-label={`Peek ${session.title}`} data-session-id={session.id}>
-      <header className="activity-peek__header">
-        <div className="activity-peek__identity">
-          <div className="activity-peek__title-row">
-            <h2 className="activity-peek__title">{session.title}</h2>
-            <span className="activity-peek__project">{projectName}</span>
-            {modelBadge ? <span className="activity-peek__model mono">{modelBadge}</span> : null}
+    <aside className={`activity-peek ${stylex.props(activityStyles.activityPeek).className ?? ""}`} aria-label={`Peek ${session.title}`} data-session-id={session.id}>
+      <header className={`activity-peek__header ${stylex.props(activityStyles.activityPeekHeader).className ?? ""}`}>
+        <div className={`activity-peek__identity ${stylex.props(activityStyles.activityPeekIdentity).className ?? ""}`}>
+          <div className={`activity-peek__title-row ${stylex.props(activityStyles.activityPeekTitleRow).className ?? ""}`}>
+            <h2 className={`activity-peek__title ${stylex.props(activityStyles.activityPeekTitle).className ?? ""}`}>{session.title}</h2>
+            <span className={`activity-peek__project ${stylex.props(activityStyles.activityPeekProject).className ?? ""}`}>{projectName}</span>
+            {modelBadge ? <span className={`activity-peek__model mono ${stylex.props(activityStyles.mono, activityStyles.activityPeekModel).className ?? ""}`}>{modelBadge}</span> : null}
           </div>
 
-          <div className="activity-peek__subrow">
+          <div className={`activity-peek__subrow ${stylex.props(activityStyles.activityPeekSubrow).className ?? ""}`}>
             {isRunning && phase ? (
-              <span className={`activity-peek__phase ${phase.isTool ? 'activity-peek__phase--tool mono' : ''}`}>
+              <span className={[`activity-peek__phase ${phase.isTool ? 'activity-peek__phase--tool mono' : ''}`, stylex.props((phase.isTool) && activityStyles.mono, activityStyles.activityPeekPhase, (phase.isTool) && activityStyles.activityPeekPhaseTool).className].filter(Boolean).join(' ')}>
                 <StatusMark state="running" size={12} />
                 <span>{phase.text}</span>
               </span>
             ) : isQuestion ? (
-              <span className="activity-peek__phase activity-peek__phase--waiting">
+              <span className={`activity-peek__phase activity-peek__phase--waiting ${stylex.props(activityStyles.activityPeekPhase, activityStyles.activityPeekPhaseWaiting).className ?? ""}`}>
                 <ChatCircleDots size={12} />
                 <span>Waiting for your answer</span>
               </span>
             ) : isFailed ? (
-              <span className="activity-peek__phase activity-peek__phase--failed">
+              <span className={`activity-peek__phase activity-peek__phase--failed ${stylex.props(activityStyles.activityPeekPhase, activityStyles.activityPeekPhaseFailed).className ?? ""}`}>
                 <WarningCircle size={12} />
                 <span>{(attention?.kind === 'failed' ? attention.error : undefined) ?? live?.lastError ?? 'Session failed'}</span>
               </span>
             ) : (
-              <span className="activity-peek__phase activity-peek__phase--idle">
+              <span className={`activity-peek__phase activity-peek__phase--idle ${stylex.props(activityStyles.activityPeekPhase, activityStyles.activityPeekPhaseIdle).className ?? ""}`}>
                 <CheckCircle size={12} />
                 <span>Ready</span>
               </span>
             )}
 
             {isRunning ? (
-              <div className="activity-peek__metrics tabular">
+              <div className={`activity-peek__metrics tabular ${stylex.props(activityStyles.tabular, activityStyles.activityPeekMetrics).className ?? ""}`}>
                 {live?.contextUsage ? (
-                  <span className="activity-meta__ring">
+                  <span className={`activity-meta__ring ${stylex.props(activityStyles.activityMetaRing).className ?? ""}`}>
                     <ContextUsageRing contextUsage={live.contextUsage} sessionUsage={live.sessionUsage} />
                   </span>
                 ) : null}
-                {displayCost ? <span className="activity-meta__cost tabular">{displayCost}</span> : null}
+                {displayCost ? <span className={`activity-meta__cost tabular ${stylex.props(activityStyles.tabular, activityStyles.activityMetaCost).className ?? ""}`}>{displayCost}</span> : null}
                 {elapsedText ? (
-                  <span className="activity-meta__elapsed tabular" aria-label={`Peek elapsed ${elapsedText}`}>
+                  <span className={`activity-meta__elapsed tabular ${stylex.props(activityStyles.tabular, activityStyles.activityMetaElapsed).className ?? ""}`} aria-label={`Peek elapsed ${elapsedText}`}>
                     <Clock size={11} />
                     {elapsedText}
                   </span>
@@ -428,17 +431,17 @@ export function ActivityPeek({
           </div>
         </div>
 
-        <div className="activity-peek__actions">
+        <div className={`activity-peek__actions ${stylex.props(activityStyles.activityPeekActions).className ?? ""}`}>
           {isRunning && onStop ? (
             confirmingStop ? (
               <div
                 ref={confirmBoxRef}
-                className="activity-stop-confirm activity-peek__stop-confirm"
+                className={`activity-stop-confirm activity-peek__stop-confirm ${stylex.props(activityStyles.activityStopConfirm).className ?? ""}`}
                 role="group"
                 aria-label="Confirm stopping run"
                 onKeyDown={handleConfirmKeyDown}
               >
-                <span className="activity-stop-confirm__prompt">Stop this run?</span>
+                <span className={`activity-stop-confirm__prompt ${stylex.props(activityStyles.activityStopConfirmPrompt).className ?? ""}`}>Stop this run?</span>
                 <ApexButton
                   ref={cancelStopRef}
                   type="button"
@@ -462,7 +465,7 @@ export function ActivityPeek({
                 </ApexButton>
               </div>
             ) : (
-              <ApexButton
+              <ApexButton xstyle={[activityStyles.activityPeekStop]}
                 ref={stopTriggerRef}
                 type="button"
                 compact
@@ -508,16 +511,16 @@ export function ActivityPeek({
       {questionSlot}
 
       {hasProgressLine ? (
-        <div className="activity-peek__progress" aria-label="Session progress">
+        <div className={`activity-peek__progress ${stylex.props(activityStyles.activityPeekProgress).className ?? ""}`} aria-label="Session progress">
           {widgets.todos.length > 0 ? (
-            <span className="activity-peek__progress-pill tabular">
+            <span className={`activity-peek__progress-pill tabular ${stylex.props(activityStyles.tabular, activityStyles.activityPeekProgressPill).className ?? ""}`}>
               <CheckCircle size={12} />
               <span>{doneTodos}/{widgets.todos.length} todos</span>
-              {activeTodo ? <span className="activity-peek__progress-detail">· {activeTodo.content}</span> : null}
+              {activeTodo ? <span className={`activity-peek__progress-detail ${stylex.props(activityStyles.activityPeekProgressDetail).className ?? ""}`}>· {activeTodo.content}</span> : null}
             </span>
           ) : null}
           {runningSubagents > 0 ? (
-            <span className="activity-peek__progress-pill activity-peek__progress-pill--agents tabular">
+            <span className={`activity-peek__progress-pill activity-peek__progress-pill--agents tabular ${stylex.props(activityStyles.tabular, activityStyles.activityPeekProgressPill, activityStyles.activityPeekProgressPillAgents).className ?? ""}`}>
               <Robot size={12} />
               <span>{runningSubagents} {runningSubagents === 1 ? 'subagent' : 'subagents'} running</span>
             </span>
@@ -527,35 +530,35 @@ export function ActivityPeek({
 
       <div
         ref={tailScrollRef}
-        className="activity-peek__tail scroll-area"
+        className={`activity-peek__tail scroll-area ${stylex.props(baseStyles.scrollArea, activityStyles.activityPeekTail).className ?? ""}`}
         role="log"
         aria-label="Live session tail"
         onScroll={handleTailScroll}
       >
         {loadingTail && tailEntries.length === 0 ? (
-          <div className="activity-peek__tail-placeholder">Loading recent activity…</div>
+          <div className={`activity-peek__tail-placeholder ${stylex.props(activityStyles.activityPeekTailPlaceholder).className ?? ""}`}>Loading recent activity…</div>
         ) : tailEntries.length === 0 && !liveActiveTool ? (
-          <div className="activity-peek__tail-placeholder">
+          <div className={`activity-peek__tail-placeholder ${stylex.props(activityStyles.activityPeekTailPlaceholder).className ?? ""}`}>
             {session.preview ? (
-              <p className="activity-tail-preview">{session.preview}</p>
+              <p className={`activity-tail-preview ${stylex.props(activityStyles.activityTailPreview).className ?? ""}`}>{session.preview}</p>
             ) : (
               'No transcript entries recorded yet.'
             )}
           </div>
         ) : (
-          <div className="activity-tail-list">
+          <div className={`activity-tail-list ${stylex.props(activityStyles.activityTailList).className ?? ""}`}>
             {tailEntries.map((entry) => (
-              <div key={entry.id} className={`activity-tail-item activity-tail-item--${entry.role}`}>
+              <div key={entry.id} className={[`activity-tail-item activity-tail-item--${entry.role}`, stylex.props(activityStyles.activityTailItem, ((entry.role === "user")) && activityStyles.activityTailItemUser).className].filter(Boolean).join(' ')}>
                 {entry.text ? (
-                  <div className="activity-tail-text">
-                    <span className="activity-tail-role">{entry.role === 'user' ? 'You' : entry.role === 'system' ? 'System' : 'Agent'}</span>
-                    <p className="activity-tail-body">{entry.text}</p>
+                  <div className={`activity-tail-text ${stylex.props(activityStyles.activityTailText).className ?? ""}`}>
+                    <span className={`activity-tail-role ${stylex.props(activityStyles.activityTailRole).className ?? ""}`}>{entry.role === 'user' ? 'You' : entry.role === 'system' ? 'System' : 'Agent'}</span>
+                    <p className={`activity-tail-body ${stylex.props(activityStyles.activityTailBody).className ?? ""}`}>{entry.text}</p>
                   </div>
                 ) : null}
                 {entry.tools.length > 0 ? (
-                  <div className="activity-tail-tools">
+                  <div className={`activity-tail-tools ${stylex.props(activityStyles.activityTailTools).className ?? ""}`}>
                     {entry.tools.map((tool) => (
-                      <div key={tool.key} className={`activity-tail-tool activity-tail-tool--${tool.status}`}>
+                      <div key={tool.key} className={[`activity-tail-tool activity-tail-tool--${tool.status}`, stylex.props(activityStyles.activityTailTool, ((tool.status === "running")) && activityStyles.activityTailToolRunning, ((tool.status === "error")) && activityStyles.activityTailToolError).className].filter(Boolean).join(' ')}>
                         {tool.status === 'running' ? (
                           <StatusMark state="running" size={11} />
                         ) : tool.status === 'error' ? (
@@ -563,9 +566,9 @@ export function ActivityPeek({
                         ) : (
                           <Terminal size={11} />
                         )}
-                        <strong className="activity-tail-tool__name mono">{tool.name}</strong>
-                        {tool.summary ? <span className="activity-tail-tool__summary mono">{tool.summary}</span> : null}
-                        <span className="activity-tail-tool__status">{tool.status}</span>
+                        <strong className={`activity-tail-tool__name mono ${stylex.props(activityStyles.mono, activityStyles.activityTailToolName).className ?? ""}`}>{tool.name}</strong>
+                        {tool.summary ? <span className={`activity-tail-tool__summary mono ${stylex.props(activityStyles.mono, activityStyles.activityTailToolSummary).className ?? ""}`}>{tool.summary}</span> : null}
+                        <span className={`activity-tail-tool__status ${stylex.props(activityStyles.activityTailToolStatus).className ?? ""}`}>{tool.status}</span>
                       </div>
                     ))}
                   </div>
@@ -574,12 +577,12 @@ export function ActivityPeek({
             ))}
 
             {liveActiveTool ? (
-              <div className="activity-tail-tools">
-                <div className="activity-tail-tool activity-tail-tool--running activity-tail-tool--live">
+              <div className={`activity-tail-tools ${stylex.props(activityStyles.activityTailTools).className ?? ""}`}>
+                <div className={`activity-tail-tool activity-tail-tool--running activity-tail-tool--live ${stylex.props(activityStyles.activityTailTool, activityStyles.activityTailToolRunning).className ?? ""}`}>
                   <StatusMark state="running" size={11} />
-                  <strong className="activity-tail-tool__name mono">{liveActiveTool.name}</strong>
-                  {liveActiveTool.summary ? <span className="activity-tail-tool__summary mono">{liveActiveTool.summary}</span> : null}
-                  <span className="activity-tail-tool__status">running</span>
+                  <strong className={`activity-tail-tool__name mono ${stylex.props(activityStyles.mono, activityStyles.activityTailToolName).className ?? ""}`}>{liveActiveTool.name}</strong>
+                  {liveActiveTool.summary ? <span className={`activity-tail-tool__summary mono ${stylex.props(activityStyles.mono, activityStyles.activityTailToolSummary).className ?? ""}`}>{liveActiveTool.summary}</span> : null}
+                  <span className={`activity-tail-tool__status ${stylex.props(activityStyles.activityTailToolStatus).className ?? ""}`}>running</span>
                 </div>
               </div>
             ) : null}

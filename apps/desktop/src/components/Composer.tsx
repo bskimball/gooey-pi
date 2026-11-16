@@ -1,3 +1,8 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { appendTaskContext, EXCERPT_LIMIT, useTaskWorkflowContext, type TaskExcerpt } from '@/lib/task-context';
 import { cleanRequestErrorDetail } from "@/app/workspace";
@@ -90,6 +95,9 @@ import {
 } from "./PiModeControl";
 import { Banner } from "@astryxdesign/core/Banner";
 import { ApexButton, IconButton, Modal, SelectControl } from "./ui";
+import * as stylex from '@stylexjs/stylex';
+import { composerMarker, styles } from './composer.stylex';
+import { ComposerBusyIndicator } from './ComposerBusyIndicator';
 
 interface ComposerProps {
 	busy: boolean;
@@ -758,7 +766,7 @@ export const Composer = memo(function Composer({
 	};
 
 	return (
-		<div className="composer-wrap">
+		<div className={`composer-wrap ${stylex.props(workbenchStyles.composerWrap, workbenchStyles.composerWrapDocked).className ?? ""}`}>
 			{queuedMessages.length ? (
 				<ComposerQueue
 					queuedMessages={queuedMessages}
@@ -773,48 +781,49 @@ export const Composer = memo(function Composer({
 				/>
 			) : null}
 			<div
-				className={`composer ${busy || admitting ? "composer--busy" : ""} ${imageAttachments.dragging ? "composer--image-dragging" : ""}`}
+				className={`composer ${stylex.props(composerMarker, styles.composer, imageAttachments.dragging && styles.dragging, [responsiveStyles.composer, responsiveLayoutStyles.composer]).className ?? ""}`}
 				{...imageAttachments.dragHandlers}
 			>
+				{busy || admitting ? <ComposerBusyIndicator /> : null}
 				{imageAttachments.dragging ? (
-					<div className="composer-drop-feedback" aria-hidden="true">
+					<div className={`composer-drop-feedback ${stylex.props(styles.dropFeedback).className}`} aria-hidden="true">
 						<Paperclip size={18} />
 						Drop files to attach
 					</div>
 				) : null}
-				{excerpts.length ? <div className="task-context-tray" aria-label="Selected context attachments">{excerpts.map((excerpt) => <div className="task-context-tray__item" key={excerpt.id}><details><summary>{excerpt.source}{excerpt.path ? ` · ${excerpt.path}` : ''}{excerpt.range ? ` · ${excerpt.range}` : ''}</summary>{excerpt.sessionFile ? <small>{excerpt.sessionFile}</small> : null}<pre>{excerpt.text}</pre></details><IconButton size="small" label={`Remove context ${excerpt.source}`} onClick={() => removeExcerpts?.([excerpt.id])}><X size={12} /></IconButton></div>)}</div> : null}
+				{excerpts.length ? <div className={`task-context-tray ${stylex.props(taskWorkflowsStyles.taskContextTray).className ?? ""}`} aria-label="Selected context attachments">{excerpts.map((excerpt) => <div className={`task-context-tray__item ${stylex.props(taskWorkflowsStyles.taskContextTrayItem).className ?? ""}`} key={excerpt.id}><details><summary>{excerpt.source}{excerpt.path ? ` · ${excerpt.path}` : ''}{excerpt.range ? ` · ${excerpt.range}` : ''}</summary>{excerpt.sessionFile ? <small>{excerpt.sessionFile}</small> : null}<pre>{excerpt.text}</pre></details><IconButton size="small" label={`Remove context ${excerpt.source}`} onClick={() => removeExcerpts?.([excerpt.id])}><X size={12} /></IconButton></div>)}</div> : null}
 				<BrowserSelectionTray annotations={sharedSelection ? [...annotations, sharedSelection] : annotations} processing={processingSelection} error={selectionError} onClear={() => { onClearAnnotations(); if (sharedSelection) consumeSharedSelection(); }} onRemove={(id) => { if (id === sharedSelection?.id) consumeSharedSelection(); else onRemoveAnnotation(id); }} onReveal={onRevealBrowserReference} />
 				{images.length ||
 				unsupportedFiles.length ||
 				terminalSelection?.text ||
 				(extensionTab && browserExtension) ? (
-					<div className="composer-attachments composer__context-chips" aria-label="Attachments">
+					<div {...stylex.props(styles.attachments)} aria-label="Attachments">
 						{extensionTab && browserExtension ? (
 							<ExtensionTabPill tab={sharedSelection || processingSelection ? extensionTab : { ...extensionTab, selection: undefined }} extension={browserExtension} />
 						) : null}
 						{terminalSelection?.text ? (
 							<div
-								className="composer-attachment composer-attachment--terminal has-selection"
+								className={`composer-attachment composer-attachment--terminal ${stylex.props(styles.attachment, styles.terminalAttachment).className}`}
 								title={`Selected text from ${terminalSelection.label}`}
 							>
 								<button
 									type="button"
-									className="composer-attachment__expand"
+									{...stylex.props(styles.terminalExpand)}
 									aria-expanded={terminalSelectionOpen}
 									aria-label={`Inspect selected text from ${terminalSelection.label}`}
 									onClick={() => setTerminalSelectionOpen((open) => !open)}
 								>
 									<TerminalWindow size={13} />
-									<span>{terminalSelection.label}</span>
-									<small>selected</small>
+									<span {...stylex.props(styles.terminalLabel)}>{terminalSelection.label}</span>
+									<small {...stylex.props(styles.terminalSelected)}>selected</small>
 									<CaretDown
 										size={11}
-										className={terminalSelectionOpen ? "is-open" : ""}
+										{...stylex.props(styles.fixedIcon, terminalSelectionOpen && styles.openCaret)}
 									/>
 								</button>
 								<IconButton
 									size="small"
-									className="composer-attachment__clear"
+									xstyle={styles.terminalClear}
 									label="Clear terminal selection"
 									onClick={onClearTerminalSelection}
 								>
@@ -823,17 +832,19 @@ export const Composer = memo(function Composer({
 							</div>
 						) : null}
 						{images.map((image) => (
-							<div className="composer-attachment" key={image.id}>
+							<div className={`composer-attachment ${stylex.props(styles.attachment).className}`} key={image.id}>
 								<img
+									{...stylex.props(styles.attachmentImage)}
 									src={`data:${image.mimeType};base64,${image.data}`}
 									alt=""
 								/>
-								<span>
-									<ImageIcon size={12} />
+								<span {...stylex.props(styles.attachmentLabel)}>
+									<ImageIcon {...stylex.props(styles.fixedIcon)} size={12} />
 									{image.name}
 								</span>
 								<button
 									type="button"
+									{...stylex.props(styles.attachmentRemove)}
 									aria-label={`Remove ${image.name}`}
 									onClick={() => imageAttachments.remove(image.id)}
 								>
@@ -842,13 +853,14 @@ export const Composer = memo(function Composer({
 							</div>
 						))}
 						{unsupportedFiles.map((file) => (
-							<div className="composer-attachment" key={file.id}>
-								<span>
-									<Paperclip size={12} />
+							<div className={`composer-attachment ${stylex.props(styles.attachment).className}`} key={file.id}>
+								<span {...stylex.props(styles.attachmentLabel)}>
+									<Paperclip {...stylex.props(styles.fixedIcon)} size={12} />
 									{file.name}
 								</span>
 								<button
 									type="button"
+									{...stylex.props(styles.attachmentRemove)}
 									aria-label={`Remove ${file.name}`}
 									onClick={() => imageAttachments.remove(file.id)}
 								>
@@ -860,22 +872,23 @@ export const Composer = memo(function Composer({
 				) : null}
 				{terminalSelectionOpen && terminalSelection?.text ? (
 					<div
-						className="composer-terminal-selection"
+						className={`composer-terminal-selection ${stylex.props(styles.terminalSelection).className}`}
 						role="region"
 						aria-label="Selected terminal text"
 					>
-						<div>
+						<div {...stylex.props(styles.terminalHeading)}>
 							<TerminalWindow size={14} aria-hidden="true" />
-							<strong>{terminalSelection.label}</strong>
+							<strong {...stylex.props(styles.terminalHeadingLabel)}>{terminalSelection.label}</strong>
 							{terminalSelection.truncated ? (
-								<small>start truncated</small>
+								<small {...stylex.props(styles.terminalTruncated)}>start truncated</small>
 							) : null}
 						</div>
-						<pre>{terminalSelection.text}</pre>
+						<pre {...stylex.props(styles.terminalText)}>{terminalSelection.text}</pre>
 					</div>
 				) : null}
-				<div className="composer-input">
+				<div {...stylex.props(styles.input)}>
 					<textarea
+						{...stylex.props(styles.textarea)}
 						data-isolated-draft={isolatedDraft || undefined}
 						ref={textareaRef}
 						value={value}
@@ -981,7 +994,7 @@ export const Composer = memo(function Composer({
 					<div
 						ref={menuRef}
 						id={menuId}
-						className="composer-menu"
+						className={`composer-menu ${stylex.props(styles.menu).className}`}
 						role="listbox"
 						aria-label={
 							menu === "command"
@@ -1002,24 +1015,24 @@ export const Composer = memo(function Composer({
 								role="option"
 								tabIndex={-1}
 								aria-selected={activeSuggestion === index}
-								className={activeSuggestion === index ? "is-active" : ""}
+								{...stylex.props(styles.menuItem, activeSuggestion === index && styles.menuItemActive)}
 								key={suggestion.key}
 								onMouseEnter={() => setActiveSuggestion(index)}
 								onClick={suggestion.choose}
 							>
 								{suggestion.icon}
-								<span>
-									<strong>{suggestion.label}</strong>
-									<small>{suggestion.detail}</small>
+								<span {...stylex.props(styles.menuText)}>
+									<strong {...stylex.props(styles.menuTitle)}>{suggestion.label}</strong>
+									<small {...stylex.props(styles.menuDetail)}>{suggestion.detail}</small>
 								</span>
 							</button>
 						))}
 					</div>
 				) : null}
-				{attachmentError ? <Banner status="error" role="alert" className="composer-attachment-error" title={attachmentError} /> : null}
+				{attachmentError ? <Banner status="error" role="alert" xstyle={styles.attachmentError} title={attachmentError} /> : null}
 				<p
 					id={imageStatusId}
-					className="sr-only"
+					className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}
 					role="status"
 					aria-live="polite"
 				>
@@ -1031,8 +1044,8 @@ export const Composer = memo(function Composer({
 								? `${images.length + unsupportedFiles.length} file${images.length + unsupportedFiles.length === 1 ? "" : "s"} attached.`
 								: ""}
 				</p>
-				<div className="composer__footer">
-					<div className="composer__controls">
+				<div className={`composer__footer ${stylex.props(styles.footer, [responsiveStyles.composerFooter, responsiveLayoutStyles.composerFooter]).className ?? ""}`}>
+					<div className={`composer__controls ${stylex.props(styles.controls, (settingsOpen || Boolean(menu)) && styles.controlsOpen, [responsiveStyles.composerControls, responsiveLayoutStyles.composerControls]).className ?? ""}`}>
 						<IconButton
 							label="Add context"
 							data-composer-menu-trigger
@@ -1047,7 +1060,7 @@ export const Composer = memo(function Composer({
 						</IconButton>
 						<input
 							ref={fileInputRef}
-							className="sr-only"
+							className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}
 							type="file"
 							multiple
 							tabIndex={-1}
@@ -1122,12 +1135,12 @@ export const Composer = memo(function Composer({
 							</ChatSettings>
 						</Modal>
 					) : null}
-					<div className="composer__actions">
+					<div className={`composer__actions ${stylex.props(styles.actions).className}`}>
 						{dictation.state === "connecting" ||
 						dictation.state === "recording" ? (
 							<button
 								type="button"
-								className="context-usage-dial context-usage-dial--cancel"
+								{...stylex.props(styles.cancelDictation)}
 								aria-label="Cancel dictation"
 								title="Cancel dictation"
 								onClick={dictation.cancel}
@@ -1142,7 +1155,7 @@ export const Composer = memo(function Composer({
 						)}
 						<button
 							type="button"
-							className={`dictation-button ${dictation.state === "recording" ? "is-recording" : ""}`}
+							{...stylex.props(styles.dictation, dictation.state === 'recording' && styles.recording)}
 							aria-label={
 								dictation.state === "recording"
 									? "Stop and transcribe dictation"
@@ -1170,7 +1183,7 @@ export const Composer = memo(function Composer({
 								<Square size={10} fill="currentColor" />
 							) : dictation.state === "connecting" ||
 								dictation.state === "transcribing" ? (
-								<CircleNotch className="is-spinning" size={15} />
+								<CircleNotch {...stylex.props(styles.spinning)} size={15} />
 							) : (
 								<Microphone size={15} />
 							)}
@@ -1178,7 +1191,7 @@ export const Composer = memo(function Composer({
 						{dictation.state === "recording" ? (
 							<button
 								type="button"
-								className="send-button"
+								{...stylex.props(styles.send)}
 								aria-label="Transcribe and send message"
 								onClick={() => void finishDictation(true)}
 							>
@@ -1188,7 +1201,7 @@ export const Composer = memo(function Composer({
 							<>
 								<button
 									type="button"
-									className={`send-button ${busy ? "send-button--steer" : ""}`}
+									{...stylex.props(styles.send, busy && styles.steer)}
 									aria-label={busy ? "Steer this run" : "Send message"}
 									title={busy ? "Steer this run" : undefined}
 									disabled={
@@ -1209,12 +1222,12 @@ export const Composer = memo(function Composer({
 								{busy ? (
 									<button
 										type="button"
-										className="send-button send-button--stop"
+										{...stylex.props(styles.send, styles.stop)}
 										aria-label="Stop Pi"
 										title="Stop this run"
 										onClick={() => void onStop()}
 									>
-										<Square size={10} fill="currentColor" aria-hidden="true" />
+										<Square {...stylex.props(styles.stopIcon)} size={10} fill="currentColor" aria-hidden="true" />
 									</button>
 								) : null}
 							</>

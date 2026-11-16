@@ -1,3 +1,7 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Check, Laptop, Moon, Sun } from '@/components/icons'
@@ -50,9 +54,9 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
   return (
     <>
       <header><h1>{t('appearance.title')}</h1><p>{t('appearance.description')}</p></header>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.theme.title')}</h2>
-        <div className="theme-options">
+        <div className={`theme-options ${stylex.props(settingsStyles.themeOptions, [responsiveStyles.themeOptions, responsiveLayoutStyles.themeOptions]).className ?? ""}`}>
           {themes.map((item) => {
             const Icon = item.icon
             const active = settings.theme === item.id
@@ -71,18 +75,18 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
           })}
         </div>
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.language.title')}</h2>
-        <label className="settings-row">
+        <label className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>{t('appearance.language.label')}</strong><small>{t('appearance.language.description')} {t('appearance.language.available', { count: locales.length - 1 })}</small></span>
           <select value={settings.locale} onChange={(event) => { void onUpdate({ locale: event.target.value as LocalePreference }) }}>
             {locales.map((locale) => <option key={locale.value} value={locale.value}>{t(locale.label)}</option>)}
           </select>
         </label>
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.text.title')}</h2>
-        <div className="settings-row settings-row--text-size">
+        <div className={`settings-row settings-row--text-size ${stylex.props(settingsStyles.settingsRow, [responsiveStyles.settingsRowTextSize, responsiveLayoutStyles.settingsRowTextSize]).className ?? ""}`}>
           <span><strong>{t('appearance.text.label')}</strong><small>{t('appearance.text.description')}</small></span>
           <SegmentedControl
             label={t('appearance.text.aria')}
@@ -94,7 +98,7 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
               if (fontScales.some((option) => option.value === parsed)) void onUpdate({ interfaceFontScale: parsed })
             }}
             onKeyDown={onScaleKeyDown}
-            className="text-size-options"
+            className={`text-size-options ${stylex.props(settingsStyles.textSizeOptions, responsiveStyles.textSizeOptions).className ?? ""}`}
           >
             {fontScales.map((option) => (
               <SegmentedControlItem
@@ -107,7 +111,7 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
           </SegmentedControl>
         </div>
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.motion.title')}</h2>
         <SettingsToggle checked={settings.reduceMotion} onChange={(reduceMotion) => { void onUpdate({ reduceMotion }) }} label={t('appearance.motion.reduce')} description={t('appearance.motion.description')} />
       </section>

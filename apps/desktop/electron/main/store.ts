@@ -13,6 +13,7 @@ import {
   type ScheduleRunRecord,
   type ScheduleTarget,
   type ScheduleTiming,
+  type SpaceRecord,
 } from '../../src/types/api'
 import { normalizeScheduleRunHistory } from './schedules/retention'
 import { isModelKey, isRecord } from 'apex-core/validation'
@@ -54,6 +55,7 @@ export interface DesktopState {
   schedules: StoredSchedule[]
   coordinatorSessions?: Record<string, string>
   globalCoordinatorSession?: string
+  spaces?: SpaceRecord[]
 }
 
 export const CURRENT_DESKTOP_STATE_FILENAME = 'prime-work-state-v4.json'
@@ -451,6 +453,12 @@ function parseStateVersion(value: Record<string, unknown>, statePath: string): S
   return version
 }
 
+function parseSpace(value: unknown): SpaceRecord | null {
+  if (!isRecord(value) || !boundedString(value.id, 200) || !boundedString(value.name, 200) || !boundedString(value.objective, 10_000, true) || !boundedString(value.projectId, 256) || !boundedString(value.createdAt, 100) || !boundedString(value.updatedAt, 100) || !Array.isArray(value.sessionIds) || value.sessionIds.length > 500 || !value.sessionIds.every((id) => boundedString(id, 256))) return null
+  if (value.coordinatorSession !== undefined && !boundedString(value.coordinatorSession, 4096)) return null
+  return { id: value.id, name: value.name, objective: value.objective, projectId: value.projectId, sessionIds: value.sessionIds, coordinatorSession: value.coordinatorSession, createdAt: value.createdAt, updatedAt: value.updatedAt }
+}
+
 function parseState(value: unknown, statePath: string): { sourceVersion: SupportedDesktopStateVersion; state: DesktopState } {
   if (!isRecord(value)) throw new Error('Desktop state is missing a supported integer schema version')
   const version = parseStateVersion(value, statePath)
@@ -466,6 +474,7 @@ function parseState(value: unknown, statePath: string): { sourceVersion: Support
     coordinatorSessions: isRecord(value.coordinatorSessions) ? Object.fromEntries(Object.entries(value.coordinatorSessions)
       .filter((entry): entry is [string, string] => entry[0].length > 0 && entry[0].length <= 200 && typeof entry[1] === 'string' && entry[1].length > 0 && entry[1].length <= 4096).slice(0, 500)) : {},
     globalCoordinatorSession: typeof value.globalCoordinatorSession === 'string' && value.globalCoordinatorSession.length > 0 && value.globalCoordinatorSession.length <= 4096 ? value.globalCoordinatorSession : undefined,
+    spaces: Array.isArray(value.spaces) ? value.spaces.map(parseSpace).filter((space): space is SpaceRecord => space !== null).slice(0, 500) : [],
     archivedSessions: Array.isArray(value.archivedSessions) ? value.archivedSessions.filter((item): item is string => typeof item === 'string') : [],
     dismissedProjectPaths: Array.isArray(value.dismissedProjectPaths) ? value.dismissedProjectPaths.filter((item): item is string => typeof item === 'string') : [],
     schedules:
@@ -591,7 +600,7 @@ export class JsonStateStore {
 
   getCoordinatorSessions(): Record<string, string> {
     this.assertCompatible()
-    return { ...this.state.coordinatorSessions, ...(this.state.globalCoordinatorSession ? { [GLOBAL_COORDINATOR_KEY]: this.state.globalCoordinatorSession } : {}) }
+    return { ...this.state.coordinatorSessions, ...Object.fromEntries((this.state.spaces ?? []).filter((space) => space.coordinatorSession).map((space) => [`space:${space.id}`, space.coordinatorSession!])), ...(this.state.globalCoordinatorSession ? { [GLOBAL_COORDINATOR_KEY]: this.state.globalCoordinatorSession } : {}) }
   }
 
   getProjects(): PersistedProject[] {

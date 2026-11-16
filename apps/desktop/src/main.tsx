@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as pagesStyles } from 'apex-ui/styles/pages.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -17,13 +20,13 @@ createRoot(root).render(
       <ErrorBoundary
         onCatch={saveComposerDraftFromDom}
         fallback={
-          <div className="empty-state app-error-fallback" role="alert">
+          <div className={`empty-state app-error-fallback ${stylex.props(pagesStyles.emptyState).className ?? ""}`} role="alert">
             <h2>Apex hit an unexpected error</h2>
             <p>Reload to continue. Any message you were typing is preserved.</p>
-            <div className="empty-state__action">
+            <div className={`empty-state__action ${stylex.props(pagesStyles.emptyStateAction).className ?? ""}`}>
               <button
                 type="button"
-                className="button button--primary"
+                className={`button button--primary ${stylex.props(workbenchStyles.button, workbenchStyles.buttonPrimary).className ?? ""}`}
                 onClick={() => window.location.reload()}
               >
                 Reload Apex

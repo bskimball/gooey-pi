@@ -1,7 +1,9 @@
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import { Dialog } from '@astryxdesign/core/Dialog'
 import * as stylex from '@stylexjs/stylex'
-import { Bell, CalendarDots, ChatCircleText, ClockCounterClockwise, File, Folder, Gear, GitDiff, Info, MagnifyingGlass, NotePencil, Package, Robot, SidebarLeft, Terminal } from './icons'
+import { Stack, CalendarDots, ChatCircleText, ClockCounterClockwise, File, Folder, Gear, GitDiff, Info, MagnifyingGlass, NotePencil, Package, Robot, SidebarLeft, Terminal } from './icons'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { HarnessId, InspectorTab, ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
@@ -131,7 +133,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
       { key: 'new', label: 'New session', detail: 'Start fresh in the current project', shortcut: key(['Primary', 'N']), icon: <NotePencil size={14} />, run: onNewSession },
       { key: 'previous', label: 'Previous session', detail: 'Return to the session you had open before', shortcut: key(['Control', 'Tab']), icon: <ClockCounterClockwise size={14} />, run: onPreviousSession },
       { key: 'projects', label: 'Open Projects', detail: 'Browse local workspaces', icon: <Folder size={14} />, run: () => onNavigate('projects') },
-      { key: 'activity', label: 'Open Activity', detail: 'See work that needs attention', icon: <Bell size={14} />, run: () => onNavigate('activity') },
+      { key: 'activity', label: 'Open Activity', detail: 'Coordinate work with Chief of Staff', icon: <Stack size={14} />, run: () => onNavigate('activity') },
       { key: 'scheduled', label: 'Open Scheduled', detail: 'Manage recurring work', icon: <CalendarDots size={14} />, run: () => onNavigate('scheduled') },
       { key: 'plugins', label: 'Open Capabilities', detail: 'Extend the active harness', icon: <Package size={14} />, run: () => onNavigate('plugins') },
       { key: 'changes', label: 'Show changes', detail: 'Review the diff for this workspace', shortcut: key(['Primary', '1']), icon: <GitDiff size={14} />, run: () => onOpenInspectorTab('changes') },
@@ -212,14 +214,14 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
       role="dialog"
       aria-label="Command palette"
       className="command-palette"
-      xstyle={styles.dialog}
+      xstyle={[overlaysStyles.commandPalette, styles.dialog, responsiveStyles.commandPalette]}
     >
-      <div className="command-search">
+      <div className={`command-search ${stylex.props(overlaysStyles.commandSearch).className ?? ""}`}>
         <MagnifyingGlass size={16} />
         <input ref={inputRef} data-autofocus="" value={query} role="combobox" aria-expanded="true" aria-controls="command-results" aria-activedescendant={items[activeIndex] ? `command-option-${activeIndex}` : undefined} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} onKeyDown={onKeyDown} />
         <AstryxButton label="Close command palette" variant="ghost" size="sm" xstyle={styles.closeButton} onClick={onClose}><kbd>esc</kbd></AstryxButton>
       </div>
-      <div id="command-results" className="command-results" role="listbox" aria-label="Results">
+      <div id="command-results" className={`command-results ${stylex.props(overlaysStyles.commandResults).className ?? ""}`} role="listbox" aria-label="Results">
         {items.map((item, index) => <PaletteRow key={item.key} item={item} index={index} active={index === activeIndex} showGroup={index === 0 || items[index - 1].group !== item.group} onHover={setActive} onChoose={choose} />)}
         {items.length === 0 ? <div className="compact-state"><EmptyState title={`No sessions, projects, or commands match “${query}”.`}>{null}</EmptyState></div> : null}
       </div>
@@ -231,7 +233,7 @@ export function CommandPalette({ open, platform = 'darwin', harness, projects, s
 
 function PaletteRow({ item, index, active, showGroup, onHover, onChoose }: { item: PaletteItem; index: number; active: boolean; showGroup: boolean; onHover(index: number): void; onChoose(item: PaletteItem): void }) {
   return <>
-    {showGroup ? <div className="command-section-label" role="presentation">{item.group}</div> : null}
+    {showGroup ? <div className={`command-section-label ${stylex.props(overlaysStyles.commandSectionLabel).className ?? ""}`} role="presentation">{item.group}</div> : null}
     <button id={`command-option-${index}`} type="button" role="option" aria-selected={active} data-group={item.group} className={active ? 'is-active' : ''} title={item.detail} onMouseEnter={() => onHover(index)} onClick={() => onChoose(item)}>
       <span>{item.icon}</span>
       <span><strong>{item.label}</strong><small>{item.detail}</small></span>

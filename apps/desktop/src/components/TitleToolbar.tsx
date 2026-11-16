@@ -1,20 +1,15 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { Badge } from '@astryxdesign/core/Badge'
 import * as stylex from '@stylexjs/stylex'
-import {
-  GitBranch,
-  SidebarLeft,
-  SidebarRight,
-} from './icons'
-import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
-import type { SessionLiveMap } from '@/app/session-live'
+import { GitBranch, SidebarRight } from './icons'
+import { IconButton } from './ui'
+import type { ProjectRecord, WorkspaceView } from '@/types/api'
 import { useI18n, type MessageKey } from '@/lib/i18n'
-import { shortcutLabel } from '@/lib/platform-shortcuts'
-import { BrowserGlobe, IconButton } from './ui'
-import { ActivityStatusPill } from './activity/ActivityStatusPill'
 import { ProjectRunControl, type ProjectScriptKind } from './ProjectRunControl'
-import { lazy, Suspense, type ReactNode } from 'react'
-
-const WindowsAppMenu = lazy(() => import('./WindowsAppMenu'))
+import type { ReactNode } from 'react'
 
 const styles = stylex.create({
   branchBadge: {
@@ -41,49 +36,33 @@ interface TitleToolbarProps {
   view: WorkspaceView
   /** Active harness product name; the session view's fallback title. */
   productName?: string
-  sidebarOpen: boolean
-  inspectorOpen: boolean
-  onToggleSidebar(): void
-  onToggleInspector(): void
-  onOpenBrowser(): void
   activeProjectScriptKind?: ProjectScriptKind
   projectSetupError?: string
   onRunProjectScript?(kind: ProjectScriptKind): Promise<void> | void
   onStopProjectScript?(): void
   onSaveProjectScripts?(scripts: { setup: string; run: string }): Promise<void>
-  sessions?: readonly SessionRecord[]
-  liveBySession?: SessionLiveMap
-  clearedActivity?: Readonly<Record<string, string>>
-  onOpenActivity?(): void
-  /** Subtle session status shown before the browser/inspector toggles. */
+  /** Subtle session status shown beside project controls. */
   sessionActions?: ReactNode
+  inspectorOpen?: boolean
+  onToggleInspector?(): void
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', sidebarOpen, inspectorOpen, activeProjectScriptKind, projectSetupError, sessions, liveBySession, clearedActivity, onOpenActivity, sessionActions, onToggleSidebar, onToggleInspector, onOpenBrowser, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', activeProjectScriptKind, projectSetupError, sessionActions, onRunProjectScript, onStopProjectScript, onSaveProjectScripts, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
-  const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
-  const browserShortcut = shortcutLabel(platform, ['Primary', 'Shift', 'B'])
   const branch = gitBranch ?? project?.gitBranch
   return (
-    <header className="title-toolbar drag-region">
-      {!sidebarOpen && platform === 'darwin' ? <div className="traffic-light-clearance traffic-light-clearance--toolbar" aria-hidden="true" /> : null}
-      <div className="title-toolbar__nav no-drag">
-        <IconButton className={sidebarOpen ? 'is-active' : ''} label={`${sidebarOpen ? 'Hide' : 'Show'} sidebar (${sidebarShortcut})`} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton>
-        {platform === 'win32' ? <Suspense fallback={null}><WindowsAppMenu /></Suspense> : null}
-      </div>
-      <div className="title-toolbar__identity">
+    <header className={`title-toolbar drag-region ${stylex.props(baseStyles.dragRegion, workbenchStyles.titleToolbar, responsiveStyles.titleToolbar, (platform === 'win32' || platform === 'linux') && workbenchStyles.titleToolbarWindowControls).className ?? ""}`}>
+      <div className={`title-toolbar__identity ${stylex.props(workbenchStyles.titleToolbarIdentity, [responsiveStyles.titleToolbarIdentity, responsiveLayoutStyles.titleToolbarIdentity]).className ?? ""}`}>
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>
-        {branch && view === 'session' ? <Badge icon={<GitBranch size={12} />} label={branch} className="branch-pill" xstyle={styles.branchBadge} /> : null}
+        {branch && view === 'session' ? <Badge icon={<GitBranch size={12} />} label={branch} className="branch-pill" xstyle={[workbenchStyles.branchPill, styles.branchBadge, responsiveStyles.branchPill]} /> : null}
       </div>
-      <div className="title-toolbar__actions no-drag">
-        {sessions ? <ActivityStatusPill sessions={sessions} liveBySession={liveBySession} clearedActivity={clearedActivity} active={view === 'activity'} onOpen={onOpenActivity} /> : null}
+      <div className={`title-toolbar__actions no-drag ${stylex.props(baseStyles.noDrag, workbenchStyles.titleToolbarActions).className ?? ""}`}>
         {view === 'session' && project && onRunProjectScript && onStopProjectScript && onSaveProjectScripts
           ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} setupError={projectSetupError} onRun={onRunProjectScript} onStop={onStopProjectScript} onSave={onSaveProjectScripts} />
           : null}
         {view === 'session' ? sessionActions : null}
-        {view === 'session' ? <IconButton className="title-toolbar__optional" label={`Open browser (${browserShortcut})`} onClick={onOpenBrowser}><BrowserGlobe size={18} /></IconButton> : null}
-        {view === 'session' ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
+        {onToggleInspector && (view === 'session' || view === 'activity') ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" aria-pressed={inspectorOpen} onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>
     </header>
   )

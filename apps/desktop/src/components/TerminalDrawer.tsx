@@ -1,8 +1,12 @@
+import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import * as stylex from '@stylexjs/stylex'
+import { styles as terminalStyles, contextStyles as terminalContext, terminalTabMarker } from 'apex-ui/styles/terminal.stylex'
+import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { ArrowsInSimple, ArrowsOutSimple, Lightning, Plus, Square, Terminal as TerminalIcon, Trash, X } from './icons'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { terminalViewMachine } from './terminalViewMachine'
-import { terminalTheme } from './terminalTheme'
+import { applyTerminalStyles, terminalTheme } from './terminalTheme'
 import { BackgroundJobView } from './BackgroundJobView'
 import type { BackgroundJobOutput } from '@/hooks/useBackgroundJobs'
 import { Terminal } from '@xterm/xterm'
@@ -196,6 +200,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
     terminal.loadAddon(fit)
     terminal.loadAddon(webLinks)
     terminal.open(container)
+    applyTerminalStyles(terminal)
     terminalRef.current = terminal
     fitRef.current = fit
     // Spawn the shell at the drawer's real dimensions. Creating the PTY at
@@ -284,7 +289,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
   // Register actor cleanup after the xterm effect so DISPOSE runs before the actor stops.
   const [, send] = useMachine(terminalViewMachine)
 
-  return <div className="terminal-surface" ref={containerRef} hidden={!visible}/>
+  return <div className={`terminal-surface ${stylex.props(terminalStyles.terminalSurface, !visible && terminalContext.hidden).className ?? ""}`} ref={containerRef} hidden={!visible}/>
 })
 
 function createTab(number: number, shell?: string, command?: string, label?: string, id: string = crypto.randomUUID()): TerminalTab {
@@ -411,42 +416,42 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
   }
 
   return (
-    <section className={`terminal-drawer ${maximized ? 'is-maximized' : ''}`} aria-label="Integrated terminal" hidden={!visible}>
+    <section className={[`terminal-drawer ${maximized ? 'is-maximized' : ''}`, stylex.props(terminalStyles.terminalDrawer, (maximized) && terminalStyles.terminalDrawerIsMaximized, [responsiveStyles.terminalDrawer, (maximized ? responsiveLayoutStyles.terminalDrawerMaximized : responsiveLayoutStyles.terminalDrawer)], !visible && terminalContext.hidden).className].filter(Boolean).join(' ')} aria-label="Integrated terminal" hidden={!visible}>
       {!maximized ? <ResizeHandle orientation="horizontal" label="Resize terminal" value={height} min={minHeight} max={maxHeight} defaultValue={defaultHeight} onChange={onHeightChange} /> : null}
-      <div className="terminal-toolbar">
-        <div className="terminal-tabs" role="tablist" aria-label="Terminal tabs">
+      <div className={`terminal-toolbar ${stylex.props(terminalStyles.terminalToolbar).className ?? ""}`}>
+        <div className={`terminal-tabs ${stylex.props(terminalStyles.terminalTabs).className ?? ""}`} role="tablist" aria-label="Terminal tabs">
           {tabs.map((tab) => (
-            <div className={`terminal-tab ${tab.id === activeTabId ? 'is-active' : ''}`} key={tab.id}>
-              <button type="button" role="tab" aria-selected={tab.id === activeTabId} onClick={() => setActiveTabId(tab.id)}>
+            <div className={[`terminal-tab ${tab.id === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (tab.id === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')} key={tab.id}>
+              <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={tab.id === activeTabId} onClick={() => setActiveTabId(tab.id)}>
                 <TerminalIcon size={14}/>
 
                 <span>{tab.label ?? `${tab.shellName} ${tab.number}`}</span>
-                <span className={`terminal-live-dot ${tab.connected ? 'is-connected' : ''}`}/>
+                <span className={[`terminal-live-dot ${tab.connected ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (tab.connected) && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
               </button>
-              <button type="button" className="terminal-tab__close" aria-label={`Close tab ${tab.number}`} onClick={() => closeTerminal(tab.id)}><X size={11}/></button>
+              <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, tab.id === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={`Close tab ${tab.number}`} onClick={() => closeTerminal(tab.id)}><X size={11}/></button>
             </div>
           ))}
           {visibleJobs.map((job) => (
-            <div className={`terminal-tab ${job.key === activeTabId ? 'is-active' : ''}`} key={job.key}>
-              <button type="button" role="tab" aria-selected={job.key === activeTabId} title={`${job.id} · ${job.command}`} onClick={() => setActiveTabId(job.key)}>
+            <div className={[`terminal-tab ${job.key === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (job.key === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')} key={job.key}>
+              <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={job.key === activeTabId} title={`${job.id} · ${job.command}`} onClick={() => setActiveTabId(job.key)}>
                 <Lightning size={14}/>
                 <span>{job.title}</span>
-                <span className={`terminal-live-dot ${job.status === 'running' ? 'is-connected' : ''}`}/>
+                <span className={[`terminal-live-dot ${job.status === 'running' ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (job.status === 'running') && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
               </button>
-              <button type="button" className="terminal-tab__close" aria-label={job.status === 'running' ? `Hide ${job.id}` : `Dismiss ${job.id}`} onClick={() => closeJob(job)}><X size={11}/></button>
+              <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, job.key === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={job.status === 'running' ? `Hide ${job.id}` : `Dismiss ${job.id}`} onClick={() => closeJob(job)}><X size={11}/></button>
             </div>
           ))}
           <IconButton label="New terminal" size="small" disabled={tabs.length >= MAX_TERMINAL_TABS} onClick={addTerminal}><Plus size={14}/></IconButton>
         </div>
-        <div className="terminal-actions">
-          <span className="terminal-cwd" title={cwd}>{cwd?.split('/').at(-1) ?? 'No project'}</span>
-          {activeJob?.status === 'running' ? <IconButton label={activeJob.stopping ? `Stopping ${activeJob.id}` : `Stop ${activeJob.id}`} disabled={activeJob.stopping || !activeJob.connected} onClick={() => onStopJob?.(activeJob.key)}><Square size={12}/></IconButton> : null}
-          <IconButton label="Clear terminal" onClick={() => viewRefs.current.get(activeTabId)?.clear()}><Trash size={13}/></IconButton>
-          <IconButton label={maximized ? 'Restore terminal' : 'Maximize terminal'} onClick={() => setMaximized((value) => !value)}>{maximized ? <ArrowsInSimple size={13}/> : <ArrowsOutSimple size={13}/>}</IconButton>
-          <IconButton label="Close terminal" onClick={onClose}><X size={14}/></IconButton>
+        <div className={`terminal-actions ${stylex.props(terminalStyles.terminalActions).className ?? ""}`}>
+          <span className={`terminal-cwd ${stylex.props(terminalStyles.terminalCwd, responsiveStyles.terminalCwd).className ?? ""}`} title={cwd}>{cwd?.split('/').at(-1) ?? 'No project'}</span>
+          {activeJob?.status === 'running' ? <IconButton xstyle={terminalStyles.terminalHeaderButton} label={activeJob.stopping ? `Stopping ${activeJob.id}` : `Stop ${activeJob.id}`} disabled={activeJob.stopping || !activeJob.connected} onClick={() => onStopJob?.(activeJob.key)}><Square size={16}/></IconButton> : null}
+          <IconButton xstyle={terminalStyles.terminalHeaderButton} label="Clear terminal" onClick={() => viewRefs.current.get(activeTabId)?.clear()}><Trash size={16}/></IconButton>
+          <IconButton xstyle={terminalStyles.terminalHeaderButton} label={maximized ? 'Restore terminal' : 'Maximize terminal'} onClick={() => setMaximized((value) => !value)}>{maximized ? <ArrowsInSimple size={16}/> : <ArrowsOutSimple size={16}/>}</IconButton>
+          <IconButton xstyle={terminalStyles.terminalHeaderButton} label="Close terminal" onClick={onClose}><X size={16}/></IconButton>
         </div>
       </div>
-      <div className="terminal-views">
+      <div className={`terminal-views ${stylex.props(terminalStyles.terminalViews).className ?? ""}`}>
         {tabs.map((tab) => (
           <TerminalView
             key={tab.id}

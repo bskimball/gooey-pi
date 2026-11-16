@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { useId, useState } from 'react'
 import { Brain, CaretRight, WarningCircle, Wrench } from '../icons'
 import type { MessagePart } from '@/types/api'
@@ -117,14 +119,14 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
   const currentSlice = current === undefined ? [] : parts.slice(current)
   const foldedImages = open ? [] : partImages(current === undefined ? parts : parts.slice(0, current))
 
-  return <div className={`work-group ${state}${live ? ' is-live' : ''}`}>
-    {summarized.length ? <button type="button" className="work-group__summary" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className="activity-line__icon">{summary.running ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}</span>
-      <span className="work-group__label">{summary.label}</span>
-      {summary.failed ? <span className="work-group__failed"><WarningCircle size={12} /> {summary.failed} failed</span> : null}
-      <CaretRight className="disclosure-caret" size={13} />
+  return <div className={[`work-group ${state}${live ? ' is-live' : ''}`, stylex.props(transcriptStyles.workGroup).className].filter(Boolean).join(' ')}>
+    {summarized.length ? <button type="button" className={`work-group__summary ${stylex.props(transcriptStyles.workGroupSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{summary.running ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}</span>
+      <span className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`}>{summary.label}</span>
+      {summary.failed ? <span className={`work-group__failed ${stylex.props(transcriptStyles.workGroupFailed).className ?? ""}`}><WarningCircle size={12} /> {summary.failed} failed</span> : null}
+      <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
     </button> : null}
-    {open ? <div className="work-group__body" id={bodyId}>{timeline(parts)}</div> : null}
+    {open ? <div className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody).className ?? ""}`} id={bodyId}>{timeline(parts)}</div> : null}
     <ImageParts images={foldedImages} />
     {!open && currentSlice.length ? <div className="work-group__current">{timeline(currentSlice)}</div> : null}
   </div>

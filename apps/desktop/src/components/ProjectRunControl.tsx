@@ -1,3 +1,7 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { ArrowCounterClockwise, CaretDown, CheckCircle, CircleNotch, Play, Square, WarningCircle } from './icons'
@@ -85,28 +89,26 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
   const setupStatus = (() => {
     const scripts = project.scripts
     if (!setup.trim()) return null
-    if (activeKind === 'setup') return <span className="project-run-menu__status is-running"><StatusMark state="running" size={12} /> Setup running</span>
-    if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className="project-run-menu__status">Runs automatically after save</span>
-    if (setupError) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup could not start: {setupError}</span>
-    if (scripts.setupLastExitCode === 0) return <span className="project-run-menu__status is-success"><CheckCircle size={12} /> Setup completed</span>
-    if (scripts.setupLastExitCode !== undefined) return <span className="project-run-menu__status is-error"><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
-    return <span className="project-run-menu__status">Setup did not finish</span>
+    if (activeKind === 'setup') return <span className={`project-run-menu__status is-running ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsRunning).className ?? ""}`}><StatusMark state="running" size={12} /> Setup running</span>
+    if (scripts?.setup !== setup.trim() || scripts.setupLastRun !== scripts.setup) return <span className={`project-run-menu__status ${stylex.props(workbenchStyles.projectRunMenuStatus).className ?? ""}`}>Runs automatically after save</span>
+    if (setupError) return <span className={`project-run-menu__status is-error ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsError).className ?? ""}`}><WarningCircle size={12} /> Setup could not start: {setupError}</span>
+    if (scripts.setupLastExitCode === 0) return <span className={`project-run-menu__status is-success ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsSuccess).className ?? ""}`}><CheckCircle size={12} /> Setup completed</span>
+    if (scripts.setupLastExitCode !== undefined) return <span className={`project-run-menu__status is-error ${stylex.props(workbenchStyles.projectRunMenuStatus, workbenchStyles.projectRunMenuStatusIsError).className ?? ""}`}><WarningCircle size={12} /> Setup exited with code {scripts.setupLastExitCode}</span>
+    return <span className={`project-run-menu__status ${stylex.props(workbenchStyles.projectRunMenuStatus).className ?? ""}`}>Setup did not finish</span>
   })()
 
   return (
-    <div ref={rootRef} className="project-run-control">
-      <div className={`project-run-split ${running ? 'is-running' : ''}`}>
-        <IconButton
-          size="small"
+    <div ref={rootRef} className={`project-run-control ${stylex.props(workbenchStyles.projectRunControl).className ?? ""}`}>
+      <div className={[`project-run-split ${running ? 'is-running' : ''}`, stylex.props(workbenchStyles.projectRunSplit, (running) && workbenchStyles.projectRunSplitIsRunning).className].filter(Boolean).join(' ')}>
+        <IconButton xstyle={[workbenchStyles.projectRunSplitPrimary]}
           title={running ? (activeKind === 'setup' ? 'Stop setup' : 'Stop project') : 'Run project'}
           className="project-run-split__primary"
           label={running ? `Stop ${activeKind} script` : 'Run project'}
           onClick={runPrimary}
         >
-          {running ? <Square size={11} fill="currentColor" /> : <Play size={15} />}
+          {running ? <Square size={16} fill="currentColor" /> : <Play size={16} />}
         </IconButton>
-        <IconButton
-          size="small"
+        <IconButton xstyle={[workbenchStyles.projectRunSplitMenu]}
           title="Configure project scripts"
           className="project-run-split__menu"
           label="Configure project scripts"
@@ -115,11 +117,11 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
           aria-controls={open ? menuId : undefined}
           onClick={() => setOpen((value) => !value)}
         >
-          <CaretDown size={13} />
+          <CaretDown size={14} />
         </IconButton>
       </div>
       {open ? (
-        <section id={menuId} className="project-run-menu" role="dialog" aria-label={`Scripts for ${project.name}`}>
+        <section id={menuId} className={`project-run-menu ${stylex.props(workbenchStyles.projectRunMenu).className ?? ""}`} role="dialog" aria-label={`Scripts for ${project.name}`}>
           <header><strong>Project scripts</strong><small>{project.name}</small></header>
           <TextArea
             id={`${menuId}-setup`}
@@ -144,10 +146,10 @@ export function ProjectRunControl({ project, activeKind, setupError, onRun, onSt
             controlClassName="mono"
             onChange={(value) => setRun(value)}
           />
-          {error ? <Banner status="error" role="alert" className="project-run-menu__error" title={error} /> : null}
+          {error ? <Banner xstyle={[workbenchStyles.projectRunMenuError]} status="error" role="alert" className="project-run-menu__error" title={error} /> : null}
           <footer>
             <ApexButton variant="quiet" disabled={!project.scripts?.setup.trim() || running || saving} icon={<ArrowCounterClockwise size={13} />} onClick={() => startScript('setup')}>Run setup again</ApexButton>
-            <ApexButton variant="primary" disabled={saving} icon={saving ? <CircleNotch className="spin" size={13} /> : undefined} onClick={() => void save()}>Save</ApexButton>
+            <ApexButton variant="primary" disabled={saving} icon={saving ? <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={13} /> : undefined} onClick={() => void save()}>Save</ApexButton>
           </footer>
         </section>
       ) : null}

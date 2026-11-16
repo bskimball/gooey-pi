@@ -1,3 +1,7 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as voiceStyles, voiceOrbMarker } from 'apex-ui/styles/voice.stylex';
+import { styles as orbStyles } from 'apex-ui/styles/voice-orb.stylex';
+import { styles as petContext } from 'apex-ui/styles/pets-context.stylex'
 import { Microphone, MicrophoneSlash, X } from './icons'
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useMachine } from '@xstate/react'
@@ -226,15 +230,15 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
   const petActivity: PetActivity = muted || orbState === 'listening' || orbState === 'user-speaking' ? 'idle'
     : orbState === 'agent-speaking' ? 'speaking'
       : orbState === 'error' ? 'failed' : 'working'
-  const receipt = taskReceipt ? <div className="voice-orb__receipt" role="status">
-    <strong>Task started</strong>
-    <span>{taskReceipt.projectName} · {HARNESS_SHORT_NAMES[taskReceipt.harness]}</span>
-    <small>{taskOpened ? 'Opened in the sidebar' : 'Opening task…'}</small>
+  const receipt = taskReceipt ? <div className={`voice-orb__receipt ${stylex.props(voiceStyles.voiceOrbReceipt, pet && petContext.receipt).className ?? ""}`} role="status">
+    <strong {...stylex.props(orbStyles.receiptTitle)}>Task started</strong>
+    <span {...stylex.props(orbStyles.receiptDetail)}>{taskReceipt.projectName} · {HARNESS_SHORT_NAMES[taskReceipt.harness]}</span>
+    <small {...stylex.props(orbStyles.receiptStatus)}>{taskOpened ? 'Opened in the sidebar' : 'Opening task…'}</small>
   </div> : null
   return (
     <>
       {/* biome-ignore lint/a11y/useMediaCaption: Live assistant audio has no static caption track; status remains available as text. */}
-      <audio ref={audioRef} autoPlay className="voice-session__audio" />
+      <audio ref={audioRef} autoPlay className={`voice-session__audio ${stylex.props(voiceStyles.voiceSessionAudio).className ?? ""}`} />
       {pet ? <DesktopPet
         {...pet}
         voiceActive
@@ -248,17 +252,17 @@ export function VoiceOrb({ voice, harness, onClose, onTaskStarted, pet, focusPet
         onVoiceControlFocused={onPetControlFocused}
       >
         {receipt}
-      </DesktopPet> : <aside className={`voice-orb voice-orb--${orbState} ${muted ? 'is-muted' : ''}`} style={{ '--orb-x': `${position.x}px`, '--orb-y': `${position.y}px` } as CSSProperties} aria-label="Realtime voice session">
-        <div className="voice-orb__drag" onPointerDown={beginDrag} onPointerMove={drag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-          <div className="voice-orb__halo" aria-hidden="true" />
-          <div className="voice-orb__core" aria-hidden="true"><i /><i /><i /></div>
-          <span className="voice-orb__status">{status}</span>
-          <div className="voice-orb__controls">
-            <button type="button" aria-label={muted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={toggleMute}>{muted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button>
-            <button type="button" aria-label="Close realtime voice" onClick={onClose}><X size={16} /></button>
+      </DesktopPet> : <aside className={[`voice-orb voice-orb--${orbState} ${muted ? 'is-muted' : ''}`, stylex.props(voiceStyles.voiceOrb, voiceOrbMarker).className].filter(Boolean).join(' ')} style={{ '--orb-x': `${position.x}px`, '--orb-y': `${position.y}px` } as CSSProperties} aria-label="Realtime voice session">
+        <div className={`voice-orb__drag ${stylex.props(voiceStyles.voiceOrbDrag).className ?? ""}`} onPointerDown={beginDrag} onPointerMove={drag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+          <div className={`voice-orb__halo ${stylex.props(voiceStyles.voiceOrbHalo, orbState === 'user-speaking' && orbStyles.userHalo, orbState === 'agent-speaking' && orbStyles.agentHalo).className ?? ""}`} aria-hidden="true" />
+          <div className={`voice-orb__core ${stylex.props(voiceStyles.voiceOrbCore, orbState === 'user-speaking' && orbStyles.userCore, orbState === 'thinking' && orbStyles.thinkingCore, orbState === 'agent-speaking' && orbStyles.agentCore, orbState === 'error' && orbStyles.errorCore, muted && orbStyles.mutedCore).className ?? ""}`} aria-hidden="true"><i {...stylex.props(orbStyles.wave)} /><i {...stylex.props(orbStyles.wave, orbStyles.waveSecond)} /><i {...stylex.props(orbStyles.wave, orbStyles.waveThird)} /></div>
+          <span className={`voice-orb__status ${stylex.props(voiceStyles.voiceOrbStatus).className ?? ""}`}>{status}</span>
+          <div className={`voice-orb__controls ${stylex.props(voiceStyles.voiceOrbControls).className ?? ""}`}>
+            <button type="button" {...stylex.props(orbStyles.controlButton)} aria-label={muted ? 'Unmute realtime voice' : 'Mute realtime voice'} onClick={toggleMute}>{muted ? <MicrophoneSlash size={15} /> : <Microphone size={15} />}</button>
+            <button type="button" {...stylex.props(orbStyles.controlButton)} aria-label="Close realtime voice" onClick={onClose}><X size={16} /></button>
           </div>
         </div>
-        {error ? <p role="alert">{error}</p> : null}
+        {error ? <p {...stylex.props(orbStyles.error)} role="alert">{error}</p> : null}
         {receipt}
       </aside>}
     </>

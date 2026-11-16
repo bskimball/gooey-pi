@@ -1,3 +1,8 @@
+import { styles as sidebarStyles } from 'apex-ui/styles/sidebar.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
+import * as stylex from '@stylexjs/stylex'
+import { styles } from './session-controls.stylex'
+import { styles as webview } from './webview.stylex'
 import { Badge } from '@astryxdesign/core/Badge'
 import { ApexButton, CaretDown, Check, ClockCounterClockwise, formatRelative } from 'apex-ui'
 import { useCallback, useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
@@ -109,11 +114,12 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
   }
 
   return (
-    <div className="apex-session-picker" ref={rootRef} onKeyDown={handleKeyDown}>
+    <div className={`apex-session-picker ${stylex.props(webview.picker).className}`} ref={rootRef} onKeyDown={handleKeyDown}>
       <ApexButton
         ref={triggerRef}
         variant="quiet"
         compact
+        xstyle={[styles.chip, webview.pickerTrigger, open && webview.pickerOpen]}
         className="permissions-chip apex-session-picker__trigger"
         aria-label={`Sessions: ${activeTitle}`}
         title={`Sessions: ${activeTitle}`}
@@ -122,21 +128,21 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
         aria-controls={open ? listId : undefined}
         onClick={() => send({ type: 'TOGGLE' })}
       >
-        <ClockCounterClockwise size={14} />
-        <span className="apex-session-picker__trigger-label">{activeTitle}</span>
-        <CaretDown size={11} className={open ? 'is-open' : ''} aria-hidden="true" />
+        <ClockCounterClockwise {...stylex.props(webview.pickerIcon)} size={14} />
+        <span className={`apex-session-picker__trigger-label ${stylex.props(webview.pickerLabel).className}`}>{activeTitle}</span>
+        <CaretDown className={`${open ? 'is-open' : ''} ${stylex.props(webview.pickerIcon, open && webview.pickerCaretOpen).className}`} size={11} aria-hidden="true" />
       </ApexButton>
       {open ? (
         <div
-          className="apex-session-picker__popover"
+          className={`apex-session-picker__popover ${stylex.props(webview.pickerPopover).className}`}
           onBlur={(event) => {
             const next = event.relatedTarget
             if (next instanceof Node && !rootRef.current?.contains(next)) close()
           }}
         >
-          <div className="apex-session-picker__header">
-            <span className="sidebar-menu__label">Sessions</span>
-            {items.length > 0 ? <Badge label={String(items.length)} className="apex-session-picker__count" /> : null}
+          <div className={`apex-session-picker__header ${stylex.props(webview.pickerHeader).className}`}>
+            <span className={`sidebar-menu__label ${stylex.props(sidebarStyles.sidebarMenuLabel).className ?? ""}`}>Sessions</span>
+            {items.length > 0 ? <Badge label={String(items.length)} className="apex-session-picker__count" xstyle={webview.pickerCount} /> : null}
           </div>
           <div
             ref={listRef}
@@ -144,7 +150,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
             role="listbox"
             aria-label="Sessions"
             aria-busy={loading}
-            className="apex-session-picker__list scroll-area"
+            className={`apex-session-picker__list scroll-area ${stylex.props(baseStyles.scrollArea, webview.pickerList).className}`}
           >
             {loading && items.length === 0 ? <p className="sidebar__empty" role="status">Loading sessions…</p> : null}
             {!loading && items.length === 0 ? <p className="sidebar__empty">No saved sessions yet</p> : null}
@@ -161,7 +167,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
               return (
                 <div
                   key={session.id || session.path}
-                  className={`session-row-wrap${isActive ? ' is-selected' : ''}`}
+                  className={[`session-row-wrap${isActive ? ' is-selected' : ''}`, stylex.props(sidebarStyles.sessionRowWrap).className].filter(Boolean).join(' ')}
                 >
                   <button
                     type="button"
@@ -169,21 +175,21 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
                     aria-selected={isActive}
                     aria-current={isActive ? 'true' : undefined}
                     title={title}
-                    className={`session-row${isActive ? ' is-selected' : ''}`}
+                    className={[[`session-row${isActive ? ' is-selected' : ''} `].filter(Boolean).join(' '), stylex.props(sidebarStyles.sessionRow, webview.sessionRow).className].filter(Boolean).join(" ")}
                     onClick={() => handleSelect(session)}
                   >
                     <span
-                      className={`session-status-mark ${isActive ? 'session-status-mark--active' : 'session-status-mark--idle'}`}
+                      className={`session-status-mark ${isActive ? 'session-status-mark--active' : 'session-status-mark--idle'} ${stylex.props(isActive && webview.sessionActive).className ?? ''}`}
                       aria-hidden="true"
                     >
                       {isActive ? <Check size={12} /> : <span />}
                     </span>
-                    <span className="session-row__text">
-                      <span className="session-row__heading">
-                        <span className="session-row__title">{title}</span>
-                        {relativeTime ? <span className="session-row__time">{relativeTime}</span> : null}
+                    <span className={`session-row__text ${stylex.props(sidebarStyles.sessionRowText, webview.sessionText).className ?? ""}`}>
+                      <span {...stylex.props(webview.sessionHeading)}>
+                        <span className={`session-row__title ${stylex.props(sidebarStyles.sessionRowTitle, webview.sessionTitle).className ?? ""}`}>{title}</span>
+                        {relativeTime ? <span {...stylex.props(webview.sessionTime)}>{relativeTime}</span> : null}
                       </span>
-                      <span className="session-row__meta">{subtitle}</span>
+                      <span className={`session-row__meta ${stylex.props(sidebarStyles.sessionRowMeta, webview.sessionMeta).className ?? ""}`}>{subtitle}</span>
                     </span>
                   </button>
                 </div>

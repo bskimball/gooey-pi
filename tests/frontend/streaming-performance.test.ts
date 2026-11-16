@@ -2,12 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingAgentEvent } from '../../apps/desktop/src/app/agent-events'
 import { createScopedRequestGuard } from '../../apps/desktop/src/app/scoped-request'
 import { areSidebarPropsEqual, boundedSidebarSessions, indexSidebarSessions, type SidebarProps } from '../../apps/desktop/src/components/Sidebar'
-import {
-  ACTIVITY_BATCH,
-  growActivityBatch,
-  updateActivityCriteria,
-  type ActivityViewState,
-} from '../../apps/desktop/src/pages/ActivityPage'
 import { applyApexEvent, createApexEventBuffer, createSteerAcceptedEvent, createSteerPickupEvent, replayApexEvents, resetTranscriptIdsForTests, type ApexEventReplayStats } from '../../apps/desktop/src/lib/events'
 import { reconcileTranscripts } from '../../apps/desktop/src/app/transcript-reconcile'
 import { createSidebarActionProxy } from '../../apps/desktop/src/hooks/useSidebarActions'
@@ -151,24 +145,6 @@ describe('Sidebar memoization and scale bounds', () => {
   })
 })
 
-describe('Activity batching', () => {
-  const initial = (): ActivityViewState => ({ filter: 'all', query: '', visibleLimit: ACTIVITY_BATCH })
-
-  it('grows by one bounded batch', () => {
-    expect(growActivityBatch(initial(), 1_000).visibleLimit).toBe(500)
-    expect(growActivityBatch({ ...initial(), visibleLimit: 750 }, 800).visibleLimit).toBe(800)
-  })
-
-  it('resets the limit atomically with query and filter changes', () => {
-    const expanded = { ...initial(), visibleLimit: 750 }
-    expect(updateActivityCriteria(expanded, { query: 'running' })).toEqual({
-      filter: 'all', query: 'running', visibleLimit: ACTIVITY_BATCH,
-    })
-    expect(updateActivityCriteria(expanded, { filter: 'running' })).toEqual({
-      filter: 'running', query: '', visibleLimit: ACTIVITY_BATCH,
-    })
-  })
-})
 
 
 afterEach(() => { vi.useRealTimers() })

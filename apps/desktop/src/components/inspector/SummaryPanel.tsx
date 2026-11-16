@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { memo } from 'react'
 import { CalendarDots, CaretRight } from '../icons'
 import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
@@ -62,12 +64,12 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
   const specialists = summary.specialists.slice(-8)
   const liveSpecialists = summary.specialists.filter((s) => isLiveSpecialist(s.status)).length
   return (
-    <div className="summary-panel">
+    <div className={`summary-panel ${stylex.props(inspectorStyles.summaryPanel).className ?? ""}`}>
       <RunConfigSection runtime={runtime} behaviorMode={behaviorMode} cwd={cwd} sessionKey={sessionKey} />
       {todos.length > 0 ? (
-        <section className="summary-section">
+        <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}>
           <h3>Plan ({todos.filter((t) => t.status === 'completed').length}/{todos.filter((t) => t.status !== 'cancelled').length})</h3>
-          <div className="progress-list">
+          <div className={`progress-list ${stylex.props(inspectorStyles.progressList).className ?? ""}`}>
             {todos.map((todo) => (
               <div key={todo.id} className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'blocked' || todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
                 <StatusMark state={todoMark(todo.status)} size={14} />
@@ -78,9 +80,9 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
         </section>
       ) : null}
       {specialists.length > 0 ? (
-        <section className="summary-section">
+        <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}>
           <h3>Agents ({liveSpecialists} reported running)</h3>
-          <div className="summary-agent-list">
+          <div className={`summary-agent-list ${stylex.props(inspectorStyles.summaryAgentList).className ?? ""}`}>
             {specialists.map((specialist) => (
               <button type="button" key={specialist.id} className={`is-${specialist.status}`} title={specialistStatusLabel[specialist.status]} onClick={() => onOpenSpecialist(specialist.id)}>
                 <StatusMark state={specialistMarkState(specialist.status)} size={14} />
@@ -92,16 +94,16 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
           </div>
         </section>
       ) : null}
-      <section className="summary-section"><h3>Readiness</h3><div className="progress-list readiness-list">
+      <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}><h3>Readiness</h3><div className={`progress-list readiness-list ${stylex.props(inspectorStyles.progressList).className ?? ""}`}>
         {readiness.checks.length || readiness.reviews.length ? null : <div><StatusMark state="pending" size={14} /><span>No checks detected in this session</span></div>}
         {readiness.checks.map((check) => <div key={check.kind} className={`${check.outcome === 'failed' ? 'is-failed' : check.outcome === 'running' ? 'is-current' : ''}${check.changesSince > 0 || check.outcome === 'unknown' ? ' is-stale' : ''}`}><StatusMark state={checkMark(check.outcome)} size={14} /><span>{CHECK_LABELS[check.kind]} · {checkState(check)}</span></div>)}
         {readiness.reviews.map((review) => <div key={review.agent} className={`${review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? '' : 'is-failed'}${review.changesSince > 0 ? ' is-stale' : ''}`}><StatusMark state={review.verdict === 'PASS' || review.verdict === 'ADVISORY' ? 'done' : 'failed'} size={14} /><span>{REVIEW_LABELS[review.agent]} · {reviewState(review)}</span></div>)}
-        <div className={git.files.length ? 'is-current' : ''}><span className="status-mark-spacer" aria-hidden="true" /><span>{deliveryLine(git)}</span></div>
-        <div><span className="status-mark-spacer" aria-hidden="true" /><span>{toolCount} tool {toolCount === 1 ? 'call' : 'calls'} recorded</span></div>
+        <div className={git.files.length ? 'is-current' : ''}><span className={`status-mark-spacer ${stylex.props(inspectorStyles.statusMarkSpacer).className ?? ""}`} aria-hidden="true" /><span>{deliveryLine(git)}</span></div>
+        <div><span className={`status-mark-spacer ${stylex.props(inspectorStyles.statusMarkSpacer).className ?? ""}`} aria-hidden="true" /><span>{toolCount} tool {toolCount === 1 ? 'call' : 'calls'} recorded</span></div>
       </div></section>
-      {automations.length ? <section className="summary-section"><h3>Automations</h3><div className="summary-automation-list">
+      {automations.length ? <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}><h3>Automations</h3><div className={`summary-automation-list ${stylex.props(inspectorStyles.summaryAutomationList).className ?? ""}`}>
         {automations.slice(0, 2).map((task) => <button type="button" key={task.id} onClick={() => onOpenAutomation(task.id)}>
-          <span className="summary-automation-icon"><CalendarDots size={14}/></span><span><strong>{task.title}</strong><small>{task.status}{task.nextRunAt ? ` · Next ${formatRelative(task.nextRunAt)}` : ''}</small></span>
+          <span className={`summary-automation-icon ${stylex.props(inspectorStyles.summaryAutomationIcon).className ?? ""}`}><CalendarDots size={14}/></span><span><strong>{task.title}</strong><small>{task.status}{task.nextRunAt ? ` · Next ${formatRelative(task.nextRunAt)}` : ''}</small></span>
         </button>)}
         {automations.length > 2 ? <button type="button" className="summary-automation-more" onClick={() => onOpenAutomation(automations[0].id)}>View all {automations.length} automations</button> : null}
       </div></section> : null}

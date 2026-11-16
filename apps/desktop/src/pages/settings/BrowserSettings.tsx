@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
 import { ArrowCounterClockwise } from '@/components/icons'
 import { ApexButton } from '@/components/ui'
 import type { SettingsSectionProps } from './contracts'
@@ -13,7 +15,7 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
   return (
     <>
       <header><h1>Browser</h1><p>Manage the isolated profile used inside Apex.</p></header>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Startup</h2>
         <DraftSettingField
           id="browser-home"
@@ -26,9 +28,9 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
         />
         <SettingsToggle checked={settings.browserAskForDownloads} onChange={(browserAskForDownloads) => { void onUpdate({ browserAskForDownloads }) }} label="Ask where to save downloads" description="Choose a location before every browser download." />
       </section>
-      <section className="settings-group">
+      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Browser data</h2>
-        <div className="danger-row">
+        <div className={`danger-row ${stylex.props(settingsStyles.dangerRow).className ?? ""}`}>
           <span><strong>Clear browsing data</strong><small>Remove cookies, cache, permissions, and browsing history.</small></span>
           <ApexButton icon={<ArrowCounterClockwise size={13} />} onClick={onRequestReset}>Clear data</ApexButton>
         </div>

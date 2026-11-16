@@ -1,3 +1,6 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { createContext, memo, useContext, useId, useState } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
 import { isLiveSpecialist, specialistOutcome, specialistStatusLabel, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
@@ -111,35 +114,35 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const verb = VERBS[part.name]
   const singleTarget = onOpen && targets.length === 1 ? targets[0] : undefined
 
-  return <div className={`subagent-lane is-${state}`}>
+  return <div className={[`subagent-lane is-${state}`, stylex.props(transcriptStyles.subagentLane, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "running")) && transcriptStyles.subagentLaneIsRunning, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "error")) && transcriptStyles.subagentLaneIsError, (((specialist?.status ?? (part.name === 'task_chain' && targets.length ? chainStatus(targets) : pending || background ? 'running' : latest.result?.isError ? 'error' : 'done')) === "waiting")) && transcriptStyles.subagentLaneIsWaiting).className].filter(Boolean).join(' ')}>
     <div
-      className={`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`}
+      className={[`subagent-lane__summary${singleTarget ? ' is-clickable' : ''}`, stylex.props(transcriptStyles.subagentLaneSummary).className].filter(Boolean).join(' ')}
       onClick={onOpen && singleTarget ? () => onOpen(singleTarget.id) : undefined}
     >
-      <span className="subagent-lane__status" aria-hidden="true">{isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
-      {verb ? <span className="subagent-lane__verb">{verb}</span> : null}
+      <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ""}`} aria-hidden="true">{isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}</span>
+      {verb ? <span className={`subagent-lane__verb ${stylex.props(transcriptStyles.subagentLaneVerb).className ?? ""}`}>{verb}</span> : null}
       {roles.length
-        ? roles.map((role, index) => <span key={`${role}-${index}`} className="subagent-lane__role">{role}</span>)
-        : <span className="subagent-lane__role">agent</span>}
-      {taskId ? <code className="subagent-lane__id">{taskId}</code> : null}
-      {mission ? <span className="subagent-lane__mission" title={mission}>{mission}</span> : <span className="subagent-lane__mission" />}
-      <span className="subagent-lane__state">{stateLabel}</span>
+        ? roles.map((role, index) => <span key={`${role}-${index}`} className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ""}`}>{role}</span>)
+        : <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ""}`}>agent</span>}
+      {taskId ? <code className={`subagent-lane__id ${stylex.props(transcriptStyles.subagentLaneId).className ?? ""}`}>{taskId}</code> : null}
+      {mission ? <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ""}`} title={mission}>{mission}</span> : <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ""}`} />}
+      <span className={`subagent-lane__state ${stylex.props(transcriptStyles.subagentLaneState).className ?? ""}`}>{stateLabel}</span>
     </div>
-    {onOpen && targets.length > 0 ? <div className="subagent-lane__links">{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
-    {rail.length || report ? <ul className="subagent-lane__tree">
+    {onOpen && targets.length > 0 ? <div className={`subagent-lane__links ${stylex.props(transcriptStyles.subagentLaneLinks).className ?? ""}`}>{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
+    {rail.length || report ? <ul className={`subagent-lane__tree ${stylex.props(transcriptStyles.subagentLaneTree).className ?? ""}`}>
       {rail.map((line, index) => <li key={`${index}-${line}`} className={highlights.length ? undefined : 'is-pending'}>
-        <span className="subagent-lane__branch" aria-hidden="true">{index === rail.length - 1 && !report ? '╰─' : '├─'}</span>
-        <span className="subagent-lane__leaf">{line}</span>
+        <span className={`subagent-lane__branch ${stylex.props(transcriptStyles.subagentLaneBranch).className ?? ""}`} aria-hidden="true">{index === rail.length - 1 && !report ? '╰─' : '├─'}</span>
+        <span className={`subagent-lane__leaf ${stylex.props(transcriptStyles.subagentLaneLeaf).className ?? ""}`}>{line}</span>
       </li>)}
       {report ? <li>
-        <span className="subagent-lane__branch" aria-hidden="true">╰─</span>
-        <button type="button" className="subagent-lane__report-toggle" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-          {open ? 'Hide full report' : 'View full report'}<CaretRight className="disclosure-caret" size={11} />
+        <span className={`subagent-lane__branch ${stylex.props(transcriptStyles.subagentLaneBranch).className ?? ""}`} aria-hidden="true">╰─</span>
+        <button type="button" className={`subagent-lane__report-toggle ${stylex.props(transcriptStyles.subagentLaneReportToggle).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
+          {open ? 'Hide full report' : 'View full report'}<CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={11} />
         </button>
       </li> : null}
     </ul> : null}
-    {open && report ? <div className="subagent-lane__body" id={bodyId}>
-      <MarkdownText text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} />
+    {open && report ? <div className={`subagent-lane__body ${stylex.props(transcriptStyles.subagentLaneBody).className ?? ""}`} id={bodyId}>
+      <MarkdownText variant="muted" text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} />
     </div> : null}
   </div>
 })
@@ -167,17 +170,17 @@ export const TodoStep = memo(function TodoStep({ part }: { part: ToolCall }) {
   const done = todos.filter((todo) => todo.status === 'completed').length
   const active = todos.find((todo) => todo.status === 'in_progress')
   const finished = todos.length > 0 && done === todos.length
-  return <div className={`todo-step ${finished ? 'is-finished' : ''}`}>
-    <button type="button" className="todo-step__summary" disabled={!todos.length} aria-expanded={todos.length ? open : undefined} aria-controls={todos.length && open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className="todo-step__count">{done}/{todos.length} done</span>
-      <span className="todo-step__label">{active?.content ?? (finished ? 'All steps complete' : 'Plan updated')}</span>
-      {todos.length ? <CaretRight className="disclosure-caret" size={13} /> : null}
+  return <div className={[`todo-step ${finished ? 'is-finished' : ''}`, stylex.props(transcriptStyles.todoStep).className].filter(Boolean).join(' ')}>
+    <button type="button" className={`todo-step__summary ${stylex.props(transcriptStyles.todoStepSummary).className ?? ""}`} disabled={!todos.length} aria-expanded={todos.length ? open : undefined} aria-controls={todos.length && open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
+      <span className={`todo-step__count ${stylex.props(transcriptStyles.todoStepCount).className ?? ""}`}>{done}/{todos.length} done</span>
+      <span className={`todo-step__label ${stylex.props(transcriptStyles.todoStepLabel).className ?? ""}`}>{active?.content ?? (finished ? 'All steps complete' : 'Plan updated')}</span>
+      {todos.length ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
-    {open ? <ol className="todo-step__list" id={listId}>
+    {open ? <ol className={`todo-step__list ${stylex.props(transcriptStyles.todoStepList).className ?? ""}`} id={listId}>
       {todos.map((todo, index) => <li key={`${index}-${todo.content}`} className={`is-${todo.status}`}>
-        <span className="todo-step__mark" aria-hidden="true">{todo.status === 'completed' ? <Check size={10} /> : null}</span>
+        <span className={`todo-step__mark ${stylex.props(transcriptStyles.todoStepMark).className ?? ""}`} aria-hidden="true">{todo.status === 'completed' ? <Check size={10} /> : null}</span>
         <span>{todo.content}</span>
-        <span className="sr-only">{todo.status.replace('_', ' ')}</span>
+        <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{todo.status.replace('_', ' ')}</span>
       </li>)}
     </ol> : null}
   </div>

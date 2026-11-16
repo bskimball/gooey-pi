@@ -1,3 +1,5 @@
+import * as stylex from '@stylexjs/stylex'
+import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { createContext, useContext, useEffect, useState, type ComponentProps } from 'react'
 import { TranscriptImage } from './transcript/TranscriptImage'
 
@@ -68,15 +70,15 @@ export function WorkspaceImage({ src, alt }: ComponentProps<'img'>) {
   }
 
   if (!canReadWorkspace) {
-    return <span className="markdown-image-placeholder">[Image: {label}]</span>
+    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Image: {label}]</span>
   }
 
   if (!resolved || resolved.key !== requestKey || resolved.status === 'loading') {
-    return <span className="markdown-image-placeholder">[Loading image: {label}]</span>
+    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Loading image: {label}]</span>
   }
 
   if (resolved.status === 'error' || !resolved.dataUrl) {
-    return <span className="markdown-image-placeholder">[Image unavailable: {label}]</span>
+    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Image unavailable: {label}]</span>
   }
 
   return <TranscriptImage source={resolved.dataUrl} alt={label} />

@@ -1,3 +1,5 @@
+import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import {
   useEffect,
   useLayoutEffect,
@@ -114,16 +116,16 @@ export function ActivityReplyBox({
 
   return (
     <form
-      className={`activity-reply ${!enabled ? 'activity-reply--disabled' : ''} ${feedback !== 'idle' ? `activity-reply--${feedback}` : ''}`}
+      className={[`activity-reply ${!enabled ? 'activity-reply--disabled' : ''} ${feedback !== 'idle' ? `activity-reply--${feedback}` : ''}`, stylex.props(activityStyles.activityReply).className].filter(Boolean).join(' ')}
       aria-label={isRunning ? 'Steer session' : 'Reply to session'}
       onSubmit={handleFormSubmit}
     >
-      <div className="activity-reply__box">
+      <div className={`activity-reply__box ${stylex.props(activityStyles.activityReplyBox).className ?? ""}`}>
         <textarea
           {...replyInputStyleProps}
           ref={assignRef}
           rows={1}
-          className={`activity-reply__input ${replyInputStyleProps.className ?? ''}`.trim()}
+          className={`activity-reply__input ${stylex.props(activityStyles.activityReplyInput, replyInputStyles.input).className ?? ""}`}
           value={draft}
           disabled={!enabled || feedback === 'sending'}
           placeholder={placeholder}
@@ -133,7 +135,7 @@ export function ActivityReplyBox({
           }}
           onKeyDown={handleKeyDown}
         />
-        <ApexButton
+        <ApexButton xstyle={[activityStyles.activityReplySend]}
           type="submit"
           variant="primary"
           compact
@@ -142,7 +144,7 @@ export function ActivityReplyBox({
           aria-label={isRunning ? 'Send steer' : 'Send follow-up'}
         >
           {feedback === 'sending' ? (
-            <CircleNotch className="spin" size={12} />
+            <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={12} />
           ) : (
             <ArrowUp size={12} weight="bold" />
           )}
@@ -150,21 +152,21 @@ export function ActivityReplyBox({
         </ApexButton>
       </div>
 
-      <div className="activity-reply__footer">
+      <div className={`activity-reply__footer ${stylex.props(activityStyles.activityReplyFooter).className ?? ""}`}>
         {feedback === 'sent' ? (
-          <span className="activity-reply__status activity-reply__status--sent" role="status">
+          <span className={`activity-reply__status activity-reply__status--sent ${stylex.props(activityStyles.activityReplyStatus, activityStyles.activityReplyStatusSent).className ?? ""}`} role="status">
             <Check size={11} />
             <span>{isRunning ? 'Steer sent' : 'Follow-up queued'}</span>
           </span>
         ) : feedback === 'failed' ? (
-          <span className="activity-reply__status activity-reply__status--failed" role="status">
+          <span className={`activity-reply__status activity-reply__status--failed ${stylex.props(activityStyles.activityReplyStatus, activityStyles.activityReplyStatusFailed).className ?? ""}`} role="status">
             <WarningCircle size={11} />
             <span>Delivery failed — draft preserved</span>
           </span>
         ) : !enabled ? (
-          <span className="activity-reply__hint">Open session to continue</span>
+          <span className={`activity-reply__hint ${stylex.props(activityStyles.activityReplyHint).className ?? ""}`}>Open session to continue</span>
         ) : (
-          <span className="activity-reply__hint">
+          <span className={`activity-reply__hint ${stylex.props(activityStyles.activityReplyHint).className ?? ""}`}>
             <kbd>Enter</kbd> {isRunning ? 'steer' : 'send'} · <kbd>Shift+Enter</kbd> newline
           </span>
         )}
