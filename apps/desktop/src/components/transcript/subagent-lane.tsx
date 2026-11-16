@@ -4,7 +4,7 @@ import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { createContext, memo, useContext, useId, useState, type ReactNode } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
-import { isLiveSpecialist, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
+import { isLiveSpecialist, shortModelName, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
 import { CaretRight, Check, Robot } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import type { MessagePart } from '@/types/api'
@@ -236,6 +236,14 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const isClickable = canExpand || Boolean(singleTarget)
   const hasBody = Boolean(report) || (Boolean(onOpen) && targets.length > 0)
   const statusKey = isLiveSpecialist(state) ? 'running' : state
+  // Fusion workers all share one role, so the task id is what tells parallel lanes apart.
+  const workerName = taskId && /^task_\d+$/.test(taskId) && part.name !== 'task_chain' ? taskId : undefined
+  const resultWorker = workerDetails(latest.result?.details ?? result?.details)
+  const models = part.name === 'task_chain'
+    ? [...new Set(targets.flatMap((target) => target.model ? [target.model] : []))]
+    : [specialist?.model ?? text(resultWorker?.model) ?? text(args.model)].filter((model): model is string => Boolean(model))
+  const thinking = part.name === 'task_chain' ? undefined : specialist?.thinking ?? text(resultWorker?.thinking) ?? text(args.thinking)
+  const modelLabel = models.length ? `${models.map((model) => shortModelName(model) ?? model).join(', ')}${thinking ? ` · ${thinking}` : ''}` : undefined
 
   const handleSummaryClick = () => {
     if (canExpand) {
@@ -265,8 +273,14 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
           {isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}
         </MorphInline>
       </span>
-      <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ''}`} title={taskId || undefined}>{roleLabel}</span>
-      <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ''}`} title={summary}>{summary ?? ''}</span>
+      <span className={`subagent-lane__main ${stylex.props(transcriptStyles.subagentLaneMain).className ?? ''}`}>
+        <span className={`subagent-lane__identity ${stylex.props(transcriptStyles.subagentLaneIdentity).className ?? ''}`}>
+          <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ''}`} title={taskId || undefined}>{roleLabel}</span>
+          {workerName ? <span className={`subagent-lane__name ${stylex.props(transcriptStyles.subagentLaneMeta).className ?? ''}`}>{workerName}</span> : null}
+          {modelLabel ? <span className={`subagent-lane__model ${stylex.props(transcriptStyles.subagentLaneMeta, transcriptStyles.subagentLaneModel).className ?? ''}`} title={models.join(', ')}>{modelLabel}</span> : null}
+        </span>
+        {summary ? <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ''}`} title={summary}>{summary}</span> : null}
+      </span>
       {onOpen && singleTarget ? (
         <button
           type="button"

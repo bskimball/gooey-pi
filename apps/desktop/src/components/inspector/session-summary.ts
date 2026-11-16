@@ -78,9 +78,15 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
       }
     }
   }
-  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity }): PiSpecialistSummary =>
-    activity ? { id, agent, mission, status, activity } : { id, agent, mission, status },
-  )
+  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity, model, thinking }): PiSpecialistSummary => ({
+    id,
+    agent,
+    mission,
+    status,
+    ...(activity ? { activity } : {}),
+    ...(model ? { model } : {}),
+    ...(thinking ? { thinking } : {}),
+  }))
   return { todos, specialists }
 }
 

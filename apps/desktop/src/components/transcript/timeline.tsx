@@ -2,6 +2,7 @@ import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layo
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, memo, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import {
@@ -497,35 +498,18 @@ function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools:
   return status ?? 'Working'
 }
 
-/** The live run ledger: the turn's chronological stream (`children`) with the status row beneath it. */
+/**
+ * The live run ledger: the turn's chronological stream (`children`). The user turn header already shows
+ * "Running" with elapsed time and the work group names the live step, so the status is screen-reader only.
+ */
 export function WorkDisclosure({ message, showReasoning, showTools, children }: { message: TranscriptMessage; showReasoning: boolean; showTools: boolean; children?: ReactNode }) {
-  const instant = useInstantMotion()
   const activity = showTools ? activeWorkLabel(message.parts) : undefined
   const statusText = activity ?? liveWorkStatus(message.parts, showReasoning, showTools)
-  const statusClass = activity ? `work-disclosure__activity ${stylex.props(transcriptStyles.workDisclosureActivity).className ?? ""}` : 'work-disclosure__verb'
-  const statusKey = `${activity ? 'activity' : 'verb'}:${statusText}`
   return <section className={`work-disclosure is-running ${stylex.props(transcriptStyles.workDisclosure, transcriptStyles.workDisclosureIsRunning).className ?? ""}`} aria-label="Agent work activity">
     <div className={`work-disclosure__live ${stylex.props(transcriptStyles.workDisclosureLive).className ?? ""}`}>
       {children}
-      <div className={`work-disclosure__status ${stylex.props(transcriptStyles.workDisclosureStatus).className ?? ""}`} role="status">
-        {instant ? (
-          <span className={statusClass} title={activity}>{statusText}</span>
-        ) : (
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span
-              key={statusKey}
-              className={statusClass}
-              title={activity}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4, transition: { duration: 0.11, ease: [0.2, 0, 0, 1] } }}
-              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-            >
-              {statusText}
-            </motion.span>
-          </AnimatePresence>
-        )}
-        <LiveElapsed since={message.startedAt ?? message.timestamp} />
+      <div className={`work-disclosure__status sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} role="status">
+        <span className={activity ? 'work-disclosure__activity' : 'work-disclosure__verb'} title={activity}>{statusText}</span>
       </div>
     </div>
   </section>

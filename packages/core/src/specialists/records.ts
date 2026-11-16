@@ -11,6 +11,8 @@ export interface PiSpecialistSummary {
   mission: string
   status: SpecialistStatus
   activity?: string
+  model?: string
+  thinking?: string
 }
 
 export interface PiSpecialistSession extends PiSpecialistSummary {
@@ -18,8 +20,6 @@ export interface PiSpecialistSession extends PiSpecialistSummary {
   cwd?: string
   instanceId?: string
   sessionFile?: string
-  model?: string
-  thinking?: string
   turns?: number
   maxTurns?: number
   generation?: number

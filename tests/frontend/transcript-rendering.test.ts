@@ -584,6 +584,7 @@ describe('transcript rendering', () => {
         { type: 'toolCall', id: 'scout', name: 'task', args: { agent: 'scout', prompt: 'Map the transcript code' } },
         { type: 'toolResult', name: 'task', text: 'Found it.', details: { finalReport: 'Transcript lives in messages.tsx' } },
         { type: 'toolCall', id: 'build', name: 'task_start', args: { agent: 'machinist', prompt: 'Build the lane' } },
+        { type: 'toolResult', name: 'task_start', text: 'started task_3\nagent: machinist', details: { worker: { id: 'task_3', agent: 'machinist', model: 'muse-code/muse-ember-1.0', thinking: 'xhigh', lifecycle: 'running' } } },
       ],
     }], true)
 
@@ -604,6 +605,10 @@ describe('transcript rendering', () => {
     const missions = [...doc.querySelectorAll('.subagent-lane__mission')].map((element) => element.textContent)
     expect(missions).toContain('Transcript lives in messages.tsx')
     expect(missions).toContain('Build the lane')
+    expect([...doc.querySelectorAll('.subagent-lane__name')].map((element) => element.textContent)).toEqual(['task_3'])
+    const model = doc.querySelector('.subagent-lane__model')
+    expect(model?.textContent).toBe('muse-ember-1.0 · xhigh')
+    expect(model?.getAttribute('title')).toBe('muse-code/muse-ember-1.0')
   })
 
   it('folds a task_wait into the lane of the task it started and summarizes the settled outcome on one line', () => {
@@ -768,6 +773,11 @@ describe('transcript rendering', () => {
     try {
       const runningStartedAt = now.getTime() - 65_000
       const running = render([{
+        id: 'live-prompt',
+        role: 'user',
+        timestamp: runningStartedAt,
+        parts: [{ type: 'text', text: 'Keep going.' }],
+      }, {
         id: 'live-active',
         role: 'assistant',
         timestamp: runningStartedAt,
@@ -775,7 +785,8 @@ describe('transcript rendering', () => {
         streaming: true,
         parts: [{ type: 'thinking', text: 'Still thinking.' }],
       }], true)
-      expect(running).toContain('live-elapsed')
+      // Elapsed time lives on the prompt's turn header; the work disclosure no longer repeats it.
+      expect(running.match(/live-elapsed/g)).toHaveLength(1)
       expect(running).toContain('1m05s')
 
       const finishedStartedAt = now.getTime() - 66_000

@@ -37,7 +37,6 @@
 .work-disclosure__button:hover { color: var(--text); }
 /* Live status reads as a quiet activity row: the elapsed clock only; the composer ribbon carries the motion. */
 .work-disclosure.is-running .work-timeline:empty { display: none; }
-.work-disclosure.is-running .work-timeline:empty+.work-disclosure__status { margin-top: 0; }
 /* Live elapsed clock on running work rows: tabular digits keep the 1-second
    updates from shifting adjacent text. */
 .timeline-page__body:not([hidden]) { display: flex; flex-direction: column; gap: 12px; }
