@@ -117,20 +117,20 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
     <div className={`apex-session-picker ${stylex.props(webview.picker).className}`} ref={rootRef} onKeyDown={handleKeyDown}>
       <ApexButton
         ref={triggerRef}
-        variant="quiet"
+        variant="secondary"
         compact
         xstyle={[styles.chip, webview.pickerTrigger, open && webview.pickerOpen]}
-        className="permissions-chip apex-session-picker__trigger"
+        className="apex-session-picker__trigger"
         aria-label={`Sessions: ${activeTitle}`}
         title={`Sessions: ${activeTitle}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         onClick={() => send({ type: 'TOGGLE' })}
+        icon={<ClockCounterClockwise size={14} aria-hidden="true" />}
+        endIcon={<CaretDown className={`${open ? 'is-open' : ''} ${stylex.props(webview.pickerIcon, open && webview.pickerCaretOpen).className}`} size={11} aria-hidden="true" />}
       >
-        <ClockCounterClockwise {...stylex.props(webview.pickerIcon)} size={14} />
         <span className={`apex-session-picker__trigger-label ${stylex.props(webview.pickerLabel).className}`}>{activeTitle}</span>
-        <CaretDown className={`${open ? 'is-open' : ''} ${stylex.props(webview.pickerIcon, open && webview.pickerCaretOpen).className}`} size={11} aria-hidden="true" />
       </ApexButton>
       {open ? (
         <div
@@ -163,7 +163,7 @@ export function SessionPicker({ status, busy, sessionName, onNotice }: SessionPi
                 ? `Open in ${session.owner}`
                 : preview && preview !== title
                   ? preview
-                  : preview || `${session.messageCount} ${session.messageCount === 1 ? 'message' : 'messages'}`
+                  : `${session.messageCount} ${session.messageCount === 1 ? 'message' : 'messages'}`
               return (
                 <div
                   key={session.id || session.path}

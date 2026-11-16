@@ -606,7 +606,10 @@ describe('VS Code webview sub-agent inspection', () => {
           posted.push(message)
           if (message.type === 'sessions:list') {
             window.dispatchEvent(new MessageEvent('message', {
-              data: { type: 'sessions:list', requestId: message.requestId, sessions: [], currentPath: '/repo/session.jsonl' },
+              data: {
+                type: 'sessions:list', requestId: message.requestId, currentPath: '/repo/session.jsonl',
+                sessions: [{ id: 'session', path: '/repo/session.jsonl', title: 'Inspect extension layout', preview: 'Inspect extension layout', messageCount: 3, updatedAt: Date.now() }],
+              },
             }))
           } else if (message.type === 'sessions:read') {
             window.dispatchEvent(new MessageEvent('message', {
@@ -667,6 +670,13 @@ describe('VS Code webview sub-agent inspection', () => {
         },
       }))
     })
+
+    const sessionTrigger = container.querySelector<HTMLButtonElement>('.apex-session-picker__trigger')!
+    await act(async () => { sessionTrigger.click() })
+    const sessionRow = container.querySelector<HTMLButtonElement>('.apex-session-picker__list [role="option"]')!
+    expect(sessionRow.querySelector('.session-row__title')?.textContent).toBe('Inspect extension layout')
+    expect(sessionRow.querySelector('.session-row__meta')?.textContent).toBe('3 messages')
+    await act(async () => { sessionTrigger.click() })
 
     const toolbarTrigger = container.querySelector<HTMLButtonElement>('.apex-agents-trigger')!
     expect(toolbarTrigger).not.toBeNull()

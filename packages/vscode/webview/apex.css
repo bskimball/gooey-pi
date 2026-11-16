@@ -1,6 +1,31 @@
-/* Global reset and active-editor theme tokens. Component styles live in webview.stylex.ts. */
+/* Active-editor tokens and webview overrides for shared desktop styles. */
 @layer apex-responsive {
 body { padding: 0; }
+
+.apex-shell .conversation-bottom-dock > .composer-wrap {
+  inset: auto;
+  width: 100%;
+}
+
+.apex-shell .composer {
+  border-color: var(--vscode-input-border, color-mix(in srgb, var(--text) 28%, var(--surface-raised)));
+}
+
+.apex-shell .composer:focus-within,
+.apex-shell .composer:has(.composer-drop-feedback) {
+  border-color: var(--focus);
+}
+
+/* These rows have no desktop sidebar actions to reveal on hover. */
+.apex-session-picker__list .session-row-wrap:hover .session-row,
+.apex-session-picker__list .session-row-wrap:focus-within .session-row {
+  padding-right: 8px;
+}
+
+.apex-session-picker__list .session-row-wrap:hover .session-row__meta,
+.apex-session-picker__list .session-row-wrap:focus-within .session-row__meta {
+  visibility: visible;
+}
 
 body[class*='vscode-'] {
   --canvas: var(--vscode-sideBar-background, var(--vscode-editor-background, #1e1e1e));

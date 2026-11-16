@@ -173,18 +173,18 @@ export function App() {
         {state?.connection === 'desktop' ? <span className={`apex-toolbar__workspace ${stylex.props(webview.workspace).className}`} title="Desktop owns the runtime. Prompts and controls go to the same session.">Desktop connected</span> : null}
         {state?.cwd ? <span className={`apex-toolbar__workspace ${stylex.props(webview.workspace).className}`} title={state.cwd}>{folderName(state.cwd)}</span> : null}
         <ApexButton
-          variant="quiet"
+          variant="secondary"
           compact
           xstyle={[styles.chip, webview.agentsTrigger, specialistsOpen && webview.agentsActive, runningSpecialists > 0 && webview.agentsRunning]}
-          className={`permissions-chip apex-agents-trigger${specialistsOpen ? ' is-active' : ''}${runningSpecialists > 0 ? ' is-running' : ''}`}
+          className={`apex-agents-trigger${specialistsOpen ? ' is-active' : ''}${runningSpecialists > 0 ? ' is-running' : ''}`}
           aria-pressed={specialistsOpen}
           aria-label={specialists.length ? `Sub-agents (${specialists.length})` : 'Sub-agents'}
           title={specialists.length ? `${specialists.length} sub-${specialists.length === 1 ? 'agent' : 'agents'} in this session` : 'View sub-agents in this session'}
           onClick={() => setSpecialistsOpen((open) => !open)}
+          icon={runningSpecialists > 0 ? <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={13} aria-hidden="true" /> : <Robot size={13} aria-hidden="true" />}
+          endIcon={specialists.length > 0 ? <Badge label={String(specialists.length)} className="apex-agents-trigger__count" xstyle={[webview.agentsCount, runningSpecialists > 0 && webview.agentsRunningCount]} /> : null}
         >
-          {runningSpecialists > 0 ? <CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={13} /> : <Robot size={13} />}
           <span className={`apex-agents-trigger__label ${stylex.props(webview.agentsLabel).className}`}>Agents</span>
-          {specialists.length > 0 ? <Badge label={String(specialists.length)} className="apex-agents-trigger__count" xstyle={[webview.agentsCount, runningSpecialists > 0 && webview.agentsRunningCount]} /> : null}
         </ApexButton>
       </header>
       <div className={`workbench__content ${stylex.props(workbenchStyles.workbenchContent).className ?? ""}`}>

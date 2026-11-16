@@ -2,8 +2,6 @@
 
 ## Commands
 
-Run from repo root (Node `24.21.0` via `.nvmrc`; run `nvm use` if `node -v` differs):
-
 ```bash
 npm run dev                  # build browser-agent + launch electron-vite dev
 npm run build                # build desktop app
@@ -58,7 +56,3 @@ Keep handwritten production files `<= 750` lines when practical; split by cohesi
 - v5 API: `setup`, `assign`, `initialTransition`, `transition`, `createActor`.
 - Use pure `initialTransition` / `transition` for deterministic state reducers (e.g. `apps/desktop/src/App.tsx`, `packages/core/src/browser/extension-bridge.ts`, `packages/vscode/src/pi-rpc.ts`).
 - Use `useMachine` / `useActorRef` / `useSelector` from `@xstate/react` for stateful UI/hooks.
-
-## pstack
-
-Vendored under `.agents/skills/pstack/` with rules in `.cursor/rules/pstack-models.mdc`. If `~/.cursor/rules/pstack-models.mdc` is missing, copy it there before running pstack skills.
