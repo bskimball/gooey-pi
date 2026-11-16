@@ -2,11 +2,6 @@
 	min-width: 0;
 	flex: 1;
 	width: auto;
-	height: 28px;
-	border: 0;
-	outline: 0;
-	background: transparent;
-	font-size: var(--fs-ui);
 }
 .tree-root strong {
 	font-size: var(--fs-ui);

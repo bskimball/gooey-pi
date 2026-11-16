@@ -1,13 +1,13 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
-import { useId, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { Brain, CaretRight, WarningCircle, Wrench } from '../icons'
 import type { MessagePart } from '@/types/api'
 import { StatusMark } from '../activity/StatusMark'
 import { isEditTool } from './edit-diff'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, type SubagentPairs } from './subagent-lane'
-import { classifyTool, isExploreTool, SEARCH_TOOLS, WorkTimeline } from './timeline'
+import { activeWorkLabel, classifyTool, isExploreTool, SEARCH_TOOLS, WorkTimeline } from './timeline'
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 
@@ -17,9 +17,10 @@ interface WorkGroupProps {
   showTools: boolean
   /** The turn is still running; pending calls keep their live state. */
   streaming: boolean
-  /** This is the turn's newest work: show only the current step, newest replacing older. */
+  /** This is the turn's newest work: summarize the current step without replacing narrative. */
   live: boolean
   subagents: SubagentPairs
+  presentation?: 'summary' | 'current-step'
 }
 
 /** Indices of the parts that render as their own timeline row. */
@@ -101,33 +102,49 @@ function summarizeWork(parts: MessagePart[], steps: number[], streaming: boolean
   return { label: sentence[0].toUpperCase() + sentence.slice(1), failed, running, thoughtsOnly: thoughts > 0 && phrases.length === 1 }
 }
 
-/**
- * One run of agent work between narrative. Live, it shows the step in progress (each new step replaces the
- * last) under a summary of the finished ones; settled, it is a single summary row that expands to the full timeline.
- */
-export function WorkGroup({ parts, showReasoning, showTools, streaming, live, subagents }: WorkGroupProps) {
+/** A tool-only disclosure between narrative boundaries; replies never enter its scroll region. */
+export function WorkGroup({ parts, showReasoning, showTools, streaming, live, subagents, presentation = 'summary' }: WorkGroupProps) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const following = useRef(true)
+  useLayoutEffect(() => {
+    const body = bodyRef.current
+    if (!body || !open || presentation !== 'summary') return
+    const follow = () => {
+      if (following.current && live) body.scrollTop = body.scrollHeight
+    }
+    follow()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(follow)
+    if (body.firstElementChild) observer.observe(body.firstElementChild)
+    return () => observer.disconnect()
+  }, [open, live, parts, presentation])
   const steps = stepIndices(parts, showReasoning, showTools, subagents.absorbed)
   const timeline = (slice: MessagePart[]) => <WorkTimeline parts={slice} showReasoning={showReasoning} showTools={showTools} streaming={streaming} subagents={subagents} />
   if (!steps.length) return timeline(parts)
 
-  const current = live ? steps.at(-1) : undefined
+  const current = presentation === 'current-step' && live ? steps.at(-1) : undefined
   const summarized = current === undefined ? steps : steps.slice(0, -1)
   const summary = summarizeWork(parts, summarized, streaming)
-  const state = summary.failed ? 'is-error' : summary.running ? 'is-running' : 'is-done'
-  const currentSlice = current === undefined ? [] : parts.slice(current)
+  const currentLabel = live && presentation === 'summary' ? activeWorkLabel(showTools ? parts : []) : undefined
+  const latestStep = steps.at(-1)
+  const label = currentLabel ?? (presentation === 'summary' && live && latestStep !== undefined && parts[latestStep].type === 'thinking' ? 'Thinking' : summary.label)
+  const state = summary.failed ? 'is-error' : summary.running || live ? 'is-running' : 'is-done'
   const foldedImages = open ? [] : partImages(current === undefined ? parts : parts.slice(0, current))
 
   return <div className={[`work-group ${state}${live ? ' is-live' : ''}`, stylex.props(transcriptStyles.workGroup).className].filter(Boolean).join(' ')}>
-    {summarized.length ? <button type="button" className={`work-group__summary ${stylex.props(transcriptStyles.workGroupSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen((value) => !value)}>
-      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{summary.running ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}</span>
-      <span className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`}>{summary.label}</span>
+    {summarized.length > 0 ? <button type="button" className={`work-group__summary ${stylex.props(transcriptStyles.workGroupSummary).className ?? ""}`} aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => { following.current = true; setOpen((value) => !value) }}>
+      <span className={`activity-line__icon ${stylex.props(transcriptStyles.activityLineIcon).className ?? ""}`}>{summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}</span>
+      <span key={label} className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`} title={label}>{label}</span>
       {summary.failed ? <span className={`work-group__failed ${stylex.props(transcriptStyles.workGroupFailed).className ?? ""}`}><WarningCircle size={12} /> {summary.failed} failed</span> : null}
       <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
     </button> : null}
-    {open ? <div className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody).className ?? ""}`} id={bodyId}>{timeline(parts)}</div> : null}
+    {open ? <div ref={bodyRef} className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody, presentation === 'summary' && transcriptStyles.workGroupHistory).className ?? ""}`} data-tool-history={presentation === 'summary' ? '' : undefined} id={bodyId} role="region" aria-label="Tool activity history" tabIndex={0} onScroll={(event) => {
+      const body = event.currentTarget
+      following.current = body.scrollHeight - body.scrollTop - body.clientHeight <= 1
+    }}>{timeline(parts)}</div> : null}
     <ImageParts images={foldedImages} />
-    {!open && currentSlice.length ? <div className="work-group__current">{timeline(currentSlice)}</div> : null}
+    {!open && current !== undefined ? <div className="work-group__current">{timeline(parts.slice(current))}</div> : null}
   </div>
 }

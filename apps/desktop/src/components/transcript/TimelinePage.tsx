@@ -25,7 +25,7 @@ export function TimelinePage({ recent, start, count, children }: { recent: boole
     }
     if (!retained) return
     const body = bodyRef.current
-    const scroller = body?.closest('.scroll-area')
+    const scroller = body?.closest('[data-tool-history], .scroll-area')
     if (body && scroller) {
       const bodyRect = body.getBoundingClientRect()
       const viewport = scroller.getBoundingClientRect()

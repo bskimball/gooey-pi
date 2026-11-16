@@ -363,7 +363,7 @@ export function FilesPanel({
     <div className={`files-panel ${stylex.props(filesPanelStyles.filesPanel).className ?? ""}`}>
       {selectedFile ? <CurrentFilePreview key={`${selectedFile.id}:${project.harness}`} node={selectedFile} harness={project.harness} onOpen={onOpen} onClose={() => setSelectedFile(null)} /> : null}
       <div className={`files-search ${stylex.props(filesPanelStyles.filesSearch).className ?? ""}`}>
-        <TextInput label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
+        <TextInput type="search" size="sm" label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
         {!isSearching && allDirIds.size > 0 ? (
           expandedIds.size > 0 ? (
             <IconButton size="small" label="Collapse all folders" onClick={collapseAll}>

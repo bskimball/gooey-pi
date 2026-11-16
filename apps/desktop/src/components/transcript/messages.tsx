@@ -19,7 +19,7 @@ import { PiMark } from '../ui'
 import { InlineText } from './syntax'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
-import { formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
+import { classifyTool, formatWorkedDuration, LiveElapsed, LiveWorkVerb, ThinkingDots, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 import { WorkGroup } from './work-group'
 import { ContextExcerpt } from '../ContextExcerpt'
@@ -46,7 +46,7 @@ function isPinnedPart(parts: MessagePart[], index: number): boolean {
   const callIndex = parts[index].type === 'toolResult' ? index - 1 : index
   const call = parts[callIndex]
   if (call?.type !== 'toolCall') return false
-  if (call.name === 'todo_write') return true
+  if (call.name === 'todo_write' || classifyTool(call.name) === 'question') return true
   if (!isSubagentTool(call.name)) return false
   const result = parts[callIndex + 1]
   return !(call.name === 'task_wait' && result?.type === 'toolResult' && result.isError)
@@ -58,7 +58,7 @@ function isPinnedPart(parts: MessagePart[], index: number): boolean {
  * `condensed` folds each work run into a WorkGroup summary so the chat reads as narrative; plan updates and
  * subagent lanes stay visible between them because they carry progress and the worker's status and report.
  */
-export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false, condensed = false, source = 'Assistant narrative') {
+export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: string, showReasoning: boolean, showTools: boolean, streaming = false, condensed: boolean | 'current-step' = false, source = 'Assistant narrative') {
   const subagents = pairSubagentCalls(parts)
   const groups: Array<{ activity: boolean; pinned: boolean; parts: MessagePart[] }> = []
   parts.forEach((part, index) => {
@@ -71,7 +71,7 @@ export function renderNarrativeWithActivity(parts: MessagePart[], keyPrefix: str
   })
   return groups.map((group, index) => {
     if (group.activity && !group.pinned && condensed) {
-      return <WorkGroup key={`${keyPrefix}-activity-${index}`} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} live={streaming && index === groups.length - 1} subagents={subagents} />
+      return <WorkGroup key={`${keyPrefix}-activity-${index}`} presentation={condensed === 'current-step' ? 'current-step' : 'summary'} parts={group.parts} showReasoning={showReasoning} showTools={showTools} streaming={streaming} live={streaming && index === groups.length - 1} subagents={subagents} />
     }
     // Models often emit bare newlines between tool calls; rendering them leaves an empty gap between work rows.
     if (!group.activity && group.parts.every((part) => part.type === 'text' && !part.text.trim())) return null

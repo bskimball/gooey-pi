@@ -32,6 +32,104 @@ function render(messages: TranscriptMessage[], active = false, showTools = true)
 }
 
 describe('transcript rendering', () => {
+  it('keeps steering replies outside tool history through append, expand, and settlement', async () => {
+    const messages: TranscriptMessage[] = [
+      { id: 'prompt', role: 'user', parts: [{ type: 'text', text: 'Inspect the app' }] },
+      { id: 'before', role: 'assistant', parts: [
+        { type: 'toolCall', id: 'read-before', name: 'read', args: { path: 'before.ts' } },
+        { type: 'toolResult', name: 'read', text: 'Previous output' },
+      ] },
+      { id: 'steer', role: 'user', steerState: 'read', parts: [{ type: 'text', text: 'Focus on accessibility' }] },
+      { id: 'reply', role: 'assistant', streaming: true, parts: [
+        { type: 'text', text: 'I will focus on keyboard navigation.' },
+        { type: 'toolCall', id: 'read-after', name: 'read', args: { path: 'after.ts' } },
+      ] },
+    ]
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    const update = async (active: boolean) => act(async () => root.render(createElement(Transcript, { messages: [...messages], git, active, onOpenChanges: noop, onSuggestion: noop })))
+    try {
+      await update(true)
+      expect(container.querySelectorAll('.work-group')).toHaveLength(2)
+      expect(container.querySelectorAll('.work-group.is-live')).toHaveLength(1)
+      const group = container.querySelector('.work-group.is-live')!
+      expect(group.querySelector('.work-group__label')?.textContent).toBe('Running read: after.ts')
+      expect(group.querySelector('.work-group__body')).toBeNull()
+      await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+      expect(group.querySelector('.work-group__body')?.textContent).toContain('after.ts')
+      expect(group.querySelector('.work-group__body')?.textContent).not.toContain('before.ts')
+      const reply = [...container.querySelectorAll('.prose')].find(node => node.textContent === 'I will focus on keyboard navigation.')!
+      expect(reply).toBeDefined()
+      expect(reply.closest('.work-group')).toBeNull()
+      expect(container.textContent).toContain('Focus on accessibility')
+      messages[3] = { ...messages[3], parts: [...messages[3].parts,
+        { type: 'toolResult', name: 'read', text: 'Keyboard controls found' },
+        { type: 'toolCall', id: 'read-next', name: 'read', args: { path: 'next.ts' } },
+      ] }
+      await update(true)
+      expect(container.querySelector('.work-group.is-live .work-group__summary')?.getAttribute('aria-expanded')).toBe('true')
+      expect(container.textContent).toContain('I will focus on keyboard navigation.')
+      messages[3] = { ...messages[3], streaming: false, parts: [...messages[3].parts,
+        { type: 'toolResult', name: 'read', text: 'Complete', isError: true },
+        { type: 'text', text: 'The keyboard review is complete.' },
+      ] }
+      await update(false)
+      expect(container.querySelector('.work-group.is-live')).toBeNull()
+      expect(container.querySelector('.work-group__failed')?.textContent).toContain('1 failed')
+      expect([...container.querySelectorAll('.work-group__label')].map(node => node.textContent)).toContain('Read 2 files')
+      expect(container.textContent).toContain('I will focus on keyboard navigation.')
+      expect(container.textContent).toContain('The keyboard review is complete.')
+      expect([...container.querySelectorAll('.message--user')].some(node => node.textContent?.includes('Focus on accessibility'))).toBe(true)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('expands live reasoning and follows tool history only while the reader is at the bottom', async () => {
+    let message: TranscriptMessage = { id: 'live-scroll', role: 'assistant', streaming: true, parts: [
+      { type: 'thinking', text: 'Checking **keyboard focus**.' },
+    ] }
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    const update = async () => act(async () => root.render(createElement(Transcript, { messages: [message], git, active: true, onOpenChanges: noop, onSuggestion: noop })))
+    try {
+      await update()
+      await act(async () => container.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
+      const body = container.querySelector<HTMLDivElement>('.work-group__body')!
+      expect(body.querySelector('.activity-line--reasoning strong')?.textContent).toBe('keyboard focus')
+      Object.defineProperties(body, { scrollHeight: { value: 900, configurable: true }, clientHeight: { value: 200 } })
+      body.scrollTop = 700
+      await act(async () => body.dispatchEvent(new Event('scroll')))
+      message = { ...message, parts: [...message.parts, { type: 'toolCall', id: 'read-1', name: 'read', args: { path: 'first.ts' } }] }
+      await update()
+      expect(body.scrollTop).toBe(900)
+      body.scrollTop = 100
+      await act(async () => body.dispatchEvent(new Event('scroll')))
+      Object.defineProperty(body, 'scrollHeight', { value: 1200 })
+      message = { ...message, parts: [...message.parts, { type: 'toolCall', id: 'read-2', name: 'read', args: { path: 'second.ts' } }] }
+      await update()
+      expect(body.scrollTop).toBe(100)
+      expect(body.textContent).toContain('first.ts')
+      expect(body.textContent).toContain('second.ts')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('keeps current result images visible when the live tool history is collapsed', () => {
+    const html = render([{ id: 'image-tool', role: 'assistant', streaming: true, parts: [
+      { type: 'toolCall', id: 'capture', name: 'browser_screenshot' },
+      { type: 'toolResult', name: 'browser_screenshot', text: 'Captured', images: [{ type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' }] },
+    ] }], true)
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    expect(document.querySelector('.work-group__body')).toBeNull()
+    expect(document.querySelector('img')?.getAttribute('src')).toContain('iVBORw0KGgo=')
+  })
+
   it('opens the matching worker from an older delegation and keeps its failed outcome after close', async () => {
     const messages: TranscriptMessage[] = Array.from({ length: 10 }, (_, index) => ({
       id: `message-${index}`, role: 'assistant', parts: [
@@ -107,7 +205,7 @@ describe('transcript rendering', () => {
     expect(html).not.toContain('Open agent transcript')
   })
 
-  it('streams reasoning inside a distinct process rail with animated thinking dots', () => {
+  it('keeps live reasoning behind a compact disclosure with animated thinking dots', () => {
     const html = render([{
       id: 'active',
       role: 'assistant',
@@ -117,13 +215,13 @@ describe('transcript rendering', () => {
       parts: [{ type: 'thinking', text: 'Checking **the workspace** now.' }],
     }])
 
-    expect(html).toContain('activity-line--reasoning')
+    expect(html).not.toContain('activity-line--reasoning')
+    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.work-group__summary[aria-expanded="false"]')?.textContent).toBe('Thinking')
     expect(html).not.toContain('work-disclosure__rail')
     expect(html).not.toContain('assistant-mark')
     expect(html).toContain('work-disclosure__status')
     expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"]")].map(element => [element.querySelector(':scope > .sr-only:first-child')?.textContent, element.querySelector(':scope > .sr-only + .live-work-verb[aria-hidden="true"]')?.textContent])).toContainEqual(["Thinking", "Thinking"])
-    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.activity-line--reasoning .prose')?.textContent).toBe('Checking the workspace now.')
-    expect(new DOMParser().parseFromString(html, 'text/html').querySelector('.activity-line--reasoning strong')?.textContent).toBe('the workspace')
+    expect(html).not.toContain('Checking the workspace now.')
     expect(html).not.toContain('**the workspace**')
     expect(html).not.toContain('Worked for')
     expect(html).toContain('thinking-dots')
@@ -143,11 +241,12 @@ describe('transcript rendering', () => {
       parts: [{ type: 'thinking', text: 'Checking the workspace.' }, { type: 'toolCall', id: 'tool-1', name, args }],
     }], false, showTools)
 
-    // The live step replaces the previous one: a visible tool call folds the reasoning into the summary row.
-    expect(html.includes('activity-line--reasoning')).toBe(!showTools)
-    expect(html.includes('Checking the workspace.')).toBe(!showTools)
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].some(element => element.textContent === "Thought")).toBe(showTools)
-    expect(html.includes('activity-line--tool')).toBe(showTools)
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    expect(document.querySelectorAll('.work-group__summary')).toHaveLength(1)
+    expect(document.querySelector('.work-group__body')).toBeNull()
+    expect(html).not.toContain('Checking the workspace.')
+    // Questions stay outside the collapsed tool history so their controls remain reachable.
+    expect(Boolean(document.querySelector('.activity-line--tool'))).toBe(showTools && name === 'ask_user')
     if (activity) {
       expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll("[role=\"status\"] > .work-disclosure__activity:first-child")].map(element => [element.getAttribute('title'), element.textContent])).toContainEqual([activity, activity])
       expect(html).not.toContain('live-work-verb')
@@ -229,8 +328,7 @@ describe('transcript rendering', () => {
     expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought")
     expect(html).not.toContain('Following the external session.')
     expect(html).toContain('Explaining the next step.')
-    expect(html).toContain('read_file')
-    expect(html).toContain('src/App.tsx')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.work-group__label')].map(element => element.textContent)).toContain('Read 1 file')
     expect(html).not.toContain('read complete')
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('Agent work activity')
@@ -590,11 +688,11 @@ describe('transcript rendering', () => {
       ],
     }])
 
-    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll(".work-group__label")].map(element => element.textContent)).toContain("Thought, 1 agent message")
-    expect(html).toContain('activity-line--tool')
+    expect([...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.work-group__label')].map(element => element.textContent)).toContain('Running read_file: src/App.tsx')
+    expect(html).not.toContain('activity-line--tool')
     expect(html).not.toContain('Detailed child-agent response.')
     expect(html).not.toContain('message--agent')
-    expect(html.match(/aria-expanded="false"/g)).toHaveLength(2)
+    expect(html.match(/aria-expanded="false"/g)).toHaveLength(1)
   })
 
   it('renders system failures as compact expandable activity instead of red boxes', () => {
@@ -712,7 +810,7 @@ describe('transcript rendering', () => {
       ],
     }], true)
 
-    const timelineEnd = html.indexOf('src/App.tsx')
+    const timelineEnd = html.indexOf('Thought, read 1 file')
     const statusStart = html.indexOf('work-disclosure__status')
     expect(timelineEnd).toBeGreaterThan(-1)
     expect(statusStart).toBeGreaterThan(timelineEnd)

@@ -95,6 +95,26 @@ describe('bounded long-turn timelines', () => {
     expect(body.textContent).toContain('command-0')
   })
 
+  it('retains the page being read inside tool history even when the outer transcript is at the bottom', () => {
+    const parts = tools(101)
+    const renderNested = (visible: MessagePart[]) => act(() => root.render(
+      <div data-tool-history=""><WorkTimeline parts={visible} showReasoning showTools streaming /></div>,
+    ))
+    renderNested(parts.slice(0, recentLimit * 2))
+    const inner = container.querySelector<HTMLElement>('[data-tool-history]')!
+    Object.defineProperties(container, { scrollHeight: { value: 1000 }, clientHeight: { value: 600 } })
+    container.scrollTop = 400
+    Object.defineProperties(inner, { scrollHeight: { value: 4000 }, clientHeight: { value: 200 } })
+    inner.scrollTop = 100
+    vi.spyOn(inner, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 800, 200))
+    const body = container.querySelector<HTMLElement>('.timeline-page__body')!
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 250))
+    renderNested(parts)
+    expect(body.hidden).toBe(false)
+    expect(body.textContent).toContain('command-0')
+    expect(toolRows()).toHaveLength(101)
+  })
+
   it('keeps tool/result pairs and expansion state together when a late result is inserted', () => {
     const parts = tools(150)
     const missing = parts.filter((_, index) => index !== 201)

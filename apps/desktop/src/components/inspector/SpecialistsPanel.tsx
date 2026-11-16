@@ -367,8 +367,8 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
                 {isAssistant && assistantTurnCount > 1 ? <div className={`specialist-turn__divider ${stylex.props(agentsStyles.specialistTurnDivider).className ?? ""}`}><span>Turn {assistantTurnCount}</span></div> : null}
                 {message.errorMessage ? <div className={`specialist-header__error ${stylex.props(agentsStyles.specialistHeaderError).className ?? ""}`} role="alert">{message.errorMessage}</div> : null}
                 <MarkdownScopeContext.Provider value="specialist-assistant"><div className="specialist-turn__content">
-                  {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, streaming, true)}
-                  {reportPart?.type === 'text' ? <section className={`specialist-result ${stylex.props(agentsStyles.specialistResult).className ?? ""}`} ref={resultRef}><h3>Result</h3><MarkdownText variant="report" text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true, streaming, true)}</section> : null}
+                  {renderNarrativeWithActivity(reportIndex < 0 ? message.parts : message.parts.slice(0, reportIndex), message.id, true, true, streaming, 'current-step')}
+                  {reportPart?.type === 'text' ? <section className={`specialist-result ${stylex.props(agentsStyles.specialistResult).className ?? ""}`} ref={resultRef}><h3>Result</h3><MarkdownText variant="report" text={reportPart.text} />{renderNarrativeWithActivity(message.parts.slice(reportIndex + 1), `${message.id}-after`, true, true, streaming, 'current-step')}</section> : null}
                 </div></MarkdownScopeContext.Provider>
                 {streaming && !message.parts.length ? (
                   <div className={`specialist-turn__working ${stylex.props(agentsStyles.specialistTurnWorking).className ?? ""}`}>

@@ -142,15 +142,10 @@
 }
 .specialists-panel .activity-tool__summary:focus-visible, .specialists-panel .activity-run__summary:focus-visible, .specialists-panel .activity-thought__summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .specialists-panel .activity-line__icon {
-	width: 20px;
-	height: 20px;
-	border: 1px solid var(--border-subtle);
-	border-radius: var(--radius-xs);
 	color: var(--text-secondary);
-	background: var(--surface-subtle);
 }
-.specialists-panel .activity-line.is-running .activity-line__icon, .specialists-panel .activity-run.is-running .activity-line__icon { border-color: color-mix(in srgb, var(--apex) 28%, var(--border)); color: var(--apex); background: var(--apex-soft); }
-.specialists-panel .activity-line.is-error .activity-line__icon, .specialists-panel .activity-run.is-error .activity-line__icon { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); color: var(--danger); background: var(--danger-soft); }
+.specialists-panel .activity-line.is-running .activity-line__icon, .specialists-panel .activity-run.is-running .activity-line__icon { color: var(--apex); }
+.specialists-panel .activity-line.is-error .activity-line__icon, .specialists-panel .activity-run.is-error .activity-line__icon { color: var(--danger); }
 .specialists-panel .activity-line--tool.is-running>.activity-tool__summary { background: color-mix(in srgb, var(--apex-soft) 45%, transparent); }
 .specialists-panel .activity-line--tool.is-error>.activity-tool__summary { background: color-mix(in srgb, var(--danger-soft) 38%, transparent); }
 .specialists-panel .activity-line__kind, .specialists-panel .activity-run__label { color: var(--text); font-size: var(--fs-meta); font-weight: 550; }
