@@ -2,7 +2,6 @@
 .settings-nav button { width: 100%; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border-radius: var(--radius-md); color: var(--text-secondary); background: transparent; text-align: left; transition: color var(--fast), background var(--fast); }
 .settings-nav button:hover { color: var(--text); background: var(--surface-hover); }
 .settings-nav button.is-active { color: var(--text); background: var(--surface-selected); }
-.settings-nav button span { flex: 1; }
 .settings-nav button > svg:last-child { opacity: 0; }
 .settings-nav button.is-active > svg:last-child { opacity: 1; color: var(--text-tertiary); }
 .settings-content header { margin-bottom: 28px; }

@@ -26,8 +26,8 @@ import {
   SidebarLeft,
   Trash,
 } from './icons'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, useIsPresent, useReducedMotion, type Variants } from 'motion/react'
 import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type SideConversation, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
@@ -44,7 +44,19 @@ import { useTaskWorkflowContext } from '@/lib/task-context'
 import type { SpecialistRosters } from '@/hooks/useSpecialistRosters'
 import { SidebarSubagents, sidebarSubagentRows } from './SidebarSubagents'
 
-const sidebarLayoutStyles = stylex.create({ windowsOverlayTitlebar: { columnGap: 2 } })
+const sidebarLayoutStyles = stylex.create({
+  windowsOverlayTitlebar: { columnGap: 2 },
+  dockedFrame: {
+    height: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 0,
+    minHeight: 0,
+  },
+  overlayFrame: {
+    display: 'contents',
+  },
+})
 
 const PROJECT_SORT_LABEL_KEYS = { recent: 'projects.sort.recent', alphabetical: 'projects.sort.alphabetical' } as const satisfies Record<ProjectSortMode, MessageKey>
 
@@ -83,6 +95,8 @@ export interface SidebarProps {
   sideConversations?: readonly SideConversation[]
   onOpenSideConversation?(sessionFile: string): void
   overlay?: boolean
+  /** Snap open without spring/opacity animation (e.g. keyboard toggle). */
+  instant?: boolean
   platform?: NodeJS.Platform
 }
 
@@ -181,26 +195,95 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, specialistRosters = NO_ROSTERS, openSpecialistId = null, onOpenSpecialist, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, overlay = false, platform = 'darwin' }: SidebarProps) {
+const ROW_ENTER_EASE = [0.23, 1, 0.32, 1] as const
+const ROW_EXIT_EASE = [0.23, 1, 0.32, 1] as const
+
+/** Keep exiting controls inert until their visual exit finishes. */
+function SidebarPresenceRow({ skipMotion, menuOpen = false, children }: { skipMotion: boolean; menuOpen?: boolean; children: ReactNode }) {
+  const isPresent = useIsPresent()
+  return (
+    <motion.div
+      inert={!isPresent}
+      initial={skipMotion ? false : { height: 0, opacity: 0, x: -8, overflow: 'hidden' }}
+      animate={skipMotion ? undefined : {
+        height: 'auto',
+        opacity: 1,
+        x: 0,
+        overflow: menuOpen ? 'visible' : 'hidden',
+        transitionEnd: { overflow: 'visible' },
+      }}
+      exit={skipMotion ? undefined : {
+        height: 0,
+        opacity: 0,
+        x: -12,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        transition: {
+          x: { duration: 0.15, ease: ROW_EXIT_EASE },
+          opacity: { duration: 0.14, ease: ROW_EXIT_EASE },
+          height: { duration: 0.14, delay: 0.03, ease: [0.2, 0, 0, 1] },
+        },
+      }}
+      transition={skipMotion ? { duration: 0 } : {
+        height: { duration: 0.17, ease: ROW_ENTER_EASE },
+        opacity: { duration: 0.18, delay: 0.02, ease: ROW_ENTER_EASE },
+        x: { duration: 0.19, ease: ROW_ENTER_EASE },
+      }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+const SIDEBAR_WIDTH_VAR = 'var(--sidebar-width, 252px)'
+const SIDEBAR_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.8 } as const
+const SIDEBAR_OPACITY_TRANSITION = { duration: 0.14, ease: [0.23, 1, 0.32, 1] } as const
+
+function isReducedOrTestMotion(): boolean {
+  if (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) {
+    return true
+  }
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true
+  return Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+}
+
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, specialistRosters = NO_ROSTERS, openSpecialistId = null, onOpenSpecialist, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, overlay = false, instant = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const workflow = useTaskWorkflowContext()
+  const isPresent = useIsPresent()
   const prefersReducedMotion = useReducedMotion()
-  const skipMotion = Boolean(prefersReducedMotion)
-    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
-    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  const skipMotion = Boolean(prefersReducedMotion) || isReducedOrTestMotion()
+  const skipEnter = skipMotion || instant
+  const frameVariants = useMemo<Variants>(() => ({
+    exit: (customInstant?: boolean) => {
+      const snap = Boolean(customInstant) || skipMotion || isReducedOrTestMotion()
+      return {
+        width: 0,
+        overflow: 'hidden',
+        transition: snap || overlay
+          ? { duration: 0 }
+          : { width: SIDEBAR_SPRING, overflow: { duration: 0 } },
+      }
+    },
+  }), [overlay, skipMotion])
+  const asideVariants = useMemo<Variants>(() => ({
+    exit: (customInstant?: boolean) => {
+      const snap = Boolean(customInstant) || skipMotion || isReducedOrTestMotion()
+      return {
+        x: -16,
+        opacity: 0,
+        transition: snap
+          ? { duration: 0 }
+          : { x: SIDEBAR_SPRING, opacity: SIDEBAR_OPACITY_TRANSITION },
+      }
+    },
+  }), [skipMotion])
   const [query, setQuery] = useState('')
   const [searchLimits, setSearchLimits] = useState<Record<string, number>>({})
   const [sessionLimits, setSessionLimits] = useState<Record<string, number>>({})
   const [collapsed, setCollapsed] = useState(readCollapsedProjects)
   const [collapsedSubagents, setCollapsedSubagents] = useState<Record<string, boolean>>({})
-  const previousSelection = useRef({ activeProjectId, activeSessionId })
-  useEffect(() => {
-    const previous = previousSelection.current
-    previousSelection.current = { activeProjectId, activeSessionId }
-    if (activeView === 'session' && activeProjectId && (previous.activeProjectId !== activeProjectId || previous.activeSessionId !== activeSessionId)) {
-      setCollapsed((value) => ({ ...value, [activeProjectId]: false }))
-    }
-  }, [activeProjectId, activeSessionId, activeView])
   useEffect(() => saveCollapsedProjects(collapsed), [collapsed])
   const revealProject = (projectId: string) => {
     const next = { ...collapsed, [projectId]: false }
@@ -208,7 +291,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
     saveCollapsedProjects(next)
     setCollapsed(next)
   }
-  const sidebarRef = useFocusTrap<HTMLElement>(overlay, onClose)
+  const sidebarRef = useFocusTrap<HTMLElement>(overlay && isPresent, onClose)
   const [projectMenu, setProjectMenu] = useState<string | null>(null)
   const [projectSortMenuOpen, setProjectSortMenuOpen] = useState(false)
   const [sessionMenu, setSessionMenu] = useState<string | null>(null)
@@ -294,7 +377,36 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const visibleProjects = projectSections.flatMap((section) => section.projects)
 
   return (
-    <aside ref={sidebarRef} className={`sidebar ${stylex.props(sidebarStyles.sidebar, [responsiveStyles.sidebar, responsiveLayoutStyles.sidebar]).className ?? ""}`} aria-label="Project and session navigation" tabIndex={overlay ? -1 : undefined}>
+    <motion.div
+      {...stylex.props(overlay ? sidebarLayoutStyles.overlayFrame : sidebarLayoutStyles.dockedFrame)}
+      initial={skipEnter || overlay ? false : { width: 0, overflow: 'hidden' }}
+      animate={overlay
+        ? { width: 0, overflow: 'visible' }
+        : {
+            width: SIDEBAR_WIDTH_VAR,
+            overflow: 'hidden',
+            transitionEnd: { width: SIDEBAR_WIDTH_VAR, overflow: 'visible' },
+          }}
+      exit="exit"
+      variants={frameVariants}
+      transition={skipEnter || overlay
+        ? { duration: 0 }
+        : { width: SIDEBAR_SPRING, overflow: { duration: 0 } }}
+    >
+      <motion.aside
+        ref={sidebarRef}
+        inert={!isPresent}
+        className={`sidebar ${stylex.props(sidebarStyles.sidebar, [responsiveStyles.sidebar, responsiveLayoutStyles.sidebar]).className ?? ""}`}
+        aria-label="Project and session navigation"
+        tabIndex={overlay ? -1 : undefined}
+        initial={skipEnter ? false : { x: -16, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit="exit"
+        variants={asideVariants}
+        transition={skipEnter
+          ? { duration: 0 }
+          : { x: SIDEBAR_SPRING, opacity: SIDEBAR_OPACITY_TRANSITION }}
+      >
       <div className={`sidebar__titlebar drag-region ${stylex.props(baseStyles.dragRegion, sidebarStyles.sidebarTitlebar, overlay && platform === 'win32' && sidebarLayoutStyles.windowsOverlayTitlebar).className ?? ""}`}>
         <div className={`traffic-light-clearance ${stylex.props(workbenchStyles.trafficLightClearance).className ?? ""}`} aria-hidden="true" />
         {/* Compact navigation also provides a close button within its focus trap. */}
@@ -336,7 +448,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
             {section.projects.map((project) => {
               const allSessions = sessionsByProject.get(project.id) ?? []
               const projectSessions = normalized ? matchingSessions.get(project.id) ?? [] : allSessions
-              const isCollapsed = normalized ? section.id === 'project-matches' : collapsed[project.id] ?? project.id !== activeProjectId
+              const isCollapsed = normalized ? section.id === 'project-matches' : collapsed[project.id] ?? true
               const limit = (normalized ? searchLimits : sessionLimits)[project.id] ?? SIDEBAR_SESSION_LIMIT
               const visibleSessions = normalized ? projectSessions.slice(0, limit) : boundedSidebarSessions(projectSessions, {
                 limit,
@@ -386,23 +498,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                             const subagentsCollapsed = Boolean(collapsedSubagents[session.id])
                             const menuOpen = sessionMenu === session.id
                             return (
-                              <motion.div
-                                key={session.id}
-                                initial={skipMotion ? false : { height: 0, opacity: 0, overflow: 'hidden' }}
-                                animate={skipMotion ? undefined : {
-                                  height: 'auto',
-                                  opacity: 1,
-                                  overflow: menuOpen ? 'visible' : 'hidden',
-                                  transitionEnd: { overflow: 'visible' },
-                                }}
-                                exit={skipMotion ? undefined : {
-                                  height: 0,
-                                  opacity: 0,
-                                  overflow: 'hidden',
-                                  transition: { duration: 0.13, ease: [0.2, 0, 0, 1] },
-                                }}
-                                transition={skipMotion ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
-                              >
+                              <SidebarPresenceRow key={session.id} skipMotion={skipMotion} menuOpen={menuOpen}>
                                 <div className={[`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${menuOpen ? 'is-menu-open' : ''}`, stylex.props(sidebarStyles.sessionRowWrap, menuOpen && sidebarStyles.sessionRowWrapIsMenuOpen, isSelected && sidebarStyles.sessionRowWrapIsSelected).className].filter(Boolean).join(' ')}>
                                   {hasSubagents ? (
                                     <button
@@ -447,12 +543,12 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                                   </motion.div> : null}</AnimatePresence>
                                 </div>
                                 {roster?.length && onOpenSpecialist ? <SidebarSubagents session={session} specialists={roster} selected={isSelected} collapsed={subagentsCollapsed} openSpecialistId={isSelected ? openSpecialistId : null} onOpen={onOpenSpecialist} /> : null}
-                              </motion.div>
+                              </SidebarPresenceRow>
                             )
                           })}
+                          {projectSessions.length === 0 ? <SidebarPresenceRow key={`empty:${project.id}`} skipMotion={skipMotion}><button type="button" title={`New session in ${project.name}`} className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button></SidebarPresenceRow> : null}
                         </AnimatePresence>
                         {remaining > 0 ? <button type="button" className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
-                        {projectSessions.length === 0 ? <button type="button" title={`New session in ${project.name}`} className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button> : null}
                       </motion.div>
                     ) : null}
                   </AnimatePresence>
@@ -465,7 +561,8 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
 
       {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
       {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
-    </aside>
+      </motion.aside>
+    </motion.div>
   )
 }
 
@@ -499,6 +596,7 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.sideConversations === next.sideConversations
     && previous.onOpenSideConversation === next.onOpenSideConversation
     && previous.overlay === next.overlay
+    && previous.instant === next.instant
     && previous.platform === next.platform
 }
 

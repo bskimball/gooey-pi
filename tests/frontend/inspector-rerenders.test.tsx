@@ -8,6 +8,7 @@ import { useBrowserAnnotations, type BrowserAnnotationsApi } from '../../apps/de
 import type { InspectorProps } from '../../apps/desktop/src/components/Inspector'
 import { RunConfigSection } from '../../apps/desktop/src/components/inspector/RunConfigSection'
 import { SpecialistsPanel } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
+import { SummaryPanel, type PiTodoItemSummary } from '../../apps/desktop/src/components/inspector/SummaryPanel'
 import type { EffectiveRunConfig, RuntimeInfo, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -249,7 +250,13 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     expect(group.querySelector('.work-group__current')?.textContent).not.toContain('first command')
     expect(group.querySelector('.work-group__summary')?.textContent).toContain('2 commands')
     await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
-    expect(group.querySelector('.work-group__body')?.textContent).toContain('First thought')
+    const history = group.querySelector('.work-group__body')!
+    const thought = history.querySelector<HTMLButtonElement>('.activity-thought__summary')!
+    expect(thought.getAttribute('aria-expanded')).toBe('false')
+    expect(history.textContent).not.toContain('First thought')
+    expect(history.textContent).toContain('Latest thought')
+    await act(async () => thought.click())
+    expect(history.textContent).toContain('First thought')
     expect(group.querySelector('.work-group__body')?.textContent).toContain('first command')
     expect(group.querySelector('.work-group__body')?.textContent).toContain('second command')
     disk = [{ ...disk[0], streaming: false, parts: [...disk[0].parts, { type: 'text', text: 'Final report' },
@@ -259,6 +266,8 @@ describe('SpecialistsPanel transcript scoping and loading', () => {
     await render(true)
     group = container.querySelector('.work-group')!
     expect(group.classList.contains('is-live')).toBe(false)
+    expect(group.querySelector('.work-group__body')?.textContent).toContain('First thought')
+    expect(group.querySelector('.work-group__body')?.textContent).not.toContain('Latest thought')
     expect(container.querySelector('.specialist-result')?.textContent).toContain('Final report')
     expect(container.querySelector('.specialist-result .work-group__summary')?.textContent).toContain('1 command')
     expect(container.querySelector('.specialist-result .work-group__summary .ph-terminal-window')).not.toBeNull()
@@ -687,10 +696,15 @@ describe('VS Code webview sub-agent inspection', () => {
     expect(toolbarTrigger.querySelector('.apex-agents-trigger__count')?.textContent).toBe('1')
     expect(container.querySelector('.apex-specialists-pane')).toBeNull()
 
-    // Click the sub-agent lane in the transcript to open its transcript view.
-    const openLink = container.querySelector<HTMLButtonElement>('.subagent-lane__open')!
-    expect(openLink.getAttribute('aria-label')).toBe('Open agent transcript')
-    await act(async () => { openLink.click() })
+    // Click the sub-agent lane primary button in the transcript to open its transcript view.
+    const summary = container.querySelector('.subagent-lane__summary')!
+    expect(summary.tagName).toBe('DIV')
+    expect(summary.hasAttribute('role')).toBe(false)
+    expect(container.querySelector('.subagent-lane__open')).toBeNull()
+    expect(summary.querySelector('button button')).toBeNull()
+    const primaryButton = summary.querySelector<HTMLButtonElement>('.subagent-lane__primary')!
+    expect(primaryButton.getAttribute('title')).toBe('Show agent in sidebar')
+    await act(async () => { primaryButton.click() })
     await act(async () => {})
 
     const pane = container.querySelector('.apex-specialists-pane')
@@ -717,5 +731,231 @@ describe('VS Code webview sub-agent inspection', () => {
     expect(container.querySelector('.apex-specialists-pane')).toBeNull()
 
     Reflect.deleteProperty(window, 'apex')
+  })
+})
+
+describe('SummaryPlan compact disclosure', () => {
+  it('caps compact view to 3 in_progress/blocked tasks, excludes cancelled from total, and toggles full ordered list', async () => {
+    const todos: PiTodoItemSummary[] = [
+      { id: '1', content: 'Done task', status: 'completed' },
+      { id: '2', content: 'Active one', status: 'in_progress' },
+      { id: '3', content: 'Pending one', status: 'pending' },
+      { id: '4', content: 'Blocked one', status: 'blocked', note: 'Waiting on API' },
+      { id: '5', content: 'Active two', status: 'in_progress' },
+      { id: '6', content: 'Blocked two', status: 'blocked' },
+      { id: '7', content: 'Dropped task', status: 'cancelled' },
+    ]
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{ toolCount: 4, todos, specialists: [] }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-1"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.querySelector('.summary-plan h3')?.textContent).toBe('Plan (1/6)')
+    const compactTexts = [...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')
+    expect(compactTexts).toEqual(['Active one', 'Active two', 'Blocked one — Waiting on API'])
+    expect(compactTexts).not.toContain('Blocked two')
+
+    const toggle = container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')!
+    expect(toggle).not.toBeNull()
+    expect(toggle.textContent).toBe('Show all 7 tasks')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    const list = container.querySelector<HTMLElement>('.summary-plan [role="list"]')!
+    expect(toggle.getAttribute('aria-controls')).toBe(list.id)
+    expect(list.hasAttribute('tabindex')).toBe(false)
+
+    await act(async () => { toggle.click() })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle.textContent).toBe('Show current')
+    expect(list.getAttribute('tabindex')).toBe('0')
+    const expandedItems = [...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')]
+    expect(expandedItems.map((item) => item.textContent ?? '')).toEqual([
+      'Done task',
+      'Active one',
+      'Pending one',
+      'Blocked one — Waiting on API',
+      'Active two',
+      'Blocked two',
+      'Dropped task',
+    ])
+    expect(expandedItems[1]?.classList.contains('is-current')).toBe(true)
+    expect(expandedItems[6]?.classList.contains('is-stale')).toBe(true)
+
+    await act(async () => { toggle.click() })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.textContent).toBe('Show all 7 tasks')
+    expect(list.hasAttribute('tabindex')).toBe(false)
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual([
+      'Active one',
+      'Active two',
+      'Blocked one — Waiting on API',
+    ])
+  })
+
+  it('falls back to the first pending task when nothing is active or blocked', async () => {
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{
+            toolCount: 4,
+            todos: [
+              { id: '1', content: 'First done', status: 'completed' },
+              { id: '2', content: 'Next pending', status: 'pending' },
+              { id: '3', content: 'Later pending', status: 'pending' },
+            ],
+            specialists: [],
+          }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-1"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect(container.querySelector('.summary-plan h3')?.textContent).toBe('Plan (1/3)')
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Next pending'])
+    expect(container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')?.textContent).toBe('Show all 3 tasks')
+
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{
+            toolCount: 4,
+            todos: [{ id: '1', content: 'Only pending', status: 'pending' }],
+            specialists: [],
+          }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-1"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Only pending'])
+    expect(container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')).toBeNull()
+  })
+
+  it('handles all-completed plans and omits the section when empty', async () => {
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{
+            toolCount: 4,
+            todos: [
+              { id: '1', content: 'Step one', status: 'completed' },
+              { id: '2', content: 'Step two', status: 'completed' },
+            ],
+            specialists: [],
+          }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-1"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect(container.querySelector('.summary-plan h3')?.textContent).toBe('Plan (2/2)')
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual([])
+    const toggle = container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')!
+    expect(toggle.textContent).toBe('Show all 2 tasks')
+    await act(async () => { toggle.click() })
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Step one', 'Step two'])
+
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{ toolCount: 4, todos: [], specialists: [] }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-1"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect(container.querySelector('.summary-plan')).toBeNull()
+  })
+
+  it('keeps user expansion across progress updates in the same session and resets on a new sessionKey', async () => {
+    const initial: PiTodoItemSummary[] = [
+      { id: '1', content: 'Setup', status: 'completed' },
+      { id: '2', content: 'Build', status: 'in_progress' },
+      { id: '3', content: 'Verify', status: 'pending' },
+    ]
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{ toolCount: 4, todos: initial, specialists: [] }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-a"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Build'])
+
+    await act(async () => { container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')!.click() })
+    expect(container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')?.getAttribute('aria-expanded')).toBe('true')
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Setup', 'Build', 'Verify'])
+
+    const progressed: PiTodoItemSummary[] = [
+      { id: '1', content: 'Setup', status: 'completed' },
+      { id: '2', content: 'Build', status: 'completed' },
+      { id: '3', content: 'Verify', status: 'in_progress' },
+    ]
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{ toolCount: 4, todos: progressed, specialists: [] }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-a"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    expect(container.querySelector('.summary-plan h3')?.textContent).toBe('Plan (2/3)')
+    const sameSessionToggle = container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')
+    expect(sameSessionToggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(sameSessionToggle?.textContent).toBe('Show current')
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Setup', 'Build', 'Verify'])
+
+    await act(async () => {
+      root.render(
+        <SummaryPanel
+          summary={{ toolCount: 4, todos: progressed, specialists: [] }}
+          readiness={{ lastEditIndex: -1, checks: [], reviews: [] }}
+          sessionKey="session-b"
+          git={{ isRepo: false, files: [] }}
+          automations={[]}
+          onOpenAutomation={vi.fn()}
+          onOpenSpecialist={vi.fn()}
+        />,
+      )
+    })
+    const newSessionToggle = container.querySelector<HTMLButtonElement>('.summary-plan button[aria-controls]')
+    expect(newSessionToggle?.getAttribute('aria-expanded')).toBe('false')
+    expect(newSessionToggle?.textContent).toBe('Show all 3 tasks')
+    expect([...container.querySelectorAll<HTMLElement>('.summary-plan [role="listitem"]')].map((item) => item.textContent ?? '')).toEqual(['Verify'])
   })
 })

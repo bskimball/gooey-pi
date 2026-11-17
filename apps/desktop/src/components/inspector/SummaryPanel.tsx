@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
-import { memo } from 'react'
+import { memo, useId, useState } from 'react'
 import { CalendarDots } from '../icons'
 import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
 import type { AutomationScheduleRecord, GitStatus, RuntimeInfo } from '@/types/api'
@@ -12,6 +12,38 @@ import { SummaryAgentsSection } from './SummaryAgentsSection'
 
 export { extractPiSessionWidgets, summarizeTranscript } from './session-summary'
 export type { PiSpecialistSummary, PiTodoItemSummary, TranscriptSummary } from './session-summary'
+
+const planStyles = stylex.create({
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  heading: { marginBottom: 0 },
+  toggle: { width: 'auto', flexShrink: 0, minHeight: 24, marginLeft: 0, marginRight: 0, paddingLeft: 4, paddingRight: 4, fontSize: 11 },
+  list: { maxHeight: 240, overflowY: 'auto', overflowX: 'hidden', marginTop: 6 },
+  text: { minWidth: 0, overflowWrap: 'anywhere' },
+})
+
+function SummaryPlan({ todos }: { todos: SessionSummary['todos'] }) {
+  const [expanded, setExpanded] = useState(false)
+  const listId = useId()
+  const current = [...todos.filter((todo) => todo.status === 'in_progress'), ...todos.filter((todo) => todo.status === 'blocked')]
+  const compact = current.length ? current.slice(0, 3) : todos.filter((todo) => todo.status === 'pending').slice(0, 1)
+  const visible = expanded ? todos : compact
+  const done = todos.filter((todo) => todo.status === 'completed').length
+  const total = todos.filter((todo) => todo.status !== 'cancelled').length
+  return <section className={`summary-section summary-plan ${stylex.props(inspectorStyles.summarySection).className ?? ''}`}>
+    <div {...stylex.props(planStyles.header)}>
+      <h3 {...stylex.props(planStyles.heading)}>Plan ({done}/{total})</h3>
+      {expanded || todos.length > compact.length ? <button type="button" {...stylex.props(inspectorStyles.runConfigToggle, planStyles.toggle)} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((value) => !value)}>
+        {expanded ? 'Show current' : `Show all ${todos.length} tasks`}
+      </button> : null}
+    </div>
+    <div id={listId} role="list" aria-label="Plan tasks" tabIndex={expanded ? 0 : undefined} className={`progress-list ${stylex.props(inspectorStyles.progressList, planStyles.list).className ?? ''}`}>
+      {visible.map((todo) => <div key={todo.id} role="listitem" className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
+        <StatusMark state={todoMark(todo.status)} size={14} />
+        <span {...stylex.props(planStyles.text)}>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
+      </div>)}
+    </div>
+  </section>
+}
 
 const CHECK_LABELS: Record<ReadinessCheck['kind'], string> = { test: 'Tests', lint: 'Lint', typecheck: 'Typecheck', build: 'Build', format: 'Format' }
 const REVIEW_LABELS: Record<Review['agent'], string> = { oracle: 'Oracle review', inspector: 'Inspector review' }
@@ -64,19 +96,7 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
   return (
     <div className={`summary-panel ${stylex.props(inspectorStyles.summaryPanel).className ?? ""}`}>
       <RunConfigSection runtime={runtime} behaviorMode={behaviorMode} cwd={cwd} sessionKey={sessionKey} />
-      {todos.length > 0 ? (
-        <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}>
-          <h3>Plan ({todos.filter((t) => t.status === 'completed').length}/{todos.filter((t) => t.status !== 'cancelled').length})</h3>
-          <div className={`progress-list ${stylex.props(inspectorStyles.progressList).className ?? ""}`}>
-            {todos.map((todo) => (
-              <div key={todo.id} className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'blocked' || todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
-                <StatusMark state={todoMark(todo.status)} size={14} />
-                <span>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {todos.length > 0 ? <SummaryPlan key={sessionKey} todos={todos} /> : null}
       <SummaryAgentsSection specialists={summary.specialists} onOpenSpecialist={onOpenSpecialist} />
       <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}><h3>Readiness</h3><div className={`progress-list readiness-list ${stylex.props(inspectorStyles.progressList).className ?? ""}`}>
         {readiness.checks.length || readiness.reviews.length ? null : <div><StatusMark state="pending" size={14} /><span>No checks detected in this session</span></div>}

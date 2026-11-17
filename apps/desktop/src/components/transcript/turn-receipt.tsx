@@ -71,12 +71,17 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
     </span> })
   }
   if (copy) facts.push({ key: 'copy', node: copy })
+  // The motion box has no margin or min-height, so the whole receipt (top margin included) grows from 0.
+  // flow-root keeps that margin inside the box; overflow is clipped only while it grows (or exits) so focus rings stay visible.
   return <motion.div
-    className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}
-    initial={instant ? false : { opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+    className="turn-receipt-motion"
+    initial={instant ? false : { height: 0, opacity: 0, overflow: 'hidden' }}
+    animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
+    exit={instant ? undefined : { height: 0, opacity: 0, overflow: 'hidden', transition: { duration: 0.125, ease: [0.2, 0, 0, 1] } }}
+    transition={instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+    style={{ display: 'flow-root' }}
   >
+  <div className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}>
     <div className={`turn-receipt__line ${stylex.props(transcriptStyles.turnReceiptLine).className ?? ""}`}>
       {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className={`turn-receipt__separator ${stylex.props(transcriptStyles.turnReceiptSeparator).className ?? ""}`} aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
     </div>
@@ -94,5 +99,6 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
         </motion.div>
       ) : null}
     </AnimatePresence>
+  </div>
   </motion.div>
 }

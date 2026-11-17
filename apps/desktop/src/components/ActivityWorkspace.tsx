@@ -14,6 +14,7 @@ import { INSPECTOR_MIN } from '@/hooks/usePanelLayout'
 interface ActivityWorkspaceProps {
   rowRef: Ref<HTMLDivElement>
   inspectorVisible: boolean
+  instant?: boolean
   compact: boolean
   width: number
   maxWidth: number
@@ -27,11 +28,11 @@ interface ActivityWorkspaceProps {
 
 const styles = stylex.create({ header: { alignItems: 'center', fontSize: 12 } })
 
-export function ActivityWorkspace({ rowRef, inspectorVisible, compact, width, maxWidth, defaultWidth, expanded, onWidthChange, onToggleExpanded, onClose, children }: ActivityWorkspaceProps) {
+export function ActivityWorkspace({ rowRef, inspectorVisible, instant = false, compact, width, maxWidth, defaultWidth, expanded, onWidthChange, onToggleExpanded, onClose, children }: ActivityWorkspaceProps) {
   const renderInspector = (content: ReactNode) => (
     <>
       {inspectorVisible && !compact ? <ResizeHandle orientation="vertical" label="Resize inspector" value={width} min={INSPECTOR_MIN} max={maxWidth} defaultValue={defaultWidth} onChange={onWidthChange} /> : null}
-      <InspectorShell visible={inspectorVisible} overlay={compact} onClose={onClose} label="Space details">
+      <InspectorShell visible={inspectorVisible} instant={instant} overlay={compact} onClose={onClose} label="Space details">
         <div className={`inspector__tabs ${stylex.props(inspectorStyles.inspectorTabs, [responsiveStyles.inspectorTabs, responsiveLayoutStyles.inspectorTabs], styles.header).className ?? ''}`}>
           <strong>Space details</strong>
           <span className={`inspector__tab-spacer ${stylex.props(inspectorStyles.inspectorTabSpacer).className ?? ''}`} />

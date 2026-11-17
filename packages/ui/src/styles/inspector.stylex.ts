@@ -1,7 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
 
-const panelInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "translateX(8px)" } })
-
 const badgeInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "scale(.6)" } })
 
 const extensionTabPulseAnimation = stylex.keyframes({ "0%": { "opacity": 0.7, "transform": "scale(0.6)" }, "100%": { "opacity": 0, "transform": "scale(1.5)" } })
@@ -52,14 +50,6 @@ export const styles = stylex.create({
     "backgroundAttachment": "scroll",
     "backgroundOrigin": "padding-box",
     "backgroundClip": "border-box",
-    "animationName": panelInAnimation,
-    "animationDuration": "150ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "ease-out",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running",
   },
   "inspectorTabs": {
     "height": "50px",
@@ -163,12 +153,31 @@ export const styles = stylex.create({
   "statusMarkSpacer": { "width": "14px", "flexGrow": 0, "flexShrink": 0, "flexBasis": "14px" },
   "summaryAgentList": { "position": "relative", "display": "flex", "flexDirection": "column", "marginTop": 0, "marginRight": "-8px", "marginBottom": 0, "marginLeft": "-8px" },
   "summaryAgentsHeading": { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "columnGap": "8px" },
-  "summaryAgentsFinished": { "display": "flex", "flexDirection": "column" },
+  "summaryAgentsFinished": { "display": "grid", "gridTemplateColumns": "auto minmax(0, 1fr)", "alignItems": "center", "columnGap": "2px" },
   "summaryAgentsFinishedAfterLive": { "marginTop": "6px" },
-  "summaryAgentsFinishedBody": { "overflowX": "hidden", "overflowY": "hidden", "marginTop": 0, "marginRight": "-8px", "marginBottom": 0, "marginLeft": "-8px" },
-  "summaryAgentsFinishedMeasure": { "position": "relative", "paddingTop": "4px", "paddingRight": 0, "paddingBottom": "2px", "paddingLeft": 0 },
-  "summaryAgentRows": { "position": "relative", "display": "flex", "flexDirection": "column" },
-  "summaryAgentStack": { "position": "relative", "display": "flex", "alignItems": "center", "minHeight": "30px", "paddingTop": "2px", "paddingRight": "8px", "paddingBottom": "2px", "paddingLeft": "10px" },
+  "summaryAgentStackScroll": { "overflowX": "auto", "overflowY": "hidden", "scrollbarWidth": "thin" },
+  "summaryAgentsFinishedToggle": { "gridColumn": "1", "gridRow": "1", "width": "auto", "flexGrow": 0, "flexShrink": 0, "flexBasis": "auto", "marginRight": 0 },
+  "summaryAgentsFinishedItems": { "position": "relative", "display": "flex", "minWidth": 0 },
+  "summaryAgentStack": { "gridColumn": "2", "gridRow": "1", "flexWrap": "nowrap", "alignItems": "center", "minHeight": "32px", "paddingTop": "4px", "paddingRight": "4px", "paddingBottom": "4px", "paddingLeft": "4px" },
+  "summaryAgentRows": { "gridColumn": "1 / -1", "gridRow": "2", "flexDirection": "column", "marginTop": 0, "marginRight": "-8px", "marginBottom": 0, "marginLeft": "-8px", "paddingTop": "4px", "paddingRight": 0, "paddingBottom": "2px", "paddingLeft": 0 },
+  "summaryAgentStackItem": {
+    "display": "inline-flex",
+    "flexGrow": 0,
+    "flexShrink": 0,
+    "flexBasis": "auto",
+    "paddingTop": 0,
+    "paddingRight": 0,
+    "paddingBottom": 0,
+    "paddingLeft": 0,
+    "borderTopLeftRadius": "999px",
+    "borderTopRightRadius": "999px",
+    "borderBottomRightRadius": "999px",
+    "borderBottomLeftRadius": "999px",
+    "backgroundColor": "transparent",
+    "cursor": "pointer",
+    "outlineStyle": { "default": null, ":focus-visible": "none" },
+    "transition": "margin-left 200ms cubic-bezier(0.23, 1, 0.32, 1)",
+  },
   "summaryAgentToken": {
     "position": "relative",
     "width": "24px",

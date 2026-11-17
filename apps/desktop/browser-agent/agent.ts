@@ -1,3 +1,4 @@
+import { hash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { BACKGROUND_CONTEXT, withAbortSignal } from '@earendil-works/chord/context'
@@ -51,8 +52,8 @@ interface TaskState {
   exhausted: boolean
   progress: string[]
 }
-const tasks = new Map<Conversation['id'], TaskState>()
-function task(id: Conversation['id']): TaskState {
+type TaskStates = Map<Conversation['id'], TaskState>
+function task(tasks: TaskStates, id: Conversation['id']): TaskState {
   const state = tasks.get(id)
   if (!state) throw new Error('Interrupted browser task cannot execute again')
   state.signal.throwIfAborted()
@@ -70,7 +71,7 @@ async function readPage(state: TaskState, mode: 'interactive' | 'text') {
     return { ...page, text: page.text?.slice(0, 8000) }
   })
 }
-const Browser = defineExtension({
+const browserExtension = (tasks: TaskStates) => defineExtension({
   name: 'browser',
   hooks: [
     hook(ToolTask, {
@@ -93,7 +94,7 @@ const Browser = defineExtension({
       replay: 'safe',
       parameters: obj({ mode: opt(oneOf(['interactive', 'text'])) }),
       async execute(args, api) {
-        const state = task(api.conversationId)
+        const state = task(tasks, api.conversationId)
         const page = await readPage(state, args.mode ?? 'interactive')
         progress(state, `read_page: ${page.elements.length} elements`)
         return output(page)
@@ -106,7 +107,7 @@ const Browser = defineExtension({
       replay: 'unsafe',
       parameters: obj({ steps: arr(stepSchema, { minItems: 1, maxItems: 25 }) }),
       async execute(args, api) {
-        const state = task(api.conversationId)
+        const state = task(tasks, api.conversationId)
         const input = { tab_id: state.input.tab_id, steps: args.steps }
         validateInput(input)
         const result = await runSteps(input, { broker: state.options.broker, classifier: state.classifier, signal: state.signal, intent: state.input.goal })
@@ -120,7 +121,7 @@ const Browser = defineExtension({
       replay: 'safe',
       parameters: obj({ condition: str({ minLength: 1, maxLength: 4000 }) }),
       async execute(args, api) {
-        const state = task(api.conversationId)
+        const state = task(tasks, api.conversationId)
         if (!state.classifier) throw new Error('judge requires an available host classifier')
         const probability = await state.classifier.holds(JSON.stringify(await readPage(state, 'text')), args.condition)
         if (!Number.isFinite(probability) || probability < 0 || probability > 1) throw new Error('Classifier returned an invalid probability')
@@ -132,45 +133,63 @@ const Browser = defineExtension({
   ],
 })
 
-let opened: { directory: string; promise: Promise<Harness> } | undefined
-let models: ReturnType<typeof hostModels>
-async function harness(options: BrowserTaskOptions, model: HostModel): Promise<Harness> {
-  const session = options.sessionId?.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120) || `pid-${process.pid}`
-  const directory = resolve(join(options.stateDir, session))
-  if (opened && opened.directory !== directory) throw new Error('Browser task storage is already open for another session in this process')
-  models = hostModels(options.registry, model)
-  if (!opened) {
-    opened = {
-      directory,
-      promise: (async () => {
-        await mkdir(directory, { recursive: true })
-        const registry = createRegistry()
-        registry.install(Browser)
-        const instance = await Harness.open(
-          await openNodeJsonlStorage(directory, BACKGROUND_CONTEXT),
-          { models: () => models, registry, settings: { toolExecution: 'sequential' } },
-          BACKGROUND_CONTEXT,
-        )
-        try {
-          // abortTask commits marks without enabling scheduling in Durable 1.4.
-          // Mark ALL leftovers while paused, before conversation.abort starts cleanup.
-          const unfinished = await instance.inspect(BACKGROUND_CONTEXT)
-          for (const submission of unfinished.submissions) await instance.abortSubmission(submission.id, BACKGROUND_CONTEXT)
-          for (const item of unfinished.tasks) await instance.abortTask(item.record.id, BACKGROUND_CONTEXT)
-          const ids = new Set([...unfinished.tasks.map((item) => item.record.conversationId), ...unfinished.submissions.map((item) => item.conversationId)])
-          for (const id of ids) {
-            const conversation = await instance.conversation(id, BACKGROUND_CONTEXT)
-            await conversation?.abort(BACKGROUND_CONTEXT, { background: true })
-          }
-          return instance
-        } catch (error) {
-          await instance.close(BACKGROUND_CONTEXT)
-          throw error
-        }
-      })(),
-    }
+interface BrowserHarness {
+  instance: Harness
+  browser: ReturnType<typeof browserExtension>
+  tasks: TaskStates
+}
+const opened = new Map<string, { promise: Promise<BrowserHarness>; models: ReturnType<typeof hostModels> }>()
+async function harness(options: BrowserTaskOptions, model: HostModel): Promise<BrowserHarness> {
+  const { sessionId } = options
+  // Keep existing UUID stores; hash custom IDs without filesystem case folding or normalization.
+  const session = !sessionId ? `pid-${process.pid}`
+    : /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(sessionId) ? sessionId
+    : join('by-session-id', hash('sha256', sessionId))
+  const directory = resolve(options.stateDir, session)
+  const models = hostModels(options.registry, model)
+  const existing = opened.get(directory)
+  if (existing) {
+    existing.models = models
+    return existing.promise
   }
-  return opened.promise
+  const entry = {
+    models,
+    promise: (async (): Promise<BrowserHarness> => {
+      await mkdir(directory, { recursive: true })
+      const tasks: TaskStates = new Map()
+      const browser = browserExtension(tasks)
+      const registry = createRegistry()
+      registry.install(browser)
+      const instance = await Harness.open(
+        await openNodeJsonlStorage(directory, BACKGROUND_CONTEXT),
+        { models: () => entry.models, registry, settings: { toolExecution: 'sequential' } },
+        BACKGROUND_CONTEXT,
+      )
+      try {
+        // abortTask commits marks without enabling scheduling in Durable 1.4.
+        // Mark ALL leftovers while paused, before conversation.abort starts cleanup.
+        const unfinished = await instance.inspect(BACKGROUND_CONTEXT)
+        for (const submission of unfinished.submissions) await instance.abortSubmission(submission.id, BACKGROUND_CONTEXT)
+        for (const item of unfinished.tasks) await instance.abortTask(item.record.id, BACKGROUND_CONTEXT)
+        const ids = new Set([...unfinished.tasks.map((item) => item.record.conversationId), ...unfinished.submissions.map((item) => item.conversationId)])
+        for (const id of ids) {
+          const conversation = await instance.conversation(id, BACKGROUND_CONTEXT)
+          await conversation?.abort(BACKGROUND_CONTEXT, { background: true })
+        }
+        return { instance, browser, tasks }
+      } catch (error) {
+        await instance.close(BACKGROUND_CONTEXT)
+        throw error
+      }
+    })(),
+  }
+  opened.set(directory, entry)
+  try {
+    return await entry.promise
+  } catch (error) {
+    opened.delete(directory)
+    throw error
+  }
 }
 
 function bounded(value: number | undefined, fallback: number, max: number, label: string): number {
@@ -189,7 +208,7 @@ export async function runBrowserTask(input: BrowserTaskInput, options: BrowserTa
   const deadline = AbortSignal.timeout(timeout)
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline
   const context = withAbortSignal(signal, BACKGROUND_CONTEXT)
-  const instance = await harness(options, input.model)
+  const { instance, browser, tasks } = await harness(options, input.model)
   const conversation = await instance.createConversation(
     {
       ownership: { kind: 'ownerless' },
@@ -197,8 +216,8 @@ export async function runBrowserTask(input: BrowserTaskInput, options: BrowserTa
         model: { provider: input.model.provider, modelId: input.model.id },
         ...(input.model.reasoning ? { thinkingLevel: 'low' } : {}),
         instructions: INSTRUCTIONS,
-        extensions: [Browser],
-        tools: Browser.tools,
+        extensions: [browser],
+        tools: browser.tools,
       },
     },
     BACKGROUND_CONTEXT,

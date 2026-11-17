@@ -137,14 +137,16 @@
 	border-color: var(--success);
 	color: var(--text-secondary);
 }
-.summary-agent-token + .summary-agent-token { margin-left: -7px; }
-.summary-agent-stack:hover > .summary-agent-token + .summary-agent-token,
-.summary-agent-stack:focus-within > .summary-agent-token + .summary-agent-token { margin-left: 3px; }
-.summary-agent-token:hover, .summary-agent-token:focus-visible { z-index: 20; color: var(--text); }
+.summary-agent-stack > .summary-agent-item { position: relative; z-index: var(--stack-z, 1); }
+.summary-agent-stack > .summary-agent-item + .summary-agent-item { margin-left: -7px; }
+/* Hover only: a focus-driven spread would widen the strip after focus scrolled into view and clip the ring. */
+.summary-agent-stack:hover > .summary-agent-item + .summary-agent-item { margin-left: 3px; }
+.summary-agent-stack > .summary-agent-item:hover, .summary-agent-stack > .summary-agent-item:focus-visible { z-index: 20; }
+.summary-agent-stack > .summary-agent-item:focus-visible > .summary-agent-token { outline: 2px solid var(--focus); outline-offset: 2px; }
+.summary-agent-item:hover > .summary-agent-token, .summary-agent-item:focus-visible > .summary-agent-token { color: var(--text); }
 .summary-agent-token.is-error { border-color: var(--danger); color: var(--danger); }
 .summary-agent-token.is-stopped, .summary-agent-token.is-closed { border-style: dashed; border-color: var(--text-tertiary); }
 .summary-agent-token--more { border-color: var(--border); color: var(--text-tertiary); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.summary-agent-list > .summary-agent-list__more { padding-left: 30px; }
 .summary-agent-list > .summary-agent-list__more > span { color: var(--text-tertiary); }
 
 /* Changes */

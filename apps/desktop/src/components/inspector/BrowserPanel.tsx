@@ -92,6 +92,17 @@ interface BrowserPanelProps {
 	/** Test hook: how often to poll the page for a clicked element while picking. */
 	pollIntervalMs?: number;
 	visible?: boolean;
+	/** True while the inspector slides this pane in or out; agent slot bounds then track every frame, clipped to `slideViewport`. */
+	sliding?: boolean;
+	/** Element whose bounds clip the agent guest layer while `sliding`. */
+	slideViewport?: HTMLElement | null;
+	/** Additional clipping while the docked sidebar frame changes width. */
+	shellViewport?: HTMLElement | null;
+}
+
+function sameClip(a: AgentSlotRect["clip"], b: AgentSlotRect["clip"]): boolean {
+	if (!a || !b) return a === b;
+	return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
 }
 
 function agentTabLabel(tab: AgentBrowserTabRecord): string {
@@ -126,6 +137,9 @@ export function BrowserPanel({
 	extension,
 	pollIntervalMs = 350,
 	visible = true,
+	sliding = false,
+	slideViewport = null,
+	shellViewport = null,
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
@@ -149,7 +163,11 @@ export function BrowserPanel({
 	const showAgentTab = !previewSelected && activeAgentTab !== null;
 	const showExtensionTab =
 		showAgentTab && activeAgentTab?.backend === "extension";
-	const showAgentWebview = visible && showAgentTab && !showExtensionTab;
+	// Keep the guest positioned while the pane slides out after losing visibility.
+	const publishAgentSlot = (visible || sliding) && showAgentTab && !showExtensionTab;
+	const slideRef = useRef({ sliding, slideViewport, shellViewport });
+	slideRef.current = { sliding, slideViewport, shellViewport };
+	const reportAgentSlotRef = useRef<(() => void) | null>(null);
 	const slotRef = useRef<HTMLDivElement | null>(null);
 	const onAgentSlotRectRef = useRef(onAgentSlotRect);
 	onAgentSlotRectRef.current = onAgentSlotRect;
@@ -196,12 +214,13 @@ export function BrowserPanel({
 						previous.left === next.left &&
 						previous.top === next.top &&
 						previous.width === next.width &&
-						previous.height === next.height;
+						previous.height === next.height &&
+						sameClip(previous.clip, next.clip);
 			if (unchanged) return;
 			lastAgentSlotRectRef.current = next;
 			onAgentSlotRectRef.current?.(next);
 		};
-		if (!showAgentWebview) {
+		if (!publishAgentSlot) {
 			publish(null);
 			return;
 		}
@@ -209,13 +228,30 @@ export function BrowserPanel({
 			const slot = slotRef.current;
 			if (!slot) return;
 			const rect = slot.getBoundingClientRect();
-			publish({
+			const next: AgentSlotRect = {
 				left: Math.round(rect.left),
 				top: Math.round(rect.top),
 				width: Math.round(rect.width),
 				height: Math.round(rect.height),
-			});
+			};
+			const { sliding: isSliding, slideViewport: viewport, shellViewport: shell } = slideRef.current;
+			if (isSliding && viewport) {
+				const bounds = viewport.getBoundingClientRect();
+				const frame = shell?.getBoundingClientRect();
+				const left = frame ? Math.max(bounds.left, frame.left) : bounds.left;
+				const top = frame ? Math.max(bounds.top, frame.top) : bounds.top;
+				const right = frame ? Math.min(bounds.left + bounds.width, frame.left + frame.width) : bounds.left + bounds.width;
+				const bottom = frame ? Math.min(bounds.top + bounds.height, frame.top + frame.height) : bounds.top + bounds.height;
+				next.clip = {
+					left: Math.round(left),
+					top: Math.round(top),
+					width: Math.max(0, Math.round(right - left)),
+					height: Math.max(0, Math.round(bottom - top)),
+				};
+			}
+			publish(next);
 		};
+		reportAgentSlotRef.current = report;
 		report();
 		const observer =
 			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(report);
@@ -226,9 +262,26 @@ export function BrowserPanel({
 			observer?.disconnect();
 			window.removeEventListener("resize", report);
 			window.clearInterval(interval);
+			reportAgentSlotRef.current = null;
 			publish(null);
 		};
-	}, [showAgentWebview]);
+	}, [publishAgentSlot]);
+
+	// While the pane slides, follow it every frame (bounded by the transition),
+	// then publish the settled, unclipped rect once.
+	useEffect(() => {
+		if (!sliding || !publishAgentSlot) return;
+		let frame = 0;
+		const tick = () => {
+			reportAgentSlotRef.current?.();
+			frame = requestAnimationFrame(tick);
+		};
+		tick();
+		return () => {
+			cancelAnimationFrame(frame);
+			reportAgentSlotRef.current?.();
+		};
+	}, [sliding, publishAgentSlot]);
 
 	useEffect(() => {
 		const view = webviewRef.current;

@@ -77,11 +77,14 @@ const styles = stylex.create({
     cursor: 'pointer',
     transform: {
       default: null,
-      ':active:not(:disabled)': 'scale(0.97)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':active:not(:disabled):not(:focus-visible)': 'scale(0.97)',
+      },
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
     transition: {
-      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease',
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease',
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
@@ -111,18 +114,27 @@ const styles = stylex.create({
         ':hover': 'var(--surface-selected)',
       },
     },
-    backgroundImage: 'none',
-    boxShadow: 'none',
+    backgroundImage: 'var(--gradient-apex)',
+    boxShadow: {
+      default: 'var(--shadow-control)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover:not(:disabled)': 'var(--shadow-control-hover)',
+      },
+    },
     fontSize: 'var(--fs-body)',
     fontWeight: 550,
     cursor: 'pointer',
     transform: {
       default: null,
-      ':active:not(:disabled)': 'scale(0.97)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':active:not(:disabled):not(:focus-visible)': 'scale(0.97)',
+      },
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
     transition: {
-      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease',
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
@@ -131,7 +143,7 @@ const styles = stylex.create({
     borderRadius: 'var(--radius-sm)',
     paddingInline: 9,
   },
-  // Primary stays in the same gray family, one step stronger than secondary.
+  // Primary: gray fill one step stronger, with apex gradient/border.
   buttonPrimary: {
     color: {
       default: 'var(--text)',
@@ -147,11 +159,19 @@ const styles = stylex.create({
         ':hover': 'color-mix(in srgb, var(--surface-selected) 82%, var(--text))',
       },
     },
-    borderColor: {
-      default: 'var(--border-strong)',
+    backgroundImage: 'var(--gradient-apex)',
+    boxShadow: {
+      default: 'var(--shadow-control)',
       '@media (hover: hover) and (pointer: fine)': {
         default: null,
-        ':hover': 'color-mix(in srgb, var(--border-strong) 80%, var(--text))',
+        ':hover:not(:disabled)': 'var(--shadow-control-hover)',
+      },
+    },
+    borderColor: {
+      default: 'var(--border-apex)',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'var(--apex)',
       },
     },
     fontWeight: 600,
@@ -168,6 +188,14 @@ const styles = stylex.create({
       },
     },
     borderColor: 'var(--danger)',
+    backgroundImage: {
+      default: 'none',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'none',
+      },
+    },
+    boxShadow: 'none',
     filter: {
       default: null,
       '@media (hover: hover) and (pointer: fine)': {
@@ -177,12 +205,22 @@ const styles = stylex.create({
     },
   },
   buttonQuiet: {
-    borderColor: 'transparent',
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
     backgroundColor: {
       default: 'transparent',
       '@media (hover: hover) and (pointer: fine)': {
         default: null,
         ':hover': 'var(--surface-hover)',
+      },
+    },
+    backgroundImage: {
+      default: 'none',
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':hover': 'none',
       },
     },
     boxShadow: 'none',
@@ -209,11 +247,15 @@ const styles = stylex.create({
     borderRadius: 'var(--radius-sm)',
     color: 'var(--text-secondary)',
     backgroundColor: 'var(--surface-subtle)',
+    backgroundImage: 'var(--gradient-apex)',
+    boxShadow: 'var(--shadow-control)',
     cursor: 'pointer',
-    ':hover': { color: 'var(--text)', backgroundColor: 'var(--surface-hover)' },
-    ':focus-within': { color: 'var(--text)', borderColor: 'var(--focus)', outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--focus)', outlineOffset: 1 },
+    '@media (hover: hover) and (pointer: fine)': {
+      ':hover:not(:has(:disabled))': { color: 'var(--text)', borderColor: 'var(--border-apex)', backgroundColor: 'var(--surface-hover)', boxShadow: 'var(--shadow-control-hover)' },
+    },
+    ':focus-within': { color: 'var(--text)', borderColor: 'var(--border-apex)', boxShadow: 'var(--shadow-control-hover)', outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--focus)', outlineOffset: 1 },
   },
-  selectRootOpen: { color: 'var(--text)', backgroundColor: 'var(--surface-hover)' },
+  selectRootOpen: { color: 'var(--text)', borderColor: 'var(--border-apex)', backgroundColor: 'var(--surface-hover)', boxShadow: 'var(--shadow-control-hover)' },
   selectRootDisabled: { opacity: 0.65, cursor: 'default' },
   selectIcon: { display: 'inline-grid', placeItems: 'center', flex: '0 0 auto', pointerEvents: 'none' },
   selectRootCompact: {
@@ -298,7 +340,9 @@ const styles = stylex.create({
   segmentedItemActive: {
     color: 'var(--text)',
     backgroundColor: 'var(--surface-raised)',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+    backgroundImage: 'var(--gradient-apex)',
+    borderRadius: 'var(--radius-xs)',
+    boxShadow: 'inset 0 0 0 1px var(--border-apex), var(--shadow-control-hover)',
   },
   emptyState: {
     height: '100%',
@@ -430,7 +474,7 @@ export function ApexButton({
       icon={icon}
       endContent={endIcon}
       className={`button ${compact ? 'button--compact' : ''} ${variantClass} ${className}`.trim()}
-      xstyle={[(variant === 'primary' ? false : variant === 'danger' ? false : variant === 'quiet') && workbenchStyles.buttonQuiet, workbenchStyles.button, compact && workbenchStyles.buttonCompact, variant === 'primary' && workbenchStyles.buttonPrimary, (variant === 'primary' ? false : variant === 'danger') && workbenchStyles.buttonDanger, styles.button, compact && styles.buttonCompact, variant === 'primary' && styles.buttonPrimary, variant === 'danger' && styles.buttonDanger, variant === 'quiet' && styles.buttonQuiet, xstyle]}
+      xstyle={[workbenchStyles.button, variant === 'quiet' && workbenchStyles.buttonQuiet, compact && workbenchStyles.buttonCompact, variant === 'primary' && workbenchStyles.buttonPrimary, (variant === 'primary' ? false : variant === 'danger') && workbenchStyles.buttonDanger, styles.button, compact && styles.buttonCompact, variant === 'primary' && styles.buttonPrimary, variant === 'danger' && styles.buttonDanger, variant === 'quiet' && styles.buttonQuiet, xstyle]}
     >
       {children}
     </AstryxButton>

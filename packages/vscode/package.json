@@ -2,7 +2,7 @@
   "name": "apex-vscode",
   "displayName": "Apex",
   "description": "The Apex workspace for Pi, inside VS Code.",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "publisher": "bdkinc",
   "license": "MIT",
   "private": true,
@@ -20,7 +20,7 @@
     "onStartupFinished"
   ],
   "scripts": {
-    "build:host": "vite build --config vite.host.config.ts && node scripts/copy-browser.mjs",
+    "build:host": "vite build --config vite.host.config.ts && node ../../scripts/build-browser-agent.mjs dist/browser-agent && node scripts/copy-browser.mjs",
     "build:webview": "vite build",
     "build": "npm run build:host && npm run build:webview",
     "typecheck": "node ../../scripts/typecheck.mjs --vscode-only",
@@ -143,8 +143,8 @@
     "@xstate/react": "^6.1.0",
     "apex-core": "0.1.0",
     "apex-ui": "*",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "xstate": "^5.33.4"
   },
   "devDependencies": {

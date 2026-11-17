@@ -154,6 +154,11 @@ describe.each<HarnessId>(['pi'])('command palette for %s', (harness) => {
   it('finds sessions and projects by any word and returns to the previous session', async () => {
     harnessState.activeHarness = harness
     await act(async () => { root.render(<App />) })
+    const collapsedProjects = await waitFor(() => {
+      const toggles = container.querySelectorAll<HTMLButtonElement>('.project-row button[aria-expanded="false"][aria-label^="Expand "]')
+      return toggles.length ? toggles : null
+    })
+    await act(async () => { for (const toggle of collapsedProjects) toggle.click() })
     const selectedTitle = () => container.querySelector('.session-row-wrap.is-selected .session-row__title')?.textContent
     await waitFor(() => selectedTitle() === 'Build the workspace shell' ? true : null)
 

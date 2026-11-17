@@ -9,6 +9,22 @@ export interface AgentSlotRect {
 	top: number;
 	width: number;
 	height: number;
+	/**
+	 * Presentation-only viewport (same coordinate space) the layer must not paint
+	 * outside. Set only while the inspector slides the Browser pane in or out.
+	 */
+	clip?: { left: number; top: number; width: number; height: number };
+}
+
+/** CSS clip-path that limits `rect` to its `clip` viewport, or undefined when unclipped. */
+export function agentSlotClipPath(rect: AgentSlotRect): string | undefined {
+	const { clip } = rect;
+	if (!clip) return undefined;
+	const top = Math.max(0, clip.top - rect.top);
+	const left = Math.max(0, clip.left - rect.left);
+	const right = Math.max(0, rect.left + rect.width - (clip.left + clip.width));
+	const bottom = Math.max(0, rect.top + rect.height - (clip.top + clip.height));
+	return `inset(${top}px ${right}px ${bottom}px ${left}px)`;
 }
 
 type AgentWebviewElement = HTMLElement & {
@@ -20,6 +36,7 @@ type AgentWebviewElement = HTMLElement & {
 interface AgentBrowserLayerProps {
 	tabs: AgentBrowserTabRecord[];
 	visibleTabId: string | null;
+	interactive?: boolean;
 	rect: AgentSlotRect | null;
 	pointerEvent: StampedPointerEvent | null;
 	onAttach(tabId: string, webContentsId: number): void;
@@ -40,18 +57,20 @@ const CURSOR_IDLE_MS = 3_500;
 export function AgentBrowserLayer({
 	tabs,
 	visibleTabId,
+	interactive = true,
 	rect,
 	pointerEvent,
 	onAttach,
 }: AgentBrowserLayerProps) {
 	const style = rect
-		? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+		? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, clipPath: agentSlotClipPath(rect), pointerEvents: interactive ? undefined : 'none' as const }
 		: undefined;
 	return (
 		<div
 			className={[`agent-browser-layer ${rect ? "is-visible" : ""}`, stylex.props(inspectorStyles.agentBrowserLayer, (rect) && inspectorStyles.agentBrowserLayerIsVisible).className].filter(Boolean).join(' ')}
 			style={style}
-			aria-hidden={rect ? undefined : true}
+			inert={!rect || !interactive}
+			aria-hidden={!rect || !interactive || undefined}
 		>
 			{/* Extension-backed tabs live in the user's Chrome; only in-app tabs need a guest. */}
 			{tabs

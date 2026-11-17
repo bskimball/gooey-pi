@@ -141,9 +141,9 @@ export function toolPreview(part: Extract<MessagePart, { type: 'toolCall' }>): s
   return boundText(serialize(raw).replace(/\s+/g, ' ').trim(), 180, '…')
 }
 
-/** Reasoning stays readable while its turn runs and after it settles; a Thought header lets you fold it away. */
-function ReasoningPart({ part, live = false, streaming = false, animateArrival = false }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean; animateArrival?: boolean }) {
-  const [open, setOpen] = useState(true)
+function ReasoningPart({ part, live = false, streaming = false, animateArrival = false, defaultOpen = true }: { part: Extract<MessagePart, { type: 'thinking' }>; live?: boolean; streaming?: boolean; animateArrival?: boolean; defaultOpen?: boolean }) {
+  const [userOpen, setOpen] = useState<boolean>()
+  const open = userOpen ?? defaultOpen
   const bodyId = useId()
   const instant = useInstantMotion()
   if (live && !part.text.trim()) return null
@@ -170,7 +170,7 @@ function ReasoningPart({ part, live = false, streaming = false, animateArrival =
             className={`activity-thought__summary ${stylex.props(transcriptStyles.activityThoughtSummary).className ?? ""}`}
             aria-expanded={open}
             aria-controls={open ? bodyId : undefined}
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => setOpen(!open)}
             {...summaryCollapse}
             transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
           >
@@ -252,11 +252,18 @@ const ToolPart = memo(function ToolPart({ part, result, animateArrival = false }
   const detailsId = useId()
   const output = result?.text ?? ''
   const command = kind === 'terminal' ? stringArg(part, 'command') : undefined
-  const visibleOutput = useMemo(() => {
-    if (!open || showDiff) return ''
-    const args = command ? '' : serialize(part.args, true)
-    return boundText(`${args}${args && output ? '\n\n' : ''}${output}`, 200_000, '\n\n[Output truncated in the desktop view.]')
-  }, [open, showDiff, command, part.args, output])
+  const sections = useMemo(() => {
+    if (!open || showDiff) return []
+    const input = command ? '' : serialize(part.args, true)
+    // Share the existing display budget without letting a large input crowd out the result.
+    const limit = 200_000
+    const inputLimit = limit - Math.min(output.length, limit / 2)
+    const outputLimit = limit - Math.min(input.length, inputLimit)
+    return [
+      ...(input ? [{ label: 'Input', text: boundText(input, inputLimit, '\n\n[Input truncated in the desktop view.]') }] : []),
+      ...(output ? [{ label: failed ? 'Error' : 'Output', text: boundText(output, outputLimit, '\n\n[Output truncated in the desktop view.]') }] : []),
+    ]
+  }, [open, showDiff, command, part.args, output, failed])
   const canExpand = showDiff || Boolean(output || !command && part.args !== undefined && part.args !== '')
   const state = failed ? 'error' : finished ? 'done' : kind === 'question' ? 'waiting' : 'running'
   const preview = toolPreview(part)
@@ -271,7 +278,7 @@ const ToolPart = memo(function ToolPart({ part, result, animateArrival = false }
 
   const copyContents = async () => {
     try {
-      await writeClipboardText(visibleOutput)
+      await writeClipboardText(sections.map((section) => section.text).join('\n\n'))
       setCopied(true)
       if (resetCopiedTimerRef.current !== null) window.clearTimeout(resetCopiedTimerRef.current)
       resetCopiedTimerRef.current = window.setTimeout(() => setCopied(false), 1_500)
@@ -308,14 +315,19 @@ const ToolPart = memo(function ToolPart({ part, result, animateArrival = false }
         {(state === 'running' || state === 'error' && command) && !open && output.trim() ? <motion.pre key="tool-tail" className={[`activity-tool__tail${state === 'error' ? ' is-error' : ''}`, stylex.props(transcriptStyles.activityToolTail).className].filter(Boolean).join(' ')} {...collapse}>{outputTail(output)}</motion.pre> : null}
       </AnimatePresence>
       <AnimatePresence initial={false}>
-        {open && visibleOutput ? (
+        {sections.length > 0 ? (
           <motion.div key="tool-details" className={`activity-tool__details ${stylex.props(transcriptStyles.activityToolDetails).className ?? ""}`} id={detailsId} {...collapse}>
-            <div className={`activity-tool__details-toolbar ${stylex.props(transcriptStyles.activityToolDetailsToolbar).className ?? ""}`}>
-              <button type="button" className={`activity-tool__copy ${stylex.props(transcriptStyles.activityToolCopy).className ?? ""}`} aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
-                {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-            <pre className={`activity-tool__contents ${stylex.props(transcriptStyles.activityToolContents).className ?? ""}`}><SyntaxText text={visibleOutput} /></pre>
+            {sections.map(({ label, text }, index) => (
+              <div key={label === 'Input' ? 'input' : 'result'} role="group" aria-label={label}>
+                <div className={`activity-tool__details-toolbar ${stylex.props(transcriptStyles.activityToolDetailsToolbar).className ?? ""}`}>
+                  <span {...stylex.props(transcriptStyles.activityToolDetailLabel, label === 'Error' && transcriptStyles.activityToolDetailLabelIsError)}>{label}</span>
+                  {index === 0 ? <button type="button" className={`activity-tool__copy ${stylex.props(transcriptStyles.activityToolCopy).className ?? ""}`} aria-label={`${copied ? 'Copied' : 'Copy'} tool contents`} onClick={() => void copyContents()}>
+                    {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+                  </button> : null}
+                </div>
+                <pre className={`activity-tool__contents ${stylex.props(transcriptStyles.activityToolContents).className ?? ""}`}><SyntaxText text={text} /></pre>
+              </div>
+            ))}
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -404,7 +416,7 @@ function partKey(part: MessagePart, index: number): string {
   return part.partId ?? `${part.type}:${index}`
 }
 
-export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false, subagents }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean; subagents?: SubagentPairs }) {
+export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = false, subagents, foldPastThoughts = false }: { id?: string; parts: MessagePart[]; showReasoning: boolean; showTools: boolean; streaming?: boolean; subagents?: SubagentPairs; foldPastThoughts?: boolean }) {
   const instant = useInstantMotion()
   const { followUps, absorbed } = subagents ?? pairSubagentCalls(parts)
   const pairedResults = new Set<number>()
@@ -418,7 +430,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       if (part.status === 'running') pendingKeys.add(key)
       return <CompactionPart key={key} part={part} animateArrival={streaming} />
     }
-    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} streaming={isTailPart} animateArrival={streaming} /> : null
+    if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={foldPastThoughts ? isTailPart : streaming} streaming={isTailPart} animateArrival={streaming} defaultOpen={!foldPastThoughts} /> : null
     if (part.type === 'toolCall') {
       const next = parts[index + 1]
       const result = next?.type === 'toolResult' ? next : undefined
@@ -489,7 +501,7 @@ export function activeWorkLabel(parts: MessagePart[]): string | undefined {
   return undefined
 }
 
-function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools: boolean): 'Thinking' | 'Working' {
+export function liveWorkStatus(parts: MessagePart[], showReasoning: boolean, showTools: boolean): 'Thinking' | 'Working' {
   let status: 'Thinking' | 'Working' | undefined
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index]

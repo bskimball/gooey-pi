@@ -3,8 +3,8 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { createContext, memo, type ReactNode, type Ref, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type AnimationPlaybackControls, AnimatePresence, animate, motion, useIsPresent, useReducedMotion } from "motion/react";
 import { pathToFileUrl } from "@/lib/desktop-actions";
 import type {
 	ExtensionTabControls,
@@ -81,6 +81,8 @@ export interface InspectorProps {
 	onGrantProject(): Promise<void> | void;
 	overlay?: boolean;
 	visible?: boolean;
+	instantShell?: boolean;
+	onShellMotionComplete?(): void;
 	expanded?: boolean;
 	onToggleExpanded?(): void;
 	browserActive?: boolean;
@@ -93,6 +95,43 @@ const tabs: Array<{ id: InspectorTab; label: string; Icon: typeof Info }> = [
 	{ id: "files", label: "Files", Icon: Folder },
 	{ id: "browser", label: "Browser", Icon: Globe },
 ];
+
+const tabIndex = (id: InspectorTab) => tabs.findIndex((tab) => tab.id === id);
+const SLIDE_TRANSITION = { duration: 0.22, ease: [0.23, 1, 0.32, 1] as const };
+const slideOffset = (dir: number) => `${dir * 100}%`;
+
+const slideStyles = stylex.create({
+	viewport: { position: "relative" },
+	browserLeaving: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+});
+
+/** Direction of the latest tab change in `tabs` order (+1 = toward the right). */
+interface SlideNav { tab: InspectorTab; dir: -1 | 0 | 1; instant: boolean }
+const SlideContext = createContext<SlideNav>({ tab: "summary", dir: 0, instant: true });
+
+/**
+ * One non-browser panel. Exiting copies read the live direction from context
+ * so a rapid reversal exits the correct way, and turn inert the moment they
+ * stop being the selected panel.
+ */
+function SlidePane({ children, ref }: { children: ReactNode; ref?: Ref<HTMLDivElement> }) {
+	const isPresent = useIsPresent();
+	const { dir, instant } = useContext(SlideContext);
+	return (
+		<motion.div
+			ref={ref}
+			{...stylex.props(inspectorStyles.inspectorPanelMotion)}
+			inert={!isPresent}
+			aria-hidden={isPresent ? undefined : true}
+			initial={instant || dir === 0 ? false : { x: slideOffset(dir) }}
+			animate={{ x: "0%" }}
+			exit={instant ? { x: "0%", opacity: 0, transition: { duration: 0 } } : { x: slideOffset(-dir) }}
+			transition={instant ? { duration: 0 } : SLIDE_TRANSITION}
+		>
+			{isPresent || !instant ? children : null}
+		</motion.div>
+	);
+}
 
 /** Memoized so streaming transcript updates (which this component no longer consumes outside the Summary tab) do not re-render the inspector shell. */
 export const Inspector = memo(function Inspector({
@@ -131,6 +170,8 @@ export const Inspector = memo(function Inspector({
 	onGrantProject,
 	overlay = false,
 	visible = true,
+	instantShell = false,
+	onShellMotionComplete,
 	expanded = false,
 	onToggleExpanded,
 	browserActive = false,
@@ -139,7 +180,64 @@ export const Inspector = memo(function Inspector({
 }: InspectorProps) {
 	const [browserVisited, setBrowserVisited] = useState(activeTab === "browser");
 	useEffect(() => { if (activeTab === "browser") setBrowserVisited(true); }, [activeTab]);
-	const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
+	const reducedMotion = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
+	const instant = reducedMotion;
+	const [shellViewport, setShellViewport] = useState<HTMLDivElement | null>(null);
+	const [shellAnimating, setShellAnimating] = useState(false);
+	const [shellSettledVisible, setShellSettledVisible] = useState(visible);
+	const shellVisibleRef = useRef(visible);
+	shellVisibleRef.current = visible;
+	const shellSliding = !reducedMotion && !instantShell && (shellAnimating || shellSettledVisible !== visible);
+	const startShellMotion = useCallback(() => setShellAnimating(true), []);
+	const completeShellMotion = useCallback(() => {
+		setShellAnimating(false);
+		setShellSettledVisible(shellVisibleRef.current);
+		onShellMotionComplete?.();
+	}, [onShellMotionComplete]);
+	// Keyboard tab moves switch instantly; pointer/programmatic moves slide.
+	const keyboardNavRef = useRef(false);
+	const [nav, setNav] = useState<SlideNav>({ tab: activeTab, dir: 0, instant: true });
+	let slideNav = nav;
+	if (nav.tab !== activeTab) {
+		slideNav = { tab: activeTab, dir: Math.sign(tabIndex(activeTab) - tabIndex(nav.tab)) as SlideNav["dir"], instant: keyboardNavRef.current };
+		setNav(slideNav);
+	}
+	if (instant && !slideNav.instant) slideNav = { ...slideNav, instant: true };
+	// Cleared after commit (not during render) so StrictMode double renders agree.
+	useEffect(() => { keyboardNavRef.current = false; }, [nav.tab]);
+	const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+	const browserPaneRef = useRef<HTMLDivElement | null>(null);
+	const browserAnimRef = useRef<AnimationPlaybackControls | null>(null);
+	const browserWasActiveRef = useRef(activeTab === "browser");
+	const [browserSliding, setBrowserSliding] = useState(false);
+	const browserSelected = activeTab === "browser";
+	// The Browser pane is never remounted: slide the persistent element itself.
+	useLayoutEffect(() => {
+		if (browserWasActiveRef.current === browserSelected) return;
+		browserWasActiveRef.current = browserSelected;
+		const pane = browserPaneRef.current;
+		const running = browserAnimRef.current;
+		running?.stop();
+		browserAnimRef.current = null;
+		if (!pane) return;
+		if (slideNav.instant || slideNav.dir === 0) {
+			animate(pane, { x: "0%" }, { duration: 0 });
+			setBrowserSliding(false);
+			return;
+		}
+		const target = browserSelected ? "0%" : slideOffset(-slideNav.dir);
+		// A reversal mid-flight continues from the current offset.
+		const keyframes = running || !browserSelected ? target : [slideOffset(slideNav.dir), target];
+		const controls = animate(pane, { x: keyframes }, SLIDE_TRANSITION);
+		browserAnimRef.current = controls;
+		setBrowserSliding(true);
+		void controls.then(() => {
+			if (browserAnimRef.current !== controls) return;
+			browserAnimRef.current = null;
+			setBrowserSliding(false);
+		});
+	}, [browserSelected, slideNav]);
+	useEffect(() => () => browserAnimRef.current?.stop(), []);
 	const [selectSummary] = useState(createSessionSummarySelector);
 	const summary = useMemo(() => selectSummary(messages), [messages, selectSummary]);
 	const [selectReadiness] = useState(createReadinessSelector);
@@ -158,13 +256,14 @@ export const Inspector = memo(function Inspector({
 		else if (key === "End") next = tabs.length - 1;
 		else return;
 		const tab = tabs[next];
+		if (tab.id !== activeTab) keyboardNavRef.current = true;
 		onTabChange(tab.id);
 		requestAnimationFrame(() =>
 			document.getElementById(`inspector-tab-${tab.id}`)?.focus(),
 		);
 	};
 	return (
-		<InspectorShell visible={visible} overlay={overlay} onClose={onClose} label="Session inspector">
+		<InspectorShell visible={visible} overlay={overlay} onClose={onClose} label="Session inspector" instant={instantShell} onMotionStart={startShellMotion} onMotionComplete={completeShellMotion} viewportRef={setShellViewport}>
 			<div
 				className={`inspector__tabs ${stylex.props(inspectorStyles.inspectorTabs, [responsiveStyles.inspectorTabs, responsiveLayoutStyles.inspectorTabs]).className ?? ""}`}
 				role="tablist"
@@ -189,7 +288,11 @@ export const Inspector = memo(function Inspector({
 							}
 						}}
 						title={tab.label}
-						onClick={() => onTabChange(tab.id)}
+						onClick={(event) => {
+							// detail 0 = Enter/Space/assistive activation: switch instantly; pointer clicks slide.
+							keyboardNavRef.current = event.detail === 0 && tab.id !== activeTab;
+							onTabChange(tab.id);
+						}}
 					>
 						<tab.Icon size={16} aria-hidden="true" />
 						<span className={`inspector__tab-label ${stylex.props(inspectorStyles.inspectorTabLabel).className ?? ""}`}>{tab.label}</span>
@@ -214,21 +317,18 @@ export const Inspector = memo(function Inspector({
 					<SidebarRight size={16} />
 				</IconButton> : null}
 			</div>
+			<SlideContext value={slideNav}>
 			<div
+				ref={setBodyEl}
 				id={`inspector-panel-${activeTab}`}
-				className={`inspector__body ${stylex.props(inspectorStyles.inspectorBody).className ?? ""}`}
+				className={`inspector__body ${stylex.props(inspectorStyles.inspectorBody, slideStyles.viewport).className ?? ""}`}
 				role="tabpanel"
 				aria-labelledby={`inspector-tab-${activeTab}`}
 				tabIndex={0}
 			>
+				<AnimatePresence initial={false} mode="popLayout">
 				{activeTab !== "browser" ? (
-					<motion.div
-						key={activeTab}
-						{...stylex.props(inspectorStyles.inspectorPanelMotion)}
-						initial={instant ? false : { opacity: 0 }}
-						animate={{ opacity: 1 }}
-						transition={instant ? { duration: 0 } : { duration: 0.14, ease: [0.23, 1, 0.32, 1] }}
-					>
+					<SlidePane key={activeTab}>
 						{activeTab === "summary" ? (
 							<div className={`inspector-scroll scroll-area ${stylex.props(baseStyles.scrollArea, inspectorStyles.inspectorScroll).className ?? ""}`}>
 								<SummaryPanel
@@ -278,12 +378,16 @@ export const Inspector = memo(function Inspector({
 								onReveal={onRevealPath}
 							/>
 						) : null}
-					</motion.div>
+					</SlidePane>
 				) : null}
+				</AnimatePresence>
 				{activeTab === "browser" || browserVisited ? (
-					<div className={`inspector__browser-panel ${stylex.props(inspectorStyles.inspectorBrowserPanel).className ?? ""}`} hidden={activeTab !== "browser"} inert={activeTab !== "browser"}>
+					<div ref={browserPaneRef} className={`inspector__browser-panel ${stylex.props(inspectorStyles.inspectorBrowserPanel, !browserSelected && browserSliding && slideStyles.browserLeaving).className ?? ""}`} hidden={!browserSelected && !browserSliding} inert={!browserSelected} aria-hidden={browserSelected ? undefined : true}>
 					<BrowserPanel
 						visible={visible && activeTab === "browser"}
+						sliding={(visible && browserSliding) || (browserSelected && shellSliding)}
+						slideViewport={bodyEl}
+						shellViewport={overlay ? undefined : shellViewport}
 						key={`${cwd ?? ''}:${agentSessionKey ?? ''}`}
 						cwd={cwd}
 						platform={platform}
@@ -308,6 +412,7 @@ export const Inspector = memo(function Inspector({
 					</div>
 				) : null}
 			</div>
+			</SlideContext>
 		</InspectorShell>
 	);
 });

@@ -73,8 +73,9 @@
 .subagent-lane.is-running .subagent-lane__status { color: var(--apex); }
 .subagent-lane.is-done .subagent-lane__status, .subagent-lane.is-done .subagent-lane__state { color: var(--success); }
 .subagent-lane.is-error .subagent-lane__status, .subagent-lane.is-error .subagent-lane__state { color: var(--danger); }
-.subagent-lane__summary[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
+.subagent-lane__toggle[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
 .subagent-lane.is-running .subagent-lane__state { color: var(--apex); }
+.subagent-lane.is-done .subagent-lane__state { color: var(--success); }
 .subagent-lane.is-waiting .subagent-lane__status, .subagent-lane.is-waiting .subagent-lane__state { color: var(--warning); }
 .subagent-lane.is-sent .subagent-lane__state { color: var(--text-secondary); }
 @media (hover: hover) and (pointer: fine) {

@@ -36,6 +36,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
+  window.localStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -76,6 +77,7 @@ describe('sidebar sub-agent rows', () => {
         onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
       />,
     ))
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Expand Project"]')!.click())
     const list = container.querySelector('.session-list [aria-label="Sub-agents of Session lead"]')
     expect(list).not.toBeNull()
     const rows = [...list!.querySelectorAll<HTMLButtonElement>('.session-subagent')]
@@ -103,6 +105,7 @@ describe('sidebar sub-agent rows', () => {
         onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
       />,
     ))
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Expand Project"]')!.click())
 
     const toggles = [...container.querySelectorAll<HTMLButtonElement>('.session-row__collapse')]
     expect(toggles).toHaveLength(1)

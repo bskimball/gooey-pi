@@ -3,7 +3,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AssistantMessage } from '../../apps/desktop/src/components/transcript/messages'
+import { AssistantMessage, renderNarrativeWithActivity } from '../../apps/desktop/src/components/transcript/messages'
 import { Transcript } from '../../apps/desktop/src/components/Transcript'
 import { WorkTimeline } from '../../apps/desktop/src/components/transcript/timeline'
 import { replayApexEvents } from '../../apps/desktop/src/lib/events'
@@ -75,7 +75,8 @@ describe('timeline part identity', () => {
     const updated = [...parts]
     updated[1] = { type: 'toolResult', name: 'probe', text: 'changed result', isError: true }
     renderTimeline({ id: 'tools', role: 'assistant', parts: updated })
-    expect(details?.textContent).toContain('changed result')
+    expect(details?.querySelector('[role="group"][aria-label="Error"] pre')?.textContent).toBe('changed result')
+    expect(details?.querySelector('[aria-label="Output"]')).toBeNull()
     expect(container.querySelector('.activity-line--tool')?.classList.contains('is-error')).toBe(true)
   })
 
@@ -212,6 +213,12 @@ describe('timeline part identity', () => {
     expect(container.querySelector('.activity-edit-diff')).toBeNull()
   })
 
+  it.each([true, 'current-step'] as const)('shows a thought-only history on the first expansion (%s)', (presentation) => {
+    act(() => root.render(renderNarrativeWithActivity([{ type: 'thinking', text: 'No tools needed.' }], 'only', true, true, false, presentation)))
+    act(() => container.querySelector<HTMLButtonElement>('.work-group__summary')?.click())
+    expect(container.querySelector('[aria-label="Tool activity history"]')?.textContent).toContain('No tools needed.')
+  })
+
   it('copies the promoted final report when reasoning trails it', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
@@ -251,6 +258,8 @@ describe('timeline part identity', () => {
     act(() => { summary.click() })
     const copy = container.querySelector('[aria-label="Copy tool contents"]') as HTMLButtonElement
     expect(copy).not.toBeNull()
+    expect(container.querySelector('[role="group"][aria-label="Input"] pre')?.textContent).toBe('{\n  "path": "src/App.tsx"\n}')
+    expect(container.querySelector('[role="group"][aria-label="Output"] pre')?.textContent).toBe('file contents')
 
     await act(async () => { copy.click() })
     expect(writeText).toHaveBeenCalledWith('{\n  "path": "src/App.tsx"\n}\n\nfile contents')

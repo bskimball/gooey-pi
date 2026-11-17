@@ -33,6 +33,7 @@ export const styles = stylex.create({
     "textAlign": "center"
   },
   "specialistTabstrip": {
+    "position": "relative",
     "minHeight": "42px",
     "flexGrow": 0,
     "flexShrink": 0,
@@ -194,15 +195,15 @@ export const styles = stylex.create({
     "fontSize": "var(--fs-meta)",
     "whiteSpace": "nowrap",
     "cursor": "pointer",
-    "transition": "color var(--fast), background-color var(--fast), border-color var(--fast), box-shadow 160ms var(--ease-out), margin-left 160ms var(--ease-out), transform 160ms var(--ease-out)",
-    "transform": {
-      "default": null,
+    "transition": "color var(--fast), background-color var(--fast), border-color var(--fast), box-shadow 160ms var(--ease-out), margin-left 160ms var(--ease-out), translate 160ms var(--ease-out)",
+    "translate": {
+      "default": "0 0",
       "@media (hover: hover) and (pointer: fine)": {
         "default": null,
-        ":hover": "translateY(-2px)"
+        ":hover": "0 -2px"
       },
-      ":focus-visible": "translateY(-2px)",
-      ":active": "translateY(0) scale(0.97)"
+      ":focus-visible": "0 -2px",
+      ":active": "0 0"
     },
     "::before": {
       "position": "absolute",

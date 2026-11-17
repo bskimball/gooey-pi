@@ -72,9 +72,10 @@ body[class*="vscode-"] {
   --radius-element: var(--radius-sm);
   --radius-container: 12px;
 
-  --shadow-low: var(--shadow-popover);
-  --shadow-med: var(--shadow-popover);
-  --shadow-high: var(--shadow-popover);
+  /* Graded scale: low = menus, med = palette, high = modal. */
+  --shadow-low: var(--shadow-elevation-low);
+  --shadow-med: var(--shadow-elevation-med);
+  --shadow-high: var(--shadow-elevation-high);
 
   --size-element-sm: 26px;
   --size-element-md: 32px;

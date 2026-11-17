@@ -5,7 +5,7 @@ import { styles as terminalStyles } from 'apex-ui/styles/terminal.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { CSSProperties, Dispatch, SetStateAction } from 'react'
 import { Sidebar } from '@/components/Sidebar'
@@ -107,6 +107,21 @@ export default function App() {
   const instant = Boolean(useReducedMotion())
     || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
     || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  const [panelKeyboard, setPanelKeyboard] = useState(true)
+  const panelInstant = instant || panelKeyboard
+  useEffect(() => {
+    const pointer = () => setPanelKeyboard(false)
+    const keyboard = () => setPanelKeyboard(true)
+    const activation = (event: MouseEvent) => { if (event.detail === 0) setPanelKeyboard(true) }
+    window.addEventListener('pointerdown', pointer, true)
+    window.addEventListener('keydown', keyboard, true)
+    window.addEventListener('click', activation, true)
+    return () => {
+      window.removeEventListener('pointerdown', pointer, true)
+      window.removeEventListener('keydown', keyboard, true)
+      window.removeEventListener('click', activation, true)
+    }
+  }, [])
   const bridge = hasBridge() ? window.apex : null
   const initialProject = bridge ? undefined : SAMPLE_PROJECTS[0]
   const initialSession = bridge ? undefined : SAMPLE_SESSIONS[0]
@@ -240,6 +255,13 @@ export default function App() {
   })
   const sidebarVisible = settingsState.sidebarOpen && !layout.sidebarSuppressed
   const inspectorVisible = settingsState.inspectorOpen && !layout.inspectorSuppressed
+  const [inspectorPresent, setInspectorPresent] = useState(inspectorVisible)
+  const inspectorVisibleRef = useRef(inspectorVisible)
+  inspectorVisibleRef.current = inspectorVisible
+  useLayoutEffect(() => { if (inspectorVisible) setInspectorPresent(true) }, [inspectorVisible])
+  const inspectorMotionComplete = useCallback(() => {
+    if (!inspectorVisibleRef.current) setInspectorPresent(false)
+  }, [])
   const extension = useExtensionUi({
     bridge, activeRuntimeId: workspace.runtime?.runtimeId, activeSessionMode: activeSession?.behaviorMode, runtimeSessionsRef: workspace.runtimeSessionsRef,
     setSessions, setRuntime: workspace.setRuntime, reportError, agentTurn: agentTurnHandle,
@@ -348,7 +370,7 @@ export default function App() {
   }, [agentBrowser.tabs, activeRuntimeSessionFile, activeSessionFilePath])
   const activeAgentTabId = activeAgentTabs.find((tab) => tab.active)?.tabId ?? activeAgentTabs[0]?.tabId ?? null
   useEffect(() => { if (!activeAgentTabs.length) setAgentPreviewSelected(true) }, [activeAgentTabs.length])
-  const agentTabVisible = view === 'session' && inspectorVisible && settingsState.inspectorTab === 'browser' && !agentPreviewSelected && activeAgentTabId !== null
+  const agentTabVisible = view === 'session' && (inspectorVisible || inspectorPresent) && agentSlotRect !== null && !agentPreviewSelected && activeAgentTabId !== null
   const pluginScope = activeProject?.primaryFolder && !activeProject.inferred ? activeProject.primaryFolder : undefined
   const pluginSkills = usePluginSkills({ bridge, harness: activeHarness, scope: pluginScope, generation: workspace.workspaceGeneration, initialSkills: bridge ? [] : SAMPLE_SKILLS, reportError })
   useEffect(() => () => { demoTimerRef.current.forEach(window.clearTimeout) }, [])
@@ -725,7 +747,9 @@ export default function App() {
 
   return <I18nProvider preference={settingsState.settings.locale}><TaskWorkflowContext.Provider value={taskWorkflow.context}><div className={`app-shell ${stylex.props(workbenchStyles.appShell).className ?? ""}`} style={{ '--sidebar-width': `${layout.sidebarWidth}px` } as CSSProperties} aria-busy={!initialized} data-platform={platform} data-ready={initialized ? 'true' : 'false'}>
     <AppRail onNavigate={navigate} vscodeProject={activeProject} terminalOpen={terminalOpen} onToggleTerminal={sidebarActions.onToggleTerminal} onOpenInVsCode={bridge ? sidebarActions.onOpenInVsCode : undefined} sidebarOpen={sidebarVisible} onToggleSidebar={toggleSidebar} voiceOpen={voiceOrbOpen} onToggleVoice={handleToggleVoice} view={view} platform={platform} />
-    {sidebarVisible ? <Sidebar sideConversations={taskWorkflow.children} onOpenSideConversation={taskWorkflow.navigate} projects={projects} sessions={chatSessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} specialistRosters={specialistRosters} openSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey && inspectorVisible && settingsState.inspectorTab === 'specialists' ? selectedSpecialist.id : null} onOpenSpecialist={openSessionSpecialist} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} overlay={layout.compactLayout} platform={platform} /> : null}
+    <AnimatePresence initial={false} custom={panelInstant}>
+    {sidebarVisible ? <Sidebar key="sidebar" instant={panelInstant} sideConversations={taskWorkflow.children} onOpenSideConversation={taskWorkflow.navigate} projects={projects} sessions={chatSessions} loading={catalogLoading} clearedAttention={clearedAttention} liveBySession={liveBySession} specialistRosters={specialistRosters} openSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey && inspectorVisible && settingsState.inspectorTab === 'specialists' ? selectedSpecialist.id : null} onOpenSpecialist={openSessionSpecialist} activeProjectId={activeProject?.id} activeSessionId={workspace.activeSessionId} activeView={view} activeHarness={activeHarness} projectSortMode={settingsState.settings.projectSortMode} {...sidebarActions} runtimeOwners={runtimeOwners} onContinueInVsCode={bridge ? sidebarActions.onContinueInVsCode : undefined} overlay={layout.compactLayout} platform={platform} /> : null}
+    </AnimatePresence>
     {sidebarVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" edge="end" cssVariable="--sidebar-width" scopeSelector=".app-shell" label="Resize sidebar" value={layout.sidebarWidth} min={SIDEBAR_MIN} max={layout.sidebarMax} defaultValue={SIDEBAR_DEFAULT} onChange={layout.setSidebarWidth} /> : null}
     <AnimatePresence initial={false}>
       {sidebarVisible ? (
@@ -763,7 +787,7 @@ export default function App() {
           {terminalSessions.map((terminal) => <Suspense key={terminal.id} fallback={terminal.id === activeTerminalSession?.id ? <TerminalLoadingPanel /> : null}><TerminalDrawer ref={(handle) => { if (handle) terminalDrawerRefs.current.set(terminal.id, handle); else terminalDrawerRefs.current.delete(terminal.id) }} visible={terminal.id === activeTerminalSession?.id} cwd={terminal.cwd} sessionPath={terminal.sessionPath} shell={settingsState.settings.terminalShell} initialCommand={terminal.initialCommand} startEmpty={terminal.startEmpty} jobs={backgroundJobs.jobs.filter((job) => jobInFolder(job, terminal.cwd))} jobOutput={backgroundJobs.output} onStopJob={(key) => { void bridge?.backgroundJobs.stop(key).catch(reportError) }} onDismissJob={(key) => { void bridge?.backgroundJobs.dismiss(key).catch(reportError) }} height={layout.terminalHeight} minHeight={TERMINAL_MIN} maxHeight={layout.terminalMax} defaultHeight={TERMINAL_DEFAULT} onHeightChange={layout.setTerminalHeight} onClose={() => closeTerminal(terminal.id)} onError={reportError} onInitialCommandConsumed={() => setTerminalSessions((current) => current.map((item) => item.id === terminal.id ? { ...item, initialCommand: undefined } : item))} onOpenLink={openTerminalLink} onReady={() => setTerminalDrawerRevision((revision) => revision + 1)} onSelectionChange={(selection) => { if (terminal.id === activeTerminalSession?.id) setTerminalSelection(selection) }} /></Suspense>)}
         </div>
           {inspectorVisible && !layout.compactLayout ? <ResizeHandle orientation="vertical" label="Resize inspector" value={layout.inspectorWidth} min={INSPECTOR_MIN} max={layout.inspectorMax} defaultValue={layout.inspectorDefaultWidth} onChange={layout.setInspectorWidth} /> : null}
-          <Suspense fallback={inspectorVisible ? <LoadingPanel label="inspector" /> : null}><Inspector visible={inspectorVisible} expanded={layout.inspectorExpanded} onToggleExpanded={layout.toggleInspectorExpanded} browserActive={Boolean(busy && agentBrowser.activityEvent && (agentBrowser.activityEvent.sessionFile === activeRuntimeSessionFile || agentBrowser.activityEvent.sessionFile === activeSessionFilePath))} key={`inspector-${browserGeneration}`} selectedSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey ? selectedSpecialist.id : null} onSelectSpecialist={openSpecialist} activeTab={settingsState.inspectorTab} onTabChange={settingsState.selectInspectorTab} onClose={toggleInspector} agentName={HARNESS_AGENT_NAMES[activeHarness]} shortName={HARNESS_SHORT_NAMES[activeHarness]} project={activeProject} cwd={activeCwd} runtime={workspace.runtime} behaviorMode={activeSession?.behaviorMode} messages={settingsState .inspectorTab === 'summary' || settingsState.inspectorTab === 'specialists' ? workspace.messages : EMPTY_MESSAGES} git={git} automations={inspectorAutomations} onOpenAutomation={openAutomation} browserHome={settingsState.settings.browserHome} browserNavigationRequest={browserNavigationRequest} onBrowserNavigationRequestHandled={handleBrowserNavigationRequest} browserAnnotations={browserAnnotations} agentBrowserTabs={activeAgentTabs} activeAgentTabId={activeAgentTabId} agentPreviewSelected={agentPreviewSelected} onSelectAgentTab={selectAgentTab} onCloseAgentTab={agentBrowser.close} onShowBrowserPreview={showBrowserPreview} onAgentSlotRect={setAgentSlotRect} agentSessionKey={activeRuntimeSessionFile ?? activeSessionFilePath} onPreviewContext={previewContext} previewPointerEvent={agentBrowser.pointerEvent?.tabId === 'preview' ? agentBrowser.pointerEvent : null} onNavigateAgentTab={navigateAgentTab} agentBrowserExtension={agentBrowser.extension} onRefreshGit={refreshGit} onOpenExternal={openExternal} onRevealPath={revealInFileManager} onGrantProject={grantActiveProject} overlay={layout.compactLayout} platform={platform} homeDir={meta?.homeDir} /></Suspense>
+          <Suspense fallback={inspectorVisible ? <LoadingPanel label="inspector" /> : null}><Inspector visible={inspectorVisible} instantShell={panelInstant} onShellMotionComplete={inspectorMotionComplete} expanded={layout.inspectorExpanded} onToggleExpanded={layout.toggleInspectorExpanded} browserActive={Boolean(busy && agentBrowser.activityEvent && (agentBrowser.activityEvent.sessionFile === activeRuntimeSessionFile || agentBrowser.activityEvent.sessionFile === activeSessionFilePath))} key={`inspector-${browserGeneration}`} selectedSpecialistId={selectedSpecialist?.sessionKey === terminalSessionKey ? selectedSpecialist.id : null} onSelectSpecialist={openSpecialist} activeTab={settingsState.inspectorTab} onTabChange={settingsState.selectInspectorTab} onClose={toggleInspector} agentName={HARNESS_AGENT_NAMES[activeHarness]} shortName={HARNESS_SHORT_NAMES[activeHarness]} project={activeProject} cwd={activeCwd} runtime={workspace.runtime} behaviorMode={activeSession?.behaviorMode} messages={settingsState .inspectorTab === 'summary' || settingsState.inspectorTab === 'specialists' ? workspace.messages : EMPTY_MESSAGES} git={git} automations={inspectorAutomations} onOpenAutomation={openAutomation} browserHome={settingsState.settings.browserHome} browserNavigationRequest={browserNavigationRequest} onBrowserNavigationRequestHandled={handleBrowserNavigationRequest} browserAnnotations={browserAnnotations} agentBrowserTabs={activeAgentTabs} activeAgentTabId={activeAgentTabId} agentPreviewSelected={agentPreviewSelected} onSelectAgentTab={selectAgentTab} onCloseAgentTab={agentBrowser.close} onShowBrowserPreview={showBrowserPreview} onAgentSlotRect={setAgentSlotRect} agentSessionKey={activeRuntimeSessionFile ?? activeSessionFilePath} onPreviewContext={previewContext} previewPointerEvent={agentBrowser.pointerEvent?.tabId === 'preview' ? agentBrowser.pointerEvent : null} onNavigateAgentTab={navigateAgentTab} agentBrowserExtension={agentBrowser.extension} onRefreshGit={refreshGit} onOpenExternal={openExternal} onRevealPath={revealInFileManager} onGrantProject={grantActiveProject} overlay={layout.compactLayout} platform={platform} homeDir={meta?.homeDir} /></Suspense>
           <AnimatePresence initial={false}>
             {inspectorVisible ? (
               <motion.button
@@ -779,7 +803,7 @@ export default function App() {
               />
             ) : null}
           </AnimatePresence>
-      </div> : view === 'activity' ? <ActivityWorkspace rowRef={layout.workspaceRowRef} inspectorVisible={inspectorVisible} compact={layout.compactLayout} width={layout.inspectorWidth} maxWidth={layout.inspectorMax} defaultWidth={layout.inspectorDefaultWidth} expanded={layout.inspectorExpanded} onWidthChange={layout.setInspectorWidth} onToggleExpanded={layout.toggleInspectorExpanded} onClose={toggleInspector}>{(renderInspector) => <Suspense fallback={<ChiefOfStaffOpening />}><ActivityPage contentInert={layout.compactLayout && inspectorVisible} contentRef={layout.sessionWorkspaceRef} renderInspector={renderInspector} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} bridge={bridge} sessions={sessions} projects={projects} controls={activityControls} /></Suspense>}</ActivityWorkspace> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
+      </div> : view === 'activity' ? <ActivityWorkspace rowRef={layout.workspaceRowRef} inspectorVisible={inspectorVisible} instant={panelInstant} compact={layout.compactLayout} width={layout.inspectorWidth} maxWidth={layout.inspectorMax} defaultWidth={layout.inspectorDefaultWidth} expanded={layout.inspectorExpanded} onWidthChange={layout.setInspectorWidth} onToggleExpanded={layout.toggleInspectorExpanded} onClose={toggleInspector}>{(renderInspector) => <Suspense fallback={<ChiefOfStaffOpening />}><ActivityPage contentInert={layout.compactLayout && inspectorVisible} contentRef={layout.sessionWorkspaceRef} renderInspector={renderInspector} showReasoning={settingsState.settings.showReasoningSummaries} showTools={settingsState.settings.showToolCalls} bridge={bridge} sessions={sessions} projects={projects} controls={activityControls} /></Suspense>}</ActivityWorkspace> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
     </div>
     {voiceOrbOpen && bridge ? <Suspense fallback={null}><VoiceOrb voice={bridge.voice} harness={activeHarness} onClose={() => { setFocusPetVoiceControl(false); setVoiceOrbOpen(false); setRestorePetVoiceFocus(settingsState.settings.petEnabled) }} onTaskStarted={handleVoiceTaskStarted} pet={{ pets: bridge.pets, petId: settingsState.settings.petId, petSize: settingsState.settings.petSize, agentBusy: busy, reduceMotion: settingsState.settings.reduceMotion }} focusPetControl={focusPetVoiceControl} onPetControlFocused={() => setFocusPetVoiceControl(false)} /></Suspense> : null}
     {settingsState.settings.petEnabled && bridge && !voiceOrbOpen ? <Suspense fallback={null}><DesktopPet pets={bridge.pets} petId={settingsState.settings.petId} petSize={settingsState.settings.petSize} agentBusy={busy} voiceActive={false} reduceMotion={settingsState.settings.reduceMotion} focusVoiceControl={restorePetVoiceFocus} onVoiceControlFocused={() => setRestorePetVoiceFocus(false)} onDismiss={() => { setRestorePetVoiceFocus(false); void settingsState.updateSettings({ petEnabled: false }) }} onOpenVoice={() => { setRestorePetVoiceFocus(false); setFocusPetVoiceControl(true); setVoiceOrbOpen(true) }} /></Suspense> : null}
@@ -798,7 +822,7 @@ export default function App() {
     <AnimatePresence initial={false}>
       {toast ? <AppToast key={toast} message={toast} onDismiss={() => setToast(null)} /> : null}
     </AnimatePresence>
-    {bridge ? <AgentBrowserLayer tabs={agentBrowser.tabs} visibleTabId={agentTabVisible ? activeAgentTabId : null} rect={agentTabVisible ? agentSlotRect : null} pointerEvent={agentBrowser.pointerEvent} onAttach={agentBrowser.attach} /> : null}
+    {bridge ? <AgentBrowserLayer tabs={agentBrowser.tabs} visibleTabId={agentTabVisible ? activeAgentTabId : null} interactive={inspectorVisible && settingsState.inspectorTab === 'browser'} rect={agentTabVisible ? agentSlotRect : null} pointerEvent={agentBrowser.pointerEvent} onAttach={agentBrowser.attach} /> : null}
     {taskWorkflow.dialog ? <Suspense fallback={<LoadingPanel label="task review" />}><TaskWorkflowDialogs workflow={taskWorkflow} /></Suspense> : null}
   </div></TaskWorkflowContext.Provider></I18nProvider>
 }

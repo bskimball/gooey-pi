@@ -1,15 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import * as stylex from '@stylexjs/stylex'
-import { ApexButton, EmptyState } from '../packages/ui/src/ui'
+import { useState } from 'react'
+import { ApexButton, EmptyState, Segmented, SelectControl } from '../packages/ui/src/ui'
 
 const styles = stylex.create({
   gallery: { display: 'grid', gap: 24, maxWidth: 920, padding: 24, color: 'var(--text)', backgroundColor: 'var(--canvas)' },
   row: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   swatch: { padding: 16, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface)', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)' },
   muted: { color: 'var(--text-secondary)' },
+  gradientChip: { padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-raised)', backgroundImage: 'var(--gradient-apex)', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-apex)', boxShadow: 'var(--shadow-control)' },
+  warningChip: { padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-raised)', backgroundImage: 'var(--gradient-warning)', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-warning)' },
+  dangerChip: { padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-raised)', backgroundImage: 'var(--gradient-danger)', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border-danger)' },
 })
 
 function FoundationGallery() {
+  const [branch, setBranch] = useState('main')
+  const [view, setView] = useState('chat')
   return (
     <main {...stylex.props(styles.gallery)}>
       <header>
@@ -27,6 +33,18 @@ function FoundationGallery() {
       <section aria-label="Surface and text tokens" {...stylex.props(styles.row)}>
         <div {...stylex.props(styles.swatch)}>Surface · primary text</div>
         <div {...stylex.props(styles.swatch, styles.muted)}>Surface · secondary text</div>
+      </section>
+      <section aria-label="Gradient tokens" {...stylex.props(styles.row)}>
+        <div {...stylex.props(styles.gradientChip)}>Apex gradient · control shadow</div>
+        <div {...stylex.props(styles.warningChip)}>Warning gradient</div>
+        <div {...stylex.props(styles.dangerChip)}>Danger gradient</div>
+      </section>
+      <section aria-label="Selection controls" {...stylex.props(styles.row)}>
+        <SelectControl label="Branch" value={branch} onChange={(event) => setBranch(event.target.value)}>
+          <option value="main">main</option>
+          <option value="feature">feature/preview</option>
+        </SelectControl>
+        <Segmented label="View" value={view} options={[{ value: 'chat', label: 'Chat' }, { value: 'agents', label: 'Agents' }]} onChange={setView} />
       </section>
       <section aria-label="Button variants" {...stylex.props(styles.row)}>
         <ApexButton variant="primary">Primary</ApexButton>

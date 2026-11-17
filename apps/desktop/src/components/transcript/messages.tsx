@@ -3,7 +3,8 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
-import { Fragment, memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence } from 'motion/react'
+import { Fragment, memo, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { CaretRight, Check, Copy, Crosshair, PencilSimple, X } from '../icons'
 import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { parseAnnotationReferences, splitAnnotationBlock } from '@/lib/browser-annotations'
@@ -20,7 +21,7 @@ import { InlineText } from './syntax'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
 import { WorkingDot } from '../SidebarAttention'
-import { classifyTool, formatWorkedDuration, LiveElapsed, WorkTimeline } from './timeline'
+import { activeWorkLabel, classifyTool, formatWorkedDuration, liveWorkStatus, LiveElapsed, WorkTimeline } from './timeline'
 import { TurnReceipt, workCounts } from './turn-receipt'
 import { WorkGroup } from './work-group'
 import { ContextExcerpt } from '../ContextExcerpt'
@@ -139,24 +140,45 @@ function timestampValue(value?: string | number): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+/** Settled frames stay in the tree as layout-neutral boxes so React keeps every descendant. */
+function liveFrame(running: boolean, className: string): { className?: string; style?: CSSProperties } {
+  return running ? { className } : { style: { display: 'contents' } }
+}
+
+function LiveWorkStatus({ parts, showReasoning, showTools }: { parts: MessagePart[]; showReasoning: boolean; showTools: boolean }) {
+  const activity = showTools ? activeWorkLabel(parts) : undefined
+  return <div className={`work-disclosure__status sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} role="status">
+    <span className={activity ? 'work-disclosure__activity' : 'work-disclosure__verb'} title={activity}>{activity ?? liveWorkStatus(parts, showReasoning, showTools)}</span>
+  </div>
+}
+
 export const AssistantMessage = memo(
-  function AssistantMessage({ message, harness = 'pi', shortName = HARNESS_SHORT_NAMES[harness], showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; harness?: HarnessId; shortName?: string; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
+  function AssistantMessage({ message, live = Boolean(message.streaming), harness = 'pi', shortName = HARNESS_SHORT_NAMES[harness], showReasoning, showTools, git, onOpenChanges }: { message: TranscriptMessage; /** The session's running turn, even before `streaming` is set; the same article settles in place. */ live?: boolean; harness?: HarnessId; shortName?: string; showReasoning: boolean; showTools: boolean; git?: GitStatus; onOpenChanges?(): void }) {
     const counts = workCounts(message.parts)
     const hasVisibleActivity = message.parts.some(
       (part) => part.type === 'agentMessage' || part.type === 'compaction' || (part.type === 'thinking' && showReasoning) || ((part.type === 'toolCall' || part.type === 'toolResult') && showTools),
     )
-    const showReceipt = !message.streaming && (counts.agents + counts.tools > 0 || hasVisibleActivity || Boolean(git?.files.length))
+    const showReceipt = !live && (counts.agents + counts.tools > 0 || hasVisibleActivity || Boolean(git?.files.length))
     const copyableText = messageText(message)
+    const running = live && hasVisibleActivity
     return (
-      <article className={`message message--assistant ${stylex.props(transcriptStyles.message, transcriptStyles.messageAssistant).className ?? ""}`}>
+      <article className={`message message--assistant${live ? ' message--streaming' : ''} ${stylex.props(transcriptStyles.message, transcriptStyles.messageAssistant).className ?? ""}`}>
         <div className={`message__content ${stylex.props(transcriptStyles.messageContent).className ?? ""}`}>
           {message.errorMessage ? <div className={`activity-line activity-line--result is-error ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineResult, transcriptStyles.activityLineResultIsError).className ?? ""}`} role="alert">{message.errorMessage}</div> : null}
-          {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, message.streaming, true, `Assistant response ${message.id}`)}
-          {message.streaming && !hasVisibleActivity ? (
+          <section {...liveFrame(running, `work-disclosure is-running ${stylex.props(transcriptStyles.workDisclosure, transcriptStyles.workDisclosureIsRunning).className ?? ""}`)} aria-label={running ? 'Agent work activity' : undefined}>
+            <div {...liveFrame(running, `work-disclosure__live ${stylex.props(transcriptStyles.workDisclosureLive).className ?? ""}`)}>
+              {renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, live, true, `Assistant response ${message.id}`)}
+              {running ? <LiveWorkStatus parts={message.parts} showReasoning={showReasoning} showTools={showTools} /> : null}
+            </div>
+          </section>
+          {live && !hasVisibleActivity ? (
             <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{shortName} is working</div>
           ) : null}
+          {/* Receipts already present on mount (loaded history) stay put; one inserted when a live turn settles grows in. */}
+          <AnimatePresence mode="wait" initial={false}>
           {showReceipt ? (
             <TurnReceipt
+              key="receipt"
               duration={workedDuration(message)}
               failed={Boolean(message.errorMessage)}
               agents={counts.agents}
@@ -165,12 +187,13 @@ export const AssistantMessage = memo(
               onReviewChanges={onOpenChanges}
               copy={copyableText ? <CopyMessageButton className={`turn-receipt__action turn-receipt__copy ${stylex.props(transcriptStyles.turnReceiptAction, transcriptStyles.turnReceiptCopy).className ?? ""}`} message={message} text={copyableText} /> : undefined}
             />
-          ) : !message.streaming ? <MessageActions message={message} text={copyableText} /> : null}
+          ) : !live ? <MessageActions key="actions" message={message} text={copyableText} /> : null}
+          </AnimatePresence>
         </div>
       </article>
     )
   },
-  (previous, next) => previous.message === next.message && previous.harness === next.harness && previous.shortName === next.shortName && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git && previous.onOpenChanges === next.onOpenChanges,
+  (previous, next) => previous.message === next.message && previous.live === next.live && previous.harness === next.harness && previous.shortName === next.shortName && previous.showReasoning === next.showReasoning && previous.showTools === next.showTools && previous.git === next.git && previous.onOpenChanges === next.onOpenChanges,
 )
 
 function SessionReferenceText({ text, references, onOpen }: { text: string; references: RoutedSessionReference[]; onOpen?(sessionId: string, harness: HarnessId): void }) {

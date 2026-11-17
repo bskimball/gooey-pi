@@ -1,15 +1,16 @@
 import { build } from 'vite'
 import { isBuiltin } from 'node:module'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = resolve('.')
+const root = fileURLToPath(new URL('..', import.meta.url))
 const result = await build({
   configFile: false,
   logLevel: 'silent',
   ssr: { noExternal: true, target: 'node' },
   build: {
     ssr: resolve(root, 'apps/desktop/browser-agent/index.ts'),
-    outDir: resolve(root, 'out/browser-agent'),
+    outDir: process.argv[2] ? resolve(process.argv[2]) : resolve(root, 'out/browser-agent'),
     emptyOutDir: false,
     target: 'node24',
     minify: false,

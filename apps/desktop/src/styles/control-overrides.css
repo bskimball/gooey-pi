@@ -34,6 +34,17 @@
 .activity-row:has(.activity-row__clear):is(:hover, :focus-within, .is-selected) .activity-meta, .activity-row--running.is-confirming-stop .activity-meta { opacity: 0; pointer-events: none; }
 .activity-row:hover .activity-row__clear, .activity-row:focus-within .activity-row__clear, .activity-row.is-selected .activity-row__clear { opacity: 1; pointer-events: auto; }
 
+/* Astryx selector menu: elevated surface in the Agents-tab language.
+   Low elevation (menus) with the apex gradient and tinted border;
+   semantic option states are untouched. */
+.astryx-selector-popup {
+	background-color: var(--surface-raised);
+	background-image: var(--gradient-apex);
+	border: 1px solid var(--border-apex);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-elevation-low);
+}
+
 /* StyleX hides message actions until hover; the reveal must sit after the `stylex` layer to win. */
 .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
 

@@ -18,9 +18,9 @@ class ApexViewProvider implements vscode.WebviewViewProvider {
   private resizeRequestId = 0
   private readonly resizeRequests = new Map<number, (data?: string) => void>()
 
-  constructor(private readonly extensionUri: vscode.Uri) {
+  constructor(private readonly extensionUri: vscode.Uri, storageUri: vscode.Uri) {
     this.session = new ApexSession((message) => this.post(message), vscode.Uri.joinPath(extensionUri, 'dist').fsPath,
-      (dataUrl, width, height, quality) => this.resizeScreenshot(dataUrl, width, height, quality))
+      storageUri.fsPath, (dataUrl, width, height, quality) => this.resizeScreenshot(dataUrl, width, height, quality))
   }
 
   resolveWebviewView(view: vscode.WebviewView) {
@@ -128,7 +128,7 @@ export function sessionPathFromUri(uri: Pick<vscode.Uri, 'path' | 'query'>): str
 let activeProvider: ApexViewProvider | undefined
 
 export function activate(context: vscode.ExtensionContext) {
-  const provider = new ApexViewProvider(context.extensionUri)
+  const provider = new ApexViewProvider(context.extensionUri, context.globalStorageUri)
   activeProvider = provider
   void provider.git.start()
   context.subscriptions.push(

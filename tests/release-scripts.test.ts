@@ -1543,7 +1543,7 @@ describe('cross-platform packaging repair', () => {
     }
   })
 
-  test('patches only Durable 1.5.0 submission waits idempotently and rejects unexpected source', () => {
+  test('patches only Durable 1.5.2 submission waits idempotently and rejects unexpected source', () => {
     const directory = mkdtempSync(join(tmpdir(), 'durable-abort-patch-'))
     const packageUrl = pathToFileURL(`${directory}/`)
     const manifest = new URL('package.json', packageUrl)
@@ -1551,7 +1551,7 @@ describe('cross-platform packaging repair', () => {
     const original = readFileSync('node_modules/@earendil-works/pi-durable/dist/harness/submissions.js', 'utf8').replace('            context.abortSignal?.throwIfAborted();\n', '')
     try {
       mkdirSync(new URL('dist/harness/', packageUrl), { recursive: true })
-      writeFileSync(manifest, JSON.stringify({ version: '1.5.0' }))
+      writeFileSync(manifest, JSON.stringify({ version: '1.5.2' }))
       writeFileSync(sourcePath, original)
       patchPiDurableSubmissionWait(packageUrl)
       const patched = readFileSync(sourcePath, 'utf8')
@@ -1559,7 +1559,7 @@ describe('cross-platform packaging repair', () => {
       patchPiDurableSubmissionWait(packageUrl)
       expect(readFileSync(sourcePath, 'utf8')).toBe(patched)
       writeFileSync(sourcePath, 'unexpected source')
-      expect(() => patchPiDurableSubmissionWait(packageUrl)).toThrow('Unexpected Pi Durable 1.5.0')
+      expect(() => patchPiDurableSubmissionWait(packageUrl)).toThrow('Unexpected Pi Durable 1.5.2')
       writeFileSync(manifest, JSON.stringify({ version: '1.5.1' }))
       expect(() => patchPiDurableSubmissionWait(packageUrl)).not.toThrow()
       expect(readFileSync(sourcePath, 'utf8')).toBe('unexpected source')

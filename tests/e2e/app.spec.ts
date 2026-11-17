@@ -462,6 +462,12 @@ test.describe('Prime Work desktop smoke', () => {
         page = await app.firstWindow({ timeout: 15_000 })
         attachDiagnostics(page)
         await expect(page.locator('.app-shell')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 })
+        if (!noHarnesses) {
+          const expandProject = page.getByRole('button', { name: 'Expand Multi-folder fixture', exact: true })
+          await expect(expandProject).toBeVisible()
+          await expect(page.locator('.session-row-wrap')).toHaveCount(0)
+          await expandProject.click()
+        }
         return
       } catch (error) {
         startupError = error

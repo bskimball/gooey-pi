@@ -392,16 +392,24 @@ describe('VS Code handoff lifecycle', () => {
   it('reports ready with a notice when reading Pi state fails after launch', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'apex-fake-pi-'))
     directories.push(directory)
-    // A stdin-only stand-in for pi: start() spawns it for real, but refreshAll is stubbed to reject.
+    // A real child reports its launch contract; refreshAll is stubbed to reject.
     const script = join(directory, 'pi.js')
-    await writeFile(script, 'process.stdin.resume()\n')
+    await writeFile(script, `#!/usr/bin/env node
+require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+      const { id } = JSON.parse(line)
+      console.log(JSON.stringify({ type: 'response', id, success: true, data: {
+        args: process.argv.slice(2), runtime: process.env.APEX_BROWSER_AGENT_RUNTIME_PATH,
+        stateDir: process.env.APEX_BROWSER_AGENT_STATE_DIR, token: process.env.APEX_BROWSER_TOKEN,
+      } }))
+    })\n`, { mode: 0o755 })
     const configuration = vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({ get: (key: string, fallback: unknown) => (key === 'piPath' ? script : fallback) } as never)
     const session = Object.create(ApexSession.prototype)
+    Object.defineProperty(session, 'cwd', { value: directory })
     Object.assign(session, {
       connectionActor: connectionIn(), state: { status: 'starting', isStreaming: false }, post: vi.fn(),
       ops: [], pendingOps: [], latestToolUpdate: new Map(), statuses: new Map(), uiQueue: [], seq: 0, currentPath: null,
       launchGeneration: 0, stopping: Promise.resolve(), browserSessionKey: '/project', browserPortNotice: false,
-      owner: { set: vi.fn() }, statusItem: { hide: vi.fn() }, distDirectory: directory,
+      owner: { set: vi.fn() }, statusItem: { hide: vi.fn() }, distDirectory: directory, storageDirectory: join(directory, 'storage'),
       browser: {
         bridge: { port: 29301 }, extensionPath: join(directory, 'extension'), start: vi.fn(async () => undefined),
         capability: { revoke: vi.fn(), environmentFor: () => ({ APEX_BROWSER_TOKEN: 'fixture-token' }) },
@@ -416,6 +424,17 @@ describe('VS Code handoff lifecycle', () => {
       expect(canAct(session.connectionActor.getSnapshot())).toBe(true)
       expect(session.state).toMatchObject({ status: 'ready', connection: 'standalone' })
       expect(session.pendingOps.at(-1)).toMatchObject({ kind: 'notice', text: "Could not read Pi's state: state unavailable" })
+      const launch = await session.rpc.command('launch_contract')
+      expect(launch).toMatchObject({
+        args: ['--mode', 'rpc', '--extension', join(directory, 'extension'), '--extension', join(directory, 'extensions', 'apex-browser-agent.ts'), '--extension', join(directory, 'extensions', 'editor-extension.ts')],
+        runtime: join(directory, 'browser-agent', 'runtime.mjs'), token: 'fixture-token',
+      })
+      expect(launch.stateDir).toMatch(new RegExp('browser-agent[\\\\/]'))
+      expect(launch.stateDir.startsWith(join(directory, 'storage'))).toBe(true)
+      await session.start()
+      await session.startup
+      const restarted = await session.rpc.command('launch_contract')
+      expect(restarted.stateDir).not.toBe(launch.stateDir)
     } finally {
       await session.rpc?.dispose()
       configuration.mockRestore()

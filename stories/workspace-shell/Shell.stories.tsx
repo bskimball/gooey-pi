@@ -19,7 +19,7 @@ import { WindowsAppMenu } from '../../apps/desktop/src/components/WindowsAppMenu
 import { ProjectRunControl } from '../../apps/desktop/src/components/ProjectRunControl'
 import { ErrorBoundary } from '../../apps/desktop/src/components/ErrorBoundary'
 import { ApexButton, EmptyState } from '../../apps/desktop/src/components/ui'
-import type { WorkspaceView } from '../../apps/desktop/src/types/api'
+import type { SessionRecord, WorkspaceView } from '../../apps/desktop/src/types/api'
 import { cleanGit, done, noop, project, session, sessions, specialists } from './fixtures'
 
 import { installWorkspaceHost } from './host'
@@ -44,6 +44,22 @@ function Workspace({ narrow = false, loading = false, empty = false }: { narrow?
   const [width, setWidth] = useState(280)
   const [terminal, setTerminal] = useState(false)
   const [terminalHeight, setTerminalHeight] = useState(240)
+  const [storySessions, setStorySessions] = useState(sessions)
+  const nextSample = useRef(0)
+  const addSampleSession = () => {
+    const index = nextSample.current++
+    const stamp = new Date().toISOString()
+    const sample: SessionRecord = { ...session, id: `story-sample-${index}`, filePath: `/story/sessions/sample-${index}.jsonl`, title: `Sample session ${index + 1}`, status: 'idle', unread: false, createdAt: stamp, updatedAt: stamp, lastUserMessageAt: stamp }
+    setStorySessions((items) => [sample, ...items])
+    setSelected(sample)
+    setNotice(`Sample session ${index + 1} added in memory`)
+  }
+  const archiveSampleSession = async (target: SessionRecord) => {
+    const remaining = storySessions.filter((item) => item.id !== target.id)
+    setStorySessions(remaining)
+    if (target.id === selected.id && remaining[0]) setSelected(remaining[0])
+    setNotice(`Archived ${target.title} in memory`)
+  }
   return (
     <div className="app-shell" style={{ display: 'flex', height: 720, maxWidth: narrow ? 440 : 1440, position: 'relative', overflow: 'hidden' }}>
       <AppRail
@@ -63,7 +79,7 @@ function Workspace({ narrow = false, loading = false, empty = false }: { narrow?
         <div style={{ width, flexShrink: 0 }}>
           <Sidebar
             projects={empty ? [] : [project]}
-            sessions={empty ? [] : sessions}
+            sessions={empty ? [] : storySessions}
             loading={loading}
             activeProjectId={project.id}
             activeSessionId={selected.id}
@@ -73,13 +89,13 @@ function Workspace({ narrow = false, loading = false, empty = false }: { narrow?
             onSelectProject={() => setView('session')}
             onSelectSession={setSelected}
             onNavigate={setView}
-            onNewSession={() => setNotice('New session requested')}
+            onNewSession={addSampleSession}
             onAddProject={() => setNotice('Project picker requested')}
             onRemoveProject={() => setNotice('Project removal captured')}
             onClose={() => setSidebar(false)}
             onOpenPalette={() => setPalette(true)}
             onRenameSession={done}
-            onArchiveSession={done}
+            onArchiveSession={archiveSampleSession}
             platform="win32"
           />
         </div>
@@ -97,10 +113,10 @@ function Workspace({ narrow = false, loading = false, empty = false }: { narrow?
           sessionActions={
             <SessionControls
               projects={empty ? [] : [project]}
-              sessions={empty ? [] : sessions}
+              sessions={empty ? [] : storySessions}
               activeSessionId={selected.id}
               platform="win32"
-              onNewSession={() => setNotice('New session requested')}
+              onNewSession={addSampleSession}
               onSelectSession={setSelected}
             />
           }

@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { createContext, memo, useContext, useId, useState, type ReactNode } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
 import { isLiveSpecialist, shortModelName, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
-import { CaretRight, Check, Robot } from '../icons'
+import { ArrowUpRight, CaretRight, Check, Robot } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
@@ -13,12 +13,34 @@ import { MarkdownText } from '../MarkdownText'
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const
 const EASE_EXIT = [0.2, 0, 0, 1] as const
+const DISCLOSURE_SPRING = { type: 'spring', stiffness: 380, damping: 27, mass: 0.8 } as const
+const DISCLOSURE_TRANSITION = { height: DISCLOSURE_SPRING, y: DISCLOSURE_SPRING, opacity: { duration: 0.14 } } as const
+const laneStyles = stylex.create({
+  body: { animationName: 'none' },
+  instantCaret: { transitionProperty: 'none' },
+  summary: { paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0, columnGap: 0, alignItems: 'stretch' },
+  primary: { flexGrow: 1, minWidth: 0, borderWidth: 0, margin: 0, fontFamily: 'inherit', textAlign: 'left', outlineOffset: -2 },
+  toggle: {
+    display: 'grid', placeItems: 'center', flexShrink: 0, alignSelf: 'center',
+    width: 28, height: 28, marginRight: 6, padding: 0, borderWidth: 0,
+    borderLeftWidth: 1, borderLeftStyle: 'solid', borderLeftColor: 'var(--border-subtle)',
+    backgroundColor: { default: 'transparent', ':hover': 'var(--surface-hover)' },
+    color: 'var(--text-tertiary)', cursor: 'pointer',
+    outlineWidth: { default: null, ':focus-visible': 2 },
+    outlineStyle: { default: null, ':focus-visible': 'solid' },
+    outlineColor: { default: null, ':focus-visible': 'var(--focus)' },
+    outlineOffset: -2,
+  },
+})
+
+function prefersInstantMotion(): boolean {
+  return (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+}
 
 export function useInstantMotion(): boolean {
-  const reduced = useReducedMotion()
-  return Boolean(reduced)
-    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
-    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  return Boolean(useReducedMotion()) || prefersInstantMotion()
 }
 
 export function collapseMotionProps(instant: boolean) {
@@ -33,9 +55,9 @@ export function collapseMotionProps(instant: boolean) {
 
 export function arrivalMotionProps(instant: boolean, animateArrival: boolean) {
   return {
-    initial: instant || !animateArrival ? (false as const) : { opacity: 0, y: 4 },
-    animate: { opacity: 1, y: 0 },
-    transition: instant ? { duration: 0 } : { duration: 0.16, ease: EASE_OUT },
+    initial: instant || !animateArrival ? (false as const) : { opacity: 0 },
+    animate: { opacity: 1 },
+    transition: instant ? { duration: 0 } : { duration: 0.15, ease: EASE_OUT },
   }
 }
 
@@ -54,10 +76,10 @@ export function MorphInline({
       <motion.span
         key={morphKey}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 'inherit' }}
-        initial={{ opacity: 0, scale: 0.88, filter: 'blur(2px)' }}
-        animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, scale: 0.88, filter: 'blur(2px)', transition: { duration: 0.11, ease: EASE_EXIT } }}
-        transition={{ duration: 0.16, ease: EASE_OUT }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.08, ease: EASE_EXIT } }}
+        transition={{ duration: 0.15, ease: EASE_OUT }}
       >
         {children}
       </motion.span>
@@ -205,6 +227,7 @@ export function pairSubagentCalls(parts: MessagePart[]): SubagentPairs {
  */
 export const SubagentLane = memo(function SubagentLane({ part, result, followUps = [], animateArrival = false }: { part: ToolCall; result?: ToolResult; followUps?: SubagentFollowUp[]; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [instantDisclosure, setInstantDisclosure] = useState(true)
   const bodyId = useId()
   const instant = useInstantMotion()
   const { specialists, onOpen } = useContext(SubagentContext)
@@ -231,8 +254,8 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
     : !isLiveSpecialist(state) && report
       ? cleanOutcome(report) ?? cleanGoal(rawPrompt)
       : cleanGoal(rawPrompt)
-  const singleTarget = onOpen && targets.length === 1 ? targets[0] : undefined
-  const canExpand = Boolean(report) || (Boolean(onOpen) && targets.length > 1)
+  const singleTarget = onOpen && part.name !== 'task_chain' && targets.length === 1 ? targets[0] : undefined
+  const canExpand = Boolean(report) || (Boolean(onOpen) && targets.length > 0 && !singleTarget)
   const isClickable = canExpand || Boolean(singleTarget)
   const hasBody = Boolean(report) || (Boolean(onOpen) && targets.length > 0)
   const statusKey = isLiveSpecialist(state) ? 'running' : state
@@ -245,65 +268,65 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const thinking = part.name === 'task_chain' ? undefined : specialist?.thinking ?? text(resultWorker?.thinking) ?? text(args.thinking)
   const modelLabel = models.length ? `${models.map((model) => shortModelName(model) ?? model).join(', ')}${thinking ? ` · ${thinking}` : ''}` : undefined
 
-  const handleSummaryClick = () => {
-    if (canExpand) {
-      setOpen((value) => !value)
-    } else if (onOpen && singleTarget) {
-      onOpen(singleTarget.id)
-    }
+  const toggleDisclosure = (keyboard: boolean) => {
+    setInstantDisclosure(keyboard || prefersInstantMotion())
+    setOpen((value) => !value)
   }
+  const summaryContent = <>
+    <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ''}`} aria-hidden="true">
+      <MorphInline morphKey={statusKey} instant={instant}>
+        {isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}
+      </MorphInline>
+    </span>
+    <span className={`subagent-lane__main ${stylex.props(transcriptStyles.subagentLaneMain).className ?? ''}`}>
+      <span className={`subagent-lane__identity ${stylex.props(transcriptStyles.subagentLaneIdentity).className ?? ''}`}>
+        <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ''}`} title={taskId || undefined}>{roleLabel}</span>
+        {workerName ? <span className={`subagent-lane__name ${stylex.props(transcriptStyles.subagentLaneMeta).className ?? ''}`}>{workerName}</span> : null}
+        {modelLabel ? <span className={`subagent-lane__model ${stylex.props(transcriptStyles.subagentLaneMeta, transcriptStyles.subagentLaneModel).className ?? ''}`} title={models.join(', ')}>{modelLabel}</span> : null}
+      </span>
+      {summary ? <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ''}`} title={summary}>{summary}</span> : null}
+    </span>
+    <span className={`subagent-lane__state ${stylex.props(transcriptStyles.subagentLaneState).className ?? ''}`}>
+      <MorphInline morphKey={stateLabel} instant={instant}>{stateLabel}</MorphInline>
+      {singleTarget ? <ArrowUpRight size={11} aria-hidden="true" /> : null}
+    </span>
+  </>
 
   return <motion.div className={[`subagent-lane is-${state}`, stylex.props(transcriptStyles.subagentLane, state === 'running' && transcriptStyles.subagentLaneIsRunning, state === 'error' && transcriptStyles.subagentLaneIsError, state === 'waiting' && transcriptStyles.subagentLaneIsWaiting).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
-    <div
-      className={[`subagent-lane__summary${isClickable ? ' is-clickable' : ''}`, stylex.props(isClickable ? transcriptStyles.subagentLaneSummaryClickable : transcriptStyles.subagentLaneSummary).className].filter(Boolean).join(' ')}
-      role={isClickable ? 'button' : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      aria-expanded={canExpand ? open : undefined}
-      aria-controls={canExpand && open ? bodyId : undefined}
-      onClick={isClickable ? handleSummaryClick : undefined}
-      onKeyDown={isClickable ? (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          handleSummaryClick()
-        }
-      } : undefined}
-    >
-      <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ''}`} aria-hidden="true">
-        <MorphInline morphKey={statusKey} instant={instant}>
-          {isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}
-        </MorphInline>
-      </span>
-      <span className={`subagent-lane__main ${stylex.props(transcriptStyles.subagentLaneMain).className ?? ''}`}>
-        <span className={`subagent-lane__identity ${stylex.props(transcriptStyles.subagentLaneIdentity).className ?? ''}`}>
-          <span className={`subagent-lane__role ${stylex.props(transcriptStyles.subagentLaneRole).className ?? ''}`} title={taskId || undefined}>{roleLabel}</span>
-          {workerName ? <span className={`subagent-lane__name ${stylex.props(transcriptStyles.subagentLaneMeta).className ?? ''}`}>{workerName}</span> : null}
-          {modelLabel ? <span className={`subagent-lane__model ${stylex.props(transcriptStyles.subagentLaneMeta, transcriptStyles.subagentLaneModel).className ?? ''}`} title={models.join(', ')}>{modelLabel}</span> : null}
-        </span>
-        {summary ? <span className={`subagent-lane__mission ${stylex.props(transcriptStyles.subagentLaneMission).className ?? ''}`} title={summary}>{summary}</span> : null}
-      </span>
-      {onOpen && singleTarget ? (
-        <button
-          type="button"
-          className={`subagent-lane__open ${stylex.props(transcriptStyles.subagentLaneOpen).className ?? ''}`}
-          aria-label="Open agent transcript"
-          title="Open agent transcript"
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpen(singleTarget.id)
-          }}
-        >
-          Transcript
-        </button>
-      ) : null}
-      <span className={`subagent-lane__state ${stylex.props(transcriptStyles.subagentLaneState).className ?? ''}`}>
-        <MorphInline morphKey={stateLabel} instant={instant}>{stateLabel}</MorphInline>
-      </span>
-      {canExpand ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.subagentLaneCaret, transcriptStyles.disclosureCaret).className ?? ''}`} size={11} aria-hidden="true" /> : null}
+    <div className={`subagent-lane__summary ${stylex.props(transcriptStyles.subagentLaneSummary, laneStyles.summary).className ?? ''}`}>
+      {isClickable ? <button
+        type="button"
+        className={`subagent-lane__primary ${stylex.props(transcriptStyles.subagentLaneSummaryClickable, laneStyles.primary).className ?? ''}`}
+        title={singleTarget ? 'Show agent in sidebar' : 'Show agent details'}
+        aria-expanded={!singleTarget && canExpand ? open : undefined}
+        aria-controls={!singleTarget && canExpand ? bodyId : undefined}
+        onClick={(event) => {
+          if (singleTarget) onOpen?.(singleTarget.id)
+          else toggleDisclosure(event.detail === 0)
+        }}
+      >{summaryContent}</button> : <div {...stylex.props(transcriptStyles.subagentLaneSummary, laneStyles.primary)}>{summaryContent}</div>}
+      {canExpand ? <button
+        type="button"
+        className={`subagent-lane__toggle ${stylex.props(laneStyles.toggle).className ?? ''}`}
+        aria-label={`${open ? 'Collapse' : 'Expand'} ${roleLabel} details`}
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={(event) => toggleDisclosure(event.detail === 0)}
+      ><CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.subagentLaneCaret, transcriptStyles.disclosureCaret, instantDisclosure && laneStyles.instantCaret).className ?? ''}`} size={11} aria-hidden="true" /></button> : null}
     </div>
-    <AnimatePresence initial={false}>
-      {open && hasBody ? <motion.div key="subagent-body" className={`subagent-lane__body ${stylex.props(transcriptStyles.subagentLaneBody).className ?? ''}`} id={bodyId} {...collapseMotionProps(instant)}>
-        {onOpen && targets.length > 0 ? <div className={`subagent-lane__links ${stylex.props(transcriptStyles.subagentLaneLinks).className ?? ''}`}>{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
-        {report ? <MarkdownText variant="muted" text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} /> : null}
+    <AnimatePresence initial={false} custom={instantDisclosure}>
+      {open && hasBody ? <motion.div key="subagent-body"
+        initial={instantDisclosure ? false : { height: 0, opacity: 0, y: -4, overflow: 'hidden' }}
+        animate={{ height: 'auto', opacity: 1, y: 0, transitionEnd: { overflow: 'visible' } }}
+        variants={{ closed: (snap: boolean) => ({ height: 0, opacity: 0, y: snap ? 0 : -4, overflow: 'hidden', transition: snap ? { duration: 0 } : DISCLOSURE_TRANSITION }) }}
+        exit="closed"
+        transition={instantDisclosure ? { duration: 0 } : DISCLOSURE_TRANSITION}
+        style={{ display: 'flow-root' }}
+      >
+        <div className={`subagent-lane__body ${stylex.props(transcriptStyles.subagentLaneBody, laneStyles.body).className ?? ''}`} id={bodyId}>
+          {onOpen && targets.length > 0 ? <div className={`subagent-lane__links ${stylex.props(transcriptStyles.subagentLaneLinks).className ?? ''}`}>{targets.map((target) => <button type="button" key={target.id} onClick={() => onOpen(target.id)}>{part.name === 'task_chain' ? `Open ${target.agent} transcript` : 'Open agent transcript'}</button>)}</div> : null}
+          {report ? <MarkdownText variant="muted" text={boundText(report, 40_000, '\n… [Subagent report truncated in the desktop view.]')} /> : null}
+        </div>
       </motion.div> : null}
     </AnimatePresence>
   </motion.div>

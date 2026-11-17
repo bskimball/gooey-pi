@@ -4,7 +4,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSlotRect } from "../../apps/desktop/src/components/AgentBrowserLayer";
-import { AgentBrowserLayer } from "../../apps/desktop/src/components/AgentBrowserLayer";
+import {
+	AgentBrowserLayer,
+	agentSlotClipPath,
+} from "../../apps/desktop/src/components/AgentBrowserLayer";
 import { BrowserPanel } from "../../apps/desktop/src/components/inspector/BrowserPanel";
 import type { ExtensionTabControls } from "../../apps/desktop/src/hooks/useAgentBrowserTabs";
 import type { BrowserAnnotationsApi } from "../../apps/desktop/src/hooks/useBrowserAnnotations";
@@ -61,6 +64,10 @@ let container: HTMLDivElement;
 let root: Root;
 let mounted: boolean;
 let currentRect: MutableRect;
+let viewportRect: MutableRect;
+let viewport: HTMLDivElement;
+let shellRect: MutableRect;
+let shell: HTMLDivElement;
 let onAgentSlotRect: ReturnType<
 	typeof vi.fn<(rect: AgentSlotRect | null) => void>
 >;
@@ -79,7 +86,14 @@ function domRect({ left, top, width, height }: MutableRect): DOMRect {
 	} as DOMRect;
 }
 
-async function renderPanel(previewSelected = false) {
+async function renderPanel(
+	previewSelected = false,
+	slide: {
+		visible?: boolean;
+		sliding?: boolean;
+		shellViewport?: HTMLElement | null;
+	} = {},
+) {
 	await act(async () => {
 		root.render(
 			<BrowserPanel
@@ -90,8 +104,18 @@ async function renderPanel(previewSelected = false) {
 				activeAgentTabId={agentTab.tabId}
 				previewSelected={previewSelected}
 				onAgentSlotRect={onAgentSlotRect}
+				visible={slide.visible}
+				sliding={slide.sliding}
+				slideViewport={slide.sliding === undefined ? undefined : viewport}
+				shellViewport={slide.shellViewport}
 			/>,
 		);
+	});
+}
+
+async function nextFrame() {
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(20);
 	});
 }
 
@@ -116,6 +140,8 @@ beforeEach(() => {
 	onAgentSlotRect = vi.fn<(rect: AgentSlotRect | null) => void>();
 	vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
 		function (this: HTMLElement) {
+			if (this === viewport) return domRect(viewportRect);
+			if (this === shell) return domRect(shellRect);
 			return domRect(
 				this.classList.contains("browser-agent-slot")
 					? currentRect
@@ -123,6 +149,10 @@ beforeEach(() => {
 			);
 		},
 	);
+	viewportRect = { left: 0, top: 0, width: 300, height: 400 };
+	viewport = document.createElement("div");
+	shellRect = { left: 0, top: 0, width: 300, height: 400 };
+	shell = document.createElement("div");
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
@@ -260,6 +290,176 @@ describe("BrowserPanel agent slot measurement", () => {
 	});
 });
 
+describe("BrowserPanel sliding slot tracking", () => {
+	const clip = { left: 0, top: 0, width: 300, height: 400 };
+
+	it("publishes clipped rects every frame while sliding in, then the settled unclipped rect", async () => {
+		currentRect = { left: 300, top: 20, width: 300, height: 380 };
+		await renderPanel(false, { visible: true, sliding: true });
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 300,
+			top: 20,
+			width: 300,
+			height: 380,
+			clip,
+		});
+
+		currentRect = { ...currentRect, left: 150.4 };
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 150,
+			top: 20,
+			width: 300,
+			height: 380,
+			clip,
+		});
+		const callsWhileStill = onAgentSlotRect.mock.calls.length;
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenCalledTimes(callsWhileStill);
+
+		currentRect = { ...currentRect, left: 0 };
+		await renderPanel(false, { visible: true, sliding: false });
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 0,
+			top: 20,
+			width: 300,
+			height: 380,
+		});
+		const settledCalls = onAgentSlotRect.mock.calls.length;
+		currentRect = { ...currentRect, left: 40 };
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenCalledTimes(settledCalls);
+	});
+
+	it("keeps tracking while sliding out after visibility drops, then publishes null", async () => {
+		currentRect = { left: 0, top: 20, width: 300, height: 380 };
+		await renderPanel(false, { visible: true, sliding: false });
+		await renderPanel(false, { visible: false, sliding: true });
+		currentRect = { ...currentRect, left: -120 };
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: -120,
+			top: 20,
+			width: 300,
+			height: 380,
+			clip,
+		});
+		expect(onAgentSlotRect).not.toHaveBeenCalledWith(null);
+
+		await renderPanel(false, { visible: false, sliding: false });
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith(null);
+		const calls = onAgentSlotRect.mock.calls.length;
+		await nextFrame();
+		await pollOnce();
+		expect(onAgentSlotRect).toHaveBeenCalledTimes(calls);
+	});
+
+	it("intersects shellViewport with slideViewport across shrinking frames, zero-area clamp, settle, and close", async () => {
+		viewportRect = { left: 100, top: 40, width: 300, height: 400 };
+		currentRect = { left: 100, top: 40, width: 300, height: 400 };
+
+		// Shell clips left/top while slideViewport clips right/bottom.
+		shellRect = { left: 130, top: 65, width: 300, height: 400 };
+		await renderPanel(false, {
+			visible: true,
+			sliding: true,
+			shellViewport: shell,
+		});
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 100,
+			top: 40,
+			width: 300,
+			height: 400,
+			clip: { left: 130, top: 65, width: 270, height: 375 },
+		});
+
+		// Shrinking shell clips right/bottom while slideViewport clips left/top.
+		shellRect = { left: 80, top: 20, width: 250, height: 300 };
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 100,
+			top: 40,
+			width: 300,
+			height: 400,
+			clip: { left: 100, top: 40, width: 230, height: 280 },
+		});
+
+		// Shrinking shell strictly inside slideViewport clips all four edges.
+		shellRect = { left: 160, top: 90, width: 120, height: 140 };
+		await nextFrame();
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 100,
+			top: 40,
+			width: 300,
+			height: 400,
+			clip: { left: 160, top: 90, width: 120, height: 140 },
+		});
+
+		// Settling while visible publishes the final unclipped slot.
+		await renderPanel(false, {
+			visible: true,
+			sliding: false,
+			shellViewport: shell,
+		});
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 100,
+			top: 40,
+			width: 300,
+			height: 400,
+		});
+
+		// Closing while shell shrinks past slideViewport clamps intersection to zero area.
+		shellRect = { left: 420, top: 460, width: 20, height: 20 };
+		await renderPanel(false, {
+			visible: false,
+			sliding: true,
+			shellViewport: shell,
+		});
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith({
+			left: 100,
+			top: 40,
+			width: 300,
+			height: 400,
+			clip: { left: 420, top: 460, width: 0, height: 0 },
+		});
+		expect(onAgentSlotRect).not.toHaveBeenCalledWith(null);
+
+		// Settling after close publishes null.
+		await renderPanel(false, {
+			visible: false,
+			sliding: false,
+			shellViewport: shell,
+		});
+		expect(onAgentSlotRect).toHaveBeenLastCalledWith(null);
+	});
+});
+
+describe("agentSlotClipPath", () => {
+	const rect = { left: 100, top: 50, width: 200, height: 100 };
+
+	it("returns undefined without a clip viewport", () => {
+		expect(agentSlotClipPath(rect)).toBeUndefined();
+	});
+
+	it("insets the left edge when the viewport starts inside the slot", () => {
+		expect(
+			agentSlotClipPath({ ...rect, clip: { left: 160, top: 0, width: 500, height: 500 } }),
+		).toBe("inset(0px 0px 0px 60px)");
+	});
+
+	it("insets the right edge when the slot extends past the viewport", () => {
+		expect(
+			agentSlotClipPath({ ...rect, clip: { left: 0, top: 0, width: 250, height: 500 } }),
+		).toBe("inset(0px 50px 0px 0px)");
+	});
+
+	it("insets the bottom edge when the viewport is shorter than the slot", () => {
+		expect(
+			agentSlotClipPath({ ...rect, clip: { left: 0, top: 0, width: 500, height: 120 } }),
+		).toBe("inset(0px 0px 30px 0px)");
+	});
+});
+
 const extensionTab: AgentBrowserTabRecord = {
 	...agentTab,
 	tabId: "extension-tab",
@@ -385,5 +585,24 @@ describe("BrowserPanel extension-backed tabs", () => {
 			);
 		});
 		expect(container.querySelectorAll("webview")).toHaveLength(1);
+		const guest = container.querySelector("webview");
+		await act(async () => {
+			root.render(
+				<AgentBrowserLayer
+					tabs={[agentTab, extensionTab]}
+					visibleTabId={agentTab.tabId}
+					interactive={false}
+					rect={{ left: 0, top: 0, width: 400, height: 300 }}
+					pointerEvent={null}
+					onAttach={() => undefined}
+				/>,
+			);
+		});
+		const layer = container.querySelector<HTMLElement>(".agent-browser-layer")!;
+		expect(container.querySelector("webview")).toBe(guest);
+		expect(layer.classList.contains("is-visible")).toBe(true);
+		expect(layer.hasAttribute("inert")).toBe(true);
+		expect(layer.getAttribute("aria-hidden")).toBe("true");
+		expect(layer.style.pointerEvents).toBe("none");
 	});
 });

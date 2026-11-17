@@ -1,7 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
 
-const sidebarInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "translateX(-8px)" } })
-
 export const styles = stylex.create({
   "permissionsChip": { "display": { "default": null, "@container (max-width: 620px)": "none", "@media (max-width: 1180px)": "none" } },
   "composerControls": {
@@ -26,14 +24,6 @@ export const styles = stylex.create({
     "width": { "default": null, "@media (max-width: 980px)": "min(268px, calc(100vw - 50px))" },
     "flexBasis": { "default": null, "@media (max-width: 980px)": "min(268px, calc(100vw - 50px))" },
     "boxShadow": { "default": null, "@media (max-width: 980px)": "12px 0 30px rgba(0,0,0,.13)" },
-    "animationName": { "default": null, "@media (max-width: 980px)": sidebarInAnimation },
-    "animationDuration": { "default": null, "@media (max-width: 980px)": "160ms" },
-    "animationDelay": { "default": null, "@media (max-width: 980px)": "0s" },
-    "animationTimingFunction": { "default": null, "@media (max-width: 980px)": "ease-out" },
-    "animationIterationCount": { "default": null, "@media (max-width: 980px)": 1 },
-    "animationDirection": { "default": null, "@media (max-width: 980px)": "normal" },
-    "animationFillMode": { "default": null, "@media (max-width: 980px)": "none" },
-    "animationPlayState": { "default": null, "@media (max-width: 980px)": "running" },
   },
   "panelScrim": {
     "position": { "default": null, "@media (max-width: 980px)": "fixed" },

@@ -10,16 +10,16 @@ export function qualifyWinptyBatchPaths(path = new URL('../../node_modules/node-
   if (qualified !== source) writeFileSync(path, qualified)
 }
 
-/** Backport the 1.5.0 submission-wait abort guard before Session delays promise delivery. */
+/** Backport the submission-wait abort guard, still missing in Durable 1.5.2. */
 export function patchPiDurableSubmissionWait(directory = new URL('../../node_modules/@earendil-works/pi-durable/', import.meta.url)) {
   const manifest = new URL('package.json', directory)
-  if (!existsSync(manifest) || JSON.parse(readFileSync(manifest, 'utf8')).version !== '1.5.0') return
+  if (!existsSync(manifest) || JSON.parse(readFileSync(manifest, 'utf8')).version !== '1.5.2') return
   const path = new URL('dist/harness/submissions.js', directory)
   const source = readFileSync(path, 'utf8')
   const original = '            return { promise: this.#waiters.add(id, context) };'
   const patched = `            context.abortSignal?.throwIfAborted();\n${original}`
   if (source.includes(patched)) return
-  if (source.split(original).length !== 2) throw new Error('Unexpected Pi Durable 1.5.0 submission wait implementation')
+  if (source.split(original).length !== 2) throw new Error('Unexpected Pi Durable 1.5.2 submission wait implementation')
   writeFileSync(path, source.replace(original, patched))
 }
 

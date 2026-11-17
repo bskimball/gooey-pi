@@ -4,7 +4,7 @@ import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
-import { type CSSProperties, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { isLiveSpecialist, shortModelName, specialistMarkState, specialistStatusLabel } from '@/lib/specialist-status'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -21,6 +21,8 @@ import { observedPath } from '@/lib/specialist-evidence'
 
 export { extractPiSpecialistSessions, type PiSpecialistSession } from '@/lib/specialist-records'
 
+
+const TAB_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.8 } as const
 
 const SPECIALIST_STATUS_RANK: Record<PiSpecialistSession['status'], number> = {
   waiting: 0,
@@ -94,9 +96,15 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   cwd,
 }: SpecialistsPanelProps) {
   const prefersReducedMotion = useReducedMotion()
-  const shouldReduceMotion = Boolean(prefersReducedMotion)
+  const tabLayoutId = useId()
+  const [instantSelection, setInstantSelection] = useState<boolean | null>(null)
+  const actualReducedMotion = Boolean(prefersReducedMotion)
     || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+  const shouldReduceMotion = actualReducedMotion
     || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  const instantTabs = shouldReduceMotion || instantSelection === true
+  const instantCssTabs = actualReducedMotion || instantSelection === true
+  const tabTransition = { layout: instantTabs ? { duration: 0 } : TAB_SPRING, opacity: { duration: instantTabs ? 0 : 0.14 } }
   const specialists = useMemo(() => extractPiSpecialistSessions(messages), [messages])
   const tabs = useMemo(() => orderSpecialistTabs(specialists), [specialists])
   const liveTabCount = tabs.filter((spec) => isLiveSpecialist(spec.status)).length
@@ -281,11 +289,28 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
 
   return (
     <MarkdownScopeContext.Provider value="specialist"><div className={`specialists-panel ${stylex.props(agentsStyles.specialistsPanel).className ?? ""}`}>
-      <div
+      <motion.div
+        layoutScroll
         ref={tabstripRef}
         className={`specialist-tabstrip scroll-area ${stylex.props(baseStyles.scrollArea, agentsStyles.specialistTabstrip).className ?? ""}`}
         role="tablist"
         aria-label="Session specialists"
+        data-instant={instantCssTabs ? 'true' : undefined}
+        onFocusCapture={(event) => {
+          if (event.target instanceof Element && event.target.matches(':focus-visible')) {
+            event.currentTarget.setAttribute('data-instant', 'true')
+            setInstantSelection(true)
+          }
+        }}
+        onPointerOverCapture={(event) => {
+          const reduceNow = document.documentElement.classList.contains('reduce-motion')
+            || matchMedia('(prefers-reduced-motion: reduce)').matches
+            || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+          if (reduceNow) return
+          event.currentTarget.removeAttribute('data-instant')
+          setInstantSelection(false)
+        }}
+        onPointerDownCapture={() => setInstantSelection(false)}
         style={{ '--tab-z-front': tabs.length + 4 } as CSSProperties}
         onWheel={(event) => {
           const strip = event.currentTarget
@@ -294,8 +319,8 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           }
         }}
       >
-        <LayoutGroup>
-          <AnimatePresence initial={false}>
+        <LayoutGroup id={tabLayoutId}>
+          <AnimatePresence initial={false} mode="popLayout">
             {tabs.flatMap((spec, index) => {
               const isSelected = spec.id === active.id
               const status = specialistStatusLabel[spec.status]
@@ -303,8 +328,13 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               const nodes = []
               if (index === liveTabCount && liveTabCount > 0) {
                 nodes.push(
-                  <span
+                  <motion.span
                     key="specialist-tabstrip-divider"
+                    layout="position"
+                    initial={instantTabs ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={tabTransition}
                     className={`specialist-tabstrip__divider ${stylex.props(agentsStyles.specialistTabDivider).className ?? ''}`}
                     aria-hidden="true"
                   />,
@@ -313,11 +343,11 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
               nodes.push(
                 <motion.button
                   key={spec.id}
-                  layout={shouldReduceMotion ? false : 'position'}
-                  initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95, x: -6 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95, transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
-                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, ease: [0.23, 1, 0.32, 1], layout: { type: 'spring', duration: 0.28, bounce: 0 } }}
+                  layout="position"
+                  initial={instantTabs ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: instantTabs ? 0 : 0.11 } }}
+                  transition={tabTransition}
                   type="button"
                   role="tab"
                   aria-selected={isSelected}
@@ -330,11 +360,16 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
                     const next = destinations[event.key]
                     if (next === undefined) return
                     event.preventDefault()
+                    tabstripRef.current?.setAttribute('data-instant', 'true')
+                    setInstantSelection(true)
                     onSelect(tabs[next].id)
                     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
                   }}
                   className={[`specialist-tabstrip__item ${isSelected ? 'is-active' : ''} is-${spec.status}`, stylex.props(agentsStyles.specialistTabstripItem, (isSelected) && agentsStyles.specialistTabstripItemIsActive, ((spec.status === "running")) && agentsStyles.specialistTabstripItemIsRunning, ((spec.status === "waiting")) && agentsStyles.specialistTabstripItemIsWaiting, ((spec.status === "error")) && agentsStyles.specialistTabstripItemIsError).className].filter(Boolean).join(' ')}
-                  onClick={() => onSelect(spec.id)}
+                  onClick={(event) => {
+                    setInstantSelection(event.detail === 0)
+                    onSelect(spec.id)
+                  }}
                 >
                   {spec.status === 'waiting' ? <Question size={12} /> : <StatusMark state={specialistMarkState(spec.status)} size={12} />}
                   <strong>{spec.agent}</strong>
@@ -345,7 +380,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
             })}
           </AnimatePresence>
         </LayoutGroup>
-      </div>
+      </motion.div>
       <header className={`specialist-header scroll-area ${stylex.props(baseStyles.scrollArea, agentsStyles.specialistHeader).className ?? ""}`} key={active.id}>
         <details className={`specialist-header__details ${stylex.props(agentsStyles.specialistHeaderDetails).className ?? ""}`}>
           <summary title="Show run details">

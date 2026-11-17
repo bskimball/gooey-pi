@@ -278,14 +278,14 @@ export const styles = stylex.create({
     "borderBottomLeftRadius": "var(--radius-lg)",
     "color": "var(--text)",
     "backgroundColor": "var(--surface-raised)",
-    "backgroundImage": "none",
+    "backgroundImage": "var(--gradient-apex)",
     "backgroundPosition": "0% 0%",
     "backgroundSize": "auto auto",
     "backgroundRepeat": "repeat",
     "backgroundAttachment": "scroll",
     "backgroundOrigin": "padding-box",
     "backgroundClip": "border-box",
-    "boxShadow": "var(--shadow-popover)",
+    "boxShadow": "var(--shadow-elevation-med)",
     "cursor": "default"
   },
   "projectRunMenuStatus": {
@@ -361,6 +361,14 @@ export const styles = stylex.create({
     "color": "var(--text-secondary)",
     "backgroundColor": "transparent",
     "backgroundImage": "none",
+    "borderTopColor": "transparent",
+    "borderRightColor": "transparent",
+    "borderBottomColor": "transparent",
+    "borderLeftColor": "transparent",
+    "boxShadow": {
+      "default": "none",
+      ":hover": "none"
+    },
     "backgroundPosition": "0% 0%",
     "backgroundSize": "auto auto",
     "backgroundRepeat": "repeat",
@@ -840,8 +848,8 @@ export const styles = stylex.create({
       ":hover": "var(--surface-selected)"
     },
     "backgroundImage": {
-      "default": "none",
-      ":hover": "none"
+      "default": "var(--gradient-apex)",
+      ":hover": "var(--gradient-apex)"
     },
     "backgroundPosition": {
       "default": "0% 0%",
@@ -867,10 +875,16 @@ export const styles = stylex.create({
       "default": "border-box",
       ":hover": "border-box"
     },
-    "boxShadow": "none",
+    "boxShadow": {
+      "default": "var(--shadow-control)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover:not(:disabled)": "var(--shadow-control-hover)"
+      }
+    },
     "fontSize": "var(--fs-body)",
     "fontWeight": 550,
-    "transition": "background var(--fast), border-color var(--fast), transform 100ms ease-out"
+    "transition": "background var(--fast), border-color var(--fast), box-shadow var(--fast), transform 100ms ease-out"
   },
   "buttonCompact": {
     "minHeight": "28px",
@@ -897,8 +911,8 @@ export const styles = stylex.create({
       ":hover": "color-mix(in srgb, var(--surface-selected) 82%, var(--text))"
     },
     "backgroundImage": {
-      "default": "none",
-      ":hover": "none"
+      "default": "var(--gradient-apex)",
+      ":hover": "var(--gradient-apex)"
     },
     "backgroundPosition": {
       "default": "0% 0%",
@@ -924,21 +938,28 @@ export const styles = stylex.create({
       "default": "border-box",
       ":hover": "border-box"
     },
+    "boxShadow": {
+      "default": "var(--shadow-control)",
+      "@media (hover: hover) and (pointer: fine)": {
+        "default": null,
+        ":hover:not(:disabled)": "var(--shadow-control-hover)"
+      }
+    },
     "borderTopColor": {
-      "default": "var(--border-strong)",
-      ":hover": "color-mix(in srgb, var(--border-strong) 80%, var(--text))"
+      "default": "var(--border-apex)",
+      ":hover": "var(--apex)"
     },
     "borderRightColor": {
-      "default": "var(--border-strong)",
-      ":hover": "color-mix(in srgb, var(--border-strong) 80%, var(--text))"
+      "default": "var(--border-apex)",
+      ":hover": "var(--apex)"
     },
     "borderBottomColor": {
-      "default": "var(--border-strong)",
-      ":hover": "color-mix(in srgb, var(--border-strong) 80%, var(--text))"
+      "default": "var(--border-apex)",
+      ":hover": "var(--apex)"
     },
     "borderLeftColor": {
-      "default": "var(--border-strong)",
-      ":hover": "color-mix(in srgb, var(--border-strong) 80%, var(--text))"
+      "default": "var(--border-apex)",
+      ":hover": "var(--apex)"
     }
   },
   "buttonDanger": {
@@ -979,6 +1000,10 @@ export const styles = stylex.create({
     "borderRightColor": "var(--danger)",
     "borderBottomColor": "var(--danger)",
     "borderLeftColor": "var(--danger)",
+    "boxShadow": {
+      "default": "none",
+      ":hover": "none"
+    },
     "filter": {
       "default": null,
       ":hover": "brightness(.94)"

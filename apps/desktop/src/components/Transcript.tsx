@@ -13,23 +13,27 @@ import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
 import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { PiWelcomeMark } from './ui'
-import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage, renderNarrative, renderNarrativeWithActivity } from './transcript/messages'
+import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerReadMarker, UserMessage } from './transcript/messages'
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { createSessionSummarySelector } from './inspector/session-summary'
 import { SubagentContext } from './transcript/subagent-lane'
 import { TurnNavigator } from './transcript/turn-navigator'
-import { formatWorkedDuration, WorkDisclosure } from './transcript/timeline'
+import { formatWorkedDuration } from './transcript/timeline'
 import { WorkspaceImageContext } from './WorkspaceImage'
 import { BrowserReferenceContext } from './transcript/BrowserReferenceCards'
 import type { BrowserReference } from '@/lib/browser-annotations'
 
 const styles = stylex.create({
   header: {
-    position: 'relative', zIndex: 20, width: '100%', maxWidth: 'var(--transcript-measure)', marginInline: 'auto',
+    position: 'relative', zIndex: 20, width: '100%',
     backgroundColor: 'var(--canvas)', boxShadow: '0 6px 16px -8px rgb(0 0 0 / 0.45)',
     borderBottomLeftRadius: 'var(--radius-lg)', borderBottomRightRadius: 'var(--radius-lg)',
-    display: 'flex', alignItems: 'center', gap: 12, paddingInline: { default: 24, '@media (max-width: 720px)': 18 }, paddingBlock: 4, minHeight: 36, flexShrink: 0,
+    flexShrink: 0,
+  },
+  headerInner: {
+    width: '100%', maxWidth: 'var(--transcript-measure)', marginInline: 'auto',
+    display: 'flex', alignItems: 'center', gap: 12, paddingInline: { default: 24, '@media (max-width: 720px)': 18 }, paddingBlock: 4, minHeight: 36,
   },
   currentTurn: { flex: '1 1 auto', minWidth: 0 },
   hidden: { display: 'none' },
@@ -77,25 +81,6 @@ interface TranscriptProps {
 }
 
 
-function ActiveAssistantMessage({ message, shortName, showReasoning, showTools }: { message: TranscriptMessage; shortName: string; showReasoning: boolean; showTools: boolean }) {
-  const visibleActivity = message.parts.some((part) => part.type === 'thinking' && showReasoning || (part.type === 'toolCall' || part.type === 'toolResult') && showTools || part.type === 'agentMessage' || part.type === 'compaction')
-  // The live turn streams in the same chronological order the settled turn keeps, so finishing only adds a Thought header to reasoning.
-  return (
-    <article className={`message message--assistant message--streaming ${stylex.props(transcriptStyles.message, transcriptStyles.messageAssistant).className ?? ""}`}>
-      <div className={`message__content ${stylex.props(transcriptStyles.messageContent).className ?? ""}`}>
-        {visibleActivity
-          ? <WorkDisclosure message={message} showReasoning={showReasoning} showTools={showTools}>{renderNarrativeWithActivity(message.parts, 'turn', showReasoning, showTools, true, true, `Assistant response ${message.id}`)}</WorkDisclosure>
-          : <>
-            {renderNarrative(message.parts, 'live', true, `Assistant response ${message.id}`)}
-            <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{shortName} is working</div>
-          </>}
-      </div>
-    </article>
-  )
-}
-
-
-
 export function Transcript({ messages, git, cwd, onRevealBrowserReference, harness = 'pi', loading, hidden = false, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, sessionActions, onOpenSessionReference, onOpenSpecialist, variant = 'thread', shortName }: TranscriptProps) {
   const workingName = shortName ?? HARNESS_SHORT_NAMES[harness]
   const [selectSummary] = useState(createSessionSummarySelector)
@@ -132,8 +117,10 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
 
   return <BrowserReferenceContext.Provider value={onRevealBrowserReference}><WorkspaceImageContext.Provider value={cwd}><SubagentContext.Provider value={subagentContext}>
     {sessionActions ? <div {...stylex.props(styles.header, hidden && styles.hidden)}>
-      <div {...stylex.props(styles.currentTurn)}>{!loading ? <TurnNavigator scrollRef={scrollRef} active={active} inline /> : null}</div>
-      {sessionActions}
+      <div {...stylex.props(styles.headerInner)}>
+        <div {...stylex.props(styles.currentTurn)}>{!loading ? <TurnNavigator scrollRef={scrollRef} active={active} inline /> : null}</div>
+        {sessionActions}
+      </div>
     </div> : null}
     <div ref={scrollRef} className={[[`${transcriptClasses} `].filter(Boolean).join(' '), stylex.props(baseStyles.scrollArea, transcriptStyles.transcript, queuedMessageCount > 0 && transcriptStyles.transcriptHasQueuedMessages, showPinnedChanges && git.files.length > 0 && transcriptStyles.transcriptHasPinnedChanges, hidden && styles.hidden, [responsiveStyles.transcript, responsiveLayoutStyles.transcript]).className].filter(Boolean).join(" ")} aria-busy={loading} onScroll={updatePinnedState}>
       <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} role="status" aria-live="polite">{announcement}</div>
@@ -178,9 +165,7 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
           return <ErrorBoundary key={message.id} fallback={<div className={`message message--render-failure ${stylex.props(transcriptStyles.message).className ?? ""}`} role="note">This message could not be displayed.</div>}>
           {message.kind === 'steer-read-marker' ? <SteerReadMarker message={message} />
             : message.role === 'user' ? <UserMessage message={message} turnLabel={turnLabel} turnSince={turnSince} turnRunning={turnRunning} turnFailed={turnFailed} onOpenSessionReference={onOpenSessionReference} />
-            : message.role === 'assistant' ? message.streaming || message.id === activeAssistantId
-              ? <ActiveAssistantMessage message={message} shortName={workingName} showReasoning={showReasoning} showTools={showTools} />
-              : <AssistantMessage message={message} harness={harness} shortName={workingName} showReasoning={showReasoning} showTools={showTools} git={message.id === latestSettledAssistantId && git.files.length ? git : undefined} onOpenChanges={onOpenChanges} />
+            : message.role === 'assistant' ? <AssistantMessage live={Boolean(message.streaming) || message.id === activeAssistantId} message={message} harness={harness} shortName={workingName} showReasoning={showReasoning} showTools={showTools} git={message.id === latestSettledAssistantId && git.files.length ? git : undefined} onOpenChanges={onOpenChanges} />
             : message.role === 'agent' ? <AgentMessage message={message} />
             : message.role === 'goal' ? <GoalMessage message={message} />
             : message.role === 'tool' || message.role === 'system' ? <ActivityMessage message={message} harness={harness} />

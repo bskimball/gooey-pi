@@ -513,8 +513,8 @@ function windowsTitleBarOverlay(theme: ResolvedTheme): {
 	height: number;
 } {
 	return theme === "dark"
-		? { color: "#0b0c0e", symbolColor: "#b4c3d4", height: 52 }
-		: { color: "#f7fafc", symbolColor: "#3b4a5e", height: 52 };
+		? { color: "#00000000", symbolColor: "#b4c3d4", height: 52 }
+		: { color: "#00000000", symbolColor: "#3b4a5e", height: 52 };
 }
 
 function resolvedWindowTheme(theme: ThemeMode | undefined): ResolvedTheme {
@@ -536,8 +536,8 @@ export function mainWindowChromeOptions(
 		};
 	if (platform === "win32")
 		return {
-			// The native caption controls sit inside Apex's 52px toolbar, painted
-			// to match it; the application menu lives behind a toolbar button.
+			// Native caption controls overlay the 52px toolbar without obscuring its background.
+			// The application menu lives behind a toolbar button.
 			titleBarStyle: "hidden",
 			titleBarOverlay: windowsTitleBarOverlay(theme),
 			autoHideMenuBar: true,

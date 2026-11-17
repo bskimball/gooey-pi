@@ -56,6 +56,11 @@ describe('transcript rendering', () => {
       expect(container.querySelectorAll('.work-group.is-live')).toHaveLength(1)
       const group = container.querySelector('.work-group.is-live')!
       expect(group.querySelector('.work-group__label')?.textContent).toBe('Running read: after.ts')
+      const firstLabel = group.querySelector('.work-group__label')
+      messages[3] = { ...messages[3], parts: [messages[3].parts[0], { type: 'toolCall', id: 'read-after', name: 'read', args: { path: 'after.tsx' } }] }
+      await update(true)
+      expect(group.querySelector('.work-group__label')).toBe(firstLabel)
+      expect(firstLabel?.textContent).toBe('Running read: after.tsx')
       expect(group.querySelector('.work-group__body')).toBeNull()
       await act(async () => group.querySelector<HTMLButtonElement>('.work-group__summary')!.click())
       expect(group.querySelector('.work-group__body')?.textContent).toContain('after.ts')
@@ -70,6 +75,15 @@ describe('transcript rendering', () => {
       ] }
       await update(true)
       expect(container.querySelector('.work-group.is-live .work-group__summary')?.getAttribute('aria-expanded')).toBe('true')
+      const nextLabel = container.querySelector('.work-group.is-live .work-group__label')
+      expect(nextLabel).not.toBe(firstLabel)
+      expect(nextLabel?.textContent).toBe('Running read: next.ts')
+      expect(container.querySelectorAll('.message--assistant .turn-receipt')).toHaveLength(1)
+      const historicReceipt = container.querySelector('.message--assistant .turn-receipt')
+      const liveArticle = container.querySelector('.message--assistant.message--streaming')!
+      const liveGroup = container.querySelector('.work-group.is-live')!
+      const openBody = liveGroup.querySelector('.work-group__body')!
+      expect(liveArticle.querySelector('section.work-disclosure.is-running [role="status"]')).not.toBeNull()
       expect(container.textContent).toContain('I will focus on keyboard navigation.')
       messages[3] = { ...messages[3], streaming: false, parts: [...messages[3].parts,
         { type: 'toolResult', name: 'read', text: 'Complete', isError: true },
@@ -77,8 +91,21 @@ describe('transcript rendering', () => {
       ] }
       await update(false)
       expect(container.querySelector('.work-group.is-live')).toBeNull()
+      // Settlement reuses the live article and its work group; the reader's open history and scroll stay put.
+      expect(liveArticle.isConnected).toBe(true)
+      expect(liveArticle.classList.contains('message--streaming')).toBe(false)
+      expect(liveArticle.querySelector('.work-disclosure.is-running, [role="status"]')).toBeNull()
+      expect(liveGroup.isConnected).toBe(true)
+      expect(liveGroup.querySelector('.work-group__summary')?.getAttribute('aria-expanded')).toBe('true')
+      expect(openBody.isConnected).toBe(true)
+      expect(liveArticle.querySelector('.turn-receipt')).not.toBeNull()
+      expect(container.querySelector('.message--assistant .turn-receipt')).toBe(historicReceipt)
       expect(container.querySelector('.work-group__failed')?.textContent).toContain('1 failed')
       expect([...container.querySelectorAll('.work-group__label')].map(node => node.textContent)).toContain('Read 2 files')
+      const settledLabel = [...container.querySelectorAll('.work-group__label')].at(-1)
+      expect(settledLabel).not.toBe(nextLabel)
+      expect(settledLabel?.textContent).toBe('Read 2 files')
+      expect(container.querySelectorAll('.message--assistant .turn-receipt')).toHaveLength(2)
       expect(container.textContent).toContain('I will focus on keyboard navigation.')
       expect(container.textContent).toContain('The keyboard review is complete.')
       expect([...container.querySelectorAll('.message--user')].some(node => node.textContent?.includes('Focus on accessibility'))).toBe(true)
@@ -152,17 +179,101 @@ describe('transcript rendering', () => {
       await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop, onOpenSpecialist })))
       const first = container.querySelector('.subagent-lane')!
       expect(first.querySelector('.subagent-lane__state')?.textContent).toBe('failed')
-      await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__open')!.click())
+      const summary = first.querySelector('.subagent-lane__summary')!
+      expect(summary.tagName).toBe('DIV')
+      expect(summary.hasAttribute('role')).toBe(false)
+      expect(summary.hasAttribute('tabindex')).toBe(false)
+      expect(first.querySelector('.subagent-lane__open')).toBeNull()
+      expect(first.querySelector('button button')).toBeNull()
+
+      const primary = first.querySelector<HTMLButtonElement>('.subagent-lane__primary')!
+      expect(primary.tagName).toBe('BUTTON')
+      expect(primary.getAttribute('title')).toBe('Show agent in sidebar')
+      expect(primary.hasAttribute('aria-expanded')).toBe(false)
+      await act(async () => primary.click())
+      expect(onOpenSpecialist).toHaveBeenCalledTimes(1)
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+      expect(first.querySelector('.subagent-lane__body')).toBeNull()
       onOpenSpecialist.mockClear()
-      // Settled lanes with a report expand on summary click to show the report and transcript link.
-      await act(async () => first.querySelector<HTMLElement>('.subagent-lane__summary.is-clickable')!.click())
-      expect(first.querySelector('.subagent-lane__body')).not.toBeNull()
+
+      // Separate disclosure toggle expands/collapses the report without opening the sidebar.
+      const toggle = first.querySelector<HTMLButtonElement>('.subagent-lane__toggle')!
+      expect(toggle.tagName).toBe('BUTTON')
+      expect(toggle.type).toBe('button')
+      expect(toggle.getAttribute('aria-label')).toBe('Expand scout details')
+      expect(toggle.getAttribute('aria-expanded')).toBe('false')
+      await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })))
+      expect(onOpenSpecialist).not.toHaveBeenCalled()
+      expect(toggle.getAttribute('aria-label')).toBe('Collapse scout details')
+      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      const body = first.querySelector('.subagent-lane__body')
+      expect(body).not.toBeNull()
+      expect(toggle.getAttribute('aria-controls')).toBe(body!.id)
+      expect(body!.textContent).toContain('Could not finish')
+
       await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
+      expect(onOpenSpecialist).toHaveBeenCalledTimes(1)
       expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+
+      await act(async () => toggle.click())
+      expect(toggle.getAttribute('aria-label')).toBe('Expand scout details')
+      expect(toggle.getAttribute('aria-expanded')).toBe('false')
+      expect(first.querySelector('.subagent-lane__body')).toBeNull()
       expect(first.querySelector('.status-mark--running')).toBeNull()
       expect(first.querySelector('.subagent-lane__status .status-mark--failed')).not.toBeNull()
       expect(container.querySelector('.subagent-lane.is-running .status-mark--running')).not.toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  it('expands chain lanes without opening an arbitrary agent and selects per-agent transcript links', async () => {
+    const messages: TranscriptMessage[] = [{
+      id: 'chain-message',
+      role: 'assistant',
+      parts: [
+        { type: 'toolCall', id: 'chain-1', name: 'task_chain', args: { steps: [{ agent: 'scout', prompt: 'Map' }, { agent: 'machinist', prompt: 'Implement' }] } },
+        { type: 'toolResult', name: 'task_chain', text: 'step 1 ok\nstep 2 ok\n--- result ---\nChain finished' },
+      ],
+    }]
+    const onOpenSpecialist = vi.fn()
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => root.render(createElement(Transcript, { messages, git, onOpenChanges: noop, onSuggestion: noop, onOpenSpecialist })))
+      const lane = container.querySelector('.subagent-lane')!
+      const summary = lane.querySelector('.subagent-lane__summary')!
+      expect(summary.tagName).toBe('DIV')
+      expect(summary.hasAttribute('role')).toBe(false)
+      expect(lane.querySelector('button button')).toBeNull()
+      expect(lane.querySelector('.subagent-lane__open')).toBeNull()
+
+      const primary = lane.querySelector<HTMLButtonElement>('.subagent-lane__primary')!
+      const toggle = lane.querySelector<HTMLButtonElement>('.subagent-lane__toggle')!
+      expect(primary.getAttribute('title')).toBe('Show agent details')
+      expect(primary.getAttribute('aria-expanded')).toBe('false')
+      expect(toggle.getAttribute('aria-label')).toBe('Expand scout → machinist details')
+
+      await act(async () => primary.click())
+      expect(onOpenSpecialist).not.toHaveBeenCalled()
+      expect(primary.getAttribute('aria-expanded')).toBe('true')
+      expect(toggle.getAttribute('aria-label')).toBe('Collapse scout → machinist details')
+
+      const links = [...lane.querySelectorAll<HTMLButtonElement>('.subagent-lane__links button')]
+      expect(links.map((link) => link.textContent)).toEqual(['Open scout transcript', 'Open machinist transcript'])
+      await act(async () => links[0]!.click())
+      expect(onOpenSpecialist).toHaveBeenLastCalledWith('chain-1-step-1')
+      await act(async () => links[1]!.click())
+      expect(onOpenSpecialist).toHaveBeenLastCalledWith('chain-1-step-2')
+      expect(onOpenSpecialist).toHaveBeenCalledTimes(2)
+      onOpenSpecialist.mockClear()
+
+      await act(async () => toggle.click())
+      expect(onOpenSpecialist).not.toHaveBeenCalled()
+      expect(toggle.getAttribute('aria-label')).toBe('Expand scout → machinist details')
+      expect(lane.querySelector('.subagent-lane__body')).toBeNull()
     } finally {
       await act(async () => root.unmount())
       container.remove()

@@ -103,6 +103,16 @@ function summarizeWork(parts: MessagePart[], steps: number[], streaming: boolean
   return { label: sentence[0].toUpperCase() + sentence.slice(1), failed, running, thoughtsOnly: thoughts > 0 && phrases.length === 1 }
 }
 
+/** Index of the pending tool call that activeWorkLabel describes; mirrors its scan. */
+function activeToolIndex(parts: MessagePart[]): number {
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]
+    const next = parts[index + 1]
+    if (part.type === 'toolCall' && !(next?.type === 'toolResult' && !next.streaming)) return index
+  }
+  return -1
+}
+
 function useInstantMotion(): boolean {
   return (
     Boolean(useReducedMotion()) ||
@@ -131,7 +141,7 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
     return () => observer.disconnect()
   }, [open, live, parts, presentation])
   const steps = stepIndices(parts, showReasoning, showTools, subagents.absorbed)
-  const timeline = (slice: MessagePart[]) => <WorkTimeline parts={slice} showReasoning={showReasoning} showTools={showTools} streaming={streaming} subagents={subagents} />
+  const timeline = (slice: MessagePart[], foldPastThoughts = false) => <WorkTimeline parts={slice} showReasoning={showReasoning} showTools={showTools} streaming={foldPastThoughts ? live : streaming} subagents={subagents} foldPastThoughts={foldPastThoughts} />
   if (!steps.length) return timeline(parts)
 
   const current = presentation === 'current-step' && live ? steps.at(-1) : undefined
@@ -139,6 +149,8 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
   const summary = summarizeWork(parts, summarized, streaming)
   const currentLabel = live && presentation === 'summary' ? activeWorkLabel(showTools ? parts : []) : undefined
   const latestStep = steps.at(-1)
+  // Transition identity is the step, not its text: streamed args update the label in place.
+  const labelKey = currentLabel !== undefined ? `tool-${activeToolIndex(parts)}` : live && latestStep !== undefined ? `step-${latestStep}` : 'settled'
   const label = currentLabel ?? (presentation === 'summary' && live && latestStep !== undefined && parts[latestStep].type === 'thinking' ? 'Thinking' : summary.label)
   const state = summary.failed ? 'is-error' : summary.running || live ? 'is-running' : 'is-done'
   const toolKinds = new Set(summarized.flatMap((index) => {
@@ -166,10 +178,10 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
               <motion.span
                 key={iconKey}
                 style={{ display: 'inline-grid', placeItems: 'center' }}
-                initial={instant ? false : { opacity: 0, scale: 0.82, filter: 'blur(2px)' }}
-                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                exit={instant ? undefined : { opacity: 0, scale: 0.82, filter: 'blur(2px)' }}
-                transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                initial={instant ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={instant ? undefined : { opacity: 0, transition: { duration: 0.08, ease: [0.2, 0, 0, 1] } }}
+                transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
               >
                 {summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : toolIcon(summaryKind)}
               </motion.span>
@@ -178,13 +190,13 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
           <span style={{ position: 'relative', display: 'grid', minWidth: 0, overflow: 'hidden' }}>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span
-                key={label}
+                key={labelKey}
                 className={`work-group__label ${stylex.props(transcriptStyles.workGroupLabel).className ?? ""}`}
                 title={label}
-                initial={instant ? false : { opacity: 0, y: 5, filter: 'blur(1.5px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={instant ? undefined : { opacity: 0, y: -5, filter: 'blur(1.5px)', transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
-                transition={instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                initial={instant ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={instant ? undefined : { opacity: 0, y: -4, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+                transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
               >
                 {label}
               </motion.span>
@@ -207,7 +219,7 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
         <div ref={bodyRef} className={`work-group__body ${stylex.props(transcriptStyles.workGroupBody, presentation === 'summary' && transcriptStyles.workGroupHistory).className ?? ""}`} data-tool-history={presentation === 'summary' ? '' : undefined} id={bodyId} role="region" aria-label="Tool activity history" tabIndex={0} onScroll={(event) => {
           const body = event.currentTarget
           following.current = body.scrollHeight - body.scrollTop - body.clientHeight <= 1
-        }}>{timeline(parts)}</div>
+        }}>{timeline(parts, presentation === 'current-step' && showTools && parts.some((part) => part.type === 'toolCall' || part.type === 'toolResult'))}</div>
       </motion.div> : null}
     </AnimatePresence>
     <ImageParts images={foldedImages} />
@@ -218,7 +230,7 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
         style={{ overflow: 'hidden' }}
         initial={instant ? false : { opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={instant ? undefined : { opacity: 0, y: -4, height: 0, transition: { duration: 0.14, ease: [0.2, 0, 0, 1] } }}
+        exit={instant ? undefined : { opacity: 0, y: -4, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
         transition={instant ? { duration: 0 } : { duration: 0.17, ease: [0.23, 1, 0.32, 1] }}
       >
         {timeline(parts.slice(current))}

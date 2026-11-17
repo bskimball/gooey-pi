@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { expect, userEvent, waitFor, within } from 'storybook/test'
 import { useEffect, useState } from 'react'
+import { createApexStoryFixture } from '../../.storybook/apex-fixture'
+import { installHostFixture } from '../../.storybook/host-fixtures'
 import { Inspector } from '../../apps/desktop/src/components/Inspector'
 import { SummaryPanel } from '../../apps/desktop/src/components/inspector/SummaryPanel'
 import { SummaryAgentsSection } from '../../apps/desktop/src/components/inspector/SummaryAgentsSection'
@@ -125,6 +127,27 @@ export const StageAndUnstage: Story = {
 }
 export const Files: Story = { render: () => <InspectorStory initialTab="files" /> }
 export const Agents: Story = { render: () => <InspectorStory initialTab="specialists" /> }
+export const AgentToolHistory: Story = {
+  beforeEach: () => {
+    const transcript: TranscriptMessage[] = [{
+      id: 'investigation', role: 'assistant', parts: [
+        { type: 'thinking', text: 'Check where the inspector sends focus when it closes.' },
+        { type: 'toolCall', id: 'read-source', name: 'read', args: { path: 'src/navigation.tsx', offset: 12, limit: 5 } },
+        { type: 'toolResult', name: 'read', text: 'triggerRef.current?.focus()' },
+        { type: 'toolCall', id: 'run-test', name: 'bash', args: { command: 'npm test -- navigation' } },
+        { type: 'toolResult', name: 'bash', text: 'Expected the trigger to have focus. Received document.body.', isError: true },
+        { type: 'text', text: 'The trigger loses focus when the inspector closes.' },
+      ],
+    }]
+    installHostFixture(createApexStoryFixture({ sessions: { read: async () => transcript } }))
+  },
+  render: () => <div style={{ width: 340 }}><SpecialistsPanel messages={[{
+    id: 'parent', role: 'assistant', parts: [
+      { type: 'toolCall', name: 'task', id: 'review', args: { agent: 'Reviewer', prompt: 'Check keyboard focus restoration.' } },
+      { type: 'toolResult', name: 'task', text: 'The trigger loses focus when the inspector closes.', details: { sessionFile: '/story/review.jsonl' } },
+    ],
+  }]} selectedId="review" onSelect={noop} /></div>,
+}
 export const Browser: Story = { render: () => <InspectorStory initialTab="browser" /> }
 export const NarrowOverlay: Story = {
   decorators: [
@@ -144,8 +167,17 @@ export const SummaryReadiness: Story = {
         toolCount: 18,
         todos: [
           { id: '1', content: 'Implement focus restoration', status: 'completed' },
-          { id: '2', content: 'Verify narrow shell', status: 'in_progress' },
-          { id: '3', content: 'Await reviewer feedback', status: 'blocked', note: 'Review in progress' },
+          { id: '2', content: 'Audit transcript scroll anchoring across narrow viewports', status: 'completed' },
+          { id: '3', content: 'Verify narrow shell', status: 'in_progress' },
+          { id: '4', content: 'Stabilize compact plan toggle alignment and overflow wrapping at 340px width', status: 'in_progress', note: 'Checking stylex layers' },
+          { id: '5', content: 'Await reviewer feedback', status: 'blocked', note: 'Review in progress' },
+          { id: '6', content: 'Confirm blocked task overflow cap', status: 'blocked', note: '4th active/blocked item' },
+          { id: '7', content: 'Validate keyboard tab order and list scrolling', status: 'pending' },
+          { id: '8', content: 'Reset expansion state on session change', status: 'pending' },
+          { id: '9', content: 'Drop deprecated inline plan badge experiment', status: 'cancelled' },
+          { id: '10', content: 'Verify Storybook readiness snapshot', status: 'pending' },
+          { id: '11', content: 'Check dark and light contrast tokens', status: 'pending' },
+          { id: '12', content: 'Sign off inspector closeout checklist', status: 'pending' },
         ],
         specialists,
       }}
@@ -167,7 +199,18 @@ export const SummaryReadiness: Story = {
     />
   ),
 }
-export const AgentOverflow: Story = { render: () => <SummaryAgentsSection specialists={[...specialists, ...specialists.map((s) => ({ ...s, id: `${s.id}-again` }))]} onOpenSpecialist={noop} /> }
+function AgentOverflowStory() {
+  // Local sample data: three copies of the fixture so finished agents exceed the 8-token limit and show +N.
+  const overflow = [0, 1, 2].flatMap((copy) => specialists.map((s) => ({ ...s, id: `${s.id}-${copy}` })))
+  const [opened, setOpened] = useState<string | null>(null)
+  return (
+    <div style={{ width: 340 }}>
+      <SummaryAgentsSection specialists={overflow} onOpenSpecialist={setOpened} />
+      <output aria-label="Opened agent">{opened ? `Opened ${opened}` : 'No agent opened'}</output>
+    </div>
+  )
+}
+export const AgentOverflow: Story = { render: () => <AgentOverflowStory /> }
 export const RunConfiguration: Story = { render: () => <RunConfigSection cwd={project.path} behaviorMode="Fusion" /> }
 export const RunConfigurationLoading: Story = {
   beforeEach: () => {

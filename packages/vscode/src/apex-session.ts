@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { canonicalSessionPath } from 'apex-core/session-paths'
@@ -116,6 +117,7 @@ export class ApexSession implements vscode.Disposable {
   constructor(
     private readonly post: (message: HostMessage) => void,
     private readonly distDirectory: string,
+    private readonly storageDirectory: string,
     resizeScreenshot?: ScreenshotResizer,
   ) {
     this.statusItem.name = 'Apex'
@@ -179,12 +181,17 @@ export class ApexSession implements vscode.Disposable {
         vscode.window.setStatusBarMessage(`Apex: ${notice}`, 15000)
         this.notice(notice)
       }
-      const environment = this.browser.capability.environmentFor({ cwd: this.cwd, sessionPath: this.browserSessionKey })
+      const environment: NodeJS.ProcessEnv = {
+        ...this.browser.capability.environmentFor({ cwd: this.cwd, sessionPath: this.browserSessionKey }),
+        APEX_BROWSER_AGENT_RUNTIME_PATH: join(this.distDirectory, 'browser-agent', 'runtime.mjs'),
+        // Durable JSONL has one writer; separate launches must never open the same store.
+        APEX_BROWSER_AGENT_STATE_DIR: join(this.storageDirectory, 'browser-agent', randomUUID()),
+      }
       launchToken = environment.APEX_BROWSER_TOKEN
       this.browserToken = launchToken
       rpc = new PiRpc(
         resolvePi(config.get('piPath', '')),
-        ['--mode', 'rpc', '--extension', this.browser.extensionPath, '--extension', join(this.distDirectory, 'extensions', 'editor-extension.ts')],
+        ['--mode', 'rpc', '--extension', this.browser.extensionPath, '--extension', join(this.distDirectory, 'extensions', 'apex-browser-agent.ts'), '--extension', join(this.distDirectory, 'extensions', 'editor-extension.ts')],
         this.cwd,
         (record) => {
           if (this.rpc === rpc) this.onRecord(record)

@@ -4,10 +4,11 @@ import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { isSessionRunning } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
-import { motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react'
 import { StatusMark } from './activity/StatusMark'
 
 const dotStyles = stylex.create({
+  attentionGroup: { display: 'flow-root' },
   workingDot: {
     width: '6px',
     height: '6px',
@@ -51,33 +52,137 @@ interface SidebarAttentionGroupsProps {
   onOpenSession(session: SessionRecord, projectId?: string): void
 }
 
+const ROW_ENTER_EASE = [0.23, 1, 0.32, 1] as const
+const ROW_EXIT_EASE = [0.23, 1, 0.32, 1] as const
+const HEIGHT_EXIT_EASE = [0.2, 0, 0, 1] as const
+
+function useSkipMotion(): boolean {
+  const prefersReducedMotion = useReducedMotion()
+  return Boolean(prefersReducedMotion)
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+}
+
 /** Cross-project groups shown above the project tree. Empty groups render nothing. */
 export function SidebarAttentionGroups({ attention, running, ...shared }: SidebarAttentionGroupsProps) {
+  const skipMotion = useSkipMotion()
   return (
-    <>
-      {attention.length ? <AttentionGroup label="Needs you" sessions={attention} attention {...shared} /> : null}
-      {running.length ? <AttentionGroup label="Running" sessions={running} attention={false} {...shared} /> : null}
-    </>
+    <AnimatePresence initial={false}>
+      {attention.length ? <AttentionGroup key="needs-you" label="Needs you" sessions={attention} attention skipMotion={skipMotion} {...shared} /> : null}
+      {running.length ? <AttentionGroup key="running" label="Running" sessions={running} attention={false} skipMotion={skipMotion} {...shared} /> : null}
+    </AnimatePresence>
   )
 }
 
-type AttentionGroupProps = Omit<SidebarAttentionGroupsProps, 'attention' | 'running'> & { label: string; sessions: SessionRecord[]; attention: boolean }
-
-function AttentionGroup({ label, sessions, attention, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
+/** Keep exiting rows inert until their slide, fade, and height collapse complete. */
+function AttentionPresenceRow({ skipMotion, session, projectId, projectName, selected, attention, live, onOpenSession }: {
+  skipMotion: boolean
+  session: SessionRecord
+  projectId?: string
+  projectName?: string
+  selected: boolean
+  attention: boolean
+  live?: SessionLive
+  onOpenSession(session: SessionRecord, projectId?: string): void
+}) {
+  const isPresent = useIsPresent()
   return (
-    <section className="sidebar-attention" aria-label={label}>
+    <motion.div
+      inert={!isPresent}
+      initial={skipMotion ? false : { height: 0, opacity: 0, x: -8, overflow: 'hidden' }}
+      animate={skipMotion ? undefined : {
+        height: 'auto',
+        opacity: 1,
+        x: 0,
+        overflow: 'hidden',
+        transitionEnd: { overflow: 'visible' },
+      }}
+      exit={skipMotion ? undefined : {
+        height: 0,
+        opacity: 0,
+        x: -12,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        transition: {
+          x: { duration: 0.15, ease: ROW_EXIT_EASE },
+          opacity: { duration: 0.14, ease: ROW_EXIT_EASE },
+          height: { duration: 0.14, delay: 0.03, ease: HEIGHT_EXIT_EASE },
+        },
+      }}
+      transition={skipMotion ? { duration: 0 } : {
+        height: { duration: 0.17, ease: ROW_ENTER_EASE },
+        opacity: { duration: 0.18, delay: 0.02, ease: ROW_ENTER_EASE },
+        x: { duration: 0.19, ease: ROW_ENTER_EASE },
+      }}
+    >
+      <button
+        type="button"
+        title={session.title}
+        className={[`sidebar-attention__row ${selected ? 'is-selected' : ''}`, stylex.props(sidebarStyles.sidebarAttentionRow, (selected) && sidebarStyles.sidebarAttentionRowIsSelected).className].filter(Boolean).join(' ')}
+        onClick={() => { if (isPresent) onOpenSession(session, projectId) }}
+      >
+        <span className={`sidebar-attention__title ${stylex.props(sidebarStyles.sidebarAttentionTitle).className ?? ""}`}>{session.title}</span>
+        <span className={`sidebar-attention__project ${stylex.props(sidebarStyles.sidebarAttentionProject).className ?? ""}`}>{projectName}</span>
+        <SessionStatusGlyph session={session} attention={attention} live={live} />
+      </button>
+    </motion.div>
+  )
+}
+
+type AttentionGroupProps = Omit<SidebarAttentionGroupsProps, 'attention' | 'running'> & {
+  label: string
+  sessions: SessionRecord[]
+  attention: boolean
+  skipMotion: boolean
+}
+
+function AttentionGroup({ label, sessions, attention, skipMotion, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
+  const isPresent = useIsPresent()
+  return (
+    <motion.section
+      className={`sidebar-attention ${stylex.props(dotStyles.attentionGroup).className ?? ''}`}
+      aria-label={label}
+      inert={!isPresent}
+      initial={skipMotion ? false : { height: 0, opacity: 0, overflow: 'hidden' }}
+      animate={skipMotion ? undefined : { height: 'auto', opacity: 1, x: 0, overflow: 'hidden', transitionEnd: { overflow: 'visible' } }}
+      exit={skipMotion ? undefined : {
+        height: 0,
+        opacity: 0,
+        x: -12,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        transition: {
+          x: { duration: 0.15, ease: ROW_EXIT_EASE },
+          opacity: { duration: 0.14, ease: ROW_EXIT_EASE },
+          height: { duration: 0.14, delay: 0.03, ease: HEIGHT_EXIT_EASE },
+        },
+      }}
+      transition={skipMotion ? { duration: 0 } : {
+        height: { duration: 0.17, ease: ROW_ENTER_EASE },
+        opacity: { duration: 0.18, delay: 0.02, ease: ROW_ENTER_EASE },
+        x: { duration: 0.19, ease: ROW_ENTER_EASE },
+      }}
+    >
       <h2 className={`sidebar__label ${stylex.props(sidebarStyles.sidebarLabel).className ?? ""}`}>{label} <span className="n">{sessions.length}</span></h2>
-      {sessions.map((session) => {
-        const project = projects.find((candidate) => candidate.path === session.projectPath || candidate.folders.includes(session.projectPath))
-        const selected = activeSessionId === session.id && activeView === 'session'
-        return (
-          <button key={session.id} type="button" title={session.title} className={[`sidebar-attention__row ${selected ? 'is-selected' : ''}`, stylex.props(sidebarStyles.sidebarAttentionRow, (selected) && sidebarStyles.sidebarAttentionRowIsSelected).className].filter(Boolean).join(' ')} onClick={() => onOpenSession(session, project?.id)}>
-            <span className={`sidebar-attention__title ${stylex.props(sidebarStyles.sidebarAttentionTitle).className ?? ""}`}>{session.title}</span>
-            <span className={`sidebar-attention__project ${stylex.props(sidebarStyles.sidebarAttentionProject).className ?? ""}`}>{project?.name ?? session.projectPath.split(/[\\/]/).pop()}</span>
-            <SessionStatusGlyph session={session} attention={attention} live={liveBySession?.[session.filePath]} />
-          </button>
-        )
-      })}
-    </section>
+      <AnimatePresence initial={false}>
+        {sessions.map((session) => {
+          const project = projects.find((candidate) => candidate.path === session.projectPath || candidate.folders.includes(session.projectPath))
+          const selected = activeSessionId === session.id && activeView === 'session'
+          return (
+            <AttentionPresenceRow
+              key={session.id}
+              skipMotion={skipMotion}
+              session={session}
+              projectId={project?.id}
+              projectName={project?.name ?? session.projectPath.split(/[\\/]/).pop()}
+              selected={selected}
+              attention={attention}
+              live={liveBySession?.[session.filePath]}
+              onOpenSession={onOpenSession}
+            />
+          )
+        })}
+      </AnimatePresence>
+    </motion.section>
   )
 }
