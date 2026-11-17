@@ -2,13 +2,13 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
-import { Brain, CaretRight, WarningCircle, Wrench } from '../icons'
+import { Brain, CaretRight, WarningCircle } from '../icons'
 import type { MessagePart } from '@/types/api'
 import { StatusMark } from '../activity/StatusMark'
 import { isEditTool } from './edit-diff'
 import { ImageParts } from './TranscriptImage'
 import { isSubagentTool, type SubagentPairs } from './subagent-lane'
-import { activeWorkLabel, classifyTool, isExploreTool, SEARCH_TOOLS, WorkTimeline } from './timeline'
+import { activeWorkLabel, classifyTool, isExploreTool, SEARCH_TOOLS, toolIcon, WorkTimeline } from './timeline'
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 
@@ -141,7 +141,13 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
   const latestStep = steps.at(-1)
   const label = currentLabel ?? (presentation === 'summary' && live && latestStep !== undefined && parts[latestStep].type === 'thinking' ? 'Thinking' : summary.label)
   const state = summary.failed ? 'is-error' : summary.running || live ? 'is-running' : 'is-done'
-  const iconKey = summary.running || live ? 'running' : summary.thoughtsOnly ? 'brain' : 'wrench'
+  const toolKinds = new Set(summarized.flatMap((index) => {
+    const part = parts[index]
+    if ((part.type === 'toolCall' || part.type === 'toolResult') && part.name) return [classifyTool(part.name)]
+    return []
+  }))
+  const summaryKind = toolKinds.size === 1 ? [...toolKinds][0] : 'mcp'
+  const iconKey = summary.running || live ? 'running' : summary.thoughtsOnly ? 'brain' : summaryKind
   const foldedImages = open ? [] : partImages(current === undefined ? parts : parts.slice(0, current))
 
   return <div className={[`work-group ${state}${live ? ' is-live' : ''}`, stylex.props(transcriptStyles.workGroup).className].filter(Boolean).join(' ')}>
@@ -165,7 +171,7 @@ export function WorkGroup({ parts, showReasoning, showTools, streaming, live, su
                 exit={instant ? undefined : { opacity: 0, scale: 0.82, filter: 'blur(2px)' }}
                 transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
               >
-                {summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : <Wrench size={14} />}
+                {summary.running || live ? <StatusMark state="running" size={14} /> : summary.thoughtsOnly ? <Brain size={14} /> : toolIcon(summaryKind)}
               </motion.span>
             </AnimatePresence>
           </span>

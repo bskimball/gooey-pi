@@ -115,10 +115,11 @@ interface FixtureOptions {
   /** Pi `get_commands` listing; omitted means the runtime reports none. */
   commands?: Array<{ name: string; source: string }>
   startError?: Error
+  imageInputSupported?: boolean
   flushPendingMutations?(runtime?: RuntimeInfo): Promise<void>
 }
 
-function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'pi', commands = [], startError, flushPendingMutations }: FixtureOptions = {}) {
+function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ownsStreaming = false, withSession = true, harness = 'pi', commands = [], startError, imageInputSupported = true, flushPendingMutations }: FixtureOptions = {}) {
   const project = { ...baseProject, harness }
   if (configuredRuntime) configuredRuntime = { ...configuredRuntime, harness }
   let currentRuntime = configuredRuntime
@@ -145,7 +146,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     return { ...runtime('started-runtime'), harness }
   })
   const followUp = vi.fn(async () => true)
-  const queuePrompt = vi.fn()
+  const queuePrompt = vi.fn(() => 'pending-prompt')
   const setToast = vi.fn()
   const reportError = vi.fn()
   const workspace = {
@@ -176,6 +177,8 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     },
     queuePrompt,
     removeQueuedPrompt: vi.fn(),
+    acceptSteer: vi.fn(),
+    acknowledgeSteer: vi.fn(),
     markQueuedPromptFlushFailed: vi.fn(),
   }
   const agentList = vi.fn(async () => configuredRuntime ? [configuredRuntime] : [])
@@ -195,7 +198,7 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
     activeProject: project,
     workspace,
     settingsState: { settings: { activeHarness: harness } },
-    provider: { model: 'auto', effort: 'medium', fast: false, flushPendingMutations },
+    provider: { model: 'auto', effort: 'medium', fast: false, selectedModel: { input: imageInputSupported ? ['text', 'image'] : ['text'] }, flushPendingMutations },
     agentTurn,
     initialized: true,
     layout: {},
@@ -217,6 +220,49 @@ function fixture({ runtime: configuredRuntime = null, sessionStatus = 'idle', ow
 
   return { actions, bridge, command, agentList, workspace, sessions: () => workspaceSessions, currentRuntime: () => currentRuntime, start, followUp, queuePrompt, setToast, reportError, messages: () => messages }
 }
+
+describe('image prompt admission', () => {
+  const images = [{ type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' }]
+
+  it.each([
+    { streaming: false, owned: false, intent: 'queue' as const, commandType: 'prompt' },
+    { streaming: true, owned: true, intent: 'steer' as const, commandType: 'steer' },
+    { streaming: true, owned: false, intent: 'queue' as const, commandType: 'follow_up' },
+  ])('rejects $commandType when an extension handles the message without delivery', async ({ streaming, owned, intent, commandType }) => {
+    const state = fixture({ runtime: runtime('image-runtime', streaming), ownsStreaming: owned })
+    state.command.mockResolvedValue({ data: { disposition: 'handled' } })
+    await expect(state.actions.sendPrompt('Explain this screenshot', images, intent)).rejects.toThrow('extension')
+    expect(state.command).toHaveBeenCalledWith('image-runtime', expect.objectContaining({ type: commandType, message: 'Explain this screenshot', images }))
+    expect(state.messages().some((message) => message.role === 'user')).toBe(false)
+  })
+
+  it.each([
+    { streaming: false, owned: false, intent: 'queue' as const, disposition: 'started', commandType: 'prompt' },
+    { streaming: true, owned: true, intent: 'steer' as const, disposition: 'queued', commandType: 'steer' },
+    { streaming: true, owned: false, intent: 'queue' as const, disposition: 'queued', commandType: 'follow_up' },
+  ])('delivers text and images together through $commandType', async ({ streaming, owned, intent, disposition, commandType }) => {
+    const state = fixture({ runtime: runtime('image-runtime', streaming), ownsStreaming: owned })
+    state.command.mockResolvedValue({ data: { disposition } })
+    await expect(state.actions.sendPrompt('Explain this screenshot', images, intent)).resolves.toBeUndefined()
+    expect(state.command).toHaveBeenCalledWith('image-runtime', expect.objectContaining({ type: commandType, message: 'Explain this screenshot', images }))
+  })
+
+  it('completes a text-only queued input handled by an extension without scheduling retries', async () => {
+    const state = fixture({ runtime: runtime() })
+    state.command.mockResolvedValue({ data: { disposition: 'handled' } })
+    await expect(state.actions.sendPrompt('ping', [], 'queue', 'queued-text')).resolves.toBeUndefined()
+    expect(state.command).toHaveBeenCalledOnce()
+    expect(state.workspace.removeQueuedPrompt).toHaveBeenCalledExactlyOnceWith('queued-text')
+    expect(state.workspace.markQueuedPromptFlushFailed).not.toHaveBeenCalled()
+    expect(state.messages().some((message) => message.streaming)).toBe(false)
+  })
+
+  it('rejects unsupported images rather than resolving a send that never happened', async () => {
+    const state = fixture({ runtime: runtime(), imageInputSupported: false })
+    await expect(state.actions.sendPrompt('Keep this screenshot', images)).rejects.toThrow('does not accept images')
+    expect(state.command).not.toHaveBeenCalled()
+  })
+})
 
 describe('optimistic session creation', () => {
   it('publishes a selectable session without starting Pi and sends the first prompt to its file', async () => {

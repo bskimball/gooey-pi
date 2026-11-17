@@ -3,6 +3,9 @@
 .title-toolbar:hover .icon-button:not(.is-active) { color: var(--text-secondary); }
 .title-toolbar .icon-button:not(.is-active):hover { color: var(--text); }
 .title-toolbar__identity strong { max-width: 28vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-body); font-weight: 550; }
+/* Branch names are mostly lowercase: trim the label to its x-height so it centers optically with the icon. */
+.branch-pill > svg { flex: none; }
+.branch-pill > span { text-box: trim-both ex alphabetic; padding-block: 5px; margin-block: -5px; }
 .project-run-split:has(.project-run-split__menu[aria-expanded='true']) { border-color: var(--border); background: var(--surface-selected); }
 .project-run-split button { display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--text-secondary); background: transparent; }
 .project-run-split button:hover { color: var(--text); background: var(--surface-hover); }

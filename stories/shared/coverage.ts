@@ -1,0 +1,52 @@
+/** UI-family ledger. Aliases and behavior-only modules are deliberately not counted. */
+export const sharedCoverage = [
+  { source: 'packages/ui/src/ui.tsx', family: 'IconButton', title: 'Shared/Controls', storyIds: ['shared-controls--button-states'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'ApexButton', title: 'Shared/Controls', storyIds: ['shared-controls--button-states', 'shared-controls--control-composition'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'BrowserGlobe', title: 'Shared/Controls', storyIds: ['shared-controls--button-states'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'SelectControl', title: 'Shared/Controls', storyIds: ['shared-controls--select-and-segmented'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'Segmented', title: 'Shared/Controls', storyIds: ['shared-controls--select-and-segmented'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'EmptyState', title: 'Shared/Controls', storyIds: ['shared-controls--actionable-empty-states'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'PiMark', title: 'Shared/Marks', storyIds: ['shared-marks--brand-sizes'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'PiWelcomeMark', title: 'Shared/Marks', storyIds: ['shared-marks--brand-sizes', 'shared-marks--reduced-motion'] },
+  { source: 'packages/ui/src/ui.tsx', family: 'GooeyPiMark', title: 'Shared/Marks', storyIds: ['shared-marks--brand-sizes'] },
+  {
+    source: 'packages/ui/src/icons.tsx',
+    family: 'IconContext + every named icon wrapper (Archive through X)',
+    title: 'Shared/Marks',
+    storyIds: ['shared-marks--icon-export-gallery', 'shared-marks--dark-icons'],
+  },
+  { source: 'packages/ui/src/Modal.tsx', family: 'Modal', title: 'Shared/Dialogs', storyIds: ['shared-dialogs--modal-with-footer', 'shared-dialogs--overflow'] },
+  {
+    source: 'packages/ui/src/ErrorBoundary.tsx',
+    family: 'ErrorBoundary',
+    title: 'Shared/Dialogs',
+    storyIds: ['shared-dialogs--healthy-boundary', 'shared-dialogs--static-error-fallback', 'shared-dialogs--retry-error-fallback'],
+  },
+  {
+    source: 'packages/ui/src/ExtensionUiModal.tsx',
+    family: 'ExtensionUiModal',
+    title: 'Shared/Extension UI',
+    storyIds: [
+      'shared-extension-ui--confirm',
+      'shared-extension-ui--blank-input',
+      'shared-extension-ui--valid-input',
+      'shared-extension-ui--prefilled-editor',
+      'shared-extension-ui--select',
+      'shared-extension-ui--filtered-options',
+      'shared-extension-ui--multi-question-flow',
+      'shared-extension-ui--freeform-answer',
+      'shared-extension-ui--inline-questionnaire',
+      'shared-extension-ui--expired',
+      'shared-extension-ui--cancelled',
+    ],
+  },
+] as const
+export const sharedExclusions = [
+  { source: 'packages/ui/src/index.ts', reason: 'Barrel only. Desktop component re-exports belong to chat/workspace inventories.' },
+  { source: 'packages/ui/src/ui.tsx', reason: 'focusableSelector/useFocusTrap/useAppShellOverlay are behavior support, exercised by real dialogs, not standalone UI.' },
+  { source: 'packages/ui/src/Modal.tsx', reason: 'ensureDialogModalMethods is private browser compatibility support.' },
+  { source: 'packages/ui/src/extensionQuestionnaireMachine.ts', reason: 'Behavior support exercised by questionnaire stories.' },
+  { source: 'packages/ui/src/tokens.d.ts', reason: 'Types only.' },
+  { source: 'packages/ui/src/styles/**', reason: 'Production styling consumed by real components.' },
+  { source: 'apps/desktop/src/components/{ui,icons,ErrorBoundary,ExtensionUiModal}.tsx', reason: 'Shared re-export aliases, not additional families.' },
+] as const

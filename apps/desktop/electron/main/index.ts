@@ -112,8 +112,8 @@ import {
 } from "./updates";
 import { VoiceService, voiceSecretStorageStatus } from "./voice";
 import { isAllowedRendererAudioPermission } from "./voice-permissions";
-import { installInteractivePreviews, isAllowedRendererFrameUrl } from "./interactive-previews";
-import { INTERACTIVE_PREVIEW_SCHEME } from "apex-core/interactive-preview";
+import { installInteractivePreviews, isAllowedRendererFrameUrl, prepareProjectPreviewSession, projectPreviewOrigin } from "./interactive-previews";
+import { INTERACTIVE_PREVIEW_SCHEME, isProjectPreviewPartition, projectPreviewUrl } from "apex-core/interactive-preview";
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: INTERACTIVE_PREVIEW_SCHEME, privileges: { standard: true, secure: true } },
@@ -316,11 +316,27 @@ export function hardenRenderer(
 		preferences.webviewTag = false;
 		const partition =
 			typeof params.partition === "string" ? params.partition : "";
-		if (partition !== BROWSER_PARTITION || !isAllowedBrowserUrl(params.src))
+		if (isProjectPreviewPartition(partition)) {
+			const url = projectPreviewUrl(params.src);
+			if (!url) { event.preventDefault(); return; }
+			const previewSession = session.fromPartition(partition);
+			const existingOrigin = projectPreviewOrigin(previewSession);
+			if (existingOrigin && existingOrigin !== url.origin) { event.preventDefault(); return; }
+			prepareProjectPreviewSession(previewSession, url.origin);
+		} else if (partition !== BROWSER_PARTITION || !isAllowedBrowserUrl(params.src)) {
 			event.preventDefault();
+		}
 	});
 	window.webContents.on("did-attach-webview", (_event, contents) => {
 		contents.setWindowOpenHandler(() => ({ action: "deny" }));
+		const previewOrigin = projectPreviewOrigin(contents.session);
+		if (previewOrigin) {
+			const allowed = (url: string) => projectPreviewUrl(url)?.origin === previewOrigin;
+			contents.on("will-navigate", (event, url) => { if (!allowed(url)) event.preventDefault(); });
+			contents.on("will-redirect", (event) => { if (!allowed(event.url)) event.preventDefault(); });
+			contents.on("will-frame-navigate", (event) => { if (!allowed(event.url)) event.preventDefault(); });
+			return;
+		}
 		contents.on("will-navigate", (event, target) => {
 			if (!isAllowedBrowserUrl(target)) event.preventDefault();
 		});

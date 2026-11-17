@@ -23,6 +23,19 @@ const styles = stylex.create({
     backgroundColor: 'var(--surface-subtle)',
     fontSize: 'var(--fs-micro)',
     fontWeight: 500,
+    lineHeight: 1,
+  },
+  separator: { flexShrink: 0, color: 'var(--text-tertiary)', fontSize: 'var(--fs-body)', fontWeight: 400 },
+  session: {
+    minWidth: 0,
+    maxWidth: '36vw',
+    flexShrink: 1,
+    overflow: 'hidden',
+    color: 'var(--text-secondary)',
+    fontSize: 'var(--fs-body)',
+    fontWeight: 500,
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
 })
 
@@ -32,6 +45,8 @@ const viewTitles: Record<Exclude<WorkspaceView, 'session'>, MessageKey> = {
 
 interface TitleToolbarProps {
   project?: ProjectRecord
+  /** Title of the open session, shown after the project name. */
+  sessionTitle?: string
   gitBranch?: string
   view: WorkspaceView
   /** Active harness product name; the session view's fallback title. */
@@ -46,13 +61,19 @@ interface TitleToolbarProps {
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, gitBranch, view, productName = 'Apex', activeProjectScriptKind, sessionActions, onRunProjectScript, onStopProjectScript, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, sessionTitle, gitBranch, view, productName = 'Apex', activeProjectScriptKind, sessionActions, onRunProjectScript, onStopProjectScript, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const branch = gitBranch ?? project?.gitBranch
   return (
     <header className={`title-toolbar drag-region ${stylex.props(baseStyles.dragRegion, workbenchStyles.titleToolbar, responsiveStyles.titleToolbar, (platform === 'win32' || platform === 'linux') && workbenchStyles.titleToolbarWindowControls).className ?? ""}`}>
       <div className={`title-toolbar__identity ${stylex.props(workbenchStyles.titleToolbarIdentity, [responsiveStyles.titleToolbarIdentity, responsiveLayoutStyles.titleToolbarIdentity]).className ?? ""}`}>
         <strong>{project?.name ?? (view === 'session' ? productName : t(viewTitles[view]))}</strong>
+        {sessionTitle && view === 'session' ? (
+          <>
+            <span className={`title-toolbar__separator ${stylex.props(styles.separator).className ?? ''}`} aria-hidden="true">/</span>
+            <span className={`title-toolbar__session ${stylex.props(styles.session).className ?? ''}`} title={sessionTitle}>{sessionTitle}</span>
+          </>
+        ) : null}
         {branch && view === 'session' ? <Badge icon={<GitBranch size={12} />} label={branch} className="branch-pill" xstyle={[workbenchStyles.branchPill, styles.branchBadge, responsiveStyles.branchPill]} /> : null}
       </div>
       <div className={`title-toolbar__actions no-drag ${stylex.props(baseStyles.noDrag, workbenchStyles.titleToolbarActions).className ?? ""}`}>

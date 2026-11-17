@@ -1,5 +1,23 @@
 import type { Session } from 'electron'
-import { INTERACTIVE_PREVIEW_POLICY, INTERACTIVE_PREVIEW_SCHEME, interactivePreviewDocument } from 'apex-core/interactive-preview'
+import { INTERACTIVE_PREVIEW_POLICY, INTERACTIVE_PREVIEW_SCHEME, interactivePreviewDocument, isProjectPreviewRequest } from 'apex-core/interactive-preview'
+
+const projectPreviewOrigins = new WeakMap<Session, string>()
+
+export function projectPreviewOrigin(session: Session): string | undefined {
+  return projectPreviewOrigins.get(session)
+}
+
+export function prepareProjectPreviewSession(session: Session, origin: string): void {
+  if (projectPreviewOrigins.has(session)) return
+  projectPreviewOrigins.set(session, origin)
+  session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  session.setPermissionCheckHandler(() => false)
+  session.setDevicePermissionHandler(() => false)
+  session.on('will-download', (event) => event.preventDefault())
+  session.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !isProjectPreviewRequest(details.url, origin) })
+  })
+}
 
 const MAX_SOURCE_LENGTH = 100_000
 

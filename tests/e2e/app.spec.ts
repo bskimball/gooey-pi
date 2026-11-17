@@ -225,8 +225,14 @@ const barrierStarted = ${JSON.stringify(join(fixtureRoot, 'prompt-admission-barr
 const barrierAccepted = ${JSON.stringify(join(fixtureRoot, 'prompt-admission-barrier-accepted'))}
 readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const command = JSON.parse(line)
+  if (['prompt', 'steer', 'follow_up'].includes(command.type) && command.message?.includes('fixture-intercepted-image')) {
+    fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'intercepted-image-args.json'))}, JSON.stringify(command))
+    send({ type: 'response', id: command.id, command: command.type, success: true, data: { disposition: 'handled' } })
+    return
+  }
   if (command.type === 'get_available_models') {
     send({ id: command.id, type: 'response', command: command.type, success: true, data: { models: [
+      { provider: 'fixture', id: 'fixture-model', name: 'Fixture Model', api: 'openai-completions', reasoning: true, input: ['text', 'image'], contextWindow: 100000, maxTokens: 8192 },
       { provider: 'anthropic', id: 'claude-fixture', name: 'Claude Fixture', api: 'anthropic-messages', reasoning: true, input: ['text'], contextWindow: 200000, maxTokens: 8192 },
       { provider: 'openai-codex', id: 'gpt-fixture', name: 'GPT Fixture', api: 'openai-responses', reasoning: true, input: ['text'], contextWindow: 200000, maxTokens: 8192 },
     ] } })
@@ -307,6 +313,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       return
     }
     fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'prompt-args.json'))}, JSON.stringify(command))
+    if (command.message?.includes('fixture-image-delivered')) {
+      fs.appendFileSync(sessionFile, JSON.stringify({ type: 'message', id: 'fixture-image-user', parentId: null,
+        timestamp: new Date().toISOString(), message: { role: 'user', content: [{ type: 'text', text: command.message }, ...(command.images ?? [])] } }) + '\\n')
+    }
     send({ type: 'agent_start' })
     if (typeof command.message !== 'string' || !command.message.includes('two questions')) {
       send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Fixture response.' } })
@@ -510,6 +520,96 @@ test.describe('Prime Work desktop smoke', () => {
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())) }
   })
 
+  test('loads real project React components inline only after consent and keeps them isolated', async () => {
+    const { createServer: createViteServer } = await import('vite')
+    const { default: desktopConfig } = await import('../../electron.vite.config')
+    const previewServer = await createViteServer({
+      ...desktopConfig.renderer,
+      configFile: false,
+      cacheDir: join(fixtureRoot, 'vite-cache'),
+      server: { host: '127.0.0.1', port: 0, watch: null },
+      plugins: [
+        ...(desktopConfig.renderer?.plugins ?? []),
+        {
+          name: 'inline-project-preview-verification',
+          configureServer(server) {
+            server.middlewares.use('/component-preview', async (_request, response) => {
+              response.setHeader('Content-Type', 'text/html')
+              response.end(await server.transformIndexHtml('/component-preview', '<!doctype html><html><body><div id="root"></div><script type="module" src="/@project-preview-entry"></script></body></html>'))
+            })
+          },
+          resolveId(id) { if (id === '/@project-preview-entry') return '\0project-preview-entry' },
+          load(id) {
+            if (id !== '\0project-preview-entry') return
+            return `import React, {useState} from 'react';
+              import {createRoot} from 'react-dom/client';
+              import {ApexButton} from 'apex-ui';
+              import '/src/styles.css';
+              function Preview() {
+                const [expanded, setExpanded] = useState(false);
+                return React.createElement('section', null,
+                  React.createElement(ApexButton, {onClick:()=>setExpanded(v=>!v), 'aria-expanded':expanded}, 'Toggle real component'),
+                  React.createElement('p', {id:'result'}, expanded ? 'Expanded' : 'Collapsed'));
+              }
+              createRoot(document.getElementById('root')).render(React.createElement(Preview));`
+          },
+        },
+      ],
+    })
+    let requests = 0
+    previewServer.middlewares.use((_request, _response, next) => { requests += 1; next() })
+    await previewServer.listen()
+    const address = previewServer.httpServer?.address()
+    if (!address || typeof address === 'string') throw new Error('Preview server did not bind')
+    const url = `http://127.0.0.1:${address.port}/component-preview`
+    let leakedRequests = 0
+    const otherServer = createServer((_request, response) => { leakedRequests += 1; response.setHeader('Access-Control-Allow-Origin', '*'); response.end('unexpected') })
+    await new Promise<void>((resolve) => otherServer.listen(0, '127.0.0.1', resolve))
+    const otherAddress = otherServer.address()
+    if (!otherAddress || typeof otherAddress === 'string') throw new Error('Other server did not bind')
+    const otherUrl = `http://127.0.0.1:${otherAddress.port}/blocked`
+    try {
+      const previewMessage = `${JSON.stringify({ type: 'message', id: 'project-preview-fixture', parentId: null, message: { role: 'assistant', content: [{ type: 'text', text: `\`\`\`apex-preview\n${JSON.stringify({ title: 'Actual project component', url })}\n\`\`\`` }] } })}\n`
+      appendFileSync(fixtureSessionFile, previewMessage)
+      appendFileSync(join(fixtureRoot, 'home', '.pi', 'agent', 'sessions', '--shared-project--', 'primary.jsonl'), previewMessage)
+      await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+      const card = page.getByRole('figure', { name: 'Project preview: Actual project component' })
+      await expect(card.getByRole('button', { name: 'Load preview', exact: true })).toBeVisible()
+      expect(requests).toBe(0)
+      await expect(card.locator('webview')).toHaveCount(0)
+      await card.getByRole('button', { name: 'Load preview', exact: true }).click()
+      await expect.poll(() => app!.evaluate(({ webContents }, target) => webContents.getAllWebContents().some((contents) => contents.getURL() === target), url)).toBe(true)
+      const guest = await app!.evaluateHandle(({ webContents }, target) => webContents.getAllWebContents().find((contents) => contents.getURL() === target), url)
+      await expect.poll(() => guest.evaluate((contents) => contents!.executeJavaScript('document.querySelector("#result")?.textContent')), { timeout: 30_000 }).toBe('Collapsed')
+      expect(await guest.evaluate((contents) => contents!.executeJavaScript('({apex:typeof window.apex, node:typeof require, opener:window.opener})'))).toEqual({ apex: 'undefined', node: 'undefined', opener: null })
+      await guest.evaluate((contents) => contents!.executeJavaScript('document.querySelector("button").click()'))
+      await expect.poll(() => guest.evaluate((contents) => contents!.executeJavaScript('document.querySelector("#result").textContent'))).toBe('Expanded')
+      await card.getByRole('button', { name: 'Collapse', exact: true }).click()
+      await card.getByRole('button', { name: 'Expand', exact: true }).click()
+      expect(await guest.evaluate((contents) => contents!.executeJavaScript('document.querySelector("#result").textContent'))).toBe('Expanded')
+      await card.getByRole('button', { name: 'Enlarge', exact: true }).click()
+      expect(await card.locator('webview').evaluate((element) => element.getBoundingClientRect().height)).toBeCloseTo(640)
+      expect(await guest.evaluate((contents, target) => contents!.executeJavaScript(`fetch(${JSON.stringify(target)}).then(()=>"allowed",()=>"blocked")`), otherUrl)).toBe('blocked')
+      expect(leakedRequests).toBe(0)
+      await page.screenshot({ path: 'tmp/project-preview-chat.png' })
+      await page.locator('.session-row-wrap').filter({ hasText: 'Primary workspace fixture' }).locator('.session-row').click()
+      await expect(card.getByRole('button', { name: 'Load preview', exact: true })).toBeVisible()
+      await expect(card.locator('webview')).toHaveCount(0)
+      await expect.poll(() => guest.evaluate((contents) => contents!.isDestroyed())).toBe(true)
+      await guest.dispose()
+      await card.getByRole('button', { name: 'Load preview', exact: true }).click()
+      await expect.poll(() => app!.evaluate(({ webContents }, target) => webContents.getAllWebContents().some((contents) => contents.getURL() === target), url)).toBe(true)
+      const secondGuest = await app!.evaluateHandle(({ webContents }, target) => webContents.getAllWebContents().find((contents) => contents.getURL() === target), url)
+      await card.getByRole('button', { name: 'Stop preview', exact: true }).click()
+      await expect(card.locator('webview')).toHaveCount(0)
+      await expect.poll(() => secondGuest.evaluate((contents) => contents!.isDestroyed())).toBe(true)
+      await secondGuest.dispose()
+    } finally {
+      await previewServer.close()
+      await new Promise<void>((resolve) => otherServer.close(() => resolve()))
+    }
+  })
+
   test('creates and revisits conversation spaces', async () => {
     await page.getByRole('button', { name: 'Activity', exact: true }).click()
     await page.getByRole('button', { name: 'New space', exact: true }).click()
@@ -694,6 +794,39 @@ test.describe('Prime Work desktop smoke', () => {
     await design.click()
     await expect(page.getByRole('dialog', { name: 'Expanded image' })).toBeVisible()
     await page.getByRole('button', { name: 'Close expanded image' }).click()
+  })
+
+  test('restores a pasted image and text when input is intercepted, then sends both on retry', async () => {
+    await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+    const composer = page.locator('.composer')
+    const textarea = composer.locator('textarea')
+    await textarea.fill('fixture-intercepted-image: explain this screenshot')
+    await textarea.evaluate((element, data) => {
+      const bytes = Uint8Array.from(atob(data), (character) => character.charCodeAt(0))
+      const clipboardData = new DataTransfer()
+      clipboardData.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }))
+      element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }))
+    }, png)
+    await expect(composer.locator('.composer-attachment')).toContainText('pasted.png')
+    await composer.getByRole('button', { name: 'Send message', exact: true }).click()
+    await expect(composer.getByRole('alert')).toContainText('An extension handled this input')
+    await expect(composer.getByRole('alert')).toContainText('Your draft and images were restored')
+    await expect(textarea).toHaveValue('fixture-intercepted-image: explain this screenshot')
+    await expect(composer.locator('.composer-attachment')).toContainText('pasted.png')
+    const intercepted = JSON.parse(readFileSync(join(fixtureRoot, 'intercepted-image-args.json'), 'utf8'))
+    expect(intercepted.images).toEqual([{ type: 'image', mimeType: 'image/png', data: png }])
+    expect(readFileSync(fixtureSessionFile, 'utf8')).not.toContain('fixture-intercepted-image')
+
+    await textarea.fill('fixture-image-delivered: explain this screenshot')
+    await composer.getByRole('button', { name: 'Send message', exact: true }).click()
+    await expect.poll(() => existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(true)
+    const delivered = JSON.parse(readFileSync(join(fixtureRoot, 'prompt-args.json'), 'utf8'))
+    expect(delivered.message).toBe('fixture-image-delivered: explain this screenshot')
+    expect(delivered.images).toEqual([{ type: 'image', mimeType: 'image/png', data: png }])
+    await expect(textarea).toHaveValue('')
+    await expect(composer.locator('.composer-attachment')).toHaveCount(0)
+    await expect.poll(() => readFileSync(fixtureSessionFile, 'utf8')).toContain('fixture-image-delivered')
   })
 
   test('keeps composer footer compact and renders Chat settings popovers unclipped in top layer', async () => {

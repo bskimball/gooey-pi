@@ -1,0 +1,131 @@
+/** Source-family ledger. Stories render production components; section children are composed by SettingsPage. */
+export const workspacePageCoverage = [
+  { source: 'apps/desktop/src/pages/ProjectsPage.tsx', exports: ['ProjectsPage'], title: 'Workspace/Pages', stories: ['ProjectCatalog', 'ProjectsEmpty', 'ProjectRemoveDialog', 'ProjectSearchEmpty'] },
+  {
+    source: 'apps/desktop/src/pages/PluginsPage.tsx',
+    exports: ['PluginsPage'],
+    title: 'Workspace/Pages',
+    stories: ['PluginCatalog', 'PluginsEmpty', 'PluginsLoading', 'PluginAddDialog', 'PluginRemoveDialog', 'PluginExtensionDialog', 'PluginWarningsAndInstallError', 'PluginInstallPending'],
+  },
+  {
+    source: 'apps/desktop/src/pages/ScheduledPage.tsx',
+    exports: ['ScheduledPage'],
+    title: 'Workspace/Pages',
+    stories: [
+      'ScheduleCatalog',
+      'ScheduleRunHistory',
+      'SchedulesEmpty',
+      'ScheduleSaveError',
+      'ScheduleSavePending',
+      'ScheduleUnauthorized',
+      'ScheduleEditDialog',
+      'ScheduleCreateDialog',
+      'ScheduleBlocked',
+      'ScheduleOneTime',
+      'ScheduleAdvanced',
+    ],
+  },
+  {
+    source: 'apps/desktop/src/pages/SettingsPage.tsx',
+    exports: ['SettingsPage'],
+    title: 'Workspace/Settings',
+    stories: ['General', 'Appearance', 'Agent', 'Providers', 'Voice', 'Pets', 'Browser', 'Terminal', 'Privacy', 'About', 'BrowserResetDialog', 'BrowserResetError'],
+  },
+  { source: 'apps/desktop/src/pages/settings/GeneralSettings.tsx', exports: ['GeneralSettings'], title: 'Workspace/Settings', stories: ['General'] },
+  { source: 'apps/desktop/src/pages/settings/AppearanceSettings.tsx', exports: ['AppearanceSettings'], title: 'Workspace/Settings', stories: ['Appearance'] },
+  { source: 'apps/desktop/src/pages/settings/AgentSettings.tsx', exports: ['AgentSettings'], title: 'Workspace/Settings', stories: ['Agent', 'AgentUnavailable', 'AgentRefreshError'] },
+  {
+    source: 'apps/desktop/src/pages/settings/ProviderSettings.tsx',
+    exports: ['ProviderSettings', 'ProvidersSettings'],
+    title: 'Workspace/Settings',
+    stories: ['Providers', 'ProvidersLoading', 'ProvidersWarning', 'ProvidersEmpty', 'ProvidersError'],
+    note: 'ProvidersSettings wraps ProviderSettings; one family.',
+  },
+  { source: 'apps/desktop/src/pages/settings/VoiceSettings.tsx', exports: ['VoiceSettings'], title: 'Workspace/Settings', stories: ['Voice', 'VoiceError', 'CredentialPending', 'CredentialError'] },
+  { source: 'apps/desktop/src/pages/settings/PetsSettings.tsx', exports: ['PetsSettings'], title: 'Workspace/Settings', stories: ['Pets', 'PetsLoading', 'PetsError'] },
+  { source: 'apps/desktop/src/pages/settings/BrowserSettings.tsx', exports: ['BrowserSettings'], title: 'Workspace/Settings', stories: ['Browser', 'BrowserResetDialog', 'BrowserResetError'] },
+  { source: 'apps/desktop/src/pages/settings/TerminalSettings.tsx', exports: ['TerminalSettings'], title: 'Workspace/Settings', stories: ['Terminal'] },
+  { source: 'apps/desktop/src/pages/settings/PrivacySettings.tsx', exports: ['PrivacySettings'], title: 'Workspace/Settings', stories: ['Privacy'] },
+  {
+    source: 'apps/desktop/src/pages/settings/AboutSettings.tsx',
+    exports: ['AboutSettings'],
+    title: 'Workspace/Settings',
+    stories: ['About', 'UpdateChecking', 'UpdateAvailable', 'UpdateDownloading', 'UpdateDownloaded', 'UpdateCurrent', 'UpdateError', 'UpdateUnsupported'],
+  },
+  {
+    source: 'apps/desktop/src/pages/settings/DraftSettingField.tsx',
+    exports: ['DraftSettingField'],
+    title: 'Workspace/Settings',
+    stories: ['DraftAndToggle', 'DraftDirty', 'DraftInvalid', 'DraftRejected', 'DraftSaving'],
+  },
+  { source: 'apps/desktop/src/pages/settings/SettingsToggle.tsx', exports: ['SettingsToggle'], title: 'Workspace/Settings', stories: ['DraftAndToggle'] },
+  { source: 'apps/desktop/src/pages/ActivityPage.tsx', exports: ['ActivityPage'], title: 'Workspace/Spaces', stories: ['ActivityPageReady'] },
+  {
+    source: 'apps/desktop/src/components/activity/SpacesPage.tsx',
+    exports: ['SpacesPage'],
+    title: 'Workspace/Spaces',
+    stories: ['SpacesReady', 'SpacesLoading', 'SpacesError', 'CreateSpace', 'EditObjective', 'SpacesRefreshFailure', 'SpacesDeletedSelection', 'SpacesDisconnected'],
+  },
+  {
+    source: 'apps/desktop/src/components/activity/ActivityCoordinator.tsx',
+    exports: ['ActivityCoordinator'],
+    title: 'Workspace/Spaces',
+    stories: ['CoordinatorReady', 'CoordinatorEmpty', 'CoordinatorOpening', 'CoordinatorError', 'CoordinatorBusy', 'CoordinatorQuestion', 'ClearCoordinatorDialog'],
+  },
+  { source: 'apps/desktop/src/components/activity/ChiefOfStaffOpening.tsx', exports: ['ChiefOfStaffOpening'], title: 'Workspace/Activity', stories: ['Opening'] },
+  {
+    source: 'apps/desktop/src/components/activity/ActivityRow.tsx',
+    exports: ['ActivityRow'],
+    title: 'Workspace/Activity',
+    stories: ['Running', 'NeedsYou', 'Review', 'Recent', 'Failed', 'GroupedActivity', 'StopConfirmation'],
+  },
+  {
+    source: 'apps/desktop/src/components/activity/ActivityPeek.tsx',
+    exports: ['ActivityPeek'],
+    title: 'Workspace/Activity',
+    stories: ['Running', 'NeedsYou', 'Review', 'Recent', 'TranscriptLoading', 'TranscriptError', 'TranscriptEmpty', 'PeekEmpty', 'StopConfirmation', 'Failed', 'GroupedActivity'],
+  },
+  {
+    source: 'apps/desktop/src/components/activity/ActivityQuestionCard.tsx',
+    exports: ['ActivityQuestionCard'],
+    title: 'Workspace/Activity',
+    stories: ['QuestionSelect', 'QuestionInput', 'QuestionConfirm', 'QuestionModal', 'QuestionExpired', 'QuestionPending', 'QuestionError', 'QuestionModalResponse'],
+  },
+  {
+    source: 'apps/desktop/src/components/activity/ActivityReplyBox.tsx',
+    exports: ['ActivityReplyBox'],
+    title: 'Workspace/Activity',
+    stories: ['Running', 'ReplyFollowUp', 'ReplyDisabled', 'ReplySending', 'ReplyError'],
+  },
+  { source: 'apps/desktop/src/components/activity/StatusMark.tsx', exports: ['StatusMark'], title: 'Workspace/Activity', stories: ['StatusGallery'] },
+  { source: 'apps/desktop/src/components/PetAvatar.tsx', exports: ['PetAvatar'], title: 'Workspace/Pets and voice', stories: ['Orb', 'Sprite', 'SpriteUnavailable', 'ActivityGallery'] },
+  {
+    source: 'apps/desktop/src/components/DesktopPet.tsx',
+    exports: ['DesktopPet'],
+    title: 'Workspace/Pets and voice',
+    stories: ['DesktopCompanion', 'DesktopBusy', 'DesktopVoiceControls', 'DesktopVoiceError', 'VoiceWithPet'],
+  },
+  {
+    source: 'apps/desktop/src/components/VoiceOrb.tsx',
+    exports: ['VoiceOrb'],
+    title: 'Workspace/Pets and voice',
+    stories: ['VoiceConnectionError', 'VoiceConnecting', 'VoiceListening', 'VoiceSpeaking', 'VoiceMuted', 'VoiceWithPet'],
+    note: 'beforeEach installs offline peer/channel/track simulator; no native constructors or device/network calls.',
+  },
+]
+
+export const nativeIntegrationExclusions = [
+  'Native folder selection and project launching; project UI callbacks mutate fixture state only.',
+  'Package installation, MCP subprocesses, credential storage, real provider requests and scheduled agent execution.',
+  'Microphone hardware, native WebRTC negotiation, audio playback and live realtime services. VoiceOrb UI is included via offline protocol simulation.',
+]
+
+/** Remaining acceptance work, not exclusions: source state audit and browser play execution are still required. */
+export const remainingValidation = [
+  'Run every play function in a dedicated Storybook browser; inspect modal portal queries and all ten settings sections.',
+  'Exercise voice simulator lifecycle/cleanup and assert native getUserMedia/RTCPeerConnection/network are never invoked.',
+  'Named state variants are implemented; their play functions still require delegated browser execution. QuestionModal opens the production ExtensionUiModal; QuestionModalResponse submits its editor value.',
+  'QuestionError uses a fixture-owned response-error Banner because ActivityQuestionCard has no error prop or rejection UI. GroupedActivity composes the four section kinds; ActivityRowItem has no grouped-session field.',
+  'SpacesDisconnected passes a null bridge and exposes current production disconnected behavior, including its loading sidebar. SpacesDeletedSelection removes the selected record on refresh, rather than simulating a native delete.',
+  'Some callback-based stories require user interaction; do not treat their initial render as proof of every transition.',
+]

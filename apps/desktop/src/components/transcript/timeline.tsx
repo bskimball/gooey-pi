@@ -30,6 +30,7 @@ import { StatusMark } from '../activity/StatusMark'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
 import { diffCounts, EditDiff, editDiffLines, isEditTool } from './edit-diff'
+import { AskUserCard, askUserExchange } from './ask-user-card'
 import {
   arrivalMotionProps,
   collapseMotionProps,
@@ -70,7 +71,7 @@ export function classifyTool(name: string): ToolKind {
   return 'mcp'
 }
 
-function toolIcon(kind: ToolKind): ReactNode {
+export function toolIcon(kind: ToolKind): ReactNode {
   if (kind === 'question') return <ChatCircleDots size={14} />
   if (kind === 'terminal') return <TerminalWindow size={14} />
   if (kind === 'web') return <Globe size={14} />
@@ -419,11 +420,14 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
     }
     if (part.type === 'thinking') return showReasoning ? <ReasoningPart key={key} part={part} live={streaming} streaming={isTailPart} animateArrival={streaming} /> : null
     if (part.type === 'toolCall') {
-      if (!showTools) return null
       const next = parts[index + 1]
-      if (next?.type === 'toolResult') pairedResults.add(index + 1)
-      if (next?.type !== 'toolResult' || next.streaming) pendingKeys.add(key)
       const result = next?.type === 'toolResult' ? next : undefined
+      // Questions and the user's answers are conversation, so they stay visible when tool rows are hidden.
+      const exchange = classifyTool(part.name) === 'question' ? askUserExchange(part, result) : undefined
+      if (!showTools && !exchange) return null
+      if (result) pairedResults.add(index + 1)
+      if (!result || result.streaming) pendingKeys.add(key)
+      if (exchange) return <Fragment key={key}><AskUserCard exchange={exchange} animateArrival={streaming} /><ImageParts images={result?.images} /></Fragment>
       if (part.name === 'todo_write') return <TodoStep key={key} part={part} animateArrival={streaming} />
       if (isSubagentTool(part.name) && !(part.name === 'task_wait' && result?.isError)) return <Fragment key={key}><SubagentLane part={part} result={result} followUps={followUps.get(part)} animateArrival={streaming} /><ImageParts images={result?.images} /></Fragment>
       if (isExploreTool(part.name)) {

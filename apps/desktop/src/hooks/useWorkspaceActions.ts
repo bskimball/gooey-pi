@@ -241,6 +241,12 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const modeCommand = parsePiModeCommand(prompt, commandHarness)
     const mcpCommand = parseMcpCommand(prompt, commandHarness)
     const bashCommand = parseBashCommand(prompt)
+    const requireMessageDelivery = (response: Awaited<ReturnType<ApexApi['agent']['command']>>) => {
+      const data = response.data
+      if (images.length > 0 && data && typeof data === 'object' && 'disposition' in data && data.disposition === 'handled') {
+        throw new Error('An extension handled this input without admitting an agent message. Check the extension notification before retrying.')
+      }
+    }
     if (mcpCommand?.type === 'authenticate') {
       const target = mcpCommand.server ? ` to sign in to ${mcpCommand.server}` : ' to authenticate network MCP servers'
       setToast(`Network MCP authentication is managed outside Apex. Use ${HARNESS_AGENT_NAMES[commandHarness]} directly${target}.`)
@@ -304,6 +310,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         }
         try {
           const response = await bridge.agent.command(currentRuntime.runtimeId, { type: 'steer', message: prompt, ...(images.length ? { images } : {}) })
+          requireMessageDelivery(response)
           workspace.acceptSteer(pendingSteerId)
           const actions = parseSessionActionSnapshot(response.sessionActions)
           if (actions) workspace.acknowledgeSteer(pendingSteerId, actions)
@@ -349,7 +356,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         return bridge.sessions.followUp(sessionFile, prompt, intent)
       }
       try {
-        if (!admitted.project || !admitted.cwd) { reportError('Add a project before starting a session.'); return }
+        if (!admitted.project || !admitted.cwd) throw new Error('Add a project before starting a session.')
         // The harness comes from the workspace's own project, never global
         // settings: a prompt landing between a harness switch and the
         // bootstrap effect's workspace reset would otherwise start the new
@@ -357,10 +364,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         const project = admitted.project
         const activeHarness = project.harness
         if (images.length > 0 && !provider.selectedModel?.input.includes('image')) {
-          reportError('This model does not accept images. Remove the attachment or choose a vision model.')
-          return
+          throw new Error('This model does not accept images. Remove the attachment or choose a vision model.')
         }
-        if (!workspace.prepareForPrompt(generation)) return
+        if (!workspace.prepareForPrompt(generation)) throw new Error('Workspace changed before the message could be sent.')
         if (creation?.generation === generation) {
           const session = await creation.promise
           admitted = { ...admitted, session, sessionFile: session.filePath }
@@ -528,6 +534,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
           // row so pickup can move them into history without redelivery.
           if (intent === 'steer') queuedPromptId = workspace.queuePrompt(prompt, intent, userMessage.parts, sentAt)
           const response = await bridge.agent.command(activeRuntime.runtimeId, { type: intent === 'steer' ? 'steer' : 'follow_up', message: prompt, ...(images.length ? { images } : {}) })
+          requireMessageDelivery(response)
           const actions = parseSessionActionSnapshot(response.sessionActions)
           if (actions) {
             workspace.setRuntime((current) => current?.runtimeId === activeRuntime.runtimeId
@@ -548,6 +555,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
             streamingBehavior: streamingBehaviorForIntent(intent),
             ...(images.length ? { images } : {}),
           })
+          requireMessageDelivery(response)
           if (submissionIsCurrent() && workspace.runtimeIdRef.current === activeRuntime.runtimeId) agentTurn.send({ type: 'PROMPT_SETTLED' })
           if (selected.sessionFile) createdSessionFiles.delete(selected.sessionFile)
           const disposition = (response.data as { disposition?: unknown } | undefined)?.disposition
@@ -559,11 +567,9 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         }
       } catch (error) {
         if (workspace.workspaceRef.current.generation !== generation || (submittedRuntimeId && workspace.runtimeIdRef.current !== submittedRuntimeId)) { reportError(error); throw error }
-        if (queuedFlushPromptId) {
-          workspace.markQueuedPromptFlushFailed(queuedFlushPromptId)
-          if (userMessageAppended) {
-            workspace.setMessages((items) => items.filter((item) => item.id !== userMessage.id))
-          }
+        if (queuedFlushPromptId) workspace.markQueuedPromptFlushFailed(queuedFlushPromptId)
+        if (userMessageAppended) {
+          workspace.setMessages((items) => items.filter((item) => item.id !== userMessage.id))
         }
         if (queuedPromptId) workspace.removeQueuedPrompt(queuedPromptId)
         const failure = requestFailureMessage(error)

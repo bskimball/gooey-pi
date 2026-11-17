@@ -5,27 +5,9 @@
 .field > span { color: var(--text); font-size: var(--fs-meta); font-weight: 550; }
 .field input, .field textarea, .field select { width: 100%; min-width: 0; }
 .field textarea { height: auto; padding: 8px; resize: vertical; }
-.extension-question__options button { min-height: 43px; display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-subtle); text-align: left; }
-.extension-question__options button:hover, .extension-question__options button:focus-visible, .extension-question__options button.is-selected { color: var(--text); border-color: var(--warning); background: var(--warning-soft); }
-.extension-question__options button.is-selected .extension-question__option-index { color: var(--surface-raised); border-color: var(--warning); background: var(--warning); }
 .extension-question__field { margin-top: 0; }
-.extension-questionnaire__timer strong { color: var(--warning); font-variant-numeric: tabular-nums; font-weight: 600; }
-.extension-questionnaire__progress button { min-height: 27px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-tertiary); background: var(--surface-subtle); font-size: var(--fs-micro); }
-.extension-questionnaire__progress button:hover, .extension-questionnaire__progress button:focus-visible, .extension-questionnaire__progress button.is-active { color: var(--text); border-color: var(--warning); background: var(--warning-soft); }
-.extension-questionnaire__question h3 { margin: 5px 0 0; color: var(--text); font-size: var(--fs-body); font-weight: 550; line-height: 1.45; }
-.extension-questionnaire__submit > button { min-height: 43px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--surface-subtle); text-align: left; }
-.extension-questionnaire__submit > button:not(:disabled):hover, .extension-questionnaire__submit > button:not(:disabled):focus-visible { color: var(--text); border-color: var(--success); background: var(--success-soft); }
-.extension-questionnaire__submit > button:disabled { cursor: not-allowed; opacity: .55; }
-.extension-questionnaire__submit p { margin: 0; color: var(--text-secondary); font-size: var(--fs-meta); }
-.extension-questionnaire-inline .extension-questionnaire__timer { display: inline-flex; gap: 6px; margin: 0 0 4px; padding: 0; border: 0; background: transparent; }
-.extension-questionnaire-inline .extension-questionnaire__progress { margin-bottom: 4px; }
-.extension-questionnaire-inline .extension-questionnaire__progress button { border: 0; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; }
-.extension-questionnaire-inline .extension-questionnaire__progress button.is-active { color: var(--text); border-bottom-color: var(--warning); }
-.extension-questionnaire-inline .extension-questionnaire__question > .modal-intro { margin: 4px 0; font-size: var(--fs-micro); }
-.extension-questionnaire-inline .extension-question__options { max-height: min(20vh, 200px); margin-top: 6px; }
-.extension-questionnaire-inline .extension-question__options button { width: 100%; }
-.extension-questionnaire-inline .extension-questionnaire__context { margin-top: 8px; }
-.extension-questionnaire-inline .extension-questionnaire__hint { margin-top: 6px; }
+.extension-questionnaire__question h3 { margin: 0 0 2px; color: var(--text); font-size: var(--fs-body); font-weight: 600; line-height: 1.4; text-wrap: pretty; }
+.extension-questionnaire kbd, .extension-questionnaire-inline__footer kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: var(--radius-xs); color: var(--text-secondary); background: var(--surface-raised); font: inherit; font-size: 10.5px; }
 .command-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: var(--fs-body); }
 .command-search > button { padding: 0; background: transparent; }
 .command-search kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-subtle); }

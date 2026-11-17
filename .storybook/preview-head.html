@@ -1,0 +1,24 @@
+<!-- Only the dedicated Storybook origin can supply assets or connections. No remote
+     images, remote frames, agents, loopback services on other ports, or form submissions. -->
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self' about: blob:; object-src 'none'; form-action 'none'; base-uri 'self'"
+/>
+<script>
+  // Run before story modules. There is never an Electron preload in this document.
+  Object.defineProperty(window, 'apex', { configurable: true, value: undefined })
+  window.open = function () {
+    throw new Error('Storybook blocks opening external windows')
+  }
+  document.addEventListener(
+    'click',
+    function (event) {
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (link && !link.getAttribute('href').startsWith('#')) {
+        event.preventDefault()
+        console.warn('Storybook blocked navigation:', link.getAttribute('href'))
+      }
+    },
+    true,
+  )
+</script>

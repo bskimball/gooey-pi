@@ -1,14 +1,14 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { memo } from 'react'
-import { CalendarDots, CaretRight } from '../icons'
+import { CalendarDots } from '../icons'
 import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
 import type { AutomationScheduleRecord, GitStatus, RuntimeInfo } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { RunConfigSection } from "./RunConfigSection"
 import type { Check as ReadinessCheck, Readiness, Review } from './readiness'
 import type { SessionSummary } from './session-summary'
-import { isLiveSpecialist, specialistMarkState, specialistStatusLabel } from '@/lib/specialist-status'
+import { SummaryAgentsSection } from './SummaryAgentsSection'
 
 export { extractPiSessionWidgets, summarizeTranscript } from './session-summary'
 export type { PiSpecialistSummary, PiTodoItemSummary, TranscriptSummary } from './session-summary'
@@ -61,8 +61,6 @@ interface SummaryPanelProps {
 /** Overview sections that the chat, Composer, and toolbar do not already show: plan, agents, progress, automations. */
 export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, runtime, behaviorMode, cwd, sessionKey, git, automations, onOpenAutomation, onOpenSpecialist }: SummaryPanelProps) {
   const { toolCount, todos } = summary
-  const specialists = summary.specialists.slice(-8)
-  const liveSpecialists = summary.specialists.filter((s) => isLiveSpecialist(s.status)).length
   return (
     <div className={`summary-panel ${stylex.props(inspectorStyles.summaryPanel).className ?? ""}`}>
       <RunConfigSection runtime={runtime} behaviorMode={behaviorMode} cwd={cwd} sessionKey={sessionKey} />
@@ -79,21 +77,7 @@ export const SummaryPanel = memo(function SummaryPanel({ summary, readiness, run
           </div>
         </section>
       ) : null}
-      {specialists.length > 0 ? (
-        <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}>
-          <h3>Agents ({liveSpecialists} reported running)</h3>
-          <div className={`summary-agent-list ${stylex.props(inspectorStyles.summaryAgentList).className ?? ""}`}>
-            {specialists.map((specialist) => (
-              <button type="button" key={specialist.id} className={`is-${specialist.status}`} title={specialistStatusLabel[specialist.status]} onClick={() => onOpenSpecialist(specialist.id)}>
-                <StatusMark state={specialistMarkState(specialist.status)} size={14} />
-                <strong>{specialist.agent}</strong>
-                <span>{specialist.activity || specialist.mission}</span>
-                <CaretRight size={11} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <SummaryAgentsSection specialists={summary.specialists} onOpenSpecialist={onOpenSpecialist} />
       <section className={`summary-section ${stylex.props(inspectorStyles.summarySection).className ?? ""}`}><h3>Readiness</h3><div className={`progress-list readiness-list ${stylex.props(inspectorStyles.progressList).className ?? ""}`}>
         {readiness.checks.length || readiness.reviews.length ? null : <div><StatusMark state="pending" size={14} /><span>No checks detected in this session</span></div>}
         {readiness.checks.map((check) => <div key={check.kind} className={`${check.outcome === 'failed' ? 'is-failed' : check.outcome === 'running' ? 'is-current' : ''}${check.changesSince > 0 || check.outcome === 'unknown' ? ' is-stale' : ''}`}><StatusMark state={checkMark(check.outcome)} size={14} /><span>{CHECK_LABELS[check.kind]} · {checkState(check)}</span></div>)}

@@ -7,6 +7,8 @@ import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { openExternalUrl } from '@/lib/desktop-actions'
 import { HtmlFence } from './HtmlFence'
+import { ProjectPreview } from './ProjectPreview'
+import { parseProjectPreview } from 'apex-core/interactive-preview'
 import { WorkspaceImage } from './WorkspaceImage'
 
 interface MarkdownTextProps {
@@ -58,10 +60,10 @@ const markdownPlugins = [remarkGfm]
  * The browser skips descendants that carry their own `dir`, so a paragraph
  * opening with LTR code still lays out RTL prose correctly.
  */
-function htmlFenceSource(children: ReactNode): string | undefined {
+function fenceSource(children: ReactNode, languages: readonly string[]): string | undefined {
   if (!isValidElement<{ className?: string; children?: ReactNode }>(children)) return undefined
   const language = /language-([\w-]+)/.exec(children.props.className ?? '')?.[1]
-  if (language !== 'html' && language !== 'htm') return undefined
+  if (!language || !languages.includes(language)) return undefined
   const body = children.props.children
   return typeof body === 'string' ? body : undefined
 }
@@ -137,7 +139,10 @@ function MarkdownCode({ node: _node, block = false, className, ...props }: Compo
 
 function MarkdownPre({ node, children, ...props }: ComponentProps<'pre'> & ExtraProps) {
   const sourceXstyle = useMarkdownStyles('pre')
-  const source = htmlFenceSource(children)
+  const source = fenceSource(children, ['html', 'htm'])
+  const projectSource = fenceSource(children, ['apex-preview'])
+  const project = projectSource === undefined ? null : parseProjectPreview(projectSource)
+  if (project) return <ProjectPreview key={project.url} preview={project} />
   if (source !== undefined) return <HtmlFence source={source} sourceXstyle={sourceXstyle} xstyle={[node?.data && 'proseFirst' in node.data && node.data.proseFirst === true && markdownStyles.firstBlock, node?.data && 'proseLast' in node.data && node.data.proseLast === true && markdownStyles.lastBlock]} />
   return <MarkdownBlock {...props} node={node} as="pre">{isValidElement<{ block?: boolean }>(children) ? cloneElement(children, { block: true }) : children}</MarkdownBlock>
 }

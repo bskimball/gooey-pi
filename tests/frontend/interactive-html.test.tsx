@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HtmlFence } from '../../apps/desktop/src/components/HtmlFence'
+import { MarkdownText } from '../../apps/desktop/src/components/MarkdownText'
 import { InteractiveChatProvider } from '../../apps/desktop/src/components/InteractiveChatContext'
 import { INTERACTIVE_PREVIEW_POLICY, interactivePreviewUrl } from '../../packages/core/src/interactive-preview'
 
@@ -13,6 +14,50 @@ describe('interactive HTML', () => {
   let root: Root
   beforeEach(() => { sessionStorage.clear(); container = document.createElement('div'); document.body.append(container); root = createRoot(container) })
   afterEach(() => { act(() => root.unmount()); container.remove() })
+
+  it('loads real project previews only on request, preserves the guest on collapse, and stops it explicitly', () => {
+    Object.defineProperty(window, 'apex', { configurable: true, value: {} })
+    try {
+      const render = (url = 'http://127.0.0.1:5173/agents', sessionKey = 'one') => root.render(<InteractiveChatProvider sessionKey={sessionKey} onSendFeedback={async () => {}}><MarkdownText text={'```apex-preview\n' + JSON.stringify({ title: 'Real agents', url }) + '\n```'} /></InteractiveChatProvider>)
+      const click = (label: string) => act(() => { [...container.querySelectorAll('button')].find((item) => item.textContent === label)!.click() })
+      act(() => render())
+      expect(container.querySelector('webview')).toBeNull()
+      click('Load preview')
+      const guest = container.querySelector('webview')!
+      expect(guest.getAttribute('src')).toBe('http://127.0.0.1:5173/agents')
+      expect(guest.getAttribute('partition')).toMatch(/^apex-project-preview-/)
+      expect(guest.hasAttribute('preload')).toBe(false)
+      act(() => guest.dispatchEvent(new Event('did-finish-load')))
+      expect(container.textContent).not.toContain('Loading project preview')
+      click('Collapse')
+      click('Expand')
+      click('Enlarge')
+      expect(container.querySelector('webview')).toBe(guest)
+      click('Reload preview')
+      const reloaded = container.querySelector('webview')!
+      expect(reloaded).not.toBe(guest)
+      expect(reloaded.getAttribute('partition')).not.toBe(guest.getAttribute('partition'))
+      act(() => reloaded.dispatchEvent(new Event('did-fail-load')))
+      expect(container.textContent).toContain('Check that the project server is running')
+      click('Stop preview')
+      expect(container.querySelector('webview')).toBeNull()
+      click('Load preview')
+      act(() => render('http://127.0.0.1:5174/other'))
+      expect(container.querySelector('webview')).toBeNull()
+      click('Load preview')
+      act(() => render('http://127.0.0.1:5174/other', 'two'))
+      expect(container.querySelector('webview')).toBeNull()
+    } finally { Reflect.deleteProperty(window, 'apex') }
+  })
+
+  it('keeps partial and unsafe project fences as source instead of mounting a guest', () => {
+    for (const source of ['{', '{"title":"Remote","url":"https://example.com"}']) {
+      act(() => root.render(<MarkdownText text={'```apex-preview\n' + source + '\n```'} />))
+      expect(container.querySelector('webview')).toBeNull()
+      expect(container.querySelector('pre code')?.textContent).toContain(source)
+      expect(container.textContent).not.toContain('Load preview')
+    }
+  })
 
   it('isolates scripts with a policy before untrusted content', () => {
     act(() => root.render(<HtmlFence source={'</head><script>window.test = 1</script>'} />))

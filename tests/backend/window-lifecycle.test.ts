@@ -13,7 +13,7 @@ const electron = vi.hoisted(() => ({
   Menu: { buildFromTemplate: vi.fn((_template: Array<{ label: string; click(): void }>) => ({ popup: vi.fn() })) },
   nativeImage: { createFromPath: vi.fn() },
   protocol: { registerSchemesAsPrivileged: vi.fn() },
-  session: {},
+  session: { fromPartition: vi.fn() },
   Tray: class {},
 }))
 
@@ -210,6 +210,57 @@ describe('renderer hardening', () => {
       const event = { preventDefault: vi.fn() }
       handler('will-attach-webview')(...[event, {}, params] as never[])
       expect(event.preventDefault).toHaveBeenCalledOnce()
+    }
+  })
+
+  it('isolates local component previews and denies permissions, downloads, and requests outside their origin', () => {
+    const { handler } = hardenedWindow()
+    const previewSession = {
+      setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn(), setDevicePermissionHandler: vi.fn(),
+      on: vi.fn(), webRequest: { onBeforeRequest: vi.fn() },
+    }
+    electron.session.fromPartition.mockReturnValue(previewSession)
+    const partition = 'apex-project-preview-12345678-1234-1234-1234-123456789abc'
+    const event = { preventDefault: vi.fn() }
+    const preferences: Record<string, unknown> = { preload: '/evil.js', nodeIntegration: true }
+    handler('will-attach-webview')(...[event, preferences, { partition, src: 'http://127.0.0.1:5173/agents' }] as never[])
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(preferences).toMatchObject({ nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: false })
+    expect(preferences).not.toHaveProperty('preload')
+    const permission = vi.fn()
+    previewSession.setPermissionRequestHandler.mock.calls[0][0]({}, 'media', permission)
+    expect(permission).toHaveBeenCalledWith(false)
+    expect(previewSession.setPermissionCheckHandler.mock.calls[0][0]()).toBe(false)
+    expect(previewSession.setDevicePermissionHandler.mock.calls[0][0]()).toBe(false)
+    const download = { preventDefault: vi.fn() }
+    previewSession.on.mock.calls[0][1](download)
+    expect(download.preventDefault).toHaveBeenCalledOnce()
+    const request = previewSession.webRequest.onBeforeRequest.mock.calls[0][0]
+    const allow = vi.fn()
+    request({ url: 'ws://127.0.0.1:5173/hmr' }, allow)
+    expect(allow).toHaveBeenCalledWith({ cancel: false })
+    const deny = vi.fn()
+    request({ url: 'http://localhost:9999/secrets' }, deny)
+    expect(deny).toHaveBeenCalledWith({ cancel: true })
+
+    const guest = hardenedWindow().webContents
+    Object.assign(guest, { session: previewSession })
+    const navigationHandlers = new Map<string, Handler>()
+    guest.on = (name, listener) => { navigationHandlers.set(name, listener) }
+    handler('did-attach-webview')(...[{}, guest] as never[])
+    expect(guest.setWindowOpenHandler.mock.calls.at(-1)?.[0]()).toEqual({ action: 'deny' })
+    for (const name of ['will-frame-navigate', 'will-redirect']) {
+      const blocked = { url: 'https://example.com', preventDefault: vi.fn() }
+      navigationHandlers.get(name)!(...[blocked] as never[])
+      expect(blocked.preventDefault).toHaveBeenCalledOnce()
+      const allowed = { url: 'http://127.0.0.1:5173/next', preventDefault: vi.fn() }
+      navigationHandlers.get(name)!(...[allowed] as never[])
+      expect(allowed.preventDefault).not.toHaveBeenCalled()
+    }
+    for (const src of ['https://example.com', 'file:///tmp/preview.html', 'http://127.0.0.1:6000/']) {
+      const invalid = { preventDefault: vi.fn() }
+      handler('will-attach-webview')(...[invalid, {}, { partition, src }] as never[])
+      expect(invalid.preventDefault).toHaveBeenCalledOnce()
     }
   })
 

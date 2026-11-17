@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { interactivePreviewUrl } from 'apex-core/interactive-preview'
+import { interactivePreviewUrl, isProjectPreviewPartition, isProjectPreviewRequest, parseProjectPreview, projectPreviewUrl } from 'apex-core/interactive-preview'
 import { interactivePreviewResponse, isAllowedRendererFrameUrl, isInteractivePreviewUrl } from '../../apps/desktop/electron/main/interactive-previews'
+
+describe('project preview boundary', () => {
+  it('parses only bounded, titled local project URLs', () => {
+    expect(parseProjectPreview('{"title":" Agents ","url":"http://127.0.0.1:5173/agents?theme=dark"}')).toEqual({ title: 'Agents', url: 'http://127.0.0.1:5173/agents?theme=dark' })
+    for (const url of ['http://localhost:5173/', 'https://[::1]:5173/']) expect(projectPreviewUrl(url)?.href).toBe(url)
+    for (const url of ['https://example.com', 'http://localhost.evil.test', 'file:///tmp/a.html', 'javascript:alert(1)', 'http://user:pass@localhost:5173', 'http://192.168.1.2:3000']) {
+      expect(parseProjectPreview(JSON.stringify({ title: 'Unsafe', url }))).toBeNull()
+    }
+    for (const source of ['{', 'null', '[]', '{"url":"http://localhost:5173"}', '{"title":"","url":"http://localhost"}', ' '.repeat(4097)]) expect(parseProjectPreview(source)).toBeNull()
+  })
+
+  it('uses nonpersistent partitions and restricts requests to the preview server, including HMR', () => {
+    expect(isProjectPreviewPartition('apex-project-preview-12345678-1234-1234-1234-123456789abc')).toBe(true)
+    for (const partition of ['persist:apex-project-preview-12345678-1234-1234-1234-123456789abc', 'apex-project-preview-', 'persist:apex-browser']) expect(isProjectPreviewPartition(partition)).toBe(false)
+    const origin = 'http://127.0.0.1:5173'
+    for (const url of [`${origin}/src/component.tsx`, 'ws://127.0.0.1:5173/?token=test']) expect(isProjectPreviewRequest(url, origin)).toBe(true)
+    for (const url of ['http://127.0.0.1:5174/', 'https://example.com/', 'file:///tmp/a', 'prime-work://app/index.html', 'http://user@127.0.0.1:5173/']) expect(isProjectPreviewRequest(url, origin)).toBe(false)
+  })
+})
 
 describe('interactive preview boundary', () => {
   it('serves bounded HTML with a restrictive response policy that authored meta tags cannot relax', async () => {
