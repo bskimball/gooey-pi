@@ -218,7 +218,7 @@ export const styles = stylex.create({
       "borderBottomLeftRadius": "inherit",
       "content": "\"\"",
       "backgroundColor": "transparent",
-      "backgroundImage": "linear-gradient(to right, var(--status-tint), transparent 72%)",
+      "backgroundImage": "linear-gradient(135deg, var(--status-tint), transparent 72%)",
       "backgroundPosition": "0% 0%",
       "backgroundSize": "auto auto",
       "backgroundRepeat": "repeat",

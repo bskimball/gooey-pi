@@ -6,6 +6,7 @@ import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex'
 import type { CSSProperties, ReactNode, Ref } from 'react'
 import { ArrowsInSimple, ArrowsOutSimple, SidebarRight } from './icons'
+import { AnimatePresence, motion } from 'motion/react'
 import { InspectorShell } from './InspectorShell'
 import { ResizeHandle } from './ResizeHandle'
 import { IconButton } from './ui'
@@ -49,14 +50,21 @@ export function ActivityWorkspace({ rowRef, inspectorVisible, instant = false, c
         </div>
         <div className={`inspector__body ${stylex.props(inspectorStyles.inspectorBody).className ?? ''}`}>{content}</div>
       </InspectorShell>
-      {inspectorVisible ? (
-        <button
-          type="button"
-          className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ''}`}
-          aria-label="Close inspector"
-          onClick={onClose}
-        />
-      ) : null}
+      <AnimatePresence initial={false}>
+        {inspectorVisible ? (
+          <motion.button
+            key="inspector-scrim"
+            type="button"
+            className={`panel-scrim panel-scrim--inspector ${stylex.props(overlaysStyles.panelScrim, [responsiveStyles.panelScrim, responsiveLayoutStyles.panelScrim], responsiveStyles.panelScrimInspector).className ?? ''}`}
+            aria-label="Close inspector"
+            onClick={onClose}
+            initial={instant ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={instant ? undefined : { opacity: 0, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+            transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+          />
+        ) : null}
+      </AnimatePresence>
     </>
   )
   return (

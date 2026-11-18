@@ -237,7 +237,15 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       { provider: 'openai-codex', id: 'gpt-fixture', name: 'GPT Fixture', api: 'openai-responses', reasoning: true, input: ['text'], contextWindow: 200000, maxTokens: 8192 },
     ] } })
   } else if (command.type === 'get_state') {
-    send({ type: 'response', id: command.id, command: command.type, success: true, data: { sessionId: 'fixture-session', sessionFile, isStreaming: streaming, thinkingLevel: 'medium', model: { provider: 'fixture', id: 'fixture-model', name: 'Fixture Model' } } })
+    const reply = () => send({ type: 'response', id: command.id, command: command.type, success: true, data: { sessionId: 'fixture-session', sessionFile, isStreaming: streaming, thinkingLevel: 'medium', model: { provider: 'fixture', id: 'fixture-model', name: 'Fixture Model' } } })
+    const hold = ${JSON.stringify(join(fixtureRoot, 'hold-chief-handshake'))}
+    if (sessionFile && fs.existsSync(hold) && fs.readFileSync(hold, 'utf8') === sessionFile) {
+      const timer = setInterval(() => {
+        if (fs.existsSync(hold)) return
+        clearInterval(timer)
+        reply()
+      }, 20)
+    } else reply()
   } else if (command.type === 'get_session_stats') {
     send({ type: 'response', id: command.id, command: command.type, success: true, data: { contextUsage: { tokens: 12000, contextWindow: 100000, percent: 12 }, cost: 0.42, tokens: { input: 10000, output: 2000, cacheRead: 0, cacheWrite: 0, total: 12000 } } })
   } else if (command.type === 'list_schedules') {
@@ -1410,6 +1418,26 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => existsSync(join(fixtureRoot, 'activity-confirm-response.json'))).toBe(true)
     expect(JSON.parse(readFileSync(join(fixtureRoot, 'activity-confirm-response.json'), 'utf8'))).toMatchObject({ confirmed: true })
     await coordinator.getByRole('button', { name: 'Stop Pi' }).click()
+    await page.evaluate(async (runtimeId) => {
+      if (!runtimeId || !await window.apex!.agent.stop(runtimeId)) throw new Error('Could not stop the fixture Chief runtime')
+    }, first.runtimeId)
+    await expect(coordinator.getByRole('button', { name: 'Reconnect' })).toBeVisible()
+    appendFileSync(first.filePath, `${JSON.stringify({
+      type: 'message', id: 'early-history', parentId: null, timestamp: new Date().toISOString(),
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Saved while the Chief was offline.' }] },
+    })}\n`)
+    const hold = join(fixtureRoot, 'hold-chief-handshake')
+    writeFileSync(hold, first.filePath)
+    try {
+      await coordinator.getByRole('button', { name: 'Reconnect' }).click()
+      await expect(coordinator.getByText('Saved while the Chief was offline.')).toBeVisible()
+      await expect(coordinator.getByRole('status').filter({ hasText: 'Connecting to Chief of Staff' })).toBeVisible()
+      await expect(input).toBeDisabled()
+    } finally {
+      rmSync(hold, { force: true })
+    }
+    await expect(input).toBeEnabled()
+    await expect(coordinator.getByText('Saved while the Chief was offline.')).toHaveCount(1)
     expect(actionableErrors).toEqual([])
   })
 

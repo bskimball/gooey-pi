@@ -455,8 +455,15 @@ export function registerIpc(
 	handle("spaces:list", () => services.coordinator.listSpaces());
 	handle("spaces:create", (_event, input) => services.coordinator.createSpace(input));
 	handle("spaces:update", (_event, id, input) => services.coordinator.updateSpace(id, input));
-	handle("coordinator:open", async (event, spaceId) => {
-		const attachment = await services.coordinator.open(event.sender.id, spaceId);
+	handle("coordinator:open", async (event, spaceId, requestIdValue) => {
+		const requestId = requestIdValue === undefined ? undefined : requireString(requestIdValue, "requestId", { min: 1, max: 64 });
+		const frame = event.senderFrame;
+		const attachment = await services.coordinator.open(event.sender.id, spaceId, requestId === undefined ? undefined : (history) => {
+			try {
+				verify(event);
+				if (frame && event.senderFrame === frame) frame.send("coordinator:history", { requestId, history });
+			} catch { /* Early history is optional if the renderer is no longer reachable. */ }
+		});
 		try {
 			verify(event);
 			return attachment;

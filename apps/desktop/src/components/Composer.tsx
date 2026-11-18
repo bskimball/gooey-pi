@@ -799,12 +799,21 @@ export const Composer = memo(function Composer({
 				{...imageAttachments.dragHandlers}
 			>
 				{busy || admitting ? <ComposerBusyIndicator /> : null}
-				{imageAttachments.dragging ? (
-					<div className={`composer-drop-feedback ${stylex.props(styles.dropFeedback).className}`} aria-hidden="true">
-						<Paperclip size={18} />
-						Drop files to attach
-					</div>
-				) : null}
+				<AnimatePresence initial={false}>
+					{imageAttachments.dragging ? (
+						<motion.div
+							key="drop-feedback"
+							className={`composer-drop-feedback ${stylex.props(styles.dropFeedback).className}`}
+							aria-hidden="true"
+							initial={instant ? false : { opacity: 0, scale: 0.98 }}
+							animate={{ opacity: 1, scale: 1, transition: instant ? { duration: 0 } : { duration: 0.14, ease: [0.23, 1, 0.32, 1] } }}
+							exit={instant ? undefined : { opacity: 0, scale: 0.98, transition: { duration: 0.1, ease: [0.2, 0, 0, 1] } }}
+						>
+							<Paperclip size={18} />
+							Drop files to attach
+						</motion.div>
+					) : null}
+				</AnimatePresence>
 				{excerpts.length ? (
 					<div className={`task-context-tray ${stylex.props(taskWorkflowsStyles.taskContextTray).className ?? ""}`} aria-label="Selected context attachments">
 						<AnimatePresence initial={false}>
@@ -955,6 +964,7 @@ export const Composer = memo(function Composer({
 						value={value}
 						disabled={disabled || loading}
 						rows={2}
+						style={{ fieldSizing: "content" }}
 						placeholder={
 							disabled
 								? "Add a project to begin"
@@ -1051,46 +1061,73 @@ export const Composer = memo(function Composer({
 						}}
 					/>
 				</div>
-				{menu && suggestions.length ? (
-					<div
-						ref={menuRef}
-						id={menuId}
-						className={`composer-menu ${stylex.props(styles.menu).className}`}
-						role="listbox"
-						aria-label={
-							menu === "command"
-								? "Commands"
-								: menu === "argument"
-									? "Command options"
-									: menu === "mention"
-										? mentionsSkills
-											? "Skills"
-											: "Files, sessions, and capabilities"
-										: "Add context"
-						}
-					>
-						{suggestions.map((suggestion, index) => (
-							<button
-								id={`${menuId}-option-${index}`}
-								type="button"
-								role="option"
-								tabIndex={-1}
-								aria-selected={activeSuggestion === index}
-								{...stylex.props(styles.menuItem, activeSuggestion === index && styles.menuItemActive)}
-								key={suggestion.key}
-								onMouseEnter={() => setActiveSuggestion(index)}
-								onClick={suggestion.choose}
-							>
-								{suggestion.icon}
-								<span {...stylex.props(styles.menuText)}>
-									<strong {...stylex.props(styles.menuTitle)}>{suggestion.label}</strong>
-									<small {...stylex.props(styles.menuDetail)}>{suggestion.detail}</small>
-								</span>
-							</button>
-						))}
-					</div>
-				) : null}
-				{attachmentError ? <Banner status="error" role="alert" xstyle={styles.attachmentError} title={attachmentError} /> : null}
+				<AnimatePresence initial={false}>
+					{menu && suggestions.length ? (
+						<motion.div
+							key={menu === "add" ? "composer-menu-add" : "composer-menu-kbd"}
+							ref={menuRef}
+							id={menuId}
+							className={`composer-menu ${stylex.props(styles.menu).className}`}
+							role="listbox"
+							style={{ transformOrigin: "bottom left" }}
+							initial={instant || menu !== "add" ? false : { opacity: 0, scale: 0.95, y: 4 }}
+							animate={{
+								opacity: 1,
+								scale: 1,
+								y: 0,
+								transition: instant || menu !== "add" ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
+							}}
+							exit={
+								instant || menu !== "add"
+									? undefined
+									: { opacity: 0, scale: 0.96, y: 2, transition: { duration: 0.1, ease: [0.2, 0, 0, 1] } }
+							}
+							aria-label={
+								menu === "command"
+									? "Commands"
+									: menu === "argument"
+										? "Command options"
+										: menu === "mention"
+											? mentionsSkills
+												? "Skills"
+												: "Files, sessions, and capabilities"
+											: "Add context"
+							}
+						>
+							{suggestions.map((suggestion, index) => (
+								<button
+									id={`${menuId}-option-${index}`}
+									type="button"
+									role="option"
+									tabIndex={-1}
+									aria-selected={activeSuggestion === index}
+									{...stylex.props(styles.menuItem, activeSuggestion === index && styles.menuItemActive)}
+									key={suggestion.key}
+									onMouseEnter={() => setActiveSuggestion(index)}
+									onClick={suggestion.choose}
+								>
+									{suggestion.icon}
+									<span {...stylex.props(styles.menuText)}>
+										<strong {...stylex.props(styles.menuTitle)}>{suggestion.label}</strong>
+										<small {...stylex.props(styles.menuDetail)}>{suggestion.detail}</small>
+									</span>
+								</button>
+							))}
+						</motion.div>
+					) : null}
+				</AnimatePresence>
+				<AnimatePresence initial={false}>
+					{attachmentError ? (
+						<motion.div
+							key={attachmentError}
+							initial={instant ? false : { opacity: 0, y: 4 }}
+							animate={{ opacity: 1, y: 0, transition: instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }}
+							exit={instant ? undefined : { opacity: 0, y: -2, transition: { duration: 0.11, ease: [0.2, 0, 0, 1] } }}
+						>
+							<Banner status="error" role="alert" xstyle={styles.attachmentError} title={attachmentError} />
+						</motion.div>
+					) : null}
+				</AnimatePresence>
 				<p
 					id={imageStatusId}
 					className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}
@@ -1138,64 +1175,66 @@ export const Composer = memo(function Composer({
 						<ExecutingModelChip executingModel={executingModel ?? undefined} />
 						{harness === "pi" && !conversationOnly ? <PiModeStatus controller={modeController} /> : null}
 					</div>
-					{settingsOpen ? (
-						<Modal title="Chat settings" onClose={closeSettings}>
-							<ChatSettings>
-								{harness === "pi" && !conversationOnly ? (
-									<PiModeFields
-										controller={modeController}
-										modelsByProvider={modelsByProvider}
-										providers={providers}
-									>
-										{modelControls}
-									</PiModeFields>
-								) : (
-									<ChatSettingsSection>{modelControls}</ChatSettingsSection>
-								)}
-								{!conversationOnly || fastSupported ? (
-									<ChatSettingsSection divider>
-										{!conversationOnly ? (
-											<ChatSettingsField label="Checkout">
-												<CheckoutPickerFields
-													controller={checkoutController}
-													catalog={checkoutCatalog}
-													fallbackLabel={checkoutLabel}
-													loading={checkoutsLoading}
-													disabled={busy || admitting}
-													onExecute={onExecuteCheckout}
-												/>
-											</ChatSettingsField>
-										) : null}
-										{fastSupported ? (
-											<ChatSettingsField label="Service tier">
-												<ApexButton
-													variant="quiet"
-													compact
-													icon={<Lightning size={12} />}
-													label="Fast"
-													className={`fast-mode-toggle ${fast ? "is-active" : ""}`}
-													xstyle={[
-														chatSettingsStyles.fastToggle,
-														fast && chatSettingsStyles.fastToggleActive,
-													]}
-													aria-pressed={fast}
-													disabled={!fastAvailable}
-													title={
-														fastAvailable
-															? `Use ${agentName} priority service tier`
-															: `The installed ${agentName} RPC runtime does not expose fast mode`
-													}
-													onClick={() => onFastChange(!fast)}
-												>
-													<span className="fast-mode-toggle__label">Fast</span>
-												</ApexButton>
-											</ChatSettingsField>
-										) : null}
-									</ChatSettingsSection>
-								) : null}
-							</ChatSettings>
-						</Modal>
-					) : null}
+					<AnimatePresence initial={false}>
+						{settingsOpen ? (
+							<Modal key="composer-chat-settings" title="Chat settings" onClose={closeSettings}>
+								<ChatSettings>
+									{harness === "pi" && !conversationOnly ? (
+										<PiModeFields
+											controller={modeController}
+											modelsByProvider={modelsByProvider}
+											providers={providers}
+										>
+											{modelControls}
+										</PiModeFields>
+									) : (
+										<ChatSettingsSection>{modelControls}</ChatSettingsSection>
+									)}
+									{!conversationOnly || fastSupported ? (
+										<ChatSettingsSection divider>
+											{!conversationOnly ? (
+												<ChatSettingsField label="Checkout">
+													<CheckoutPickerFields
+														controller={checkoutController}
+														catalog={checkoutCatalog}
+														fallbackLabel={checkoutLabel}
+														loading={checkoutsLoading}
+														disabled={busy || admitting}
+														onExecute={onExecuteCheckout}
+													/>
+												</ChatSettingsField>
+											) : null}
+											{fastSupported ? (
+												<ChatSettingsField label="Service tier">
+													<ApexButton
+														variant="quiet"
+														compact
+														icon={<Lightning size={12} />}
+														label="Fast"
+														className={`fast-mode-toggle ${fast ? "is-active" : ""}`}
+														xstyle={[
+															chatSettingsStyles.fastToggle,
+															fast && chatSettingsStyles.fastToggleActive,
+														]}
+														aria-pressed={fast}
+														disabled={!fastAvailable}
+														title={
+															fastAvailable
+																? `Use ${agentName} priority service tier`
+																: `The installed ${agentName} RPC runtime does not expose fast mode`
+														}
+														onClick={() => onFastChange(!fast)}
+													>
+														<span className="fast-mode-toggle__label">Fast</span>
+													</ApexButton>
+												</ChatSettingsField>
+											) : null}
+										</ChatSettingsSection>
+									) : null}
+								</ChatSettings>
+							</Modal>
+						) : null}
+					</AnimatePresence>
 					<div className={`composer__actions ${stylex.props(styles.actions).className}`}>
 						{dictation.state === "connecting" ||
 						dictation.state === "recording" ? (
@@ -1302,19 +1341,63 @@ export const Composer = memo(function Composer({
 									}
 									onClick={() => void submit(busy ? "steer" : "queue")}
 								>
-									<ArrowUp size={17} />
+									<AnimatePresence mode="popLayout" initial={false}>
+										<motion.span
+											key={busy ? "steer" : "send"}
+											initial={instant ? false : { opacity: 0, scale: 0.25, filter: "blur(4px)" }}
+											animate={{
+												opacity: 1,
+												scale: 1,
+												filter: "blur(0px)",
+												transition: instant ? { duration: 0 } : { type: "spring", duration: 0.3, bounce: 0 },
+											}}
+											exit={
+												instant
+													? undefined
+													: {
+															opacity: 0,
+															scale: 0.25,
+															filter: "blur(4px)",
+															transition: { duration: 0.12, ease: [0.2, 0, 0, 1] },
+														}
+											}
+											style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+										>
+											<ArrowUp size={17} />
+										</motion.span>
+									</AnimatePresence>
 								</button>
-								{busy ? (
-									<button
-										type="button"
-										{...stylex.props(styles.send, styles.stop)}
-										aria-label="Stop Pi"
-										title="Stop this run"
-										onClick={() => void onStop()}
-									>
-										<Square {...stylex.props(styles.stopIcon)} size={10} fill="currentColor" aria-hidden="true" />
-									</button>
-								) : null}
+								<AnimatePresence mode="popLayout" initial={false}>
+									{busy ? (
+										<motion.button
+											key="stop-run"
+											type="button"
+											{...stylex.props(styles.send, styles.stop)}
+											aria-label="Stop Pi"
+											title="Stop this run"
+											initial={instant ? false : { opacity: 0, scale: 0.25, filter: "blur(4px)" }}
+											animate={{
+												opacity: 1,
+												scale: 1,
+												filter: "blur(0px)",
+												transition: instant ? { duration: 0 } : { type: "spring", duration: 0.3, bounce: 0 },
+											}}
+											exit={
+												instant
+													? undefined
+													: {
+															opacity: 0,
+															scale: 0.25,
+															filter: "blur(4px)",
+															transition: { duration: 0.12, ease: [0.2, 0, 0, 1] },
+														}
+											}
+											onClick={() => void onStop()}
+										>
+											<Square {...stylex.props(styles.stopIcon)} size={10} fill="currentColor" aria-hidden="true" />
+										</motion.button>
+									) : null}
+								</AnimatePresence>
 							</>
 						)}
 					</div>

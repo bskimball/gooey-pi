@@ -79,12 +79,12 @@ const styles = stylex.create({
       default: null,
       '@media (hover: hover) and (pointer: fine)': {
         default: null,
-        ':active:not(:disabled):not(:focus-visible)': 'scale(0.97)',
+        ':active:not(:disabled):not(:focus-visible)': 'scale(0.98)',
       },
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
     transition: {
-      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease',
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color var(--fast), color var(--fast)',
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
@@ -129,12 +129,12 @@ const styles = stylex.create({
       default: null,
       '@media (hover: hover) and (pointer: fine)': {
         default: null,
-        ':active:not(:disabled):not(:focus-visible)': 'scale(0.97)',
+        ':active:not(:disabled):not(:focus-visible)': 'scale(0.98)',
       },
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
     transition: {
-      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color var(--fast), color var(--fast), border-color var(--fast), box-shadow var(--fast)',
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
   },
@@ -250,6 +250,18 @@ const styles = stylex.create({
     backgroundImage: 'var(--gradient-apex)',
     boxShadow: 'var(--shadow-control)',
     cursor: 'pointer',
+    transform: {
+      default: null,
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':active:not(:has(:disabled)):not(:has(:focus-visible))': 'scale(0.98)',
+      },
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    transition: {
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color var(--fast), color var(--fast), border-color var(--fast), box-shadow var(--fast)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
     '@media (hover: hover) and (pointer: fine)': {
       ':hover:not(:has(:disabled))': { color: 'var(--text)', borderColor: 'var(--border-apex)', backgroundColor: 'var(--surface-hover)', boxShadow: 'var(--shadow-control-hover)' },
     },

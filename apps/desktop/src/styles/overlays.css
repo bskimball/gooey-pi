@@ -25,5 +25,4 @@
 @keyframes panel-in { from { opacity: 0; transform: translateX(8px); } }
 @keyframes drawer-in { from { opacity: .7; transform: translateY(8px); } }
 @keyframes fade-in { from { opacity: 0; } }
-@keyframes modal-in { from { opacity: 0; transform: translateY(5px) scale(.99); } }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }

@@ -3,11 +3,11 @@ import type { ExtensionUiResponse } from '@/components/ExtensionUiModal'
 import type { PendingExtensionUi } from './useExtensionUi'
 import { parseExtensionUiRequest } from '@/lib/extension-ui'
 import { replayApexEvents } from '@/lib/events/reduce'
-import type { ApexApi, ApexEventEnvelope, CoordinatorAttachment, PromptDeliveryIntent, PromptImage, TranscriptMessage } from '@/types/api'
+import type { ApexApi, ApexEventEnvelope, CoordinatorAttachment, CoordinatorHistory, PromptDeliveryIntent, PromptImage, TranscriptMessage } from '@/types/api'
 
 type CoordinatorState =
   | { phase: 'closed' }
-  | { phase: 'opening'; projectId: string }
+  | { phase: 'opening'; projectId: string; history?: CoordinatorHistory }
   | { phase: 'error'; projectId: string; error: string }
   | { phase: 'ready'; projectId: string; attachment: CoordinatorAttachment; messages: TranscriptMessage[]; dialogs: Record<string, unknown>[]; disconnected: boolean }
 
@@ -115,7 +115,9 @@ function open(bridge: ApexApi, projectId: string, spaceId: string | undefined): 
     }
   }
   const unsubscribe = bridge.agent.onEvent(receive)
-  void bridge.coordinator.open(spaceId).then((opened) => {
+  void bridge.coordinator.open(spaceId, (history) => {
+    if (!connection.closed) setState(connection, (current) => current.phase === 'opening' ? { ...current, history } : current)
+  }).then((opened) => {
     if (connection.closed) {
       void bridge.coordinator.close(opened.attachmentId).catch(() => undefined)
       return

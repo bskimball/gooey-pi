@@ -24,35 +24,14 @@
 }
 .inspector__tabs > button:not(.icon-button) > svg {
 	flex: 0 0 auto;
-	transition: transform 120ms ease-out;
 }
-.inspector__tabs > button:not(.icon-button):active > svg {
-	transform: scale(0.9);
-}
-.inspector__tabs > button:not(.icon-button):hover {
-	color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+	.inspector__tabs > button:not(.icon-button):hover {
+		color: var(--text);
+	}
 }
 .inspector__tabs > button.is-active {
 	color: var(--text);
-}
-.inspector__tabs > button:not(.icon-button)::after {
-	position: absolute;
-	left: 8px;
-	right: 8px;
-	bottom: -1px;
-	height: 2px;
-	border-radius: 2px;
-	content: "";
-	background: var(--apex);
-	opacity: 0;
-	transform: scaleX(0.3);
-	transition:
-		transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
-		opacity 160ms ease-out;
-}
-.inspector__tabs > button.is-active::after {
-	opacity: 1;
-	transform: scaleX(1);
 }
 .inspector__tabs > .icon-button {
 	align-self: center;
@@ -87,9 +66,14 @@
 	cursor: pointer;
 	transition: background-color var(--fast);
 }
-.summary-agent-list > button:hover {
-	color: var(--text);
-	background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+	.summary-agent-list > button:hover {
+		color: var(--text);
+		background: var(--surface-hover);
+	}
+	.summary-agent-list > button:hover > svg:last-child {
+		opacity: 1;
+	}
 }
 .summary-agent-list > button:focus-visible {
 	outline: 2px solid var(--focus);
@@ -103,7 +87,6 @@
 	opacity: 0;
 	transition: opacity 120ms ease-out;
 }
-.summary-agent-list > button:hover > svg:last-child,
 .summary-agent-list > button:focus-visible > svg:last-child {
 	opacity: 1;
 }
@@ -140,10 +123,14 @@
 .summary-agent-stack > .summary-agent-item { position: relative; z-index: var(--stack-z, 1); }
 .summary-agent-stack > .summary-agent-item + .summary-agent-item { margin-left: -7px; }
 /* Hover only: a focus-driven spread would widen the strip after focus scrolled into view and clip the ring. */
-.summary-agent-stack:hover > .summary-agent-item + .summary-agent-item { margin-left: 3px; }
-.summary-agent-stack > .summary-agent-item:hover, .summary-agent-stack > .summary-agent-item:focus-visible { z-index: 20; }
+@media (hover: hover) and (pointer: fine) {
+	.summary-agent-stack:hover > .summary-agent-item + .summary-agent-item { margin-left: 3px; }
+	.summary-agent-stack > .summary-agent-item:hover { z-index: 20; }
+	.summary-agent-item:hover > .summary-agent-token { color: var(--text); }
+}
+.summary-agent-stack > .summary-agent-item:focus-visible { z-index: 20; }
 .summary-agent-stack > .summary-agent-item:focus-visible > .summary-agent-token { outline: 2px solid var(--focus); outline-offset: 2px; }
-.summary-agent-item:hover > .summary-agent-token, .summary-agent-item:focus-visible > .summary-agent-token { color: var(--text); }
+.summary-agent-item:focus-visible > .summary-agent-token { color: var(--text); }
 .summary-agent-token.is-error { border-color: var(--danger); color: var(--danger); }
 .summary-agent-token.is-stopped, .summary-agent-token.is-closed { border-style: dashed; border-color: var(--text-tertiary); }
 .summary-agent-token--more { border-color: var(--border); color: var(--text-tertiary); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
@@ -182,7 +169,12 @@
 	background: transparent;
 	text-align: left;
 }
-.file-changes > button:hover,
+@media (hover: hover) and (pointer: fine) {
+	.file-changes > button:hover {
+		color: var(--text);
+		background: var(--surface-hover);
+	}
+}
 .file-changes > button.is-selected {
 	color: var(--text);
 	background: var(--surface-hover);
@@ -260,7 +252,12 @@
 	color: transparent;
 	background: transparent;
 }
-.diff-line:hover > button {
+@media (hover: hover) and (pointer: fine) {
+	.diff-line:hover > button {
+		color: var(--text-tertiary);
+	}
+}
+.diff-line > button:focus-visible {
 	color: var(--text-tertiary);
 }
 .diff-line > code {
@@ -323,8 +320,10 @@
 	background: transparent;
 	text-align: left;
 }
-.browser-history > button:hover {
-	background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+	.browser-history > button:hover {
+		background: var(--surface-hover);
+	}
 }
 .browser-history > button span {
 	overflow: hidden;
@@ -425,9 +424,11 @@
 	color: var(--text-tertiary);
 	background: transparent;
 }
-.browser-tabstrip__agent > button:hover {
-	color: var(--text);
-	background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+	.browser-tabstrip__agent > button:hover {
+		color: var(--text);
+		background: var(--surface-hover);
+	}
 }
 .browser-panel .browser-preview {
 	position: relative;
@@ -554,9 +555,11 @@
 	text-align: left;
 	cursor: pointer;
 }
-.summary-automation-list > button:hover {
-	border-color: var(--border-strong);
-	background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+	.summary-automation-list > button:hover {
+		border-color: var(--border-strong);
+		background: var(--surface-hover);
+	}
 }
 .summary-automation-list > button:focus-visible {
 	outline: 2px solid var(--focus);

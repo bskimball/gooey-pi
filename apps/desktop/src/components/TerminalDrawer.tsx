@@ -23,6 +23,7 @@ import { ResizeHandle } from './ResizeHandle'
 
 interface TerminalDrawerProps {
   visible?: boolean
+  instant?: boolean
   cwd?: string
   sessionPath?: string
   shell?: string
@@ -58,6 +59,7 @@ interface TerminalTab {
 }
 
 interface TerminalViewHandle {
+  fit(): void
   clear(): void
   clearSelection(): void
   readSelection(): Pick<TerminalPromptContext, 'text' | 'truncated'>
@@ -130,6 +132,7 @@ const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function 
   labelRef.current = label
 
   useImperativeHandle(ref, () => ({
+    fit: () => { try { fitRef.current?.fit() } catch { /* drawer is transitioning */ } },
     clear: () => terminalRef.current?.clear(),
     clearSelection: () => terminalRef.current?.clearSelection(),
     readSelection: () => {
@@ -303,7 +306,7 @@ function createTab(number: number, shell?: string, command?: string, label?: str
     label,
   }
 }
-export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(function TerminalDrawer({ visible = true, cwd, sessionPath, shell, initialCommand, startEmpty = false, jobs = [], jobOutput, onStopJob, onDismissJob, height, minHeight, maxHeight, defaultHeight, onHeightChange, onClose, onError, onInitialCommandConsumed, onOpenLink, onReady, onSelectionChange }, ref) {
+export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(function TerminalDrawer({ visible = true, instant: instantProp = false, cwd, sessionPath, shell, initialCommand, startEmpty = false, jobs = [], jobOutput, onStopJob, onDismissJob, height, minHeight, maxHeight, defaultHeight, onHeightChange, onClose, onError, onInitialCommandConsumed, onOpenLink, onReady, onSelectionChange }, ref) {
   const drawerInstanceId = useId()
   const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const firstTabRef = useRef<TerminalTab | null | undefined>(undefined)
@@ -317,6 +320,18 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
   const [tabs, setTabs] = useState<TerminalTab[]>(() => firstTabRef.current ? [firstTabRef.current] : [])
   const [activeTabId, setActiveTabId] = useState(() => firstTabRef.current?.id ?? '')
   const [maximized, setMaximized] = useState(false)
+  const [prevVisible, setPrevVisible] = useState(visible)
+  const [instantDrawer, setInstantDrawer] = useState(instant || instantProp)
+  const [closing, setClosing] = useState(false)
+  if (visible !== prevVisible) {
+    const skip = instant || instantProp
+    setPrevVisible(visible)
+    setInstantDrawer(skip)
+    setClosing(prevVisible && !visible && !skip)
+  }
+  useEffect(() => {
+    if (instant && closing) setClosing(false)
+  }, [instant, closing])
   const [hiddenJobKeys, setHiddenJobKeys] = useState<ReadonlySet<string>>(() => new Set())
   const knownJobKeysRef = useRef(new Set<string>())
   const visibleJobs = jobs.filter((job) => !hiddenJobKeys.has(job.key))
@@ -419,65 +434,65 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
   }
 
   return (
-    <section className={[`terminal-drawer ${maximized ? 'is-maximized' : ''}`, stylex.props(terminalStyles.terminalDrawer, (maximized) && terminalStyles.terminalDrawerIsMaximized, [responsiveStyles.terminalDrawer, (maximized ? responsiveLayoutStyles.terminalDrawerMaximized : responsiveLayoutStyles.terminalDrawer)], !visible && terminalContext.hidden).className].filter(Boolean).join(' ')} aria-label="Integrated terminal" hidden={!visible}>
+    <motion.section className={[`terminal-drawer ${maximized ? 'is-maximized' : ''}`, stylex.props(terminalStyles.terminalDrawer, (maximized) && terminalStyles.terminalDrawerIsMaximized, [responsiveStyles.terminalDrawer, (maximized ? responsiveLayoutStyles.terminalDrawerMaximized : responsiveLayoutStyles.terminalDrawer)], (!visible && !closing) && terminalContext.hidden).className].filter(Boolean).join(' ')} aria-label="Integrated terminal" hidden={!visible && !closing} inert={!visible || undefined} initial={instantDrawer ? false : { opacity: 0, y: 8 }} animate={visible ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }} transition={instantDrawer ? { duration: 0 } : { duration: visible ? 0.18 : 0.13, ease: [0.32, 0.72, 0, 1] }} onAnimationComplete={() => { if (!visible) setClosing(false); else viewRefs.current.get(activeTabIdRef.current)?.fit() }}>
       {!maximized ? <ResizeHandle orientation="horizontal" label="Resize terminal" value={height} min={minHeight} max={maxHeight} defaultValue={defaultHeight} onChange={onHeightChange} /> : null}
       <div className={`terminal-toolbar ${stylex.props(terminalStyles.terminalToolbar).className ?? ""}`}>
         <div className={`terminal-tabs ${stylex.props(terminalStyles.terminalTabs).className ?? ""}`} role="tablist" aria-label="Terminal tabs">
           {(() => {
-            const tabItems = (
-              <>
-                {tabs.map((tab) => (
-                  <motion.div
-                    initial={instant ? false : { opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
-                    transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-                    className={[`terminal-tab ${tab.id === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (tab.id === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')}
-                    key={tab.id}
-                  >
-                    {tab.id === activeTabId ? (
-                      <motion.span
-                        layoutId={`terminal-tab-active-${drawerInstanceId}`}
-                        {...stylex.props(terminalStyles.terminalTabIndicator)}
-                        transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.24, bounce: 0 }}
-                      />
-                    ) : null}
-                    <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={tab.id === activeTabId} onClick={() => setActiveTabId(tab.id)}>
-                      <TerminalIcon size={14}/>
+            const tabElements = [
+              ...tabs.map((tab) => (
+                <motion.div
+                  layout="position"
+                  initial={instant ? false : { opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
+                  transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                  className={[`terminal-tab ${tab.id === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (tab.id === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')}
+                  key={tab.id}
+                >
+                  {tab.id === activeTabId ? (
+                    <motion.span
+                      layoutId={`terminal-tab-active-${drawerInstanceId}`}
+                      {...stylex.props(terminalStyles.terminalTabIndicator)}
+                      transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.24, bounce: 0 }}
+                    />
+                  ) : null}
+                  <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={tab.id === activeTabId} onClick={() => setActiveTabId(tab.id)}>
+                    <TerminalIcon size={14}/>
 
-                      <span>{tab.label ?? `${tab.shellName} ${tab.number}`}</span>
-                      <span className={[`terminal-live-dot ${tab.connected ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (tab.connected) && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
-                    </button>
-                    <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, tab.id === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={`Close tab ${tab.number}`} onClick={() => closeTerminal(tab.id)}><X size={11}/></button>
-                  </motion.div>
-                ))}
-                {visibleJobs.map((job) => (
-                  <motion.div
-                    initial={instant ? false : { opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
-                    transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-                    className={[`terminal-tab ${job.key === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (job.key === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')}
-                    key={job.key}
-                  >
-                    {job.key === activeTabId ? (
-                      <motion.span
-                        layoutId={`terminal-tab-active-${drawerInstanceId}`}
-                        {...stylex.props(terminalStyles.terminalTabIndicator)}
-                        transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.24, bounce: 0 }}
-                      />
-                    ) : null}
-                    <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={job.key === activeTabId} title={`${job.id} · ${job.command}`} onClick={() => setActiveTabId(job.key)}>
-                      <Lightning size={14}/>
-                      <span>{job.title}</span>
-                      <span className={[`terminal-live-dot ${job.status === 'running' ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (job.status === 'running') && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
-                    </button>
-                    <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, job.key === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={job.status === 'running' ? `Hide ${job.id}` : `Dismiss ${job.id}`} onClick={() => closeJob(job)}><X size={11}/></button>
-                  </motion.div>
-                ))}
-              </>
-            )
-            return instant ? tabItems : <AnimatePresence initial={false}>{tabItems}</AnimatePresence>
+                    <span>{tab.label ?? `${tab.shellName} ${tab.number}`}</span>
+                    <span className={[`terminal-live-dot ${tab.connected ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (tab.connected) && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
+                  </button>
+                  <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, tab.id === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={`Close tab ${tab.number}`} onClick={() => closeTerminal(tab.id)}><X size={11}/></button>
+                </motion.div>
+              )),
+              ...visibleJobs.map((job) => (
+                <motion.div
+                  layout="position"
+                  initial={instant ? false : { opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
+                  transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
+                  className={[`terminal-tab ${job.key === activeTabId ? 'is-active' : ''}`, stylex.props(terminalStyles.terminalTab, (job.key === activeTabId) && terminalStyles.terminalTabIsActive, terminalTabMarker).className].filter(Boolean).join(' ')}
+                  key={job.key}
+                >
+                  {job.key === activeTabId ? (
+                    <motion.span
+                      layoutId={`terminal-tab-active-${drawerInstanceId}`}
+                      {...stylex.props(terminalStyles.terminalTabIndicator)}
+                      transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.24, bounce: 0 }}
+                    />
+                  ) : null}
+                  <button type="button" {...stylex.props(terminalContext.tabButton)} role="tab" aria-selected={job.key === activeTabId} title={`${job.id} · ${job.command}`} onClick={() => setActiveTabId(job.key)}>
+                    <Lightning size={14}/>
+                    <span>{job.title}</span>
+                    <span className={[`terminal-live-dot ${job.status === 'running' ? 'is-connected' : ''}`, stylex.props(terminalStyles.terminalLiveDot, (job.status === 'running') && terminalStyles.terminalLiveDotIsConnected).className].filter(Boolean).join(' ')}/>
+                  </button>
+                  <button type="button" className={`terminal-tab__close ${stylex.props(terminalStyles.terminalTabClose, job.key === activeTabId && terminalContext.closeActive).className ?? ""}`} aria-label={job.status === 'running' ? `Hide ${job.id}` : `Dismiss ${job.id}`} onClick={() => closeJob(job)}><X size={11}/></button>
+                </motion.div>
+              )),
+            ]
+            return instant ? tabElements : <AnimatePresence initial={false}>{tabElements}</AnimatePresence>
           })()}
           <IconButton label="New terminal" size="small" disabled={tabs.length >= MAX_TERMINAL_TABS} onClick={addTerminal}><Plus size={14}/></IconButton>
         </div>
@@ -514,6 +529,6 @@ export const TerminalDrawer = forwardRef<TerminalDrawerHandle, TerminalDrawerPro
           <BackgroundJobView key={job.key} job={job} output={jobOutput} visible={visible && job.key === activeTabId} onOpenLink={onOpenLink}/>
         )) : null}
       </div>
-    </section>
+    </motion.section>
   )
 })

@@ -1,4 +1,4 @@
-import type { ApexEventEnvelope, ApexModelDescriptor, RuntimeInfo } from '../../../src/types/api'
+import type { ApexEventEnvelope, ApexModelDescriptor, RuntimeInfo, TranscriptMessage } from '../../../src/types/api'
 import { assertNoMcpAuthenticationCommand } from '../../../src/lib/mcp-policy'
 import { parseSessionActionSnapshot, streamingBehaviorForIntent } from '../../../src/lib/session-actions'
 import { resolveExecutable, runProcess, type ExecutableSource } from '../process-utils'
@@ -176,8 +176,8 @@ export class AgentRpcManager {
     if (help.code !== 0 || help.timedOut || help.outputExceeded || !['--tools', '--no-extensions', '--no-mcp'].every((flag) => new RegExp(`^\\s*${flag}(?:[\\s,=]|$)`, 'm').test(help.stdout))) throw new Error('Configured Pi does not support the required read-only side conversation flags')
   }
 
-  async start(raw: unknown): Promise<RuntimeInfo> {
-    return this.startWithMode(raw, true)
+  async start(raw: unknown, onBaseline?: (sessionPath: string, messages: TranscriptMessage[]) => Promise<void>): Promise<RuntimeInfo> {
+    return this.startWithMode(raw, true, onBaseline)
   }
 
   /** Internal scheduler entrypoint: unattended children must never expose UI-blocking tools. */
@@ -185,7 +185,7 @@ export class AgentRpcManager {
     return this.startWithMode(raw, false)
   }
 
-  private async startWithMode(raw: unknown, interactive: boolean): Promise<RuntimeInfo> {
+  private async startWithMode(raw: unknown, interactive: boolean, onBaseline?: (sessionPath: string, messages: TranscriptMessage[]) => Promise<void>): Promise<RuntimeInfo> {
     this.requireOpen()
     const executable = resolveExecutable(this.executable)
     if (!executable) throw new Error(`${this.adapter.agentName} executable was not found`)
@@ -257,6 +257,7 @@ export class AgentRpcManager {
       })
       // Read before spawn: persistence cannot race the baseline and live frames.
       const baseline = sessionPath ? await readPiTranscript(sessionPath, false) : []
+      if (sessionPath && baseline.length && onBaseline) await onBaseline(sessionPath, baseline)
       runtime = await this.admitRuntime(() => {
         const created = new RpcRuntime(
           executable,

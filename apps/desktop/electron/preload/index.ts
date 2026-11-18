@@ -8,6 +8,8 @@ import type {
 	ApexEventEnvelope,
 	BackgroundJobEvent,
 	ApexApi,
+	CoordinatorAttachment,
+	CoordinatorHistory,
 	ScheduleChangeEvent,
 	SessionChangeEvent,
 	SpecialistRosterChange,
@@ -64,6 +66,8 @@ function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 	});
 }
 
+let nextCoordinatorOpen = 0;
+
 const api: ApexApi = {
 	app: {
 		getMeta: () => invoke("app:get-meta"),
@@ -117,7 +121,15 @@ const api: ApexApi = {
 		update: (id, input) => invoke("spaces:update", id, input),
 	},
 	coordinator: {
-		open: (spaceId) => spaceId === undefined ? invoke("coordinator:open") : invoke("coordinator:open", spaceId),
+		open: (spaceId, onHistory) => {
+			if (!onHistory) return spaceId === undefined ? invoke("coordinator:open") : invoke("coordinator:open", spaceId);
+			if (typeof onHistory !== "function") throw new TypeError("onHistory must be a function");
+			const requestId = String(++nextCoordinatorOpen);
+			const unsubscribe = subscribe<{ requestId: string; history: CoordinatorHistory }>("coordinator:history", (payload) => {
+				if (payload.requestId === requestId) onHistory(payload.history);
+			});
+			return invoke<CoordinatorAttachment>("coordinator:open", spaceId, requestId).finally(unsubscribe);
+		},
 		close: (attachmentId) => invoke("coordinator:close", attachmentId),
 		reset: (spaceId) => spaceId === undefined ? invoke("coordinator:reset") : invoke("coordinator:reset", spaceId),
 	},

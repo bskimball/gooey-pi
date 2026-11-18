@@ -1,8 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 
-const badgeInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "scale(.6)" } })
-
-const sidebarMenuInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "translateY(-3px) scale(.98)" } })
+const badgeInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "scale(0.92)" } })
 
 export const styles = stylex.create({
   "sidebar": {
@@ -298,14 +296,7 @@ export const styles = stylex.create({
     "fontWeight": 550,
     "letterSpacing": "normal",
     "textTransform": "none",
-    "animationName": sidebarMenuInAnimation,
-    "animationDuration": "120ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "cubic-bezier(.2, 0, 0, 1)",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running",
+    "transformOrigin": "top right",
     "top": "calc(100% + 4px)",
     "right": 0,
     "width": "164px",
@@ -345,14 +336,7 @@ export const styles = stylex.create({
     "fontWeight": 550,
     "letterSpacing": "normal",
     "textTransform": "none",
-    "animationName": sidebarMenuInAnimation,
-    "animationDuration": "120ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "cubic-bezier(.2, 0, 0, 1)",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running",
+    "transformOrigin": "top right",
     "top": "calc(100% + 3px)",
     "right": "2px",
     "width": "162px",
@@ -392,14 +376,7 @@ export const styles = stylex.create({
     "fontWeight": 550,
     "letterSpacing": "normal",
     "textTransform": "none",
-    "animationName": sidebarMenuInAnimation,
-    "animationDuration": "120ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "cubic-bezier(.2, 0, 0, 1)",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running",
+    "transformOrigin": "top right",
     "top": "calc(100% + 3px)",
     "right": "2px",
     "width": "max-content",

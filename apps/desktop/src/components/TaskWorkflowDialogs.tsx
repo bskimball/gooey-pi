@@ -1,6 +1,7 @@
 import { Banner } from '@astryxdesign/core/Banner'
 import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
 import { styles as taskWorkflowsStyles } from 'apex-ui/styles/task-workflows.stylex'
+import { AnimatePresence } from 'motion/react'
 import { useEffect, useState, type ReactNode } from 'react'
 import * as stylex from '@stylexjs/stylex'
 import type { FinishReview, RunHistoricalContent, RunHistoricalFile } from '@/types/api'
@@ -111,8 +112,7 @@ function HistoricalContent({ content, path, version, runId }: { content: RunHist
   return <section><h4>{version}</h4><ContextExcerpt key={`${path}:${version}`} source={`Run ${runId} · ${version}`} path={path} text={lines.join('\n')}><pre className={`task-history-code ${stylex.props(taskWorkflowsStyles.taskHistoryCode).className ?? ""}`}>{lines.map((line, index) => <span key={index} data-context-line={index + 1}>{line}{'\n'}</span>)}</pre></ContextExcerpt>{truncated ? <p>File view truncated.</p> : null}</section>
 }
 
-export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
-  const { dialog } = workflow
+function TaskWorkflowDialogBody({ dialog, workflow }: { dialog: NonNullable<Workflow['dialog']>; workflow: Workflow }) {
   const [restore, setRestore] = useState(false)
   const [path, setPath] = useState('')
   const [file, setFile] = useState<RunHistoricalFile>()
@@ -120,13 +120,12 @@ export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
   const [loading, setLoading] = useState(false)
   useEffect(() => { setRestore(false); setPath(''); setFile(undefined); setFileError('') }, [dialog])
   useEffect(() => {
-    if (dialog?.kind !== 'history' || !path || !dialog.receipt.anchorUserEntryId) return
+    if (dialog.kind !== 'history' || !path || !dialog.receipt.anchorUserEntryId) return
     let current = true
     setLoading(true); setFile(undefined); setFileError('')
     void window.apex.sessions.readRunFile(dialog.sessionFile, dialog.receipt.anchorUserEntryId, path).then((value) => { if (current) setFile(value) }, (reason: unknown) => { if (current) setFileError(errorMessage(reason)) }).finally(() => { if (current) setLoading(false) })
     return () => { current = false }
   }, [dialog, path])
-  if (!dialog) return null
   if (dialog.kind === 'history') return <Modal title="Changes observed during this run" onClose={workflow.close} footer={<ApexButton onClick={workflow.close}>Close</ApexButton>}>
     <div className={`task-review ${stylex.props(taskWorkflowsStyles.taskReview).className ?? ""}`}>
       <p>Saved checkout snapshots, not current Git changes. These can include your edits and other processes, not only the agent's work.</p>
@@ -164,4 +163,13 @@ export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
       </>}
     </div>
   </Modal>
+}
+
+export function TaskWorkflowDialogs({ workflow }: { workflow: Workflow }) {
+  const { dialog } = workflow
+  return (
+    <AnimatePresence initial={false}>
+      {dialog ? <TaskWorkflowDialogBody key={dialog.kind} dialog={dialog} workflow={workflow} /> : null}
+    </AnimatePresence>
+  )
 }

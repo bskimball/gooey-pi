@@ -236,7 +236,7 @@ function SidebarPresenceRow({ skipMotion, menuOpen = false, children }: { skipMo
 }
 
 const SIDEBAR_WIDTH_VAR = 'var(--sidebar-width, 252px)'
-const SIDEBAR_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.8 } as const
+const SIDEBAR_DOCK_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] } as const
 const SIDEBAR_OPACITY_TRANSITION = { duration: 0.14, ease: [0.23, 1, 0.32, 1] } as const
 
 function isReducedOrTestMotion(): boolean {
@@ -263,7 +263,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         overflow: 'hidden',
         transition: snap || overlay
           ? { duration: 0 }
-          : { width: SIDEBAR_SPRING, overflow: { duration: 0 } },
+          : { width: SIDEBAR_DOCK_TRANSITION, overflow: { duration: 0 } },
       }
     },
   }), [overlay, skipMotion])
@@ -275,7 +275,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         opacity: 0,
         transition: snap
           ? { duration: 0 }
-          : { x: SIDEBAR_SPRING, opacity: SIDEBAR_OPACITY_TRANSITION },
+          : { x: SIDEBAR_DOCK_TRANSITION, opacity: SIDEBAR_OPACITY_TRANSITION },
       }
     },
   }), [skipMotion])
@@ -391,7 +391,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
       variants={frameVariants}
       transition={skipEnter || overlay
         ? { duration: 0 }
-        : { width: SIDEBAR_SPRING, overflow: { duration: 0 } }}
+        : { width: SIDEBAR_DOCK_TRANSITION, overflow: { duration: 0 } }}
     >
       <motion.aside
         ref={sidebarRef}
@@ -405,7 +405,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         variants={asideVariants}
         transition={skipEnter
           ? { duration: 0 }
-          : { x: SIDEBAR_SPRING, opacity: SIDEBAR_OPACITY_TRANSITION }}
+          : { x: SIDEBAR_DOCK_TRANSITION, opacity: SIDEBAR_OPACITY_TRANSITION }}
       >
       <div className={`sidebar__titlebar drag-region ${stylex.props(baseStyles.dragRegion, sidebarStyles.sidebarTitlebar, overlay && platform === 'win32' && sidebarLayoutStyles.windowsOverlayTitlebar).className ?? ""}`}>
         <div className={`traffic-light-clearance ${stylex.props(workbenchStyles.trafficLightClearance).className ?? ""}`} aria-hidden="true" />
@@ -559,8 +559,10 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         ))}
       </div>
 
-      {renameTarget ? <Modal title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
-      {removeTarget ? <Modal title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
+      <AnimatePresence initial={false}>
+        {renameTarget ? <Modal key="rename-session" title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
+        {removeTarget ? <Modal key="remove-project" title="Remove project" onClose={() => setRemoveTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRemoveTarget(null)}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>Remove</ApexButton></>}><p>Remove “{removeTarget.name}” from {HARNESS_PRODUCT_NAMES[activeHarness]}? The folder and saved sessions will not be deleted.</p></Modal> : null}
+      </AnimatePresence>
       </motion.aside>
     </motion.div>
   )

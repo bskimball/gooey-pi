@@ -520,7 +520,7 @@ export function BrowserPanel({
 								key={tab.tabId}
 								initial={instant ? false : { opacity: 0, scale: 0.95 }}
 								animate={{ opacity: 1, scale: 1 }}
-								exit={instant ? undefined : { opacity: 0, scale: 0.95 }}
+								exit={instant ? undefined : { opacity: 0, scale: 0.96, transition: { duration: 0.11, ease: [0.2, 0, 0, 1] } }}
 								transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
 								role="tab"
 								tabIndex={0}

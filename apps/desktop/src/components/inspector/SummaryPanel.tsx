@@ -1,8 +1,10 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
+import { AnimatePresence, motion } from 'motion/react'
 import { memo, useId, useState } from 'react'
 import { CalendarDots } from '../icons'
 import { StatusMark, type StatusMarkState } from '../activity/StatusMark'
+import { collapseMotionProps, useInstantMotion } from '../transcript/subagent-lane'
 import type { AutomationScheduleRecord, GitStatus, RuntimeInfo } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { RunConfigSection } from "./RunConfigSection"
@@ -23,6 +25,8 @@ const planStyles = stylex.create({
 
 function SummaryPlan({ todos }: { todos: SessionSummary['todos'] }) {
   const [expanded, setExpanded] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
+  const instant = useInstantMotion() || keyboardToggle
   const listId = useId()
   const current = [...todos.filter((todo) => todo.status === 'in_progress'), ...todos.filter((todo) => todo.status === 'blocked')]
   const compact = current.length ? current.slice(0, 3) : todos.filter((todo) => todo.status === 'pending').slice(0, 1)
@@ -32,15 +36,17 @@ function SummaryPlan({ todos }: { todos: SessionSummary['todos'] }) {
   return <section className={`summary-section summary-plan ${stylex.props(inspectorStyles.summarySection).className ?? ''}`}>
     <div {...stylex.props(planStyles.header)}>
       <h3 {...stylex.props(planStyles.heading)}>Plan ({done}/{total})</h3>
-      {expanded || todos.length > compact.length ? <button type="button" {...stylex.props(inspectorStyles.runConfigToggle, planStyles.toggle)} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((value) => !value)}>
+      {expanded || todos.length > compact.length ? <button type="button" {...stylex.props(inspectorStyles.runConfigToggle, planStyles.toggle)} aria-expanded={expanded} aria-controls={listId} onClick={(event) => { setKeyboardToggle(event.detail === 0); setExpanded((value) => !value) }}>
         {expanded ? 'Show current' : `Show all ${todos.length} tasks`}
       </button> : null}
     </div>
     <div id={listId} role="list" aria-label="Plan tasks" tabIndex={expanded ? 0 : undefined} className={`progress-list ${stylex.props(inspectorStyles.progressList, planStyles.list).className ?? ''}`}>
-      {visible.map((todo) => <div key={todo.id} role="listitem" className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
-        <StatusMark state={todoMark(todo.status)} size={14} />
-        <span {...stylex.props(planStyles.text)}>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
-      </div>)}
+      <AnimatePresence initial={false}>
+        {visible.map((todo) => <motion.div key={todo.id} {...collapseMotionProps(instant)} role="listitem" className={todo.status === 'in_progress' ? 'is-current' : todo.status === 'cancelled' ? 'is-stale' : ''} title={todo.status === 'blocked' || todo.status === 'cancelled' ? todo.status : undefined}>
+          <StatusMark state={todoMark(todo.status)} size={14} />
+          <span {...stylex.props(planStyles.text)}>{todo.content}{todo.note ? ` — ${todo.note}` : ''}</span>
+        </motion.div>)}
+      </AnimatePresence>
     </div>
   </section>
 }

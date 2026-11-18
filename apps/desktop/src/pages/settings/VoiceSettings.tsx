@@ -9,6 +9,7 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useMachine } from '@xstate/react'
 import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
+import { AnimatePresence } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { ApexButton, IconButton, Modal, SelectControl } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
@@ -326,21 +327,23 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
         </div>
       </section>
 
-      {credential ? <Modal title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton variant="quiet" disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
-        <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
-        {failure ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={failure} /> : null}
-        <TextInput
-          label={credential === 'self-hosted' ? 'Access token' : 'API key'}
-          hasAutoFocus
-          type="password"
-          value={apiKey}
-          autoComplete="off"
-          hasSpellCheck={false}
-          placeholder={credential === 'self-hosted' ? 'Paste access token' : 'Paste API key'}
-          containerClassName="field"
-          onChange={(nextValue) => send({ type: 'SET_API_KEY', value: nextValue })}
-        />
-      </Modal> : null}
+      <AnimatePresence initial={false}>
+        {credential ? <Modal key={`voice-credential:${credential}`} title={`Connect ${CREDENTIALS.find((item) => item.id === credential)?.name ?? credential}`} onClose={closeCredential} footer={<><ApexButton variant="quiet" disabled={busy} onClick={closeCredential}>Cancel</ApexButton><ApexButton variant="primary" disabled={busy || !apiKey.trim()} onClick={() => void saveCredential()}>{busy ? 'Saving…' : credential === 'self-hosted' ? 'Save token' : 'Save API key'}</ApexButton></>}>
+          <p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>{secureStorageAvailable ? `Paste the ${credential === 'self-hosted' ? 'optional bearer token' : 'provider API key'}. Apex encrypts it with your operating system’s secure credential store and never reads it back into this screen.` : `Secure credential storage is unavailable. Apex will keep this ${credential === 'self-hosted' ? 'token' : 'key'} only in desktop memory for the current app session. It will not write the ${credential === 'self-hosted' ? 'token' : 'key'} to disk, and it will be cleared when Apex quits.`}</p>
+          {failure ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={failure} /> : null}
+          <TextInput
+            label={credential === 'self-hosted' ? 'Access token' : 'API key'}
+            hasAutoFocus
+            type="password"
+            value={apiKey}
+            autoComplete="off"
+            hasSpellCheck={false}
+            placeholder={credential === 'self-hosted' ? 'Paste access token' : 'Paste API key'}
+            containerClassName="field"
+            onChange={(nextValue) => send({ type: 'SET_API_KEY', value: nextValue })}
+          />
+        </Modal> : null}
+      </AnimatePresence>
     </>
   )
 }

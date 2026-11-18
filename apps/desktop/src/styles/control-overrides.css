@@ -60,7 +60,15 @@
 /* The reply's footer carries a finished turn's duration and the typing bubble shows a live one; only a failed turn badges the prompt. */
 .transcript--chat .message--user > .message__turn-status:not(.is-failed) { display: none; }
 .transcript--chat .message--assistant { display: flex; flex-direction: column; align-items: flex-start; }
-.transcript--chat .message--assistant > .message__content { position: relative; max-width: calc(100% - 36px); }
+.transcript--chat .message--assistant > .message__content {
+	position: relative;
+	width: fit-content;
+	max-width: min(85%, calc(100% - 36px));
+	padding: 10px 14px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 18px 18px 18px 4px;
+	background: var(--surface-raised);
+}
 .transcript--chat .message--assistant > .message__content > .message-actions { position: absolute; bottom: 0; left: 100%; margin: 0 0 0 4px; }
 
 /* Back-to-back collapsed work groups (separate tool calls with no prose between) stack as one list. */
@@ -83,4 +91,15 @@
 .activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled):hover :is(.activity-tool__preview, .activity-tool__range),
 .activity-run > .activity-run__summary:hover .activity-run__names {
 	color: var(--text-secondary);
+}
+
+/* Full-width SelectControl: stretch Selector's internal field wrapper and combobox button so the caret aligns right. */
+.select-control--full-width > *,
+.select-control--full-width .select-control__box {
+	width: 100%;
+}
+.select-control--full-width .select-control__box > [role="combobox"] {
+	flex: 1 1 auto;
+	min-width: 0;
+	text-align: left;
 }

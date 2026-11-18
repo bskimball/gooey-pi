@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
+import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ChatCircleDots, Check, Clock, X } from '@/components/icons'
 import { ApexButton } from '@/components/ui'
@@ -28,6 +29,9 @@ export function ActivityQuestionCard({
   const [inputValue, setInputValue] = useState('')
   const [filterQuery, setFilterQuery] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const instant = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
 
   useEffect(() => {
     setInputValue('')
@@ -69,7 +73,13 @@ export function ActivityQuestionCard({
   }
 
   return (
-    <section className={`activity-question-card ${stylex.props(activityStyles.activityQuestionCard).className ?? ""}`} aria-label={`Question: ${question.title}`}>
+    <motion.section
+      initial={instant ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: instant ? 0 : 0.18, ease: [0.23, 1, 0.32, 1] } }}
+      exit={instant ? undefined : { opacity: 0, y: -2, transition: { duration: 0.12, ease: [0.2, 0, 0, 1] } }}
+      className={`activity-question-card ${stylex.props(activityStyles.activityQuestionCard).className ?? ""}`}
+      aria-label={`Question: ${question.title}`}
+    >
       <div className={`activity-question-card__header ${stylex.props(activityStyles.activityQuestionCardHeader).className ?? ""}`}>
         <span className={`activity-question-card__badge ${stylex.props(activityStyles.activityQuestionCardBadge).className ?? ""}`}>
           <ChatCircleDots size={13} />
@@ -188,6 +198,6 @@ export function ActivityQuestionCard({
           </div>
         )}
       </div>
-    </section>
+    </motion.section>
   )
 }

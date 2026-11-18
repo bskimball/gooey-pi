@@ -5,9 +5,10 @@ import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
+import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import * as stylex from '@stylexjs/stylex'
-import { CircleNotch } from './icons'
+import { CaretDown, CircleNotch } from './icons'
 import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
 import { ChangesCard } from './ChangesCard'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -17,7 +18,7 @@ import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerRead
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { createSessionSummarySelector } from './inspector/session-summary'
-import { SubagentContext } from './transcript/subagent-lane'
+import { SubagentContext, useInstantMotion } from './transcript/subagent-lane'
 import { TurnNavigator } from './transcript/turn-navigator'
 import { formatWorkedDuration } from './transcript/timeline'
 import { WorkspaceImageContext } from './WorkspaceImage'
@@ -34,8 +35,55 @@ const styles = stylex.create({
     width: '100%', maxWidth: 'var(--transcript-measure)', marginInline: 'auto',
     display: 'flex', alignItems: 'center', gap: 12, paddingInline: { default: 24, '@media (max-width: 720px)': 18 }, paddingBlock: 4, minHeight: 36,
   },
-  currentTurn: { flex: '1 1 auto', minWidth: 0 },
+  currentTurn: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden' },
   hidden: { display: 'none' },
+  jumpToBottomWrap: {
+    position: 'sticky',
+    bottom: 12,
+    zIndex: 18,
+    display: 'flex',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+    marginTop: -36,
+    height: 36,
+  },
+  jumpToBottomButton: {
+    pointerEvents: 'auto',
+    height: 30,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    paddingInline: 11,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border-strong)',
+    borderRadius: 999,
+    color: 'var(--text)',
+    backgroundColor: 'color-mix(in srgb, var(--surface-raised) 92%, transparent)',
+    backdropFilter: 'blur(8px)',
+    boxShadow: 'var(--shadow-control)',
+    fontSize: 'var(--fs-meta)',
+    fontWeight: 550,
+    cursor: 'pointer',
+    transform: {
+      default: null,
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':active': 'scale(0.96)',
+      },
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    transition: {
+      default: 'transform 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color var(--fast), border-color var(--fast)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    '@media (hover: hover) and (pointer: fine)': {
+      ':hover': {
+        backgroundColor: 'var(--surface-hover)',
+        borderColor: 'var(--border-apex)',
+      },
+    },
+  },
 })
 
 export { classifyTool, formatWorkedDuration } from './transcript/timeline'
@@ -87,7 +135,8 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
   const subagentContext = useMemo(() => ({ specialists, onOpen: onOpenSpecialist }), [specialists, onOpenSpecialist])
   const [coalesce] = useState(createAssistantTurnCoalescer)
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
-  const { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages, active)
+  const { announcement, hiddenCount, isPinned, scrollRef, scrollToBottom, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages, active)
+  const instant = useInstantMotion()
   const activeAssistantId = useMemo(() => active && groupedMessages.at(-1)?.role === 'assistant' ? groupedMessages.at(-1)?.id : undefined, [active, groupedMessages])
   // Workspace changes belong to the newest settled turn; older turns cannot claim the current working tree.
   const latestSettledAssistantId = useMemo(() => {
@@ -174,6 +223,27 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
         {active && !activeAssistantId ? <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} aria-live="polite">{workingName} is working</div> : null}
         <div />
       </div>
+      <AnimatePresence initial={false}>
+        {!hidden && !loading && !isPinned && visibleMessages.length > 0 ? (
+          <motion.div
+            key="jump-to-bottom"
+            {...stylex.props(styles.jumpToBottomWrap)}
+            initial={instant ? false : { opacity: 0, transform: 'translateY(8px) scale(0.95)' }}
+            animate={{ opacity: 1, transform: 'translateY(0px) scale(1)', transition: instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] } }}
+            exit={instant ? undefined : { opacity: 0, transform: 'translateY(6px) scale(0.96)', transition: { duration: 0.11, ease: [0.2, 0, 0, 1] } }}
+          >
+            <button
+              type="button"
+              {...stylex.props(styles.jumpToBottomButton)}
+              aria-label="Scroll to bottom"
+              onClick={() => scrollToBottom(instant ? 'auto' : 'smooth')}
+            >
+              <CaretDown size={12} aria-hidden="true" />
+              <span>{active ? 'Latest output' : 'Bottom'}</span>
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
     {!hidden && !loading && !sessionActions ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
     {!hidden && showPinnedChanges && git.files.length ? <div className={`transcript-changes-pin ${stylex.props(workbenchStyles.transcriptChangesPin, transcriptStyles.transcriptChangesPin).className ?? ""}`}><ChangesCard git={git} onOpenChanges={onOpenChanges} /></div> : null}

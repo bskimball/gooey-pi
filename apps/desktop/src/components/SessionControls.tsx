@@ -1,4 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ProjectRecord, SessionRecord } from '@/types/api'
 import { formatRelative } from '@/lib/data'
@@ -79,6 +80,10 @@ interface SessionControlsProps {
 
 export function SessionControls({ projects, sessions, activeSessionId, platform, onNewSession, onSelectSession }: SessionControlsProps) {
   const [open, setOpen] = useState(false)
+  const prefersReducedMotion = useReducedMotion()
+  const skipMotion = Boolean(prefersReducedMotion)
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -126,8 +131,9 @@ export function SessionControls({ projects, sessions, activeSessionId, platform,
         <IconButton ref={triggerRef} label="Session history" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
           <ClockCounterClockwise size={17} />
         </IconButton>
+        <AnimatePresence initial={false}>
         {open ? (
-          <div id={listId} role="dialog" aria-label="Session history" {...stylex.props(styles.popover)}>
+          <motion.div id={listId} role="dialog" aria-label="Session history" className={stylex.props(styles.popover).className ?? ''} style={{ transformOrigin: 'top right' }} initial={skipMotion ? false : { opacity: 0, scale: 0.96, y: -3 }} animate={{ opacity: 1, scale: 1, y: 0, transition: skipMotion ? { duration: 0 } : { duration: 0.14, ease: [0.23, 1, 0.32, 1] } }} exit={skipMotion ? undefined : { opacity: 0, scale: 0.96, y: -2, transition: { duration: 0.10, ease: [0.2, 0, 0, 1] } }}>
             <div {...stylex.props(styles.heading)}>
               <span>Recent sessions</span>
               <span {...stylex.props(styles.count)}>{history.length}</span>
@@ -187,8 +193,9 @@ export function SessionControls({ projects, sessions, activeSessionId, platform,
                 })
               )}
             </div>
-          </div>
+          </motion.div>
         ) : null}
+        </AnimatePresence>
       </div>
       <IconButton label={`New session (${shortcutLabel(platform, ['Primary', 'N'])})`} onClick={() => onNewSession()}>
         <NotePencil size={16} />

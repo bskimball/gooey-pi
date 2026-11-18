@@ -78,9 +78,10 @@ export const styles = stylex.create({
   input: { position: 'relative', width: '100%', minHeight: 55, maxHeight: 150, flex: 1 },
   textarea: {
     width: '100%',
-    height: '100%',
+    height: 'auto',
     minHeight: 55,
     maxHeight: 150,
+    overflowY: 'auto',
     display: 'block',
     paddingBlock: 7,
     paddingInline: 11,

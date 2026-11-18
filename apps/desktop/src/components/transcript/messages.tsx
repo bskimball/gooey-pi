@@ -3,9 +3,10 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
-import { AnimatePresence } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, memo, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { CaretRight, Check, Copy, Crosshair, PencilSimple, X } from '../icons'
+import { collapseMotionProps, useInstantMotion } from './subagent-lane'
 import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { parseAnnotationReferences, splitAnnotationBlock } from '@/lib/browser-annotations'
 import { BrowserReferenceCards } from './BrowserReferenceCards'
@@ -332,45 +333,57 @@ export const ActivityMessage = memo(function ActivityMessage({ message, harness 
 
 export const AgentMessage = memo(function AgentMessage({ message }: { message: TranscriptMessage }) {
   const [open, setOpen] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
+  const instant = useInstantMotion() || keyboardToggle
   const contentId = useId()
   const text = messageText(message)
   const label = message.agentName ? `Message from agent: ${message.agentName}` : 'Message from agent'
   return (
     <article className={[`message message--agent ${open ? 'is-open' : ''}`, stylex.props(transcriptStyles.message, transcriptStyles.messageAgent).className].filter(Boolean).join(' ')}>
-      <button type="button" className={`agent-message__summary ${stylex.props(transcriptStyles.agentMessageSummary, [responsiveStyles.agentMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label={label} onClick={() => setOpen((value) => !value)}>
+      <button type="button" className={`agent-message__summary ${stylex.props(transcriptStyles.agentMessageSummary, [responsiveStyles.agentMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label={label} onClick={(event) => { setKeyboardToggle(event.detail === 0); setOpen((value) => !value) }}>
         <PiMark size={18} />
         <span className={`agent-message__label ${stylex.props(transcriptStyles.agentMessageLabel).className ?? ""}`}>Message from agent</span>
         {message.agentName ? <span className={`agent-message__name ${stylex.props(transcriptStyles.agentMessageName).className ?? ""}`}>{message.agentName}</span> : null}
         <CaretRight className={`agent-message__chevron disclosure-caret ${stylex.props(transcriptStyles.agentMessageChevron, transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
-      {open ? (
-        <div className={`agent-message__content ${stylex.props(transcriptStyles.agentMessageContent).className ?? ""}`} id={contentId}>
-          <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Agent message truncated in the desktop view.]')} />
-          <MessageActions message={message} />
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div {...collapseMotionProps(instant)}>
+            <div className={`agent-message__content ${stylex.props(transcriptStyles.agentMessageContent).className ?? ""}`} id={contentId}>
+              <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Agent message truncated in the desktop view.]')} />
+              <MessageActions message={message} />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   )
 })
 
 export const GoalMessage = memo(function GoalMessage({ message }: { message: TranscriptMessage }) {
   const [open, setOpen] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
+  const instant = useInstantMotion() || keyboardToggle
   const contentId = useId()
   const text = messageText(message)
   return (
     <article className={[`message message--goal ${open ? 'is-open' : ''}`, stylex.props(transcriptStyles.message, transcriptStyles.messageGoal).className].filter(Boolean).join(' ')}>
-      <button type="button" className={`goal-message__summary ${stylex.props(transcriptStyles.goalMessageSummary, [responsiveStyles.goalMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label="Goal summary" onClick={() => setOpen((value) => !value)}>
+      <button type="button" className={`goal-message__summary ${stylex.props(transcriptStyles.goalMessageSummary, [responsiveStyles.goalMessageSummary, responsiveLayoutStyles.agentMessageSummary]).className ?? ""}`} aria-expanded={open} aria-controls={contentId} aria-label="Goal summary" onClick={(event) => { setKeyboardToggle(event.detail === 0); setOpen((value) => !value) }}>
         <span className={`goal-message__icon ${stylex.props(transcriptStyles.goalMessageIcon).className ?? ""}`}>
           <Crosshair size={15} />
         </span>
         <span className={`goal-message__label ${stylex.props(transcriptStyles.goalMessageLabel).className ?? ""}`}>Goal summary</span>
         <CaretRight className={`goal-message__chevron disclosure-caret ${stylex.props(transcriptStyles.goalMessageChevron, transcriptStyles.disclosureCaret).className ?? ""}`} size={13} />
       </button>
-      {open ? (
-        <div className={`goal-message__content ${stylex.props(transcriptStyles.goalMessageContent).className ?? ""}`} id={contentId}>
-          <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Goal summary truncated in the desktop view.]')} />
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div {...collapseMotionProps(instant)}>
+            <div className={`goal-message__content ${stylex.props(transcriptStyles.goalMessageContent).className ?? ""}`} id={contentId}>
+              <MarkdownText variant="muted" text={boundText(text, 40_000, '\n… [Goal summary truncated in the desktop view.]')} />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   )
 })

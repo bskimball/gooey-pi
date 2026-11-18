@@ -8,7 +8,7 @@ import type { ReactNode, Ref } from 'react'
 import { useFocusTrap } from './ui'
 
 const INSPECTOR_WIDTH = 'var(--inspector-width, clamp(340px, 42vw, 410px))'
-const SPRING_TRANSITION = { type: 'spring', stiffness: 380, damping: 30, mass: 0.8 } as const
+const DOCKED_TRANSITION: { duration: number; ease: [number, number, number, number] } = { duration: 0.22, ease: [0.32, 0.72, 0, 1] }
 const INSTANT_TRANSITION = { duration: 0 } as const
 
 const FRAME_VARIANTS = {
@@ -125,8 +125,8 @@ export function InspectorShell({
       asideControls.set(target)
       return
     }
-    void frameControls.start(target, overlay ? INSTANT_TRANSITION : SPRING_TRANSITION)
-    void asideControls.start(target, SPRING_TRANSITION)
+    void frameControls.start(target, overlay ? INSTANT_TRANSITION : DOCKED_TRANSITION)
+    void asideControls.start(target, DOCKED_TRANSITION)
   }, [visible, overlay, skipMotion, frameControls, asideControls])
 
   const handleAnimationStart = (driver: MotionDriver, definition: unknown) => {
@@ -163,7 +163,7 @@ export function InspectorShell({
       initial={initialState.current}
       variants={FRAME_VARIANTS}
       animate={frameControls}
-      transition={overlay || skipMotion ? INSTANT_TRANSITION : SPRING_TRANSITION}
+      transition={overlay || skipMotion ? INSTANT_TRANSITION : DOCKED_TRANSITION}
       style={{
         display: overlay ? 'contents' : 'block',
         flexShrink: 0,
@@ -185,7 +185,7 @@ export function InspectorShell({
         initial={initialState.current}
         variants={ASIDE_VARIANTS}
         animate={asideControls}
-        transition={skipMotion ? INSTANT_TRANSITION : SPRING_TRANSITION}
+        transition={skipMotion ? INSTANT_TRANSITION : DOCKED_TRANSITION}
         style={{ height: overlay ? undefined : '100%' }}
         onAnimationStart={(definition) => handleAnimationStart('overlay', definition)}
         onAnimationComplete={(definition) => handleAnimationComplete('overlay', definition)}

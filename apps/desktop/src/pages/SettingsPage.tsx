@@ -214,21 +214,24 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           </AnimatePresence>
         </div>
       </div>
-      {confirmReset ? (
-        <Modal
-          title="Clear browser data?"
-          onClose={() => { if (!resetting) setConfirmReset(false) }}
-          footer={(
-            <>
-              <ApexButton variant="quiet" disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</ApexButton>
-              <ApexButton variant="danger" disabled={resetting} onClick={() => { void resetBrowser() }}>{resetting ? 'Clearing…' : 'Clear browsing data'}</ApexButton>
-            </>
-          )}
-        >
-          <p>This signs you out of websites opened in Apex and removes history, cache, cookies, and saved permissions. This cannot be undone.</p>
-          {resetError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={resetError} /> : null}
-        </Modal>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {confirmReset ? (
+          <Modal
+            key="confirm-browser-reset"
+            title="Clear browser data?"
+            onClose={() => { if (!resetting) setConfirmReset(false) }}
+            footer={(
+              <>
+                <ApexButton variant="quiet" disabled={resetting} onClick={() => setConfirmReset(false)}>Cancel</ApexButton>
+                <ApexButton variant="danger" disabled={resetting} onClick={() => { void resetBrowser() }}>{resetting ? 'Clearing…' : 'Clear browsing data'}</ApexButton>
+              </>
+            )}
+          >
+            <p>This signs you out of websites opened in Apex and removes history, cache, cookies, and saved permissions. This cannot be undone.</p>
+            {resetError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={resetError} /> : null}
+          </Modal>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 
-const badgeInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "scale(.6)" } })
+const badgeInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "scale(0.92)" } })
 
 const extensionTabPulseAnimation = stylex.keyframes({ "0%": { "opacity": 0.7, "transform": "scale(0.6)" }, "100%": { "opacity": 0, "transform": "scale(1.5)" } })
 

@@ -1,7 +1,7 @@
 import { watch, type Dirent, type Stats } from 'node:fs'
-import { readdir, realpath } from 'node:fs/promises'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve, sep } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { HarnessId, SessionChangeEvent, SessionRecord, TranscriptMessage } from '../../src/types/api'
 import { comparePaths, createAdmissionQueue, createSingleFlight, type AdmissionQueue } from 'apex-core/lib/async'
 import type { ExecutableSource } from './process-utils'
@@ -9,6 +9,7 @@ import { SessionMetadataCatalog, type SessionCatalogIo, type SessionNameTimestam
 import { createSessionMetadataReader, type SessionMetadata, type SessionMetadataReader } from 'apex-core/sessions/metadata'
 import { readTranscript } from 'apex-core/sessions/transcript'
 import { createPiSessionFile } from 'apex-core/sessions/pi'
+import { isBucketedSessionPath } from 'apex-core/sessions/bucketed'
 import type { JsonStateStore } from './store'
 import { isPathWithin, requireBoolean, requireExistingDirectory, requireString } from 'apex-core/validation'
 
@@ -217,6 +218,17 @@ export class SessionService {
     return records.sort((a, b) => Date.parse(b.lastUserMessageAt ?? b.createdAt) - Date.parse(a.lastUserMessageAt ?? a.createdAt) || comparePaths(a.filePath, b.filePath))
   }
 
+  async readCoordinatorRecord(value: unknown): Promise<SessionRecord> {
+    if (this.harness !== 'pi') throw new Error('The saved coordinator session is no longer available')
+    const path = await this.requireSessionPath(value, (root, candidate) =>
+      isBucketedSessionPath(root, candidate) && !relative(root, candidate).split(sep).some((segment) => segment.startsWith('.')))
+    const fileStat = await stat(path)
+    if (!fileStat.isFile()) throw new Error('The saved coordinator session is no longer available')
+    const { sessionName: _sessionName, ...record } = await this.readMetadata(path, fileStat)
+    if (record.depth !== 0) throw new Error('The saved coordinator session is no longer available')
+    return { ...record, harness: this.harness, archived: this.store.getArchivedSessions().some((entry) => resolve(entry) === path), role: 'coordinator' }
+  }
+
   private snapshotRuntimeSessions(): Map<string, RuntimeSessionState> | null {
     if (!this.listRuntimeSessions) return null
     const bySession = new Map<string, RuntimeSessionState>()
@@ -263,7 +275,7 @@ export class SessionService {
     return true
   }
 
-  async requireSessionPath(value: unknown): Promise<string> {
+  async requireSessionPath(value: unknown, additionalCheck?: SessionPathAuthorizer): Promise<string> {
     const requested = requireString(value, 'filePath', { min: 1, max: 4096 })
     const root = await realpath(this.sessionRoot)
     const candidate = this.resolveSessionCandidate
@@ -271,6 +283,7 @@ export class SessionService {
       : requested
     const path = await realpath(candidate)
     if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the Pi session directory')
+    if (additionalCheck && !additionalCheck(root, path)) throw new Error('The saved coordinator session is no longer available')
     return path
   }
 

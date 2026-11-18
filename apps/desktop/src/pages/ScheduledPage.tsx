@@ -438,7 +438,7 @@ export function ScheduledPage({
   }
 
   const editorModal = editorOpen ? (
-    <Modal title={editorMode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
+    <Modal key={`schedule-editor:${editorMode}`} title={editorMode === 'create' ? 'Create schedule' : 'Edit schedule'} onClose={closeEditor} footer={(
       <>
         <span className={`schedule-editor__save-status ${stylex.props(pagesStyles.scheduleEditorSaveStatus, responsiveStyles.scheduleEditorSaveStatus).className ?? ""}`} aria-live="polite">{saving ? 'Saving without closing your draft…' : ''}</span>
         <ApexButton variant="quiet" disabled={saving} onClick={closeEditor}>Cancel</ApexButton>
@@ -596,7 +596,7 @@ export function ScheduledPage({
           {viewContent}
         </motion.div>
       </AnimatePresence>
-      {editorModal}
+      <AnimatePresence initial={false}>{editorModal}</AnimatePresence>
     </div>
   )
 }

@@ -108,7 +108,18 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop }: Projec
           label={running ? 'Stop project script' : (selected ? `Run ${selected.name}` : 'Run project')}
           onClick={runPrimary}
         >
-          {running ? <Square size={16} fill="currentColor" /> : <Play size={16} />}
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={running ? 'stop' : 'run'}
+              style={{ display: 'inline-flex' }}
+              initial={instant ? false : { opacity: 0, scale: 0.5, filter: 'blur(3px)' }}
+              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+              exit={instant ? undefined : { opacity: 0, scale: 0.5, filter: 'blur(3px)' }}
+              transition={instant ? { duration: 0 } : { type: 'spring', duration: 0.25, bounce: 0 }}
+            >
+              {running ? <Square size={16} fill="currentColor" /> : <Play size={16} />}
+            </motion.span>
+          </AnimatePresence>
         </IconButton>
         {hasMenu ? (
           <IconButton
@@ -133,9 +144,9 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop }: Projec
             aria-label={`Scripts for ${project.name}`}
             className={`project-run-menu project-run-menu--scripts ${stylex.props(workbenchStyles.projectRunMenu).className ?? ''}`}
             style={{ transformOrigin: 'top right' }}
-            initial={instant ? false : { opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={instant ? undefined : { opacity: 0, scale: 0.96 }}
+            initial={instant ? false : { opacity: 0, scale: 0.96, y: -2 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={instant ? undefined : { opacity: 0, scale: 0.96, y: -2, transition: { duration: 0.10, ease: [0.2, 0, 0, 1] } }}
             transition={instant ? { duration: 0 } : { duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
           >
             {availableScripts.map((script) => {

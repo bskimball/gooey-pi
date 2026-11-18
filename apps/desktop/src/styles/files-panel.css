@@ -9,13 +9,19 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
-.file-tree__row:hover .file-tree__item,
 .file-tree__row:focus-within .file-tree__item {
 	color: var(--text);
 }
-.file-tree__row:hover .file-tree__reveal,
 .file-tree__row:focus-within .file-tree__reveal {
 	opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+	.file-tree__row:hover .file-tree__item {
+		color: var(--text);
+	}
+	.file-tree__row:hover .file-tree__reveal {
+		opacity: 1;
+	}
 }
 @media (hover: none) {
 }
@@ -45,7 +51,9 @@
 	font-size: var(--fs-meta);
 	cursor: pointer;
 }
-.file-tree > .file-tree__show-more:hover {
-	color: var(--text);
-	background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+	.file-tree > .file-tree__show-more:hover {
+		color: var(--text);
+		background: var(--surface-hover);
+	}
 }

@@ -1,55 +1,39 @@
 import * as stylex from '@stylexjs/stylex';
 const orbUserAnimation = stylex.keyframes({
   "from": {
-    "transform": "scale(.94,.99) rotate(-4deg)",
-    "borderTopLeftRadius": "40% 58%",
-    "borderTopRightRadius": "60% 41%",
-    "borderBottomRightRadius": "52% 59%",
-    "borderBottomLeftRadius": "48% 42%"
+    "transform": "scale(.94,.99) rotate(-4deg)"
   },
   "to": {
-    "transform": "scale(1.08,.96) rotate(4deg)",
-    "borderTopLeftRadius": "59% 42%",
-    "borderTopRightRadius": "41% 58%",
-    "borderBottomRightRadius": "44% 43%",
-    "borderBottomLeftRadius": "56% 57%"
+    "transform": "scale(1.08,.96) rotate(4deg)"
   }
 });
 const orbThinkingAnimation = stylex.keyframes({
   "0%": {
     "transform": "rotate(-5deg) scale(.97)"
   },
+  "50%": {
+    "transform": "rotate(8deg) scale(1.03)"
+  },
   "100%": {
     "transform": "rotate(-5deg) scale(.97)"
-  },
-  "50%": {
-    "transform": "rotate(8deg) scale(1.03)",
-    "borderTopLeftRadius": "58% 43%",
-    "borderTopRightRadius": "42% 62%",
-    "borderBottomRightRadius": "61% 38%",
-    "borderBottomLeftRadius": "39% 57%"
   }
 });
 const orbAgentAnimation = stylex.keyframes({
   "from": {
-    "transform": "scale(.9,1.08) rotate(-8deg)",
-    "borderTopLeftRadius": "36% 61%",
-    "borderTopRightRadius": "64% 37%",
-    "borderBottomRightRadius": "43% 63%",
-    "borderBottomLeftRadius": "57% 39%"
+    "transform": "scale(.9,1.08) rotate(-8deg)"
   },
   "to": {
-    "transform": "scale(1.13,.92) rotate(7deg)",
-    "borderTopLeftRadius": "65% 39%",
-    "borderTopRightRadius": "35% 64%",
-    "borderBottomRightRadius": "59% 36%",
-    "borderBottomLeftRadius": "41% 61%"
+    "transform": "scale(1.13,.92) rotate(7deg)"
   }
 });
 const orbAgentHaloAnimation = stylex.keyframes({
+  "from": {
+    "opacity": 0.62,
+    "transform": "scale(1) rotate(0deg)"
+  },
   "to": {
-    "transform": "scale(1.28) rotate(24deg)",
-    "filter": "blur(20px)"
+    "opacity": 0.88,
+    "transform": "scale(1.28) rotate(24deg)"
   }
 });
 export const styles = stylex.create({
@@ -311,6 +295,7 @@ export const styles = stylex.create({
   },
   "agentHalo": {
     "opacity": 0.72,
+    "filter": "blur(20px)",
     "animationName": {
       "default": orbAgentHaloAnimation,
       "@media (prefers-reduced-motion: reduce)": "none !important"

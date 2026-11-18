@@ -1,6 +1,8 @@
 /* Toolbar icons stay quiet until the pointer is on the bar; active toggles keep full contrast. */
 .title-toolbar .icon-button:not(.is-active) { color: var(--text-tertiary); }
+@media (hover: hover) and (pointer: fine) {
 .title-toolbar:hover .icon-button:not(.is-active) { color: var(--text-secondary); }
+}
 .title-toolbar .icon-button:not(.is-active):hover { color: var(--text); }
 .title-toolbar__identity strong { max-width: 28vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-body); font-weight: 550; }
 /* Branch names are mostly lowercase: trim the label to its x-height so it centers optically with the icon. */
@@ -41,8 +43,9 @@
 .terminal-drawer > .resize-handle > span { background: var(--terminal-resize); }
 .terminal-drawer > .resize-handle:hover > span, .terminal-drawer > .resize-handle:focus-visible > span, .terminal-drawer > .resize-handle[data-resizing="true"] > span { background: var(--apex); }
 body.is-resizing-vertical, body.is-resizing-vertical * { cursor: col-resize !important; user-select: none !important; }
-body.is-resizing-vertical .sidebar, body.is-resizing-vertical .sidebar *, body.is-resizing-vertical .resize-handle > span { transition: none !important; }
+body.is-resizing-vertical .sidebar, body.is-resizing-vertical .sidebar *, body.is-resizing-vertical .inspector, body.is-resizing-vertical .inspector *, body.is-resizing-vertical .resize-handle > span { transition: none !important; }
 body.is-resizing-horizontal, body.is-resizing-horizontal * { cursor: row-resize !important; user-select: none !important; }
+body.is-resizing-horizontal .terminal-drawer, body.is-resizing-horizontal .terminal-drawer *, body.is-resizing-horizontal .resize-handle > span { transition: none !important; }
 .icon-button:active:not(:disabled) { transform: scale(.96); }
 .icon-button.is-active { color: var(--text); background: var(--surface-selected); }
 .button:active:not(:disabled) { transform: scale(.96); }

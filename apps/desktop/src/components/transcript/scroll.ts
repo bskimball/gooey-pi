@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { TranscriptMessage } from '@/types/api'
 import { newestWindow } from '@/lib/render-bounds'
 
@@ -17,6 +17,7 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
   const previousStreamingRef = useRef(false)
   const pinnedToBottomRef = useRef(true)
   const lastScrollTopRef = useRef(0)
+  const [isPinned, setIsPinned] = useState(true)
   const [visibleLimit, setVisibleLimit] = useState(250)
   const [announcement, setAnnouncement] = useState('')
   const streaming = messages.some((message) => message.streaming)
@@ -30,6 +31,7 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
     const scroller = scrollRef.current
     if (firstLoadedTranscript) {
       pinnedToBottomRef.current = true
+      setIsPinned(true)
       if (scroller) pinScrollerToBottom(scroller, lastScrollTopRef)
     } else if (scroller && pinnedToBottomRef.current && (live || previousStreamingRef.current || appendedMessage)) {
       pinScrollerToBottom(scroller, lastScrollTopRef)
@@ -59,15 +61,32 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
     if (!scroller) return
     const currentTop = scroller.scrollTop
     const distanceFromBottom = scroller.scrollHeight - currentTop - scroller.clientHeight
+    let nextPinned = pinnedToBottomRef.current
     if (currentTop < lastScrollTopRef.current - 1) {
-      pinnedToBottomRef.current = distanceFromBottom < 120
+      nextPinned = distanceFromBottom < 120
     } else if (distanceFromBottom < 120) {
-      pinnedToBottomRef.current = true
+      nextPinned = true
     }
+    pinnedToBottomRef.current = nextPinned
+    setIsPinned((prev) => (prev === nextPinned ? prev : nextPinned))
     lastScrollTopRef.current = currentTop
   }
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const scroller = scrollRef.current
+    pinnedToBottomRef.current = true
+    setIsPinned(true)
+    if (!scroller) return
+    const targetTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior })
+    } else {
+      scroller.scrollTop = targetTop
+    }
+    lastScrollTopRef.current = targetTop
+  }, [])
+
   const showEarlier = () => setVisibleLimit((limit) => Math.min(messages.length, limit + 250))
 
-  return { announcement, hiddenCount, scrollRef, showEarlier, updatePinnedState, visibleMessages }
+  return { announcement, hiddenCount, isPinned, scrollRef, scrollToBottom, showEarlier, updatePinnedState, visibleMessages }
 }

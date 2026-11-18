@@ -6,7 +6,8 @@ import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { ArrowLineDown, ArrowsClockwise, ArrowUUpLeft, CircleNotch, File, FileCode, GitBranch, Sparkle } from '../icons'
-import { memo, useEffect, useRef } from 'react'
+import { AnimatePresence } from 'motion/react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { errorMessage } from '@/lib/errors'
 import type { GitStatus } from '@/types/api'
@@ -144,12 +145,23 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
     }
   }
 
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshGit = async () => {
+    setRefreshing(true)
+    try {
+      await onRefreshGit()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+  const spinning = refreshing || loading
+
   if (!git.isRepo) return <EmptyState icon={<GitBranch size={24} />} title="No Git repository">Open a project backed by Git to review, stage, and commit changes.</EmptyState>
   if (git.error) {
     return <EmptyState
       icon={<GitBranch size={24} />}
       title="Git status unavailable"
-      action={<ApexButton icon={<ArrowsClockwise size={13} />} onClick={() => void onRefreshGit()}>Try again</ApexButton>}
+      action={<ApexButton icon={<ArrowsClockwise className={[spinning ? 'spin' : '', stylex.props(spinning && activityStyles.spin, spinning && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={13} />} onClick={() => void refreshGit()}>Try again</ApexButton>}
     >{git.error}</EmptyState>
   }
   return (
@@ -158,7 +170,7 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
         <div className={`changes-toolbar__branch ${stylex.props(inspectorStyles.changesToolbarBranch).className ?? ""}`} title={`${git.branch ?? 'Repository'}${git.ahead ? ` · ${git.ahead} ahead` : ''}`}><GitBranch size={13} /><strong>{git.branch ?? 'Repository'}</strong>{git.ahead ? <small>{git.ahead} ahead</small> : null}</div>
         <Segmented value={scope} label="Diff scope" options={[{ value: 'unstaged', label: 'Unstaged' }, { value: 'staged', label: 'Staged' }]} onChange={(value) => { if (value === 'unstaged' || value === 'staged') send({ type: 'SET_SCOPE', scope: value }) }} />
         <ApexButton compact disabled={readOnly || !git.files.some((file) => file.staged)} onClick={() => send({ type: 'OPEN_COMMIT' })}>Commit</ApexButton>
-        <IconButton label="Refresh changes" onClick={() => void onRefreshGit()}><ArrowsClockwise size={14} /></IconButton>
+        <IconButton label="Refresh changes" onClick={() => void refreshGit()}><ArrowsClockwise className={[spinning ? 'spin' : '', stylex.props(spinning && activityStyles.spin, spinning && overlaysStyles.spin).className].filter(Boolean).join(' ')} size={14} /></IconButton>
       </div>
       {readOnly ? <div className={`changes-read-only ${stylex.props(inspectorStyles.changesReadOnly).className ?? ""}`} role="note"><span>This project is read-only because it was discovered from session history.</span>{onGrantProject ? <ApexButton compact onClick={() => void onGrantProject()}>Add project</ApexButton> : null}</div> : null}
       {actionError ? <Banner status="error" role="alert" title={actionError} /> : null}
@@ -173,8 +185,10 @@ export function ChangesPanel({ cwd, git, readOnly = false, onGrantProject, onRef
           {loading ? <div className={`diff-loading ${stylex.props(inspectorStyles.diffLoading).className ?? ""}`} role="status"><CircleNotch className={`spin ${stylex.props(activityStyles.spin, overlaysStyles.spin).className ?? ""}`} size={15} aria-hidden="true" /><div className="compact-state"><EmptyState title="Loading diff…">{null}</EmptyState></div></div> : <DiffView text={diff} path={activeSelectedPath} scope={scope} />}
         </div>
       </div>
-      {commitOpen ? <Modal title="Commit staged changes" onClose={() => send({ type: 'CLOSE_MODAL' })} footer={<><ApexButton variant="quiet" onClick={() => send({ type: 'CLOSE_MODAL' })}>Cancel</ApexButton><ApexButton variant="primary" disabled={readOnly || !commitMessage.trim() || commitSubmitting} onClick={() => void commit()}>Commit changes</ApexButton></>}><label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Commit message</span><div className={`commit-message-input ${stylex.props(inspectorStyles.commitMessageInput).className ?? ""}`}><TextInput label="Commit message" isLabelHidden hasAutoFocus value={commitMessage} onChange={(message) => send({ type: 'SET_COMMIT_MESSAGE', message })} placeholder="Describe this change" containerStyle={{ flex: 1, minWidth: 0 }} /><ApexButton compact icon={<Sparkle size={13} />} onClick={fillCommitSummary} title="Generate a summary from staged files">Generate summary</ApexButton></div></label><p className={`muted-copy ${stylex.props(overlaysStyles.mutedCopy).className ?? ""}`}>This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
-      {confirmUndoOpen && confirmUndoTarget ? <Modal title="Undo file changes?" onClose={() => send({ type: 'CLOSE_MODAL' })} footer={<><ApexButton variant="quiet" onClick={() => send({ type: 'CLOSE_MODAL' })}>Cancel</ApexButton><ApexButton variant="danger" disabled={readOnly || confirmUndoRestoring} onClick={() => void confirmRestore()}>Undo changes</ApexButton></>}><p>This discards the staged and unstaged changes to <code>{confirmUndoTarget}</code> and restores the file to its last commit. A new untracked file will be deleted.</p></Modal> : null}
+      <AnimatePresence initial={false}>
+        {commitOpen ? <Modal key="commit-modal" title="Commit staged changes" onClose={() => send({ type: 'CLOSE_MODAL' })} footer={<><ApexButton variant="quiet" onClick={() => send({ type: 'CLOSE_MODAL' })}>Cancel</ApexButton><ApexButton variant="primary" disabled={readOnly || !commitMessage.trim() || commitSubmitting} onClick={() => void commit()}>Commit changes</ApexButton></>}><label className={`field ${stylex.props(overlaysStyles.field).className ?? ""}`}><span>Commit message</span><div className={`commit-message-input ${stylex.props(inspectorStyles.commitMessageInput).className ?? ""}`}><TextInput label="Commit message" isLabelHidden hasAutoFocus value={commitMessage} onChange={(message) => send({ type: 'SET_COMMIT_MESSAGE', message })} placeholder="Describe this change" containerStyle={{ flex: 1, minWidth: 0 }} /><ApexButton compact icon={<Sparkle size={13} />} onClick={fillCommitSummary} title="Generate a summary from staged files">Generate summary</ApexButton></div></label><p className={`muted-copy ${stylex.props(overlaysStyles.mutedCopy).className ?? ""}`}>This will commit all staged files on <code>{git.branch}</code>.</p></Modal> : null}
+        {confirmUndoOpen && confirmUndoTarget ? <Modal key={`undo:${confirmUndoTarget}`} title="Undo file changes?" onClose={() => send({ type: 'CLOSE_MODAL' })} footer={<><ApexButton variant="quiet" onClick={() => send({ type: 'CLOSE_MODAL' })}>Cancel</ApexButton><ApexButton variant="danger" disabled={readOnly || confirmUndoRestoring} onClick={() => void confirmRestore()}>Undo changes</ApexButton></>}><p>This discards the staged and unstaged changes to <code>{confirmUndoTarget}</code> and restores the file to its last commit. A new untracked file will be deleted.</p></Modal> : null}
+      </AnimatePresence>
     </div>
   )
 }

@@ -19,13 +19,13 @@ const dotStyles = stylex.create({
 
 /** Small pulsing dot for live work; static under reduced motion. Decorative: callers carry the label. */
 export function WorkingDot() {
-  const reduceMotion = useReducedMotion()
+  const skipMotion = useSkipMotion()
   return (
     <motion.span
       {...stylex.props(dotStyles.workingDot)}
       aria-hidden="true"
-      animate={reduceMotion ? undefined : { opacity: [1, 0.35, 1], scale: [1, 0.8, 1] }}
-      transition={reduceMotion ? undefined : { duration: 1.4, ease: 'easeInOut', repeat: Infinity }}
+      animate={skipMotion ? undefined : { opacity: [1, 0.35, 1], scale: [1, 0.8, 1] }}
+      transition={skipMotion ? undefined : { duration: 1.4, ease: 'easeInOut', repeat: Infinity }}
     />
   )
 }

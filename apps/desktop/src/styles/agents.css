@@ -45,6 +45,23 @@
 /* Run-state pill */
 
 /* Specialist info bar & collapsible run details */
+.specialist-header__details, .specialist-files {
+	interpolate-size: allow-keywords;
+}
+.specialist-header__details::details-content, .specialist-files::details-content {
+	opacity: 0;
+	block-size: 0;
+	overflow-y: clip;
+	transition: content-visibility 160ms allow-discrete, opacity 160ms var(--ease-out), block-size 160ms var(--ease-out);
+}
+.specialist-header__details[open]::details-content, .specialist-files[open]::details-content {
+	opacity: 1;
+	block-size: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+	.specialist-header__details::details-content, .specialist-files::details-content { transition: none; }
+}
+.reduce-motion .specialist-header__details::details-content, .reduce-motion .specialist-files::details-content { transition: none; }
 .specialist-header__details>summary {
 	min-height: 28px;
 	display: flex;
@@ -62,9 +79,9 @@
 .specialist-header__details>summary::-webkit-details-marker { display: none; }
 @media (hover: hover) and (pointer: fine) {
 	.specialist-header__details>summary:hover { color: var(--text); background: var(--surface-hover); }
+	.specialist-header__details>summary:hover .specialist-header__caret { color: var(--text); }
 }
 .specialist-header__details>summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.specialist-header__details>summary:hover .specialist-header__caret { color: var(--text); }
 .specialist-header__details[open] .specialist-header__caret { transform: rotate(90deg); }
 .specialist-header__details>summary>.run-state { margin-left: auto; }
 .specialist-header__meta span { padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-xs); color: var(--text-secondary); background: var(--canvas); font-size: var(--fs-micro); line-height: 1.35; font-variant-numeric: tabular-nums; }
@@ -132,7 +149,6 @@
 	max-height: 280px;
 	overflow-y: auto;
 	padding: 6px 4px 10px 23px;
-	animation: disclosure-in 180ms var(--ease-out) both;
 }
 
 /* Assistant turns & multi-turn divider */

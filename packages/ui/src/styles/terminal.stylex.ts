@@ -1,11 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
 export const terminalTabMarker = stylex.defineMarker();
-const drawerInAnimation = stylex.keyframes({
-  "from": {
-    "opacity": 0.7,
-    "transform": "translateY(8px)"
-  }
-});
 export const styles = stylex.create({
   "terminalHeaderButton": { "width": "32px", "height": "32px" },
   "terminalDrawer": {
@@ -23,15 +17,7 @@ export const styles = stylex.create({
     "backgroundRepeat": "repeat",
     "backgroundAttachment": "scroll",
     "backgroundOrigin": "padding-box",
-    "backgroundClip": "border-box",
-    "animationName": drawerInAnimation,
-    "animationDuration": "180ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "ease-out",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running"
+    "backgroundClip": "border-box"
   },
   "terminalDrawerLoading": {
     "alignItems": "center",

@@ -248,7 +248,7 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
                 key="creating"
                 initial={instant ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={instant ? undefined : { opacity: 0, y: 4 }}
+                exit={instant ? undefined : { opacity: 0, y: -2, transition: { duration: 0.115, ease: [0.2, 0, 0, 1] } }}
                 transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                 {...stylex.props(styles.form)}
                 onSubmit={(event) => { event.preventDefault(); void create() }}
@@ -273,7 +273,7 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
                 key="coordinator"
                 initial={instant ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={instant ? undefined : { opacity: 0, y: 4 }}
+                exit={instant ? undefined : { opacity: 0, y: -2, transition: { duration: 0.115, ease: [0.2, 0, 0, 1] } }}
                 transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                 {...stylex.props(styles.content)}
               >

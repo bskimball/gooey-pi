@@ -1,13 +1,19 @@
+import { AnimatePresence, motion } from 'motion/react'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { useEffect, useState, type RefObject } from 'react'
 import * as stylex from '@stylexjs/stylex'
 import { ArrowUp } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
+import { useInstantMotion } from './subagent-lane'
 import { isOverlayOpen } from '@/lib/app-shortcuts'
 import { shortcutLabel, detectRendererPlatform } from '@/lib/platform-shortcuts'
 
+const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1]
+const EASE_EXIT: [number, number, number, number] = [0.4, 0, 1, 1]
+
 const styles = stylex.create({
   inline: { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, color: 'var(--text-secondary)' },
+  noCssAnimation: { animationName: 'none' },
   prompt: { flex: '1 1 auto' },
   jump: { flexShrink: 0 },
 })
@@ -96,27 +102,40 @@ export function TurnNavigator({ scrollRef, active, inline = false }: { scrollRef
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [scrollRef])
 
-  if (!current) return null
+  const instant = useInstantMotion()
   const platform = detectRendererPlatform()
   const mac = platform === 'darwin'
   const jumpHint = `${shortcutLabel(platform, ['Primary'])}${mac ? '⌥' : '+Alt+'}↑`
   const running = active && isLast
   return (
-    <div className={`${inline ? '' : 'turn-header'} ${stylex.props(inline ? styles.inline : transcriptStyles.turnHeader).className}`} role="navigation" aria-label="Current turn">
-      <button
-        type="button"
-        className={`turn-header__jump ${stylex.props(transcriptStyles.turnHeaderJump, styles.jump).className}`}
-        aria-label={`Scroll to this prompt (${jumpHint} for previous)`}
-        title={`Scroll to this prompt · ${jumpHint} / ↓ steps between prompts`}
-        onClick={() => {
-          const prompt = scrollRef.current ? prompts(scrollRef.current)[current.index] : undefined
-          prompt?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
-        }}
-      >
-        <ArrowUp size={12} />
-      </button>
-      <span className={`turn-header__prompt ${stylex.props(transcriptStyles.turnHeaderPrompt, styles.prompt).className}`} title={current.text}>{current.text}</span>
-      {running ? <span className={`turn-header__state ${stylex.props(transcriptStyles.turnHeaderState).className}`}><StatusMark state="running" size={12} /> running</span> : null}
-    </div>
+    <AnimatePresence initial={false}>
+      {current ? (
+        <motion.div
+          key="turn-header"
+          className={`${inline ? '' : 'turn-header'} ${stylex.props(inline ? styles.inline : [transcriptStyles.turnHeader, styles.noCssAnimation]).className}`}
+          role="navigation"
+          aria-label="Current turn"
+          initial={instant ? false : { opacity: 0, transform: 'translateY(-12px)' }}
+          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          exit={instant ? undefined : { opacity: 0, transform: 'translateY(-12px)', transition: { duration: 0.14, ease: EASE_EXIT } }}
+          transition={instant ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT }}
+        >
+          <button
+            type="button"
+            className={`turn-header__jump ${stylex.props(transcriptStyles.turnHeaderJump, styles.jump).className}`}
+            aria-label={`Scroll to this prompt (${jumpHint} for previous)`}
+            title={`Scroll to this prompt · ${jumpHint} / ↓ steps between prompts`}
+            onClick={() => {
+              const prompt = scrollRef.current ? prompts(scrollRef.current)[current.index] : undefined
+              prompt?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+            }}
+          >
+            <ArrowUp size={12} />
+          </button>
+          <span className={`turn-header__prompt ${stylex.props(transcriptStyles.turnHeaderPrompt, styles.prompt).className}`} title={current.text}>{current.text}</span>
+          {running ? <span className={`turn-header__state ${stylex.props(transcriptStyles.turnHeaderState).className}`}><StatusMark state="running" size={12} /> running</span> : null}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

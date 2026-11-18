@@ -56,6 +56,12 @@ interface SpecialistsPanelProps {
 
 function WorkOrderTurn({ text }: { text: string }) {
   const [open, setOpen] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
+  const prefersReducedMotion = useReducedMotion()
+  const instant = Boolean(prefersReducedMotion)
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
+    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+    || keyboardToggle
   const { label, body, lineCount } = useMemo(() => {
     const modeMatch = /^\*\*\[([^\]]+)\]\*\*\n\n([\s\S]*)$/.exec(text)
     const rawBody = (modeMatch ? modeMatch[2] : text) ?? text
@@ -72,17 +78,29 @@ function WorkOrderTurn({ text }: { text: string }) {
         type="button"
         className="specialist-turn__toggle"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={(event) => {
+          setKeyboardToggle(event.detail === 0)
+          setOpen((value) => !value)
+        }}
       >
         <CaretRight size={12} aria-hidden="true" className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} />
         <span className={`specialist-turn__label ${stylex.props(agentsStyles.specialistTurnLabel).className ?? ""}`}>{label}</span>
         {lineCount > 0 ? <span className={`specialist-turn__meta ${stylex.props(agentsStyles.specialistTurnMeta).className ?? ""}`}>{lineCount} {lineCount === 1 ? 'line' : 'lines'}</span> : null}
       </button>
-      {open ? (
-        <div className={`specialist-turn__content scroll-area ${stylex.props(baseStyles.scrollArea).className ?? ""}`}>
-          <MarkdownText variant="workOrder" text={body} />
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            initial={instant ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1, transition: instant ? { duration: 0 } : { duration: 0.18, ease: [0.23, 1, 0.32, 1] } }}
+            exit={instant ? undefined : { height: 0, opacity: 0, transition: { duration: 0.125, ease: [0.2, 0, 0, 1] } }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className={`specialist-turn__content scroll-area ${stylex.props(baseStyles.scrollArea).className ?? ""}`}>
+              <MarkdownText variant="workOrder" text={body} />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   )
 }

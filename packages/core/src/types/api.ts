@@ -918,12 +918,15 @@ export interface SpaceRecord {
   updatedAt: string
 }
 
-export interface CoordinatorAttachment {
+export interface CoordinatorHistory {
+  session: SessionRecord
+  messages: TranscriptMessage[]
+}
+
+export interface CoordinatorAttachment extends CoordinatorHistory {
   attachmentId: string
   eventSequence: number
-  session: SessionRecord
   runtime: RuntimeInfo
-  messages: TranscriptMessage[]
   pendingDialogs: Record<string, unknown>[]
 }
 
@@ -934,7 +937,7 @@ export interface ApexApi {
     update(id: string, input: { name?: string; objective?: string; sessionIds?: string[]; addSessionIds?: string[]; removeSessionIds?: string[] }): Promise<SpaceRecord>
   }
   coordinator: {
-    open(spaceId?: string): Promise<CoordinatorAttachment>
+    open(spaceId?: string, onHistory?: (history: CoordinatorHistory) => void): Promise<CoordinatorAttachment>
     close(attachmentId: string): Promise<boolean>
     /** Archives the saved Chief of Staff session so the next open starts a fresh chat. */
     reset(spaceId?: string): Promise<boolean>

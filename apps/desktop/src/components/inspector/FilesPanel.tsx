@@ -6,7 +6,6 @@ import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import {
   ArrowsClockwise,
-  CaretDown,
   CaretRight,
   Code,
   FileJs,
@@ -16,6 +15,7 @@ import {
   MagnifyingGlass,
 } from '../icons'
 import { TextInput } from '@astryxdesign/core/TextInput'
+import { AnimatePresence, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { basename } from '@/lib/data'
 import { errorMessage } from '@/lib/errors'
@@ -272,6 +272,8 @@ export function FilesPanel({
   const [treeRoots, setTreeRoots] = useState<FileTreeNode[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [loading, setLoading] = useState(false)
+  const reduceMotion = Boolean(useReducedMotion())
+    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
   const [error, setError] = useState('')
   const [skipped, setSkipped] = useState(0)
   const [visibleLimit, setVisibleLimit] = useState(1_000)
@@ -361,7 +363,9 @@ export function FilesPanel({
 
   return (
     <div className={`files-panel ${stylex.props(filesPanelStyles.filesPanel).className ?? ""}`}>
-      {selectedFile ? <CurrentFilePreview key={`${selectedFile.id}:${project.harness}`} node={selectedFile} harness={project.harness} onOpen={onOpen} onClose={() => setSelectedFile(null)} /> : null}
+      <AnimatePresence initial={false}>
+        {selectedFile ? <CurrentFilePreview key={`${selectedFile.id}:${project.harness}`} node={selectedFile} harness={project.harness} onOpen={onOpen} onClose={() => setSelectedFile(null)} /> : null}
+      </AnimatePresence>
       <div className={`files-search ${stylex.props(filesPanelStyles.filesSearch).className ?? ""}`}>
         <TextInput type="search" size="sm" label="Filter project paths" isLabelHidden value={query} onChange={setQuery} placeholder="Filter project paths" startIcon={<MagnifyingGlass size={13} />} hasClear controlClassName="files-search__input" containerStyle={{ flex: 1, minWidth: 0 }} />
         {!isSearching && allDirIds.size > 0 ? (
@@ -447,7 +451,13 @@ export function FilesPanel({
                     {isDirectory ? (
                       <span className={`file-tree__chevron ${stylex.props(filesPanelStyles.fileTreeChevron).className ?? ""}`}>
                         {node.children.length > 0 ? (
-                          isExpanded ? <CaretDown size={13} /> : <CaretRight size={13} />
+                          <CaretRight
+                            size={13}
+                            style={{
+                              transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                              transition: reduceMotion ? 'none' : 'transform 150ms cubic-bezier(0.23, 1, 0.32, 1)',
+                            }}
+                          />
                         ) : (
                           <span className={`file-tree__expander-placeholder ${stylex.props(filesPanelStyles.fileTreeExpanderPlaceholder).className ?? ""}`} />
                         )}

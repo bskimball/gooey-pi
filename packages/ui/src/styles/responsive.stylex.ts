@@ -71,7 +71,7 @@ export const styles = stylex.create({
   "directoryList": { "gridTemplateColumns": { "default": null, "@media (max-width: 980px)": "1fr" } },
   "titleToolbar": { "paddingInlineStart": { "default": null, "@media (max-width: 720px)": "6px" }, "paddingInlineEnd": { "default": "14px", "@media (max-width: 720px)": "6px" } },
   "trafficLightClearanceToolbar": { "width": { "default": null, "@media (max-width: 720px)": "64px" }, "flexBasis": { "default": null, "@media (max-width: 720px)": "64px" } },
-  "branchPill": { "display": { "default": null, "@media (max-width: 720px)": "none" } },
+  "branchPill": { "display": { "default": "inline-flex", "@media (max-width: 720px)": "none" } },
   "iconButton": { "width": { "default": null, "@media (max-width: 720px)": "36px" }, "height": { "default": null, "@media (max-width: 720px)": "36px" } },
   "inspectorTabs": {
     "height": { "default": null, "@media (max-width: 720px)": "45px" },

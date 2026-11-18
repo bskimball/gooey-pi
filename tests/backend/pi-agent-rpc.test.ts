@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, normalize } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -728,7 +728,9 @@ describe('pi RPC handshake', () => {
       const reopenedSessions = new SessionService(reopenedStore, () => null, 5000, piSessionServiceOptions(join(cwd, 'sessions')))
       const reopenedControl = new ActivityCoordinatorService(reopenedStore, reopenedProjects, reopenedSessions, manager)
       try {
+        const list = vi.spyOn(reopenedSessions, 'list')
         const reopened = await reopenedControl.open(3)
+        expect(list).not.toHaveBeenCalled()
         expect(reopened.session.filePath).toBe(first.session.filePath)
         expect(reopened.runtime.runtimeId).toBe(manager.getForSession(first.session.filePath)?.runtimeId)
         reopenedControl.releaseOwner(3)
@@ -845,6 +847,23 @@ describe('pi RPC handshake', () => {
       expect(fresh.session.filePath).not.toBe(first.session.filePath)
       expect(fresh.messages).toEqual([])
       await expect(control.reset('missing-space')).rejects.toThrow('Space not found')
+
+      await manager.stop(fresh.runtime.runtimeId)
+      appendFileSync(fresh.session.filePath, `${JSON.stringify({
+        type: 'message', id: 'saved', parentId: null, timestamp: new Date().toISOString(),
+        message: { role: 'user', content: 'Saved history' },
+      })}\n`)
+      const start = manager.start.bind(manager)
+      const revoke = vi.fn(() => projects.remove('project'))
+      vi.spyOn(manager, 'start').mockImplementationOnce((options, onBaseline) => start(options, async (path, messages) => {
+        await revoke()
+        await onBaseline?.(path, messages)
+      }))
+      const onHistory = vi.fn()
+      await expect(control.open(2, undefined, onHistory)).rejects.toThrow(/path is not inside an added .* project/)
+      expect(revoke).toHaveBeenCalledOnce()
+      expect(onHistory).not.toHaveBeenCalled()
+      expect(manager.getForSession(fresh.session.filePath)).toBeUndefined()
     } finally {
       control.dispose()
       await store.beginShutdown()

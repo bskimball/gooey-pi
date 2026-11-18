@@ -1,7 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
 
-const modalInAnimation = stylex.keyframes({ "from": { "opacity": 0, "transform": "translateY(5px) scale(.99)" } })
-
 const spinAnimation = stylex.keyframes({ "to": { "transform": "rotate(360deg)" } })
 
 export const styles = stylex.create({
@@ -38,14 +36,6 @@ export const styles = stylex.create({
     "backgroundOrigin": "padding-box",
     "backgroundClip": "border-box",
     "boxShadow": "var(--shadow-elevation-high)",
-    "animationName": modalInAnimation,
-    "animationDuration": "150ms",
-    "animationDelay": "0s",
-    "animationTimingFunction": "ease-out",
-    "animationIterationCount": 1,
-    "animationDirection": "normal",
-    "animationFillMode": "none",
-    "animationPlayState": "running",
   },
   "modalHeader": {
     "height": "48px",

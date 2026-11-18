@@ -3,6 +3,7 @@ import * as stylex from '@stylexjs/stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
+import { AnimatePresence } from 'motion/react'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Composer } from '@/components/Composer'
@@ -54,6 +55,7 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
   const { state } = coordinator
   const ready = state.phase === 'ready'
   const runtime = ready ? state.attachment.runtime : null
+  const history = ready ? { session: state.attachment.session, messages: state.messages } : state.phase === 'opening' ? state.history : undefined
   const reportError = useCallback((error: unknown) => controls?.reportError?.(error), [controls])
   const provider = useProviderCatalog({ bridge, harness: 'pi', runtime, activeSession: ready ? state.attachment.session : undefined, syncRuntime: coordinator.syncRuntime, reportError })
   const [showQuestionModal, setShowQuestionModal] = useState(false)
@@ -93,30 +95,33 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
       ) : clearButton && actionsTarget ? (
         createPortal(clearButton, actionsTarget)
       ) : null}
-      {confirmClear ? (
-        <Modal
-          title="Clear Chief of Staff chat?"
-          onClose={() => setConfirmClear(false)}
-          footer={
-            <>
-              <ApexButton variant="quiet" onClick={() => setConfirmClear(false)}>
-                Cancel
-              </ApexButton>
-              <ApexButton
-                variant="primary"
-                onClick={() => {
-                  setConfirmClear(false)
-                  void coordinator.clear()
-                }}
-              >
-                Clear chat
-              </ApexButton>
-            </>
-          }
-        >
-          <p>This starts a fresh conversation. The current one is archived, not deleted, so you can still find it under archived sessions.</p>
-        </Modal>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {confirmClear ? (
+          <Modal
+            key="confirm-clear-chief"
+            title="Clear Chief of Staff chat?"
+            onClose={() => setConfirmClear(false)}
+            footer={
+              <>
+                <ApexButton variant="quiet" onClick={() => setConfirmClear(false)}>
+                  Cancel
+                </ApexButton>
+                <ApexButton
+                  variant="primary"
+                  onClick={() => {
+                    setConfirmClear(false)
+                    void coordinator.clear()
+                  }}
+                >
+                  Clear chat
+                </ApexButton>
+              </>
+            }
+          >
+            <p>This starts a fresh conversation. The current one is archived, not deleted, so you can still find it under archived sessions.</p>
+          </Modal>
+        ) : null}
+      </AnimatePresence>
       <main
         className={`conversation-pane activity-coordinator__conversation ${stylex.props(workbenchStyles.conversationPane, activityStyles.activityCoordinatorConversation, [responsiveStyles.conversationPane, responsiveLayoutStyles.conversationPane], embedded && spaceStyles.pane).className ?? ''}`}
       >
@@ -129,7 +134,7 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
             <p {...stylex.props(chiefStyles.emptyCopy)}>Chief of Staff requires the desktop app.</p>
           </div>
         ) : null}
-        {state.phase === 'opening' ? <ChiefOfStaffOpening /> : null}
+        {state.phase === 'opening' && !history ? <ChiefOfStaffOpening /> : null}
         {state.phase === 'error' ? (
           <div role="alert" className={`activity-coordinator__error ${stylex.props(chiefStyles.empty, chiefStyles.enter).className ?? ''}`}>
             <span {...stylex.props(chiefStyles.emptyIcon, chiefStyles.errorIcon)}>
@@ -155,16 +160,16 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
             </ApexButton>
           </div>
         ) : null}
-        {ready ? (
+        {history ? (
           <div
             className={[
-              `activity-coordinator__transcript ${state.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`,
+              `activity-coordinator__transcript ${history.messages.length === 0 ? 'activity-coordinator__transcript--empty' : ''}`,
               stylex.props(activityStyles.activityCoordinatorTranscript).className,
             ]
               .filter(Boolean)
               .join(' ')}
           >
-            {state.messages.length === 0 ? (
+            {history.messages.length === 0 ? (
               embedded ? (
                 <div className={`activity-coordinator__empty ${stylex.props(chiefStyles.empty).className ?? ''}`}>
                   <span {...stylex.props(chiefStyles.emptyIcon)}>
@@ -179,12 +184,12 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
                 </div>
               )
             ) : null}
-            {state.messages.length > 0 ? (
-              <InteractiveChatProvider sessionKey={state.attachment.session.id} disabled={state.disconnected} onSendFeedback={async (text) => coordinator.send(text, [])}>
+            {history.messages.length > 0 ? (
+              <InteractiveChatProvider sessionKey={history.session.id} disabled={!ready || state.disconnected} onSendFeedback={async (text) => coordinator.send(text, [])}>
                 <Transcript
-                  messages={state.messages}
+                  messages={history.messages}
                   git={EMPTY_GIT_STATUS}
-                  cwd={runtime?.cwd}
+                  cwd={runtime?.cwd ?? history.session.projectPath}
                   harness="pi"
                   active={busy}
                   showReasoning={showReasoning}
@@ -199,22 +204,32 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
             ) : null}
           </div>
         ) : null}
-        {pending && pending.request.method !== 'questionnaire' ? (
-          <ActivityQuestionCard question={questionFromPendingExtensionUi(pending)} pendingUi={pending} now={now} onRespond={respond} onOpenModal={() => setShowQuestionModal(true)} />
-        ) : null}
-        {showQuestionModal && pending && pending.request.method !== 'questionnaire' ? (
-          <ExtensionUiModal
-            request={pending.request}
-            deadline={pending.deadline}
-            onRespond={(response) => {
-              setShowQuestionModal(false)
-              void respond(pending.runtimeId, response)
-            }}
-          />
-        ) : null}
+        <AnimatePresence initial={false}>
+          {pending && pending.request.method !== 'questionnaire' ? (
+            <ActivityQuestionCard key={`${pending.runtimeId}:${pending.request.id}`} question={questionFromPendingExtensionUi(pending)} pendingUi={pending} now={now} onRespond={respond} onOpenModal={() => setShowQuestionModal(true)} />
+          ) : null}
+        </AnimatePresence>
+        <AnimatePresence initial={false}>
+          {showQuestionModal && pending && pending.request.method !== 'questionnaire' ? (
+            <ExtensionUiModal
+              key={`modal:${pending.runtimeId}:${pending.request.id}`}
+              request={pending.request}
+              deadline={pending.deadline}
+              onRespond={(response) => {
+                setShowQuestionModal(false)
+                void respond(pending.runtimeId, response)
+              }}
+            />
+          ) : null}
+        </AnimatePresence>
         <div
           className={`conversation-bottom-dock ${stylex.props(workbenchStyles.conversationBottomDock, [responsiveStyles.conversationBottomDock, responsiveLayoutStyles.conversationBottomDock], embedded && spaceStyles.dock).className ?? ''}`}
         >
+          {state.phase === 'opening' && history ? (
+            <div role="status" {...stylex.props(chiefStyles.noticeBar)}>
+              <p {...stylex.props(chiefStyles.noticeCopy)}>Connecting to Chief of Staff…</p>
+            </div>
+          ) : null}
           {pending?.request.method === 'questionnaire' ? (
             <ExtensionUiModal presentation="inline" request={pending.request} deadline={pending.deadline} onRespond={(response) => void respond(pending.runtimeId, response)} />
           ) : null}

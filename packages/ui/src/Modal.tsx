@@ -1,16 +1,28 @@
 import { styles as overlaysStyles } from './styles/overlays.stylex'
 import { Dialog } from '@astryxdesign/core/Dialog'
 import * as stylex from '@stylexjs/stylex'
-import { useReducedMotion } from 'motion/react'
+import { usePresence, useReducedMotion } from 'motion/react'
 import { X } from './icons'
 import { IconButton, focusableSelector, useAppShellOverlay } from './ui'
-import { useCallback, useId, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 const modalIn = stylex.keyframes({
-  from: { opacity: 0, transform: 'scale(0.96)' },
-  to: { opacity: 1, transform: 'scale(1)' },
+  from: { opacity: 0, transform: 'translateY(4px) scale(0.985)' },
+  to: { opacity: 1, transform: 'translateY(0) scale(1)' },
 })
+
+const modalOut = stylex.keyframes({
+  from: { opacity: 1, transform: 'translateY(0) scale(1)' },
+  to: { opacity: 0, transform: 'translateY(2px) scale(0.985)' },
+})
+
+const backdropOut = stylex.keyframes({
+  from: { opacity: 1 },
+  to: { opacity: 0 },
+})
+
+const MODAL_EXIT_MS = 130
 
 const styles = stylex.create({
   modalDialog: {
@@ -29,13 +41,33 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
     animationDuration: {
-      default: '200ms',
+      default: '160ms',
       '@media (prefers-reduced-motion: reduce)': '0ms',
     },
     animationTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
     '::backdrop': {
       backgroundColor: 'rgba(6, 11, 18, 0.46)',
       backdropFilter: 'blur(4px)',
+    },
+  },
+  modalDialogExiting: {
+    pointerEvents: 'none',
+    animationName: {
+      default: modalOut,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+    animationDuration: {
+      default: '130ms',
+      '@media (prefers-reduced-motion: reduce)': '0ms',
+    },
+    animationTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+    animationFillMode: 'forwards',
+    '::backdrop': {
+      pointerEvents: 'none',
+      animationName: backdropOut,
+      animationDuration: '130ms',
+      animationTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+      animationFillMode: 'forwards',
     },
   },
   modalDialogInstant: {
@@ -105,10 +137,22 @@ function ensureDialogModalMethods(dialog: HTMLDialogElement | null): void {
 
 export function Modal({ title, children, onClose, footer }: { title: string; children: ReactNode; onClose(): void; footer?: ReactNode }) {
   const titleId = useId()
+  const [isPresent, safeToRemove] = usePresence()
   const instant = Boolean(useReducedMotion())
     || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
     || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-  useAppShellOverlay(true)
+  useAppShellOverlay(isPresent)
+  useEffect(() => {
+    if (isPresent) return
+    if (instant) {
+      safeToRemove?.()
+      return
+    }
+    const timer = window.setTimeout(() => {
+      safeToRemove?.()
+    }, MODAL_EXIT_MS)
+    return () => window.clearTimeout(timer)
+  }, [isPresent, instant, safeToRemove])
   const attachDialog = useCallback((node: HTMLDialogElement | null) => {
     ensureDialogModalMethods(node)
   }, [])
@@ -121,8 +165,9 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
     <Dialog
       ref={attachDialog}
       isOpen
+      inert={!isPresent || undefined}
       onOpenChange={(open) => {
-        if (!open) onClose()
+        if (!open && isPresent) onClose()
       }}
       purpose="info"
       width={500}
@@ -130,7 +175,7 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
       role="dialog"
       aria-labelledby={titleId}
       className="modal"
-      xstyle={[overlaysStyles.modal, styles.modalDialog, instant && styles.modalDialogInstant]}
+      xstyle={[overlaysStyles.modal, styles.modalDialog, !isPresent && styles.modalDialogExiting, instant && styles.modalDialogInstant]}
     >
       <div className={`modal__header ${stylex.props(overlaysStyles.modalHeader, styles.modalHeader).className ?? ""}`} style={headerStylex.style}>
         <h2 id={titleId} className={titleStylex.className} style={titleStylex.style}>{title}</h2>

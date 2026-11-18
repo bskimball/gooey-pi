@@ -34,7 +34,10 @@ const styles = stylex.create({
     paddingInline: 9,
     borderWidth: 1,
     borderStyle: 'solid',
-    borderColor: 'var(--border)',
+    borderColor: {
+      default: 'var(--border)',
+      ':hover:not(:disabled)': 'var(--border-apex)',
+    },
     borderRadius: 'var(--radius-sm)',
     color: {
       default: 'var(--text-secondary)',
@@ -44,13 +47,27 @@ const styles = stylex.create({
       default: 'var(--surface-subtle)',
       ':hover:not(:disabled)': 'var(--surface-hover)',
     },
-    boxShadow: 'none',
+    backgroundImage: 'var(--gradient-apex)',
+    boxShadow: {
+      default: 'var(--shadow-control)',
+      ':hover:not(:disabled)': 'var(--shadow-control-hover)',
+    },
+    transform: {
+      default: null,
+      '@media (hover: hover) and (pointer: fine)': {
+        default: null,
+        ':active:not(:disabled):not(:focus-visible)': 'scale(0.98)',
+      },
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
     fontSize: 'var(--fs-ui)',
     fontWeight: 550,
   },
   triggerOpen: {
     color: 'var(--text)',
+    borderColor: 'var(--border-apex)',
     backgroundColor: 'var(--surface-hover)',
+    boxShadow: 'var(--shadow-control-hover)',
   },
   triggerLead: {
     minWidth: 0,

@@ -285,12 +285,13 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
           </motion.div>
         </AnimatePresence>
 
-        {confirmDisable ? <Modal title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
-        {confirmRemove ? <Modal title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
-
-        {addOpen ? (
-          <Modal
-            title={addDraft.kind ? `Add ${addDraft.kind === 'mcp' ? 'MCP server' : addDraft.kind === 'extension' ? 'extension' : PACKAGE_LABELS[harness].toLowerCase()}` : `Add a ${HARNESS_SHORT_NAMES[harness]} capability`}
+        <AnimatePresence initial={false}>
+          {confirmDisable ? <Modal key={`disable:${confirmDisable.id}`} title={`Disable ${confirmDisable.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void disableCapability(confirmDisable)}>Yes, disable</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? New sessions will no longer receive this capability until you enable it again. Installed files, server settings, and saved authorization are kept.</p></Modal> : null}
+          {confirmRemove ? <Modal key={`remove:${confirmRemove.id}`} title={`Remove ${confirmRemove.name}?`} onClose={() => operation.cancelConfirm()} footer={<><ApexButton variant="quiet" onClick={() => operation.cancelConfirm()}>Cancel</ApexButton><ApexButton variant="danger" onClick={() => void removeCapability(confirmRemove)}>Yes, remove completely</ApexButton></>}><p className={`modal-intro ${stylex.props(overlaysStyles.modalIntro).className ?? ""}`}>Are you sure? This removes {confirmRemove.kind === 'mcp' ? 'only the server definition; Pi-owned authorization is not changed.' : 'the package registration and harness-managed files.'} Other packages and MCP entries will be kept.</p></Modal> : null}
+          {addOpen ? (
+            <Modal
+              key="add-capability"
+              title={addDraft.kind ? `Add ${addDraft.kind === 'mcp' ? 'MCP server' : addDraft.kind === 'extension' ? 'extension' : PACKAGE_LABELS[harness].toLowerCase()}` : `Add a ${HARNESS_SHORT_NAMES[harness]} capability`}
             onClose={() => sendAdd({ type: 'CLOSE' })}
             footer={addDraft.kind
               ? <><ApexButton icon={<ArrowLeft size={13}/>} onClick={() => sendAdd({ type: 'BACK' })}>Back</ApexButton><ApexButton variant="primary" disabled={!canAdd || adding} onClick={() => void add()}>{adding ? (addDraft.kind === 'mcp' ? 'Saving…' : 'Installing…') : (addDraft.kind === 'mcp' ? 'Save local server' : addDraft.kind === 'extension' ? 'Install extension' : 'Install package')}</ApexButton></>
@@ -335,8 +336,9 @@ export function PluginsPage({ harness, skills, warnings, loading, activeProjectP
               </div>
             )}
             {addDraft.output ? <pre className={`install-output ${stylex.props(pluginsStyles.installOutput).className ?? ""}`} role="status">{addDraft.output}</pre> : null}
-          </Modal>
-        ) : null}
+            </Modal>
+          ) : null}
+        </AnimatePresence>
       </div>
     </div>
   )

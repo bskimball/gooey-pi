@@ -1,8 +1,10 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
+import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useId, useState } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
+import { collapseMotionProps, useInstantMotion } from '../transcript/subagent-lane'
 import type { EffectiveCapability, EffectiveInstructionSource, EffectiveRunConfig, RuntimeInfo } from '@/types/api'
 
 const NOT_REPORTED = 'Not yet reported'
@@ -66,6 +68,8 @@ interface RunConfigSectionProps {
 
 export function RunConfigSection({ runtime, behaviorMode, cwd, sessionKey }: RunConfigSectionProps) {
   const [open, setOpen] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
+  const instant = useInstantMotion() || keyboardToggle
   const bodyId = useId()
   const config = useEffectiveRunConfig(cwd, sessionKey)
   const model = runtime?.executingModel?.label ?? runtime?.model?.name ?? runtime?.model?.id
@@ -82,7 +86,10 @@ export function RunConfigSection({ runtime, behaviorMode, cwd, sessionKey }: Run
           className={`run-config__toggle ${stylex.props(inspectorStyles.runConfigToggle).className ?? ""}`}
           aria-expanded={open}
           aria-controls={open ? bodyId : undefined}
-          onClick={() => setOpen((value) => !value)}
+          onClick={(event) => {
+            setKeyboardToggle(event.detail === 0)
+            setOpen((value) => !value)
+          }}
         >
           <CaretRight size={12} className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} aria-hidden="true" />
           <span className={`run-config__title ${stylex.props(inspectorStyles.runConfigTitle).className ?? ""}`}>Run configuration</span>
@@ -96,65 +103,69 @@ export function RunConfigSection({ runtime, behaviorMode, cwd, sessionKey }: Run
           ) : null}
         </button>
       </h3>
-      {open ? (
-        <div id={bodyId} className={`run-config__body ${stylex.props(inspectorStyles.runConfigBody).className ?? ""}`}>
-          <dl className={`run-config__grid ${stylex.props(inspectorStyles.runConfigGrid).className ?? ""}`}>
-            <div className={`run-config__stat run-config__stat--wide ${stylex.props(inspectorStyles.runConfigStat, inspectorStyles.runConfigStatWide).className ?? ""}`}>
-              <dt>Model</dt>
-              <dd title={model ?? undefined}>{model ?? NOT_REPORTED}</dd>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div {...collapseMotionProps(instant)}>
+            <div id={bodyId} className={`run-config__body ${stylex.props(inspectorStyles.runConfigBody).className ?? ""}`}>
+              <dl className={`run-config__grid ${stylex.props(inspectorStyles.runConfigGrid).className ?? ""}`}>
+                <div className={`run-config__stat run-config__stat--wide ${stylex.props(inspectorStyles.runConfigStat, inspectorStyles.runConfigStatWide).className ?? ""}`}>
+                  <dt>Model</dt>
+                  <dd title={model ?? undefined}>{model ?? NOT_REPORTED}</dd>
+                </div>
+                <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
+                  <dt>Effort</dt>
+                  <dd>{effort ?? NOT_REPORTED}</dd>
+                </div>
+                <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
+                  <dt>Mode</dt>
+                  <dd>{behaviorMode ?? NOT_REPORTED}</dd>
+                </div>
+              </dl>
+              {config === undefined ? null : config === null ? <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>Loading…</p> : (
+                <>
+                  <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
+                    <h4>Instructions &amp; skills</h4>
+                    <span>
+                      {config.instructionSources.length} {config.instructionSources.length === 1 ? 'file' : 'files'}
+                      {totalSkills > 0 ? ` · ${totalSkills} ${totalSkills === 1 ? 'skill' : 'skills'}` : ''}
+                    </span>
+                  </div>
+                  {config.instructionSources.length || config.skillDirs.length ? (
+                    <ul className={`run-config__items ${stylex.props(inspectorStyles.runConfigItems).className ?? ""}`}>
+                      {config.instructionSources.map((source) => (
+                        <li key={source.path} title={source.path}>
+                          <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{source.scope === 'user' ? source.kind : shortPath(source.path, cwd)}</span>
+                          <span className={[`run-config__scope is-${source.scope}`, stylex.props(inspectorStyles.runConfigScope, source.scope === "project" && inspectorStyles.runConfigScopeIsProject).className].filter(Boolean).join(' ')}>{SCOPE_LABELS[source.scope]}</span>
+                          <small>{formatBytes(source.bytes)}</small>
+                        </li>
+                      ))}
+                      {config.skillDirs.map((dir) => (
+                        <li key={dir.path} title={dir.path}>
+                          <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{shortPath(dir.path, cwd)}</span>
+                          <span className={`run-config__scope is-skills ${stylex.props(inspectorStyles.runConfigScope, inspectorStyles.runConfigScopeIsSkills).className ?? ""}`}>Skills</span>
+                          <small>{dir.count}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>No instruction files found</p>}
+                  <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
+                    <h4>Bundled extensions</h4>
+                    <span>{presentExtensions}/{config.injectedCapabilities.length} bundled</span>
+                  </div>
+                  <ul className={`run-config__chips ${stylex.props(inspectorStyles.runConfigChips).className ?? ""}`}>
+                    {config.injectedCapabilities.map((item) => (
+                      <li key={item.capability} title={`${item.filename} (${item.present ? 'bundled' : 'missing'})`} className={item.present ? 'is-present' : 'is-missing'}>
+                        {item.present ? <Check size={11} aria-hidden="true" /> : <WarningCircle size={11} aria-hidden="true" />}
+                        <span>{capabilityLabel(item)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
-            <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
-              <dt>Effort</dt>
-              <dd>{effort ?? NOT_REPORTED}</dd>
-            </div>
-            <div className={`run-config__stat ${stylex.props(inspectorStyles.runConfigStat).className ?? ""}`}>
-              <dt>Mode</dt>
-              <dd>{behaviorMode ?? NOT_REPORTED}</dd>
-            </div>
-          </dl>
-          {config === undefined ? null : config === null ? <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>Loading…</p> : (
-            <>
-              <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
-                <h4>Instructions &amp; skills</h4>
-                <span>
-                  {config.instructionSources.length} {config.instructionSources.length === 1 ? 'file' : 'files'}
-                  {totalSkills > 0 ? ` · ${totalSkills} ${totalSkills === 1 ? 'skill' : 'skills'}` : ''}
-                </span>
-              </div>
-              {config.instructionSources.length || config.skillDirs.length ? (
-                <ul className={`run-config__items ${stylex.props(inspectorStyles.runConfigItems).className ?? ""}`}>
-                  {config.instructionSources.map((source) => (
-                    <li key={source.path} title={source.path}>
-                      <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{source.scope === 'user' ? source.kind : shortPath(source.path, cwd)}</span>
-                      <span className={[`run-config__scope is-${source.scope}`, stylex.props(inspectorStyles.runConfigScope, source.scope === "project" && inspectorStyles.runConfigScopeIsProject).className].filter(Boolean).join(' ')}>{SCOPE_LABELS[source.scope]}</span>
-                      <small>{formatBytes(source.bytes)}</small>
-                    </li>
-                  ))}
-                  {config.skillDirs.map((dir) => (
-                    <li key={dir.path} title={dir.path}>
-                      <span className={`run-config__path ${stylex.props(inspectorStyles.runConfigPath).className ?? ""}`}>{shortPath(dir.path, cwd)}</span>
-                      <span className={`run-config__scope is-skills ${stylex.props(inspectorStyles.runConfigScope, inspectorStyles.runConfigScopeIsSkills).className ?? ""}`}>Skills</span>
-                      <small>{dir.count}</small>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className={`run-config__empty ${stylex.props(inspectorStyles.runConfigEmpty).className ?? ""}`}>No instruction files found</p>}
-              <div className={`run-config__subhead ${stylex.props(inspectorStyles.runConfigSubhead).className ?? ""}`}>
-                <h4>Bundled extensions</h4>
-                <span>{presentExtensions}/{config.injectedCapabilities.length} bundled</span>
-              </div>
-              <ul className={`run-config__chips ${stylex.props(inspectorStyles.runConfigChips).className ?? ""}`}>
-                {config.injectedCapabilities.map((item) => (
-                  <li key={item.capability} title={`${item.filename} (${item.present ? 'bundled' : 'missing'})`} className={item.present ? 'is-present' : 'is-missing'}>
-                    {item.present ? <Check size={11} aria-hidden="true" /> : <WarningCircle size={11} aria-hidden="true" />}
-                    <span>{capabilityLabel(item)}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </section>
   )
 }

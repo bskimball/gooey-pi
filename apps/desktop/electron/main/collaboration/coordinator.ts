@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isRecord, requireString } from 'apex-core/validation'
-import type { CoordinatorAttachment, PromptDeliveryIntent, SessionRecord, SpaceRecord } from 'apex-core/types/api'
+import type { CoordinatorAttachment, CoordinatorHistory, PromptDeliveryIntent, SessionRecord, SpaceRecord } from 'apex-core/types/api'
 import type { AgentRpcManager } from '../agent-rpc'
 import type { ProjectService } from '../projects'
 import type { SessionService } from '../sessions'
@@ -128,24 +128,23 @@ export class ActivityCoordinatorService {
     })
   }
 
-  async open(owner: number, spaceIdValue?: unknown): Promise<CoordinatorAttachment> {
+  async open(owner: number, spaceIdValue?: unknown, onHistory?: (history: CoordinatorHistory) => void): Promise<CoordinatorAttachment> {
     const spaceId = spaceIdValue === undefined ? undefined : requireString(spaceIdValue, 'spaceId', { min: 1, max: 200 })
     const ownerGeneration = this.ownerGenerations.get(owner) ?? 0
     return this.withDelivery(spaceId ? `space:${spaceId}` : 'global-coordinator', async () => {
       this.requireOpen()
       let session: SessionRecord
+      let savedProjectId: string | undefined
       const space = spaceId ? this.listSpaces().find((item) => item.id === spaceId) : undefined
       if (spaceId && !space) throw new Error('Space not found')
       const spaceCwd = space ? await this.authorizeSpaceProject(space.projectId) : undefined
       const saved = space ? space.coordinatorSession : this.store.getCoordinatorSessions()[GLOBAL_COORDINATOR_KEY]
       if (saved) {
-        const filePath = await this.sessions.requireSessionPath(saved)
-        const record = (await this.sessions.list(undefined, true, true)).find((candidate) => resolve(candidate.filePath) === resolve(filePath))
-        if (!record || record.harness !== 'pi' || record.depth !== 0) throw new Error('The saved coordinator session is no longer available')
-        const cwd = await this.projects.authorizeCwd(record.projectPath)
+        session = await this.sessions.readCoordinatorRecord(saved)
+        const cwd = await this.projects.authorizeCwd(session.projectPath)
         const scope = await this.projects.collaborationScope(cwd)
         if (space && scope.projectId !== space.projectId) throw new Error('The Space coordinator project changed')
-        session = { ...record, role: 'coordinator' }
+        savedProjectId = scope.projectId
       } else {
         let cwd: string | undefined = spaceCwd
         for (const project of this.store.getProjects()) {
@@ -171,7 +170,16 @@ export class ActivityCoordinatorService {
       }
       return this.withDelivery(`session:${session.filePath}`, async () => {
         this.requireOpen()
-        const runtime = this.agents.getForSession(session.filePath) ?? await this.agents.start({ cwd: session.projectPath, sessionPath: session.filePath })
+        const publishHistory = savedProjectId && onHistory ? async (path: string, messages: CoordinatorHistory['messages']) => {
+          if (resolve(path) !== resolve(session.filePath)) throw new Error('The saved coordinator session path changed')
+          // A project can be removed while the baseline is being read, before a child exists to stop.
+          const cwd = await this.projects.authorizeCwd(session.projectPath)
+          if ((await this.projects.collaborationScope(cwd)).projectId !== savedProjectId) throw new Error('The coordinator project grant changed')
+          this.requireOpen()
+          if ((this.ownerGenerations.get(owner) ?? 0) !== ownerGeneration) throw new Error('The coordinator attachment owner has gone away')
+          onHistory({ session, messages })
+        } : undefined
+        const runtime = this.agents.getForSession(session.filePath) ?? await this.agents.start({ cwd: session.projectPath, sessionPath: session.filePath }, publishHistory)
         this.requireOpen()
         if (!runtime.sessionFile || resolve(runtime.sessionFile) !== resolve(session.filePath)) throw new Error('The coordinator runtime did not attach to its saved session')
         if ((this.ownerGenerations.get(owner) ?? 0) !== ownerGeneration) throw new Error('The coordinator attachment owner has gone away')

@@ -201,6 +201,28 @@ describe('preload bridge contract', () => {
     expect(electronMocks.ipcRenderer.removeListener).toHaveBeenCalledWith('app:open-settings', listener)
   })
 
+  it('routes early coordinator history only to the matching open and removes its listener on settlement', async () => {
+    const api = electronMocks.api as BridgeApi
+    expect(() => api.coordinator.open(undefined, 'invalid')).toThrow('onHistory must be a function')
+    await api.coordinator.open('space-only')
+    expect(electronMocks.ipcRenderer.invoke).toHaveBeenCalledWith('coordinator:open', 'space-only')
+    electronMocks.ipcRenderer.invoke.mockClear()
+    const firstHistory = vi.fn()
+    const secondHistory = vi.fn()
+    const first = api.coordinator.open(undefined, firstHistory)
+    const second = api.coordinator.open('space-id', secondHistory)
+    const requestId = electronMocks.ipcRenderer.invoke.mock.calls[1][2]
+    const history = { session: { id: 'space-chief' }, messages: [] }
+    const listeners = electronMocks.ipcRenderer.on.mock.calls.map(([, listener]) => listener)
+    for (const listener of listeners) listener(undefined, { requestId, history })
+    expect(firstHistory).not.toHaveBeenCalled()
+    expect(secondHistory).toHaveBeenCalledExactlyOnceWith(history)
+    await Promise.all([first, second])
+    for (const listener of listeners) {
+      expect(electronMocks.ipcRenderer.removeListener).toHaveBeenCalledWith('coordinator:history', listener)
+    }
+  })
+
   it('freezes the exposed API and every domain', () => {
     const api = electronMocks.api as BridgeApi
     expect(electronMocks.contextBridge.exposeInMainWorld).toHaveBeenCalledWith('apex', api)
