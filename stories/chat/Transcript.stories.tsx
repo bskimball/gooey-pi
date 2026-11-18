@@ -10,7 +10,7 @@ import { TurnNavigator } from '../../apps/desktop/src/components/transcript/turn
 import { TurnReceipt } from '../../apps/desktop/src/components/transcript/turn-receipt'
 import { EditDiff } from '../../apps/desktop/src/components/transcript/edit-diff'
 import { SyntaxText, InlineText } from '../../apps/desktop/src/components/transcript/syntax'
-import { assistant, cleanGit, failed, git, live, noop, user, work } from './data'
+import { assistant, cleanGit, failed, git, history, live, noop, user, work } from './data'
 
 function Thread(props: Partial<ComponentProps<typeof Transcript>>) {
   return (
@@ -28,14 +28,7 @@ export const Loading: Story = { args: { messages: [], loading: true } }
 export const Streaming: Story = { args: { messages: [user, live], active: true } }
 export const Failed: Story = { args: { messages: [user, failed] } }
 export const NarrowConversation: Story = { args: { variant: 'chat', messages: [user, assistant] }, globals: { viewport: { value: 'narrow', isRotated: false } } }
-export const LongHistory: Story = {
-  args: {
-    messages: Array.from({ length: 70 }, (_, index) => [
-      { ...user, id: `prompt-${index}`, parts: [{ type: 'text' as const, text: `Review step ${index + 1}: check the current component state.` }] },
-      { ...assistant, id: `reply-${index}` },
-    ]).flat(),
-  },
-}
+export const LongHistory: Story = { args: { messages: history(70) } }
 export const MessageKinds: Story = {
   render: () => (
     <>

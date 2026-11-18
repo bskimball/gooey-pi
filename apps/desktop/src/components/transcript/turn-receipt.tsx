@@ -83,7 +83,7 @@ export function TurnReceipt({ duration, failed = false, agents, tools, git, onRe
   >
   <div className={[failed ? 'turn-receipt is-failed' : 'turn-receipt', stylex.props(transcriptStyles.turnReceipt).className].filter(Boolean).join(' ')}>
     <div className={`turn-receipt__line ${stylex.props(transcriptStyles.turnReceiptLine).className ?? ""}`}>
-      {facts.map((fact, index) => <Fragment key={fact.key}>{index ? <span className={`turn-receipt__separator ${stylex.props(transcriptStyles.turnReceiptSeparator).className ?? ""}`} aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
+      {facts.map((fact, index) => <Fragment key={fact.key}>{index && fact.key !== 'copy' ? <span className={`turn-receipt__separator ${stylex.props(transcriptStyles.turnReceiptSeparator).className ?? ""}`} aria-hidden="true">·</span> : null}{fact.node}</Fragment>)}
     </div>
     <AnimatePresence initial={false}>
       {diffOpen ? (

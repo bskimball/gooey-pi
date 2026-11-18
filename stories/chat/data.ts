@@ -125,6 +125,13 @@ export const assistant = {
   completedAt: '2026-01-01T12:01:12Z',
   parts: [...work, { type: 'text', text: 'The catalog now uses the **existing components**. Review the changes below.\n\n- Composer controls\n- Streaming timeline\n- Rich content' }],
 } satisfies TranscriptMessage
+/** Repeated settled turns, used for long-history transcript and full-surface stories. */
+export function history(turns: number): TranscriptMessage[] {
+  return Array.from({ length: turns }, (_, index) => [
+    { ...user, id: `prompt-${index}`, parts: [{ type: 'text' as const, text: `Review step ${index + 1}: check the current component state.` }] },
+    { ...assistant, id: `reply-${index}` },
+  ]).flat()
+}
 export const live = {
   ...assistant,
   id: 'reply-live',

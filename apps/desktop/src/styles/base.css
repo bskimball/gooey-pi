@@ -123,7 +123,7 @@
      cqi against .conversation-pane so the scrolled column and the absolutely
      positioned surfaces resolve identically even when the scroll area loses
      width to a non-overlay scrollbar. */
-  --transcript-measure: clamp(760px, 85cqi, 1240px);
+  --transcript-measure: clamp(680px, 85cqi, 860px);
   font-family: Vazirmatn, Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: var(--fs-body);
   font-synthesis: none;

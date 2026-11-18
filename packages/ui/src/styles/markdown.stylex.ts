@@ -11,7 +11,7 @@ export const styles = stylex.create({
   h3: { fontSize: '1.05em' },
   streamingText: { textWrap: 'wrap' },
   list: { paddingInlineStart: 22 },
-  item: { marginTop: { default: null, ':not(:first-child)': 7 } },
+  item: { marginTop: { default: null, ':not(:first-child)': 4 } },
   quote: { paddingInlineStart: 11, borderInlineStartWidth: 3, borderInlineStartStyle: 'solid', borderInlineStartColor: 'var(--border-strong)', color: 'var(--text-secondary)' },
   link: { color: 'var(--annotation)', textDecoration: 'underline', textUnderlineOffset: 2 },
   linkText: { unicodeBidi: 'isolate' },
