@@ -21,7 +21,10 @@ function emptyDraft(snapshot: ComposerDraftSnapshot): boolean {
 export function saveComposerDraftFromDom(): void {
   try {
     const textarea = document.querySelector<HTMLTextAreaElement>('.composer textarea:not([data-isolated-draft])')
-    if (textarea?.value) window.sessionStorage.setItem(LEGACY_COMPOSER_DRAFT_KEY, textarea.value)
+    if (!textarea?.value) return
+    const scope = textarea.dataset.composerDraftKey
+    if (scope) saveComposerDraft(scope, { text: textarea.value }, true)
+    else window.sessionStorage.setItem(LEGACY_COMPOSER_DRAFT_KEY, textarea.value)
   } catch { /* storage unavailable */ }
 }
 

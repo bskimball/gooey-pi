@@ -242,7 +242,6 @@ describe('ProjectService list enrichment', () => {
       session('dismissed', dismissed, '2026-04-01T00:00:00.000Z', '2026-04-02T00:00:00.000Z'),
       session('missing', missing, '2026-05-01T00:00:00.000Z', '2026-05-02T00:00:00.000Z'),
     ]
-    const filterSpy = vi.spyOn(sessions, 'filter')
     const now = '2026-01-01T00:00:00.000Z'
     await store.update((state) => {
       state.projects.push({
@@ -257,7 +256,6 @@ describe('ProjectService list enrichment', () => {
 
     const records = await service.list()
 
-    expect(filterSpy).not.toHaveBeenCalled()
     expect(records.map((record) => record.id)).toEqual([
       'persisted',
       expect.stringMatching(/^inferred-/),

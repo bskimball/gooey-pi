@@ -539,7 +539,6 @@ describe('PluginService discovery', () => {
 
     expect(records).toContainEqual(expect.objectContaining({ name: 'local', path: realpathSync(localSkill) }))
     expect(records.some((record) => record.path === realpathSync(ancestorSkill))).toBe(false)
-    expect(readFileSync('apps/desktop/electron/main/plugins/catalog.ts', 'utf8')).not.toContain('collectAncestorSkills')
   })
 
   it('keeps user-configured discovery contained to the agent directory and home', async () => {

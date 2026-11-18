@@ -206,7 +206,12 @@ export function pairSubagentCalls(parts: MessagePart[]): SubagentPairs {
     const result = next?.type === 'toolResult' ? next : undefined
     if (part.name === 'task_start') {
       const id = startedTaskId(result)
-      if (id) starts.set(id, part)
+      if (id && !result?.isError) starts.set(id, part)
+      return
+    }
+    if (part.name === 'task_rebind' && result && !result.isError) {
+      // A wait after rebind may refer to a different launch. Leave it visible rather than folding it into a stale lane.
+      if (/^rebound task_\d+ /m.test(result.text)) starts.clear()
       return
     }
     if (!['task_wait', 'task_send', 'task_status', 'task_close', 'task_abort'].includes(part.name)) return
@@ -236,8 +241,12 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const roles = part.name === 'task_chain' ? steps.map((step) => text(step?.agent)!) : text(args.agent) ? [text(args.agent)!] : []
   const roleLabel = roles.length ? roles.join(' → ') : 'agent'
   const taskId = text(args.id) ?? (part.name === 'task_start' ? startedTaskId(result) : undefined) ?? part.id
-  const specialist = specialists.find((candidate) => candidate.id === taskId)
-  const targets = specialists.filter((candidate) => part.name === 'task_chain' ? candidate.id.startsWith(`${taskId}-step-`) : candidate.id === taskId)
+  const instanceId = text(workerDetails(result?.details)?.instanceId)
+  const handleMatches = specialists.filter((candidate) => (candidate.taskId ?? candidate.id) === taskId)
+  const specialist = (part.id ? specialists.find((candidate) => candidate.launchCallId === part.id) : undefined)
+    ?? (instanceId && !result?.isError ? specialists.find((candidate) => candidate.instanceId === instanceId) : undefined)
+    ?? (handleMatches.length === 1 && (!instanceId || !handleMatches[0]?.instanceId) ? handleMatches[0] : undefined)
+  const targets = part.name === 'task_chain' ? specialists.filter((candidate) => candidate.id.startsWith(`${taskId}-step-`)) : specialist ? [specialist] : []
   const rawPrompt = text(args.prompt) ?? text(args.message) ?? text(steps[0]?.prompt)
   // Failed operations stay in the timeline; keep the last received report in the lane.
   const latest = [...followUps].reverse().find((followUp) => followUp.call.name === 'task_wait' && !followUp.result?.isError) ?? { call: part, result }

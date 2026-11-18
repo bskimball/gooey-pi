@@ -14,6 +14,7 @@ import {
   createCoverageInventory,
   familyCoverageThresholds,
 } from '../scripts/release/coverage-inventory'
+import { SHIPPED_EXTENSION_FILENAMES } from '../apps/desktop/electron/main/extension-manifest'
 import vitestConfig from '../vitest.config'
 
 const temporaryDirectories: string[] = []
@@ -108,17 +109,9 @@ describe('safety-critical coverage inventory', () => {
 
   it('automatically includes every shipped extension and every new runtime file in a covered family', () => {
     const inventory = createCoverageInventory(PROJECT_ROOT)
-    const shippedExtensions = inventory.includedFiles.filter((file) => file.startsWith('apps/desktop/assets/extensions/'))
-    expect(shippedExtensions).toEqual([
-      'apps/desktop/assets/extensions/apex-ask-user.ts',
-      'apps/desktop/assets/extensions/apex-browser-agent.ts',
-      'apps/desktop/assets/extensions/apex-browser.ts',
-      'apps/desktop/assets/extensions/apex-collaboration.ts',
-      'apps/desktop/assets/extensions/apex-editor.ts',
-      'apps/desktop/assets/extensions/apex-schedules.ts',
-      'apps/desktop/assets/extensions/apex-visual-previews.ts',
-      'apps/desktop/assets/extensions/pi-work-fast-mode.ts',
-    ])
+    expect(inventory.includedFiles).toEqual(expect.arrayContaining(
+      SHIPPED_EXTENSION_FILENAMES.map((file) => `apps/desktop/assets/extensions/${file}`),
+    ))
 
     expect(inventory.filesByFamily['browser-agent-runtime']).toEqual([
       'apps/desktop/browser-agent/agent.ts',

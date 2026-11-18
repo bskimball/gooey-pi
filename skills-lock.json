@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "prune-tests": {
+      "source": "caldoai/skills",
+      "commit": "bd73b2ea5eb854ab8f0553fb41f77c8786f28f82",
+      "sourceType": "github",
+      "skillPath": "skills/prune-tests/SKILL.md",
+      "computedHash": "5f72196ebe7519a9dded8fb87e4680e0ec3d026ea938fdf692b1e47d43da4459"
+    }
+  }
+}

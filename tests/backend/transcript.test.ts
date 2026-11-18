@@ -395,6 +395,29 @@ describe('transcript graph bounds', () => {
 describe('transcript text budgets', () => {
   const partMax = 256 * 1024 // MAX_PART_TEXT_CHARS
 
+  it('keeps specialist identity and settlement when later output exhausts tool and argument budgets', async () => {
+    const records: string[] = []
+    const append = (message: object) => {
+      const n = records.length
+      records.push(JSON.stringify({ type: 'message', id: `m${n}`, parentId: n ? `m${n - 1}` : null, message }))
+    }
+    const tool = (name: string, args: object, text: string, details?: object) => {
+      const id = `call${records.length}`
+      append({ role: 'assistant', content: [{ type: 'toolCall', id, name, arguments: args }] })
+      append({ role: 'toolResult', toolCallId: id, toolName: name, content: [{ type: 'text', text }], details })
+    }
+    tool('task_start', { agent: 'scout', prompt: 'Check the worktree' }, 'started task_1', { worker: { id: 'task_1', instanceId: 'instance-A' } })
+    tool('task_wait', { id: 'task_1' }, 'task_1 settled (generation 1).')
+    for (let i = 0; i < 6; i++) tool('bash', { command: 'x'.repeat(120_000) }, 'y'.repeat(120_000))
+    const parts = (await readTranscript(sessionFile(records), false)).flatMap((message) => message.parts)
+    expect(parts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'task_start', args: { agent: 'scout', prompt: 'Check the worktree' } }),
+      expect.objectContaining({ name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', instanceId: 'instance-A' } } }),
+      expect.objectContaining({ name: 'task_wait', args: { id: 'task_1' } }),
+      expect.objectContaining({ name: 'task_wait', text: 'task_1 settled (generation 1).' }),
+    ]))
+  })
+
   it('drops the oldest text once newer parts consume the transcript budget exactly', async () => {
     // Four maximum-size parts consume MAX_TRANSCRIPT_TEXT_CHARS (1 MiB) to
     // the character, leaving nothing for the oldest message, which is dropped.

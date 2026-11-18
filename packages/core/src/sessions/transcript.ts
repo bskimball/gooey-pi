@@ -104,11 +104,31 @@ function roleOf(message: JsonRecord): TranscriptMessage['role'] {
   }
 }
 
-function boundedArgs(value: unknown): unknown {
+function compactWorker(value: unknown): unknown {
+  if (!isRecord(value)) return undefined
+  const { id, instanceId, lifecycle, generation, sessionFile, model, thinking, killReason, waiting_ui_requests } = value
+  return { id, instanceId, lifecycle, generation, sessionFile, model, thinking, killReason,
+    ...(Array.isArray(waiting_ui_requests) ? { waiting_ui_requests: waiting_ui_requests.slice(0, 1) } : {}) }
+}
+
+function compactTaskData(name: unknown, value: unknown, result: boolean): unknown {
+  if (typeof name !== 'string' || !name.startsWith('task_') || !isRecord(value)) return undefined
+  if (!result) return { ...value, ...(typeof value.prompt === 'string' ? { prompt: boundedString(value.prompt, 1024) } : {}) }
+  if (isRecord(value.worker)) return { worker: compactWorker(value.worker) }
+  if (name === 'task_list' && isRecord(value.list) && Array.isArray(value.list.workers)) {
+    const { includeSettled, total, workers } = value.list
+    return { list: { includeSettled, total, workers: workers.map(compactWorker) } }
+  }
+  return undefined
+}
+
+function boundedArgs(value: unknown, tool?: string, result = false): unknown {
   if (value === undefined) return undefined
   try {
     const serialized = typeof value === 'string' ? value : JSON.stringify(value)
-    return serialized.length <= MAX_PART_ARGS_CHARS ? value : boundedString(serialized, MAX_PART_ARGS_CHARS)
+    if (serialized.length <= MAX_PART_ARGS_CHARS) return value
+    const compact = compactTaskData(tool, value, result)
+    return compact !== undefined && JSON.stringify(compact).length <= MAX_PART_ARGS_CHARS ? compact : boundedString(serialized, MAX_PART_ARGS_CHARS)
   } catch {
     return '[unserializable arguments]'
   }
@@ -129,7 +149,7 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
           type: 'toolCall',
           id: typeof raw.id === 'string' ? boundedString(raw.id, 1_024) : undefined,
           name: boundedString(raw.name, 512),
-          args: boundedArgs(raw.arguments ?? raw.args),
+          args: boundedArgs(raw.arguments ?? raw.args, raw.name),
         })
       } else if (raw.type === 'image') {
         parts.push({
@@ -147,7 +167,7 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
       .map((part) => part.text)
       .join('\n')
     const images = parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
-    const details = isRecord(message.details) ? boundedArgs(message.details) : undefined
+    const details = isRecord(message.details) ? boundedArgs(message.details, typeof message.toolName === 'string' ? message.toolName : undefined, true) : undefined
     return [
       {
         type: 'toolResult',
@@ -174,10 +194,39 @@ function partsFromMessage(message: JsonRecord): MessagePart[] {
   return parts.length ? parts : [{ type: 'text', text: '' }]
 }
 
+// Protect task handles and lifecycle receipts from unrelated command output. Charge the
+// reservation to the existing budgets, and give unused space back to the full receipt.
+function reserveTaskReceipts(messages: TranscriptMessage[]) {
+  const receipts = new Map<MessagePart, { args: number; text: number; compact: unknown; notice?: string }>()
+  let args = 0
+  let text = 0
+  let remainingParts = MAX_TRANSCRIPT_PARTS
+  for (let i = messages.length - 1; i >= 0 && remainingParts > 0; i--) {
+    const parts = messages[i]!.parts
+    for (let j = parts.length - 1; j >= 0 && remainingParts-- > 0; j--) {
+      const part = parts[j]!
+      if (part.type !== 'toolCall' && part.type !== 'toolResult') continue
+      const settlement = part.type === 'toolResult' && (part.name === 'Async Task Settled' || part.name === 'async-task-settled')
+      if (!settlement && !part.name?.startsWith('task_')) continue
+      const notice = settlement ? part.text.match(/^task_\d+:\s*(?:settled|failed|aborted)\b[^\n]*?(?=\s+result=|$)/gm)?.join('\n') : undefined
+      const compact = part.type === 'toolCall' ? compactTaskData(part.name, part.args, false) : compactTaskData(part.name, part.details, true)
+      const size = compact === undefined ? 0 : JSON.stringify(compact).length
+      const argSize = size <= MAX_TRANSCRIPT_ARGS_CHARS / 4 - args ? size : 0
+      const textSize = part.type === 'toolResult' ? Math.min(notice?.length ?? part.text.length, 2048, MAX_TRANSCRIPT_TOOL_CHARS / 4 - text) : 0
+      receipts.set(part, { args: argSize, text: textSize, compact: argSize ? compact : undefined, notice })
+      args += argSize
+      text += textSize
+    }
+  }
+  return { receipts, args, text }
+}
+
 function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[] {
   let textBudget = MAX_TRANSCRIPT_TEXT_CHARS
-  let toolBudget = MAX_TRANSCRIPT_TOOL_CHARS
-  let argsBudget = MAX_TRANSCRIPT_ARGS_CHARS
+  const messages = transcript.slice(-MAX_TRANSCRIPT_MESSAGES)
+  const reserved = reserveTaskReceipts(messages)
+  let toolBudget = MAX_TRANSCRIPT_TOOL_CHARS - reserved.text
+  let argsBudget = MAX_TRANSCRIPT_ARGS_CHARS - reserved.args
   let imageBudget = MAX_TRANSCRIPT_IMAGE_CHARS
   let partBudget = MAX_TRANSCRIPT_PARTS
   const bounded: TranscriptMessage[] = []
@@ -190,12 +239,15 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
     return { ...part, data, dataTruncated: part.dataTruncated || Boolean(part.data && data !== part.data) || undefined }
   }
 
-  for (const message of transcript.slice(-MAX_TRANSCRIPT_MESSAGES).reverse()) {
+  for (const message of messages.reverse()) {
     const errorMessage = message.errorMessage === undefined ? undefined : boundedString(message.errorMessage, Math.min(MAX_PART_TEXT_CHARS, textBudget))
     textBudget -= errorMessage?.length ?? 0
     const parts: MessagePart[] = []
     for (const part of [...message.parts].reverse()) {
       if (partBudget <= 0) break
+      const receipt = reserved.receipts.get(part)
+      toolBudget += receipt?.text ?? 0
+      argsBudget += receipt?.args ?? 0
       let next: MessagePart | undefined
       if (part.type === 'text' || part.type === 'thinking' || part.type === 'agentMessage') {
         if (textBudget > 0) {
@@ -207,15 +259,14 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
         const images = part.images?.length
           ? [...part.images].reverse().map(boundImagePart).reverse()
           : undefined
-        if (toolBudget > 0 || images?.length) {
-          const text = toolBudget > 0 ? boundedString(part.text, toolBudget) : ''
+        if (toolBudget > 0 || images?.length || receipt?.compact !== undefined) {
+          const text = boundedString(part.text.length <= toolBudget ? part.text : receipt?.notice ?? part.text, toolBudget)
           toolBudget -= text.length
           let details: unknown
           if (part.details !== undefined && argsBudget > 0) {
             const serialized = typeof part.details === 'string' ? part.details : JSON.stringify(part.details)
-            if (serialized.length <= argsBudget) details = part.details
-            else details = boundedString(serialized, argsBudget)
-            argsBudget -= Math.min(serialized.length, argsBudget)
+            details = serialized.length <= argsBudget ? part.details : receipt?.compact ?? boundedString(serialized, argsBudget)
+            argsBudget -= details === receipt?.compact ? receipt!.args : Math.min(serialized.length, argsBudget)
           }
           next = {
             ...part,
@@ -228,9 +279,8 @@ function boundedTranscript(transcript: TranscriptMessage[]): TranscriptMessage[]
         let args: unknown
         if (part.args !== undefined && argsBudget > 0) {
           const serialized = typeof part.args === 'string' ? part.args : JSON.stringify(part.args)
-          if (serialized.length <= argsBudget) args = part.args
-          else args = boundedString(serialized, argsBudget)
-          argsBudget -= Math.min(serialized.length, argsBudget)
+          args = serialized.length <= argsBudget ? part.args : receipt?.compact ?? boundedString(serialized, argsBudget)
+          argsBudget -= args === receipt?.compact ? receipt!.args : Math.min(serialized.length, argsBudget)
         }
         next = { ...part, args }
       } else if (part.type === 'compaction') {

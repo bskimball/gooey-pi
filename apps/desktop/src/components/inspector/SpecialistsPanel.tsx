@@ -109,7 +109,11 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
   const tabs = useMemo(() => orderSpecialistTabs(specialists), [specialists])
   const liveTabCount = tabs.filter((spec) => isLiveSpecialist(spec.status)).length
   const active = useMemo(
-    () => specialists.find((spec) => spec.id === selectedId) ?? specialists.find((spec) => isLiveSpecialist(spec.status)) ?? specialists.at(-1),
+    () => {
+      const byHandle = selectedId ? specialists.filter((spec) => spec.taskId === selectedId) : []
+      return specialists.find((spec) => spec.id === selectedId) ?? (byHandle.length === 1 ? byHandle[0] : undefined)
+        ?? specialists.find((spec) => isLiveSpecialist(spec.status)) ?? specialists.at(-1)
+    },
     [specialists, selectedId],
   )
   const [diskTranscript, setDiskTranscript] = useState<{
@@ -278,7 +282,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
     ? active.maxTurns !== undefined ? `${active.turns}/${active.maxTurns} turns` : `${active.turns} ${active.turns === 1 ? 'turn' : 'turns'}`
     : undefined
   const detailBadges = [
-    !/^task_\d+$/.test(active.id) ? active.id : undefined,
+    !active.taskId ? active.id : undefined,
     active.model,
     active.thinking ? `think:${active.thinking}` : undefined,
     active.generation !== undefined ? `gen ${active.generation}` : undefined,
@@ -351,7 +355,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
                   type="button"
                   role="tab"
                   aria-selected={isSelected}
-                  aria-label={`${spec.agent} ${spec.id}${model ? ` (${model})` : ''}: ${status}. ${spec.mission || 'No task recorded'}`}
+                  aria-label={`${spec.agent} ${spec.taskId ?? spec.id}${model ? ` (${model})` : ''}: ${status}. ${spec.mission || 'No task recorded'}`}
                   title={`${spec.mission} · ${model ? `${model} · ` : ''}${status}`}
                   tabIndex={isSelected ? 0 : -1}
                   style={{ '--tab-z': isSelected ? tabs.length + 2 : tabs.length - index } as CSSProperties}
@@ -373,7 +377,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
                 >
                   {spec.status === 'waiting' ? <Question size={12} /> : <StatusMark state={specialistMarkState(spec.status)} size={12} />}
                   <strong>{spec.agent}</strong>
-                  {model ? <span>{model}</span> : /^task_\d+$/.test(spec.id) ? <span>{spec.id}</span> : null}
+                  {model ? <span>{model}</span> : spec.taskId ? <span>{spec.taskId}</span> : null}
                 </motion.button>,
               )
               return nodes
@@ -386,7 +390,7 @@ export const SpecialistsPanel = memo(function SpecialistsPanel({
           <summary title="Show run details">
             <CaretRight size={12} aria-hidden="true" className={`specialist-header__caret ${stylex.props(agentsStyles.specialistHeaderCaret).className ?? ""}`} />
             <strong className={`specialist-header__agent ${stylex.props(agentsStyles.specialistHeaderAgent).className ?? ""}`}>{active.agent}</strong>
-            {/^task_\d+$/.test(active.id) ? <span className={`specialist-header__handle mono ${stylex.props(agentsStyles.specialistHeaderHandle, activityStyles.mono).className ?? ""}`}>{active.id}</span> : null}
+            {active.taskId ? <span className={`specialist-header__handle mono ${stylex.props(agentsStyles.specialistHeaderHandle, activityStyles.mono).className ?? ""}`}>{active.taskId}</span> : null}
             {turnsBadge ? <span className={`specialist-header__turns ${stylex.props(agentsStyles.specialistHeaderTurns).className ?? ""}`}>{turnsBadge}</span> : null}
             <span className={[`run-state is-${active.status}`, stylex.props(agentsStyles.runState, ((active.status === "running")) && agentsStyles.runStateIsRunning, ((active.status === "waiting")) && agentsStyles.runStateIsWaiting, ((active.status === "error")) && agentsStyles.runStateIsError, ((active.status === "stopped")) && agentsStyles.runStateIsStopped, ((active.status === "closed")) && agentsStyles.runStateIsClosed).className].filter(Boolean).join(' ')}>{active.status === 'running' ? <StatusMark state="running" size={11} /> : null}{activeStatus}</span>
           </summary>

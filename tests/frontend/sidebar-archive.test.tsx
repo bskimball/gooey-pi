@@ -439,7 +439,9 @@ describe('sidebar project context menu', () => {
     expect(onRemoveProject).toHaveBeenCalledWith(project)
   })
 
-  it('uses notebook icons for new sessions and a folder-plus icon for projects', async () => {
+  it('starts a session in its project and opens the add-project flow', async () => {
+    const onNewSession = vi.fn()
+    const onAddProject = vi.fn()
     await act(async () => {
       root.render(
         <Sidebar
@@ -449,8 +451,8 @@ describe('sidebar project context menu', () => {
           onSelectProject={noop}
           onSelectSession={noop}
           onNavigate={noop}
-          onNewSession={noop}
-          onAddProject={noop}
+          onNewSession={onNewSession}
+          onAddProject={onAddProject}
           onRemoveProject={noop}
           onClose={noop}
           onOpenPalette={noop}
@@ -460,11 +462,10 @@ describe('sidebar project context menu', () => {
       )
     })
 
-    expect(container.querySelector('.sidebar__titlebar [aria-label^="New session"]')).toBeNull()
-    expect(container.querySelector('.project-row__new-session .ph-note-pencil')).not.toBeNull()
-    expect(container.querySelector('.sidebar__section-heading .ph-folder-plus')).not.toBeNull()
-    expect(container.querySelector('[aria-label="New session in Project"][title="New session in Project"]')).not.toBeNull()
-    expect(container.querySelector('[aria-label="Add project"][title="Add project"]')).not.toBeNull()
+    await press(container.querySelector('button[aria-label="New session in Project"]')!)
+    expect(onNewSession).toHaveBeenCalledExactlyOnceWith(project)
+    await press(container.querySelector('button[aria-label="Add project"]')!)
+    expect(onAddProject).toHaveBeenCalledOnce()
   })
 
   it('shows Linux shortcut names on Linux', async () => {

@@ -182,8 +182,8 @@ interface ComposerProps {
 	onCreateSide?(question?: string): void;
 	onReviewFinish?(): void;
 	/** A new `id` appends `text` to the draft without sending it. */
-	insertDraft?: { id: number; text: string };
-	onDraftInserted?(id: number): void;
+	insertDraft?: { id: number; text: string } | { id: string; text: string; prepend: true };
+	onDraftInserted?(id: number | string): void;
 }
 
 const reasoningLabels: Record<ApexThinkingLevel, string> = {
@@ -323,8 +323,8 @@ export const Composer = memo(function Composer({
 	);
 	const [value, setValue] = useState(
 		() =>
-			(draftKey ? readComposerDraft(draftKey, isolatedDraft)?.text : undefined) ??
-			(isolatedDraft ? "" : takeComposerDraft()),
+			draftKey ? (readComposerDraft(draftKey, true)?.text ?? "") :
+				(isolatedDraft ? "" : takeComposerDraft()),
 	);
 	const [caret, setCaret] = useState(() => value.length);
 	const [sessionReferenceIds, setSessionReferenceIds] = useState<
@@ -374,22 +374,24 @@ export const Composer = memo(function Composer({
 		[skills],
 	);
 
-	const insertedDraftId = useRef<number | undefined>(undefined);
+	const insertedDraftId = useRef<number | string | undefined>(undefined);
 	useEffect(() => {
 		if (!insertDraft || insertDraft.id === insertedDraftId.current) return;
 		insertedDraftId.current = insertDraft.id;
 		const current = textareaRef.current?.value ?? "";
-		const next = current ? `${current}\n\n${insertDraft.text}` : insertDraft.text;
+		const next = !current ? insertDraft.text : "prepend" in insertDraft
+			? `${insertDraft.text}\n\n${current}`
+			: `${current}\n\n${insertDraft.text}`;
 		setValue(next);
 		setCaret(next.length);
 		onDraftInserted?.(insertDraft.id);
-		requestAnimationFrame(() => textareaRef.current?.focus());
+		if (!("prepend" in insertDraft)) requestAnimationFrame(() => textareaRef.current?.focus());
 	}, [insertDraft, onDraftInserted]);
 
 	useEffect(() => {
 		if (!draftKey || restoredDraftRef.current) return;
 		restoredDraftRef.current = true;
-		const draft = readComposerDraft(draftKey, isolatedDraft);
+		const draft = readComposerDraft(draftKey, true);
 		if (!draft) return;
 		if (draft.model && draft.model !== model) onModelChange(draft.model);
 		if (draft.effort && draft.effort !== effort)
@@ -408,10 +410,10 @@ export const Composer = memo(function Composer({
 
 	useEffect(() => {
 		if (draftKeyRef.current && draftKeyRef.current !== draftKey)
-			clearComposerDraft(draftKeyRef.current, isolatedDraft);
+			clearComposerDraft(draftKeyRef.current, true);
 		draftKeyRef.current = draftKey;
 		if (draftKey)
-			saveComposerDraft(draftKey, { text: value, model, effort, fast }, isolatedDraft);
+			saveComposerDraft(draftKey, { text: value, model, effort, fast }, true);
 	}, [draftKey, effort, fast, model, value]);
 
 	useEffect(() => {
@@ -723,13 +725,14 @@ export const Composer = memo(function Composer({
 		try {
 			await onSend(promptWithContext, submittedImages, intent);
 			if (sharedSelection && !commandDraft) consumeSharedSelection();
-			if (draftKeyRef.current && mountedRef.current) clearComposerDraft(draftKeyRef.current, isolatedDraft);
+			if (draftKeyRef.current && mountedRef.current && !textareaRef.current?.value)
+				clearComposerDraft(draftKeyRef.current, true);
 			// The annotations were delivered: clear the attachment and page markers.
 			if (sentAnnotations.length > 0) onClearAnnotations();
 			if (currentExcerpts.length) removeExcerpts?.(currentExcerpts.map((excerpt) => excerpt.id));
 		} catch (error) {
 			if (!mountedRef.current && draftKeyRef.current) {
-				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast }, isolatedDraft);
+				restoreComposerDraft(draftKeyRef.current, { text: submittedValue, model, effort, fast }, true);
 			}
 			if (mountedRef.current) {
 				setValue((current) => current.trim() ? `${submittedValue}\n\n${current}` : submittedValue);
@@ -947,6 +950,7 @@ export const Composer = memo(function Composer({
 					<textarea
 						{...stylex.props(styles.textarea)}
 						data-isolated-draft={isolatedDraft || undefined}
+						data-composer-draft-key={draftKey}
 						ref={textareaRef}
 						value={value}
 						disabled={disabled || loading}

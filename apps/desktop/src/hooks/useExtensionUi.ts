@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { extensionUiMachine } from './extensionUiMachine'
 import type { AgentTurnHandle } from '@/app/agentTurnMachine'
@@ -11,6 +11,7 @@ import type { ApexApi, RuntimeInfo, SessionRecord } from '@/types/api'
 interface UseExtensionUiOptions {
   bridge: ApexApi | null
   activeRuntimeId?: string
+  activeSessionFile?: string
   activeSessionMode?: string
   runtimeSessionsRef: React.RefObject<Map<string, string>>
   setSessions: React.Dispatch<React.SetStateAction<SessionRecord[]>>
@@ -45,6 +46,7 @@ function requestIds(pending: PendingExtensionUi): string[] {
 export function useExtensionUi({
   bridge,
   activeRuntimeId,
+  activeSessionFile,
   activeSessionMode,
   runtimeSessionsRef,
   setSessions,
@@ -67,6 +69,20 @@ export function useExtensionUi({
   }))
   const extensionUi = snapshot.context.visible
   const pendingByRuntime = snapshot.context.pendingByRuntime
+  const [editorDrafts, setEditorDrafts] = useState<ReadonlyMap<string, { id: string; text: string }>>(() => new Map())
+  const fileDraftKey = activeSessionFile ? `file:${activeSessionFile}` : undefined
+  const runtimeDraftKey = activeRuntimeId ? `runtime:${activeRuntimeId}` : undefined
+  const editorDraftKey = fileDraftKey && editorDrafts.has(fileDraftKey) ? fileDraftKey : runtimeDraftKey
+  const editorDraft = editorDraftKey ? editorDrafts.get(editorDraftKey) : undefined
+  const consumeEditorDraft = useCallback((id: string) => {
+    if (!editorDraftKey) return
+    setEditorDrafts((current) => {
+      if (current.get(editorDraftKey)?.id !== id) return current
+      const next = new Map(current)
+      next.delete(editorDraftKey)
+      return next
+    })
+  }, [editorDraftKey])
   const modeByRuntimeRef = useRef<Map<string, PiBehaviorMode>>(new Map())
   const hydraByRuntimeRef = useRef<Map<string, ActivePiHydraTier>>(new Map())
   // Reported by the runtime only; never cached across runtimes or restarts.
@@ -208,10 +224,27 @@ export function useExtensionUi({
       }
       return
     }
-    if (rawEvent.type === 'runtime_exit') {
-      modeByRuntimeRef.current.delete(runtimeId)
-      hydraByRuntimeRef.current.delete(runtimeId)
-      setFusionPair(runtimeId, undefined)
+    if (rawEvent.type === 'runtime_exit' || rawEvent.type === 'desktop_session_revoked') {
+      if (rawEvent.type === 'runtime_exit') {
+        modeByRuntimeRef.current.delete(runtimeId)
+        hydraByRuntimeRef.current.delete(runtimeId)
+        setFusionPair(runtimeId, undefined)
+      }
+      const key = `runtime:${runtimeId}`
+      setEditorDrafts((current) => {
+        if (!current.has(key)) return current
+        const next = new Map(current)
+        next.delete(key)
+        return next
+      })
+      return
+    }
+    if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'set_editor_text') {
+      const { id, text, sessionFile } = rawEvent
+      if (typeof id !== 'string' || !id || id.length > 200 || typeof text !== 'string' || text.length > 32_000 || !text.trim()) return
+      if (typeof sessionFile !== 'string' && (sessionFile !== null || activeRuntimeIdRef.current !== runtimeId)) return
+      const key = typeof sessionFile === 'string' ? `file:${sessionFile}` : `runtime:${runtimeId}`
+      setEditorDrafts((current) => new Map(current).set(key, { id, text }))
       return
     }
     if (rawEvent.type === 'extension_ui_request' && rawEvent.method === 'setStatus' && rawEvent.statusKey === PI_FUSION_PAIR_STATUS_KEY) {
@@ -395,6 +428,8 @@ export function useExtensionUi({
   return {
     extensionUi,
     pendingByRuntime,
+    editorDraft,
+    consumeEditorDraft,
     clearExtensionUi,
     respondToExtensionUi,
     respondForRuntime,

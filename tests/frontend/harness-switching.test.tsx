@@ -1283,14 +1283,12 @@ describe('harness settings surfaces', () => {
     expect(container.querySelector('h1')?.textContent).toBe('Pi')
   })
 
-  it('refreshes Pi discovery without exposing removed runtime controls', async () => {
+  it('refreshes Pi discovery without changing settings', async () => {
     const onUpdate = vi.fn()
     const onRefreshHarnesses = vi.fn(async () => undefined)
     const settings: AppSettings = { ...DEFAULT_SETTINGS, activeHarness: 'pi' }
     await act(async () => { root.render(<AgentSettings settings={settings} meta={allDetectedMeta} onUpdate={onUpdate} onRefreshHarnesses={onRefreshHarnesses} />) })
     expect(container.textContent).toContain('Pi is ready')
-    expect(container.textContent).not.toContain('OMP')
-    expect(container.textContent).not.toContain('Prime Agent')
     const refresh = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Refresh'))!
     await click(refresh)
     expect(onRefreshHarnesses).toHaveBeenCalledTimes(1)

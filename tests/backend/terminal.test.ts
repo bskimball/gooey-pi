@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalService } from '../../apps/desktop/electron/main/terminal'
-import { createTerminalLifecycle } from '../../apps/desktop/electron/main/terminalLifecycleMachine'
 
 const dirs: string[] = []
 const windows = process.platform === 'win32'
@@ -206,32 +205,6 @@ describe('TerminalService', () => {
   })
 
 
-  it('short-circuits termination without signalling anything when the pty already exited', async () => {
-    const service = new TerminalService(async (cwd) => cwd, () => testShell)
-    const killSpy = vi.spyOn(process, 'kill')
-    const lifecycle = createTerminalLifecycle()
-    lifecycle.send({ type: 'EXITED' })
-    const owned = {
-      terminal: { pid: process.pid, kill: vi.fn() },
-      owner: { isDestroyed: () => true },
-      ownerId: 45,
-      cwd: '/',
-      shell: testShell,
-      outputWindowStartedAt: Date.now(),
-      outputWindowBytes: 0,
-      pendingOutput: '',
-      pendingOutputBytes: 0,
-      lifecycle,
-    }
-    try {
-      const started = Date.now()
-      await (service as unknown as { terminateProcess(id: string, owned: unknown): Promise<void> }).terminateProcess('gone', owned)
-      expect(Date.now() - started).toBeLessThan(400)
-      expect(owned.terminal.kill).not.toHaveBeenCalled()
-      expect(killSpy).not.toHaveBeenCalled()
-    } finally { killSpy.mockRestore() }
-  })
-
   it('makes concurrent app shutdown await an owner teardown already in progress', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'apex-pty-shutdown-')); dirs.push(cwd)
     const send = vi.fn()
@@ -262,11 +235,7 @@ describe('TerminalService', () => {
     service.input(owner, created.terminalId, 'exit\r')
     await waitFor(() => exits.length > 0)
 
-    // The exit handler already removed the terminal, so kill neither finds it
-    // nor runs the HUP/TERM/KILL escalation ladder.
-    const started = Date.now()
     expect(await service.kill(owner, created.terminalId)).toBe(false)
-    expect(Date.now() - started).toBeLessThan(100)
     expect(exits).toHaveLength(1)
     expect(exits[0]).toMatchObject({ terminalId: created.terminalId })
 

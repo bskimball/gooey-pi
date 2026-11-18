@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorBoundary } from '../../apps/desktop/src/components/ErrorBoundary'
 import { Transcript } from '../../apps/desktop/src/components/Transcript'
-import { saveComposerDraftFromDom, takeComposerDraft } from '../../apps/desktop/src/lib/composer-draft'
+import { clearComposerDraft, readComposerDraft, saveComposerDraftFromDom, takeComposerDraft } from '../../apps/desktop/src/lib/composer-draft'
 import type { TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -88,18 +88,20 @@ describe('transcript per-message boundary', () => {
 })
 
 describe('composer draft preservation', () => {
-  it('saves the composer DOM value on catch and restores it once', () => {
+  it('keeps a captured session draft out of other composers', () => {
     const composer = document.createElement('div')
     composer.className = 'composer'
     const textarea = document.createElement('textarea')
-    textarea.value = 'half-written prompt'
+    textarea.dataset.composerDraftKey = 'project:session'
+    textarea.value = 'session-specific crash draft'
     composer.append(textarea)
     document.body.append(composer)
     try {
       saveComposerDraftFromDom()
-      expect(takeComposerDraft()).toBe('half-written prompt')
+      expect(readComposerDraft('project:session', true)?.text).toBe('session-specific crash draft')
       expect(takeComposerDraft()).toBe('')
     } finally {
+      clearComposerDraft('project:session', true)
       composer.remove()
     }
   })
@@ -137,6 +139,6 @@ describe('composer draft preservation', () => {
       />)
     })
     expect(container.querySelector('textarea')?.value).toBe('draft before crash')
-    expect(window.sessionStorage.length).toBe(0)
+    expect(takeComposerDraft()).toBe('')
   })
 })

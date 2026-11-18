@@ -12,7 +12,7 @@ describe('renderer content bounds', () => {
     expect(boundText('abc', 3, '[cut]')).toBe('abc')
   })
 
-  it('does not materialize every line from newline-heavy diff input', () => {
+  it('caps the preview of a newline-heavy diff at the line limit', () => {
     const result = boundLines('\n'.repeat(1_000_000), 2 * 1024 * 1024, 4_000)
     expect(result.lines).toHaveLength(4_000)
     expect(result.truncated).toBe(true)

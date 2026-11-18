@@ -45,6 +45,7 @@ interface Subscriber {
 export function rosterFromMessages(messages: TranscriptMessage[]): SpecialistRosterEntry[] {
   return extractPiSpecialistSessions(messages).map((specialist) => ({
     id: specialist.id,
+    ...(specialist.taskId ? { taskId: specialist.taskId } : {}),
     agent: specialist.agent,
     mission: specialist.mission,
     status: specialist.status,

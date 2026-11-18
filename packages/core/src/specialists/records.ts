@@ -6,7 +6,12 @@ import { extractStaticToolCalls, pairToolCalls, type ToolResultPart } from './to
 export { extractStaticToolCalls, pairToolCalls, type ToolResultPart } from './tool-calls'
 
 export interface PiSpecialistSummary {
+  /** Stable UI key. Recycled RPC handles get distinct keys. */
   id: string
+  /** RPC handle as reported by the worker receipts, not a UI key. */
+  taskId?: string
+  instanceId?: string
+  launchCallId?: string
   agent: string
   mission: string
   status: SpecialistStatus
@@ -18,7 +23,6 @@ export interface PiSpecialistSummary {
 export interface PiSpecialistSession extends PiSpecialistSummary {
   prompt: string
   cwd?: string
-  instanceId?: string
   sessionFile?: string
   turns?: number
   maxTurns?: number
@@ -131,8 +135,34 @@ export function extractPiSpecialistSessions(messages: TranscriptMessage[]): PiSp
 export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSession[] {
   const specialists: PiSpecialistSession[] = []
   const turnsBySpecId = new Map<string, SpecialistTurnDraft[]>()
-  const workerById = new Map<string, PiSpecialistSession>()
+  const workerByHandle = new Map<string, PiSpecialistSession>()
+  const workerByInstance = new Map<string, PiSpecialistSession>()
+  const usedIds = new Set<string>()
   const pairedResults = pairToolCalls(flatParts)
+
+  const uniqueId = (base: string): string => {
+    let id = base
+    for (let ordinal = 2; usedIds.has(id); ordinal += 1) id = `${base}#${ordinal}`
+    usedIds.add(id)
+    return id
+  }
+
+  const currentWorker = (handle: string, worker?: Record<string, unknown>): PiSpecialistSession | undefined => {
+    const target = workerByHandle.get(handle)
+    if (!target || (typeof worker?.id === 'string' && worker.id !== handle)) return undefined
+    const instanceId = worker?.instanceId
+    if (typeof instanceId === 'string' && instanceId) {
+      const known = workerByInstance.get(instanceId)
+      if ((target.instanceId && target.instanceId !== instanceId) || (known && known !== target)) return undefined
+    }
+    return target
+  }
+
+  const rememberInstance = (target: PiSpecialistSession, instanceId: unknown) => {
+    if (typeof instanceId !== 'string' || !instanceId) return
+    target.instanceId = instanceId
+    if (target.taskId && workerByHandle.get(target.taskId) === target) workerByInstance.set(instanceId, target)
+  }
 
   const getPairedResult = (index: number, includeStreaming: boolean): ToolResultPart | undefined => {
     const result = pairedResults.get(index)
@@ -150,7 +180,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     if (!worker) return
     if (typeof worker.cwd === 'string') target.cwd = worker.cwd
     target.status = applySpecialistEvents(target.status, uiRequestsEvent(worker))
-    if (typeof worker.instanceId === 'string' && worker.instanceId) target.instanceId = worker.instanceId
+    rememberInstance(target, worker.instanceId)
     if (typeof worker.sessionFile === 'string' && worker.sessionFile) target.sessionFile = worker.sessionFile
     if (typeof worker.model === 'string' && worker.model) target.model = worker.model
     if (typeof worker.thinking === 'string' && worker.thinking) target.thinking = worker.thinking
@@ -169,6 +199,21 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
       currentTurn.isError = target.status === 'error'
       target.messages = buildMessagesFromTurns(turns!)
     }
+  }
+
+  const retireHandle = (handle: string) => {
+    const target = workerByHandle.get(handle)
+    if (!target) return
+    workerByHandle.delete(handle)
+    target.status = applySpecialistEvents(target.status, [{ type: 'CLOSED' }])
+    syncTurnState(target)
+  }
+
+  const bindHandle = (handle: string, target: PiSpecialistSession) => {
+    if (workerByHandle.get(handle) !== target) retireHandle(handle)
+    if (target.taskId && target.taskId !== handle && workerByHandle.get(target.taskId) === target) workerByHandle.delete(target.taskId)
+    target.taskId = handle
+    workerByHandle.set(handle, target)
   }
 
   const applyControlResult = (target: PiSpecialistSession, toolName: string, result: ToolResultPart) => {
@@ -224,8 +269,11 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     const pattern = /^(task_\d+):\s*(settled|failed|aborted)\b(.*)$/gm
     let match: RegExpExecArray | null
     while ((match = pattern.exec(text)) !== null) {
-      const target = workerById.get(match[1]!)
+      const target = currentWorker(match[1]!)
       if (!target) continue
+      // Saved async notices lack instance IDs. Their agent and generation can still rule out a stale notice.
+      const metadata = /^[ \t]+agent=(\S+)[ \t]+gen=(\d+)\b/.exec(match[3]!)
+      if (metadata && (metadata[1] !== target.agent || (target.generation !== undefined && Number(metadata[2]) !== target.generation))) continue
       const word = match[2]!
       const eventType = word === 'settled' ? 'SETTLED' : word === 'failed' ? 'FAILED' : 'ABORTED'
       target.status = applySpecialistEvents(target.status, [{ type: eventType }])
@@ -254,7 +302,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
       const fullPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
       const rawPrompt = fullPrompt.replace(/\s+/g, ' ')
       const responseText = typeof details?.finalReport === 'string' && details.finalReport.trim() ? details.finalReport.trim() : finalResult?.text?.trim() || undefined
-      const id = part.id ?? `task-${specialists.length + 1}`
+      const id = uniqueId(part.id ?? `task-${specialists.length + 1}`)
       const turn: SpecialistTurnDraft = {
         id,
         prompt: fullPrompt,
@@ -315,7 +363,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
             status = finalResult.isError ? 'error' : 'done'
           }
         }
-        const id = `${baseId}-step-${stepIndex + 1}`
+        const id = uniqueId(`${baseId}-step-${stepIndex + 1}`)
         const isLastStep = stepIndex === args.steps.length - 1 || status === 'error'
         const stepReport = typeof stepDetail?.report === 'string' && stepDetail.report.trim() ? stepDetail.report.trim() : finalResult && isLastStep ? finalBody : undefined
         const turn: SpecialistTurnDraft = {
@@ -342,19 +390,25 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
     } else if (part.name === 'task_start' && typeof args?.agent === 'string') {
       const result = getPairedResult(index, false)
       const details = asRecord(result?.details)
-      const workerView = asRecord(details?.worker)
+      const workerView = workerDetails(details)
       const fullPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
       const rawPrompt = fullPrompt.replace(/\s+/g, ' ')
-      const match = typeof result?.text === 'string' ? /\b(?:started|reused)\s+(task_\d+)\b/i.exec(result.text) : null
-      const workerId = (typeof workerView?.id === 'string' ? workerView.id : undefined) ?? match?.[1]
+      const match = result ? /\b(started|reused)\s+(task_\d+)\b/i.exec(result.text) : null
+      const reportedHandle = (typeof workerView?.id === 'string' && workerView.id) || match?.[2]
+      const handle = result?.isError ? undefined : reportedHandle
+      const instanceId = typeof workerView?.instanceId === 'string' && workerView.instanceId ? workerView.instanceId : undefined
       const { parts: activityParts, runningLabel } = activityPartsFromDetails(workerView?.activities)
-      const existing = workerId ? workerById.get(workerId) : undefined
-      if (existing && workerId) {
+      const known = instanceId ? workerByInstance.get(instanceId) : undefined
+      // A receipt with the same instance is a continuation. A legacy `started` receipt means a fresh worker.
+      const current = handle && match?.[1]?.toLowerCase() !== 'started' ? currentWorker(handle, workerView) : undefined
+      const existing = handle ? known ?? current : undefined
+      if (existing && handle) {
+        bindHandle(handle, existing)
         existing.agent = args.agent
         if (typeof args.cwd === 'string') existing.cwd = args.cwd
         if (rawPrompt) existing.mission = rawPrompt.slice(0, 120)
         if (fullPrompt) existing.prompt = fullPrompt
-        existing.status = applySpecialistEvents(existing.status, [{ type: result?.isError ? 'FAILED' : 'RUNNING' }])
+        existing.status = applySpecialistEvents(existing.status, [{ type: 'RUNNING' }])
         delete existing.killReason
         delete existing.finalReport
         delete existing.activity
@@ -370,7 +424,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         turnsBySpecId.set(existing.id, turns)
         existing.messages = buildMessagesFromTurns(turns)
       } else {
-        const id = workerId ?? part.id ?? `task-${specialists.length + 1}`
+        const id = uniqueId((handle && instanceId ? `worker:${instanceId}` : part.id) ?? reportedHandle ?? `task-${specialists.length + 1}`)
         const turns: SpecialistTurnDraft[] = [
           {
             id: `${id}-gen-1`,
@@ -383,6 +437,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         turnsBySpecId.set(id, turns)
         const entry: PiSpecialistSession = {
           id,
+          ...(reportedHandle ? { taskId: reportedHandle, launchCallId: part.id } : {}),
           agent: args.agent,
           mission: rawPrompt.slice(0, 120),
           prompt: fullPrompt,
@@ -391,16 +446,17 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
           ...(runningLabel ? { activity: runningLabel } : {}),
           messages: buildMessagesFromTurns(turns),
         }
-        applyWorkerDetails(entry, details)
+        if (handle) bindHandle(handle, entry)
+        // Failed launches can report the worker they tried to reuse. Don't attach its transcript to the failure.
+        if (!result?.isError) applyWorkerDetails(entry, details)
         specialists.push(entry)
-        if (workerId) workerById.set(workerId, entry)
       }
     } else if (part.name === 'task_send' && typeof args?.id === 'string') {
-      const target = workerById.get(args.id)
-      if (!target) continue
       const result = getPairedResult(index, false)
       if (result?.isError) continue
       const details = asRecord(result?.details)
+      const target = currentWorker(args.id, workerDetails(details))
+      if (!target) continue
       applyWorkerDetails(target, details)
       const fullMessage = typeof args.message === 'string' ? args.message.trim() : ''
       const rawMessage = fullMessage.replace(/\s+/g, ' ')
@@ -429,19 +485,18 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         target.messages = buildMessagesFromTurns(turns)
       }
     } else if ((part.name === 'task_wait' || part.name === 'task_status' || part.name === 'task_close' || part.name === 'task_abort') && typeof args?.id === 'string') {
-      const target = workerById.get(args.id)
-      if (!target) continue
       const result = getPairedResult(index, part.name === 'task_wait' || part.name === 'task_status')
       if (!result) continue
-      applyControlResult(target, part.name, result)
+      const target = currentWorker(args.id, workerDetails(result.details))
+      if (target) applyControlResult(target, part.name, result)
     } else if (part.name === 'task_wait' && Array.isArray(args?.ids)) {
       const result = getPairedResult(index, true)
       if (!result) continue
-      const details = asRecord(result.details)
-      const workerView = asRecord(details?.worker)
+      const workerView = workerDetails(result.details)
       const primaryId = (typeof workerView?.id === 'string' && workerView.id) || /^(task_\d+)\s+(?:already\s+)?settled\b/im.exec(result.text)?.[1] || /^(task_\d+)\b/m.exec(result.text)?.[1]
       if (primaryId) {
-        const target = workerById.get(primaryId)
+        const target = currentWorker(primaryId, workerView)
+        if (workerByHandle.has(primaryId) && !target) continue
         if (target) applyControlResult(target, 'task_wait', result)
       }
       const othersLine = /^others:[ \t]*(.+)$/im.exec(result.text)?.[1]
@@ -451,7 +506,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         while ((m = otherPattern.exec(othersLine)) !== null) {
           const otherId = m[1]!
           if (otherId === primaryId) continue
-          const other = workerById.get(otherId)
+          const other = currentWorker(otherId)
           if (!other) continue
           other.status = specialistOutcome({
             previous: other.status,
@@ -461,17 +516,34 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
           syncTurnState(other)
         }
       }
+    } else if (part.name === 'task_rebind') {
+      const result = getPairedResult(index, false)
+      if (!result || result.isError) continue
+      for (const [, handle, instanceId] of result.text.matchAll(/^rebound (task_\d+) instance=(\S+)/gm)) {
+        if (!handle || !instanceId) continue
+        const target = workerByInstance.get(instanceId)
+        if (target) bindHandle(handle, target)
+        else retireHandle(handle)
+      }
     } else if (part.name === 'task_list') {
       const result = getPairedResult(index, false)
       if (!result || result.isError) continue
       const details = asRecord(result.details)
       const listObj = asRecord(details?.list)
       const rawWorkers = Array.isArray(listObj?.workers) ? listObj.workers : Array.isArray(details?.workers) ? details.workers : []
+      const listedHandles = new Set<string>()
       for (const item of rawWorkers) {
         const w = asRecord(item)
-        if (!w || typeof w.id !== 'string' || typeof w.lifecycle !== 'string') continue
-        const target = workerById.get(w.id)
-        if (!target) continue
+        if (!w || typeof w.id !== 'string' || !w.id) continue
+        listedHandles.add(w.id)
+        const target = currentWorker(w.id, w)
+        if (!target) {
+          // A snapshot can show that the handle now belongs to an unrecorded worker.
+          retireHandle(w.id)
+          continue
+        }
+        if (typeof w.lifecycle !== 'string') continue
+        rememberInstance(target, w.instanceId)
         target.status = specialistOutcome({
           previous: target.status,
           tool: 'task_list',
@@ -479,10 +551,18 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
         })
         syncTurnState(target)
       }
+      // A complete list (including settled workers) proves absent handles are no longer bound.
+      if (listObj?.includeSettled === true && Array.isArray(listObj.workers) && listObj.total === listedHandles.size && listedHandles.size === rawWorkers.length) {
+        for (const handle of workerByHandle.keys()) {
+          if (!listedHandles.has(handle)) retireHandle(handle)
+        }
+      }
       const rowPattern = /^(task_\d+)\s+lifecycle=([a-z_]+)/gim
       let rowMatch: RegExpExecArray | null
       while ((rowMatch = rowPattern.exec(result.text)) !== null) {
-        const target = workerById.get(rowMatch[1]!)
+        const handle = rowMatch[1]!
+        if (listedHandles.has(handle)) continue
+        const target = currentWorker(handle)
         if (!target) continue
         target.status = specialistOutcome({
           previous: target.status,
@@ -498,7 +578,7 @@ export function parseSpecialistRecords(flatParts: MessagePart[]): PiSpecialistSe
       for (const call of staticCalls) {
         const id = typeof call.args.id === 'string' ? call.args.id : undefined
         if (!id) continue
-        const target = workerById.get(id)
+        const target = currentWorker(id)
         if (!target) continue
         if (call.name === 'task_close' || call.name === 'task_abort') {
           applyControlResult(target, call.name, {

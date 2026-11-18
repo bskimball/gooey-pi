@@ -28,7 +28,6 @@ const styles = stylex.create({
   header: {
     position: 'relative', zIndex: 20, width: '100%',
     backgroundColor: 'var(--canvas)', boxShadow: '0 6px 16px -8px rgb(0 0 0 / 0.45)',
-    borderBottomLeftRadius: 'var(--radius-lg)', borderBottomRightRadius: 'var(--radius-lg)',
     flexShrink: 0,
   },
   headerInner: {

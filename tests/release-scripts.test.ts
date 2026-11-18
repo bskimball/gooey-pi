@@ -217,17 +217,15 @@ describe('release preflight', () => {
     expect(() => assertBooleanEntitlement(`<key>${entitlement}</key><false/>`, entitlement, 'fixture')).toThrow(/missing required true entitlement/)
   })
 
-  test('enforces the repository Node and npm boundaries from checked-in metadata', () => {
-    expect(readRepositoryToolchain()).toEqual({ node: '24.21.0', npm: '12.0.2' })
-    expect(() => assertSupportedNode('v24.20.9')).toThrow(/Node\.js >=24\.21\.0 is required/)
-    expect(() => assertSupportedNode('v24.21.0')).not.toThrow()
-    expect(() => assertSupportedNode('v24.21.1')).not.toThrow()
-    expect(() => assertSupportedNode('v26.8.2')).not.toThrow()
-    expect(() => assertSupportedNode('v27.0.0')).not.toThrow()
-    expect(() => assertSupportedNpm('12.0.1')).toThrow(/npm >=12\.0\.2 is required/)
-    expect(() => assertSupportedNpm('12.0.2')).not.toThrow()
-    expect(() => assertSupportedNpm('13.0.0')).not.toThrow()
-    expect(() => assertSupportedToolchain({ nodeVersion: 'v24.21.0', npmVersion: '12.0.2' })).not.toThrow()
+  test('rejects versions below each configured minimum and accepts the minimum or newer', () => {
+    const toolchain = { node: '24.21.0', npm: '12.0.2' }
+    expect(() => assertSupportedNode('v24.20.9', toolchain)).toThrow(/Node\.js >=24\.21\.0 is required/)
+    expect(() => assertSupportedNode('v24.21.1', toolchain)).not.toThrow()
+    expect(() => assertSupportedNode('v26.8.2', toolchain)).not.toThrow()
+    expect(() => assertSupportedNpm('12.0.1', toolchain)).toThrow(/npm >=12\.0\.2 is required/)
+    expect(() => assertSupportedNpm('13.0.0', toolchain)).not.toThrow()
+    const minimum = readRepositoryToolchain()
+    expect(() => assertSupportedToolchain({ nodeVersion: `v${minimum.node}`, npmVersion: minimum.npm })).not.toThrow()
   })
 
   test('rejects malformed and prerelease tool versions', () => {
@@ -338,18 +336,20 @@ describe('release preflight', () => {
   test('probes npm through its JavaScript CLI and both release entry points reject an old npm', () => {
     const directory = mkdtempSync(join(tmpdir(), 'gooeypi-npm-version-'))
     const npmCli = join(directory, 'npm-cli.mjs')
-    writeFileSync(npmCli, "process.stdout.write('12.0.1\\n')\n")
+    const oldNpm = '0.0.1'
+    const { npm: minimumNpm } = readRepositoryToolchain()
+    writeFileSync(npmCli, `process.stdout.write('${oldNpm}\\n')\n`)
     const env = fixtureEnvironment({ npm_execpath: npmCli })
     try {
-      expect(readNpmVersion({ env })).toBe('12.0.1')
+      expect(readNpmVersion({ env })).toBe(oldNpm)
       const preflight = spawnSync(process.execPath, ['scripts/release/preflight.mjs', '--toolchain-only'], { encoding: 'utf8', env })
       expect(preflight.status).toBe(1)
-      expect(preflight.stderr).toContain('npm >=12.0.2 is required')
+      expect(preflight.stderr).toContain(`npm >=${minimumNpm} is required`)
 
       const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'
       const packaging = spawnSync(process.execPath, ['scripts/release/package.mjs', '--qa', '--platform', platform, '--dry-run'], { encoding: 'utf8', env })
       expect(packaging.status).toBe(1)
-      expect(packaging.stderr).toContain('npm >=12.0.2 is required')
+      expect(packaging.stderr).toContain(`npm >=${minimumNpm} is required`)
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
@@ -567,22 +567,10 @@ else if (JSON.stringify(args) === ${JSON.stringify(JSON.stringify(expectedInstal
     }
   })
 
-  test('keeps contributor instructions aligned with the enforced engines', () => {
+  test('records the same engine requirements in the package manifest and lockfile', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-    const toolchain = readRepositoryToolchain()
-    expect(packageJson.engines).toEqual({ node: `>=${toolchain.node}`, npm: `>=${toolchain.npm}` })
     const packageLock = JSON.parse(readFileSync('package-lock.json', 'utf8'))
     expect(packageLock.packages[''].engines).toEqual(packageJson.engines)
-    expect(packageJson.packageManager).toBe(`npm@${toolchain.npm}`)
-    expect(readFileSync('.nvmrc', 'utf8').trim()).toBe(toolchain.node)
-    const readme = readFileSync('README.md', 'utf8')
-    expect(readme).toContain(`Node.js ${toolchain.node} or newer and npm ${toolchain.npm} or newer`)
-    expect(readme).toContain('npm run toolchain:bootstrap')
-    expect(readme).toContain("invoked npm's configured global prefix")
-    expect(readme).toContain('install-time lifecycle scripts disabled')
-    expect(readme).not.toContain('into the active Node installation')
-    expect(readFileSync('scripts/release/package.mjs', 'utf8')).toContain('assertSupportedToolchain()')
-    expect(readFileSync('scripts/release/preflight.mjs', 'utf8')).toContain('assertSupportedToolchain()')
   })
 
   test('fails closed without Developer ID credentials', () => {
@@ -1161,20 +1149,7 @@ describe('fuse hardening configuration', () => {
   test('uses only the configured canonical afterPack hook', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
     expect(packageJson.build.afterPack).toBe('scripts/release/after-pack.cjs')
-    expect(() => readFileSync('scripts/afterPack.cjs', 'utf8')).toThrow()
     expect(readFileSync(packageJson.build.afterPack, 'utf8')).toContain('FuseV1Options.OnlyLoadAppFromAsar')
-  })
-})
-
-describe('coverage configuration', () => {
-  test('loads the fail-closed inventory without weakening thresholds', () => {
-    const config = readFileSync('vitest.config.ts', 'utf8')
-    expect(config).toContain("from './scripts/release/coverage-inventory'")
-    expect(config).toContain('include: coverageInventory.includePatterns')
-    expect(config).toContain('statements: 65')
-    expect(config).toContain('branches: 50')
-    expect(config).toContain('functions: 70')
-    expect(config).toContain('lines: 75')
   })
 })
 

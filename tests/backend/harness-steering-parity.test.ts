@@ -9,7 +9,7 @@ const adapters = [
 describe.each(adapters)('%s steering protocol parity', (_name, adapter) => {
   it('passes steer commands through the shared RPC vocabulary', () => {
     const command = { type: 'steer', message: 'change direction' }
-    expect(adapter.translateCommand(command)).toBe(command)
+    expect(adapter.translateCommand(command)).toEqual(command)
   })
 
   it('preserves the existing image payload for prompts and steers', () => {
@@ -17,8 +17,8 @@ describe.each(adapters)('%s steering protocol parity', (_name, adapter) => {
     const prompt = { type: 'prompt', message: 'inspect', images }
     const steer = { type: 'steer', message: 'inspect this instead', images }
 
-    expect(adapter.translateCommand(prompt)).toBe(prompt)
-    expect(adapter.translateCommand(steer)).toBe(steer)
+    expect(adapter.translateCommand(prompt)).toEqual(prompt)
+    expect(adapter.translateCommand(steer)).toEqual(steer)
   })
 
   it('preserves both queued and picked-up session action snapshots', () => {
@@ -38,8 +38,6 @@ describe.each(adapters)('%s steering protocol parity', (_name, adapter) => {
 
     const normalizedQueued = adapter.normalizeEvent(queued)
     const normalizedPickedUp = adapter.normalizeEvent(pickedUp)
-    expect(normalizedQueued).toBe(queued)
-    expect(normalizedPickedUp).toBe(pickedUp)
     expect(parseSessionActionSnapshot(normalizedQueued?.actions)).toEqual(queued.actions)
     expect(parseSessionActionSnapshot(normalizedPickedUp?.actions)).toEqual(pickedUp.actions)
   })

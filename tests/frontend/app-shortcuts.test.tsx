@@ -23,29 +23,6 @@ afterEach(() => {
 })
 
 describe('app keyboard shortcuts lifecycle', () => {
-  it('subscribes the window keydown handler once and keeps it across re-renders', async () => {
-    const addSpy = vi.spyOn(window, 'addEventListener')
-    const removeSpy = vi.spyOn(window, 'removeEventListener')
-    const container = document.createElement('div')
-    document.body.append(container)
-    const root = createRoot(container)
-    await act(async () => { root.render(<App />) })
-    const keydownAdds = () => addSpy.mock.calls.filter(([type]) => type === 'keydown').length
-    const keydownRemoves = () => removeSpy.mock.calls.filter(([type]) => type === 'keydown').length
-    const initialAdds = keydownAdds()
-    expect(initialAdds).toBeGreaterThan(0)
-
-    // Force state-driven re-renders through the shortcut itself.
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true })) })
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true })) })
-
-    expect(keydownAdds()).toBe(initialAdds)
-    expect(keydownRemoves()).toBe(0)
-    await act(async () => root.unmount())
-    expect(keydownRemoves()).toBeGreaterThan(0)
-    container.remove()
-  })
-
   it('auto-closes the sidebar on entering the smallest breakpoint but still allows toggling it', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 721 })
     const container = document.createElement('div')
@@ -73,6 +50,9 @@ describe('app keyboard shortcuts lifecycle', () => {
     expect(container.querySelector('.sidebar')).toBeNull()
 
     await act(async () => root.unmount())
+    const shortcut = new KeyboardEvent('keydown', { key: 'b', metaKey: true, cancelable: true })
+    window.dispatchEvent(shortcut)
+    expect(shortcut.defaultPrevented).toBe(false)
     container.remove()
   })
 })

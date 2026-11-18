@@ -72,7 +72,7 @@ export const SidebarSubagents = memo(function SidebarSubagents({ session, specia
                   <button
                     type="button"
                     className={`session-subagent is-${specialist.status}${isOpen ? ' is-open' : ''} ${stylex.props(sidebarStyles.subagentRow, isOpen && sidebarStyles.subagentRowSelected).className ?? ''}`}
-                    aria-label={`${specialist.agent} ${specialist.id}: ${status}. ${mission}`}
+                    aria-label={`${specialist.agent} ${specialist.taskId ?? specialist.id}: ${status}. ${mission}`}
                     aria-current={isOpen ? 'true' : undefined}
                     title={`${specialist.agent}${model ? ` · ${model}` : ''} · ${status}\n${mission}`}
                     onClick={() => onOpen(session, specialist.id)}

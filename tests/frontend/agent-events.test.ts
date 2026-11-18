@@ -76,8 +76,12 @@ describe('agent event admission bound', () => {
     expect(buffered).toHaveLength(1)
   })
 
-  it('exposes a bounded default queue limit', () => {
-    expect(AGENT_EVENT_QUEUE_LIMIT).toBe(50_000)
+  it('enforces the default queue limit when no override is supplied', () => {
+    const queue: PendingAgentEvent[] = []
+    queue.length = AGENT_EVENT_QUEUE_LIMIT - 1
+    expect(admitAgentEvent(1, { type: 'message_update' }, null, queue)).toBe('frame')
+    expect(admitAgentEvent(1, { type: 'message_update' }, null, queue)).toBe('overflow')
+    expect(queue).toHaveLength(AGENT_EVENT_QUEUE_LIMIT)
   })
 })
 

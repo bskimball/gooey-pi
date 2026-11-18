@@ -192,7 +192,7 @@ describe('transcript rendering', () => {
       expect(primary.hasAttribute('aria-expanded')).toBe(false)
       await act(async () => primary.click())
       expect(onOpenSpecialist).toHaveBeenCalledTimes(1)
-      expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+      expect(onOpenSpecialist).toHaveBeenCalledWith('start-0')
       expect(first.querySelector('.subagent-lane__body')).toBeNull()
       onOpenSpecialist.mockClear()
 
@@ -213,7 +213,7 @@ describe('transcript rendering', () => {
 
       await act(async () => first.querySelector<HTMLButtonElement>('.subagent-lane__links button')!.click())
       expect(onOpenSpecialist).toHaveBeenCalledTimes(1)
-      expect(onOpenSpecialist).toHaveBeenCalledWith('task_0')
+      expect(onOpenSpecialist).toHaveBeenCalledWith('start-0')
 
       await act(async () => toggle.click())
       expect(toggle.getAttribute('aria-label')).toBe('Expand scout details')

@@ -310,6 +310,8 @@ export interface ApexEventEnvelope {
 /** One sub-agent a session delegated to, as the main process reads it from the session's task_* receipts. */
 export interface SpecialistRosterEntry {
   id: string
+  /** Process-local RPC handle, for display only. */
+  taskId?: string
   agent: string
   mission: string
   status: 'running' | 'waiting' | 'done' | 'error' | 'stopped' | 'closed'

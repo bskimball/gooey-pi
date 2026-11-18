@@ -10,7 +10,6 @@ import { validateRpcCommand } from '../../apps/desktop/electron/main/agent-rpc/c
 import { MAX_RPC_WRITE_FRAME_BYTES, rpcRequestFrameBytes } from '../../apps/desktop/electron/main/agent-rpc/limits'
 import { RpcRuntime } from '../../apps/desktop/electron/main/agent-rpc/runtime'
 import { createRuntimeActivityActor, streamingActivity } from '../../apps/desktop/electron/main/agent-rpc/runtimeActivityMachine'
-import { createRpcRuntimeLifecycle } from '../../apps/desktop/electron/main/agent-rpc/rpcRuntimeLifecycleMachine'
 import { createDesktopLinkPeerLifecycle } from '../../apps/desktop/electron/main/desktopLinkPeerMachine'
 import { FramedRpcTransport } from '../../apps/desktop/electron/main/agent-rpc/transport'
 import type { RpcObject } from '../../apps/desktop/electron/main/agent-rpc/types'
@@ -120,6 +119,7 @@ input.on('line', (line) => {
   } else if (command.type === 'switch_session' || command.type === 'new_session') {
     if (${confirmSwitch}) {
       pendingSwitch = command
+      send({ type: 'extension_ui_request', method: 'set_editor_text', id: 'switch-draft', text: 'Draft during an ambiguous session transition' })
       send({ type: 'extension_ui_request', method: 'confirm', id: 'switch-confirm', title: 'Switch session?' })
       return
     }
@@ -323,6 +323,7 @@ describe('Desktop session attachment over real local sockets', () => {
     manager.subscribe(({ event }) => events.push(event))
     const switching = manager.command(runtime.runtimeId, { type: 'new_session' })
     await waitUntil(() => events.some((event) => event.id === 'switch-confirm'))
+    expect(events.some((event) => event.id === 'switch-draft')).toBe(false)
     await expect(manager.command(runtime.runtimeId, { type: 'prompt', message: 'do not admit' })).rejects.toThrow('session change')
     await expect(manager.command(runtime.runtimeId, { type: 'extension_ui_response', id: 'switch-confirm', confirmed: false })).resolves.toMatchObject({ success: true })
     await expect(switching).resolves.toMatchObject({ data: { cancelled: true } })
@@ -1754,7 +1755,7 @@ setInterval(() => {}, 1000)
   })
 })
 
-describe('desktopLinkPeerMachine & rpcRuntimeLifecycleMachine', () => {
+describe('desktop link peer cleanup', () => {
   it('releases late attachments when a peer disconnects while attaching and handles auth timeout', async () => {
     vi.useFakeTimers()
     try {
@@ -1796,26 +1797,4 @@ describe('desktopLinkPeerMachine & rpcRuntimeLifecycleMachine', () => {
     }
   })
 
-  it('tracks rpcRuntimeLifecycleMachine transitions through running, stopping, and exited', () => {
-    const lc = createRpcRuntimeLifecycle()
-    expect(lc.getSnapshot().matches('running')).toBe(true)
-    expect(lc.getSnapshot().context).toMatchObject({ acceptingChunkFrames: true, inputClosed: false, receivedFrame: false, transportFailed: false })
-
-    lc.send({ type: 'FRAME_RECEIVED' })
-    expect(lc.getSnapshot().context.receivedFrame).toBe(true)
-
-    const stopPromise = Promise.resolve(true)
-    lc.send({ type: 'STOP_REQUESTED', stopPromise })
-    expect(lc.getSnapshot().matches('stopping')).toBe(true)
-    expect(lc.getSnapshot().context).toMatchObject({ acceptingChunkFrames: false, inputClosed: false, stopPromise })
-
-    lc.send({ type: 'CLOSE_SETTLED' })
-    expect(lc.getSnapshot().context.inputClosed).toBe(true)
-
-    lc.send({ type: 'TRANSPORT_FAILED' })
-    expect(lc.getSnapshot().context.transportFailed).toBe(true)
-
-    lc.send({ type: 'PROCESS_EXITED' })
-    expect(lc.getSnapshot().matches('exited')).toBe(true)
-  })
 })

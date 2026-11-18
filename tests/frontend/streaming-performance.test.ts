@@ -517,7 +517,7 @@ describe('streaming markdown parse throttling', () => {
     expect(summarizeTranscript([])).toEqual({ toolCount: 0, lastText: undefined })
     expect(extractPiSessionWidgets(messages)).toEqual({
       todos: [{ id: '1', content: 'Setup GUI', status: 'in_progress', note: undefined }],
-      specialists: [{ id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'running' }],
+      specialists: [{ id: 'task-1', taskId: 'task_1', launchCallId: 'task-1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'running' }],
     })
     const settledMessages: TranscriptMessage[] = [
       ...messages,
@@ -529,7 +529,7 @@ describe('streaming markdown parse throttling', () => {
       ] },
     ]
     expect(extractPiSessionWidgets(settledMessages).specialists).toEqual([
-      { id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
+      { id: 'task-1', taskId: 'task_1', launchCallId: 'task-1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
       { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
     ])
     const chainAndSendMessages: TranscriptMessage[] = [
@@ -540,7 +540,7 @@ describe('streaming markdown parse throttling', () => {
       ] },
     ]
     expect(extractPiSessionWidgets(chainAndSendMessages).specialists).toEqual([
-      { id: 'task_1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
+      { id: 'task-1', taskId: 'task_1', launchCallId: 'task-1', agent: 'librarian', mission: 'Inspect pi-gui', status: 'done' },
       { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
     ])
     const promptMessages: TranscriptMessage[] = [
@@ -551,7 +551,7 @@ describe('streaming markdown parse throttling', () => {
       ] },
     ]
     expect(extractPiSessionWidgets(promptMessages).specialists).toEqual([
-      { id: 'task_1', agent: 'librarian', mission: 'Check repo licenses', status: 'running' },
+      { id: 'task-1', taskId: 'task_1', launchCallId: 'task-1', agent: 'librarian', mission: 'Check repo licenses', status: 'running' },
       { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
     ])
     const promptAndReuseMessages: TranscriptMessage[] = [
@@ -573,9 +573,9 @@ describe('streaming markdown parse throttling', () => {
       ] },
     ]
     expect(extractPiSessionWidgets(promptAndReuseMessages).specialists).toEqual([
-      { id: 'task_1', agent: 'sidekick', mission: 'Reuse context', status: 'running', activity: 'bash: npx vitest run (1s)' },
+      { id: 'task-1', taskId: 'task_1', launchCallId: 'task-1', agent: 'sidekick', mission: 'Reuse context', status: 'running', activity: 'bash: npx vitest run (1s)' },
       { id: 'sync-1', agent: 'oracle', mission: 'Review diff', status: 'running' },
-      { id: 'task_2', agent: 'sidekick', mission: 'Audit IPC surface', status: 'running' },
+      { id: 'sidekick-2', taskId: 'task_2', launchCallId: 'sidekick-2', agent: 'sidekick', mission: 'Audit IPC surface', status: 'running' },
       { id: 'chain-1-step-1', agent: 'scout', mission: 'Map auth', status: 'done' },
       { id: 'chain-1-step-2', agent: 'machinist', mission: 'Patch auth', status: 'error' },
     ])
@@ -587,7 +587,7 @@ describe('streaming markdown parse throttling', () => {
       ] },
     ]
     expect(extractPiSessionWidgets(statusIdleMessages).specialists[0]).toEqual({
-      id: 'task_1',
+      id: 'task-1', taskId: 'task_1', launchCallId: 'task-1',
       agent: 'sidekick',
       mission: 'Reuse context',
       status: 'running',
@@ -633,7 +633,8 @@ describe('streaming markdown parse throttling', () => {
     const sessions = extractPiSpecialistSessions(detailedMessages)
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toMatchObject({
-      id: 'task_1',
+      id: 'worker:inst-42',
+      taskId: 'task_1',
       agent: 'sidekick',
       instanceId: 'inst-42',
       model: 'openai-codex/gpt-5.4',

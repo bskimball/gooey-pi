@@ -116,8 +116,17 @@ export class AgentRpcManager {
   }
 
   private publishEvent(envelope: ApexEventEnvelope): void {
-    const normalized = this.projections.get(envelope.runtimeId)?.apply(envelope.event)
-    const published = { ...envelope, sequence: ++this.eventSequence }
+    const { runtimeId, event } = envelope
+    let scopedEvent = event
+    if (event.type === 'extension_ui_request' && event.method === 'set_editor_text') {
+      // A runtime can retain its ID across a session replacement. Never route
+      // a draft using the old association while that transition is in flight.
+      const runtime = this.runtimes.get(runtimeId)
+      if (!runtime || this.sessionTransitions.has(runtimeId)) return
+      scopedEvent = { ...event, sessionFile: runtime.snapshot().sessionFile ?? null }
+    }
+    const normalized = this.projections.get(runtimeId)?.apply(scopedEvent)
+    const published = { ...envelope, event: scopedEvent, sequence: ++this.eventSequence }
     this.eventSink(published)
     for (const sink of this.subscribers) sink(published)
     if (normalized) {

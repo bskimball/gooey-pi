@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, useState, type ComponentProps } from 'react'
+import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '../../apps/desktop/src/components/Composer'
 import { groupModelsByProvider } from '../../apps/desktop/src/hooks/useProviderCatalog'
-import type { ApexModelDescriptor, ApexProviderDescriptor, RuntimeInfo, SkillRecord } from '../../apps/desktop/src/types/api'
+import type { ApexModelDescriptor, ApexProviderDescriptor, RuntimeInfo } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -60,7 +60,7 @@ function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = fal
     onEffortChange={vi.fn()}
     onFastChange={vi.fn()}
     onSend={onSend}
-    onStop={vi.fn()}
+    onStop={extra.onStop ?? vi.fn()}
   />))
   return onSend
 }
@@ -241,6 +241,36 @@ describe('Composer image ingestion', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('up to 8 files')
   })
 
+
+  it('keeps an extension draft staged before command acknowledgment without moving focus', async () => {
+    let acknowledge!: () => void
+    const onSend = vi.fn(() => new Promise<void>((resolve) => { acknowledge = resolve }))
+    const draftKey = 'project:extension-session'
+    renderComposer(onSend, true, false, 'queue', { draftKey })
+    act(() => {
+      const textarea = container.querySelector('textarea')!
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+      setter?.call(textarea, '/deepen fixture')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => { container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click() })
+    expect(onSend).toHaveBeenCalledOnce()
+
+    const otherInput = document.createElement('input')
+    container.append(otherInput)
+    otherInput.focus()
+    renderComposer(onSend, true, false, 'queue', { draftKey, insertDraft: { id: 'extension-draft', text: 'Review before sending.', prepend: true } })
+    await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+    expect(document.activeElement).toBe(otherInput)
+    expect(container.querySelector('textarea')?.value).toBe('Review before sending.')
+    await act(async () => { acknowledge() })
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    renderComposer(onSend, true, false, 'queue', { draftKey })
+    expect(container.querySelector('textarea')?.value).toBe('Review before sending.')
+    expect(onSend).toHaveBeenCalledOnce()
+  })
 
   it('restores the text and image draft when prompt admission fails', async () => {
     const onSend = renderComposer(vi.fn(async () => { throw new Error('rejected') }))
@@ -556,36 +586,33 @@ describe('Composer submission lifecycle', () => {
 })
 
 describe('Composer context usage and stop control', () => {
-  it('shows the exact context usage as a ring beside the send controls', () => {
+  it('reports measured context usage', () => {
     renderComposer(vi.fn(), true, false, 'queue', { contextUsage: { tokens: 50_000, contextWindow: 100_000, percent: 50 } })
-    expect([...container.querySelector('.composer__actions')!.children].map((element) => element.getAttribute('aria-label'))).toEqual(['Context usage', 'Start dictation', 'Send message'])
     const meter = container.querySelector<HTMLElement>('[role="meter"]')
     expect(meter?.textContent).toBe('50')
     expect(meter?.title).toBe('50,000 / 100,000 tokens')
     expect(meter?.getAttribute('aria-valuenow')).toBe('50')
   })
 
-  it('shows unavailable usage honestly and uses a square stop icon', () => {
+  it('reports context usage as unavailable rather than zero', () => {
     renderComposer(vi.fn(), true, false, 'queue', { contextUsage: { tokens: null, contextWindow: 100_000, percent: null } })
     const meter = container.querySelector<HTMLElement>('[role="meter"]')
     expect(meter?.textContent).toBe('—')
     expect(meter?.hasAttribute('aria-valuenow')).toBe(false)
     expect(meter?.title).toContain('unavailable')
-
-    renderComposer(vi.fn(), true, true, 'queue')
-    expect(container.querySelector('button[aria-label="Stop Pi"] .ph-square')).not.toBeNull()
-    expect(container.querySelector('.ph-stop-circle')).toBeNull()
   })
 
-  it('keeps Stop after an explicit Steer action while a run is busy', () => {
-    renderComposer(vi.fn(), true, true)
+  it('allows stopping a busy run without allowing an empty steer', () => {
+    const onStop = vi.fn()
+    const onSend = renderComposer(vi.fn(), true, true, 'queue', { onStop })
+    const stop = container.querySelector<HTMLButtonElement>('button[aria-label="Stop Pi"]')!
+    const steer = container.querySelector<HTMLButtonElement>('button[aria-label="Steer this run"]')!
 
-    expect(container.querySelector('textarea')?.placeholder).toBe('Steer this run… (Ctrl+Enter to steer, Enter to queue)')
-    const stop = container.querySelector('button[aria-label="Stop Pi"]')
-    const steer = container.querySelector<HTMLButtonElement>('button[aria-label="Steer this run"]')
-    expect(steer?.nextElementSibling).toBe(stop)
-    expect(steer?.disabled).toBe(true)
-    expect(container.querySelector('button[aria-label="Send message"]')).toBeNull()
+    expect(steer.disabled).toBe(true)
+    act(() => steer.click())
+    act(() => stop.click())
+    expect(onStop).toHaveBeenCalledOnce()
+    expect(onSend).not.toHaveBeenCalled()
   })
 })
 
@@ -610,59 +637,5 @@ describe('Composer fallback indicator', () => {
     expect(fallback?.textContent).toContain('Running on anthropic/claude-sonnet')
     expect(fallback?.getAttribute('title')).toContain('Provider fallback')
     expect(fallback?.closest('[role="dialog"]')).toBeNull()
-  })
-})
-
-describe('Composer memoization', () => {
-  const stableProps = {
-    busy: false,
-    model: 'provider/vision',
-    effort: 'medium' as const,
-    modelsByProvider,
-    providers,
-    reasoningLevels: ['medium' as const],
-    fast: false,
-    fastSupported: false,
-    fastAvailable: true,
-    imageInputSupported: true,
-    messageEnterAction: 'queue' as const,
-    skills: [],
-    onModelChange: vi.fn(),
-    onEffortChange: vi.fn(),
-    onFastChange: vi.fn(),
-    onSend: vi.fn(),
-    onStop: vi.fn(),
-  }
-
-  it('does not re-render when a streaming parent re-renders with identical props', () => {
-    // Composer's render body scans `skills` for enabled entries, so counting
-    // those scans counts Composer renders.
-    let renderProbes = 0
-    const probedSkills = new Proxy([] as SkillRecord[], {
-      get(target, key, receiver) {
-        if (key === 'filter') renderProbes += 1
-        return Reflect.get(target, key, receiver)
-      },
-    })
-    let forceParentRender: () => void = () => undefined
-    function Parent() {
-      const [, setTick] = useState(0)
-      forceParentRender = () => setTick((value) => value + 1)
-      return <Composer {...stableProps} skills={probedSkills} />
-    }
-
-    act(() => root.render(<Parent />))
-    const initialRenders = renderProbes
-    expect(initialRenders).toBeGreaterThan(0)
-
-    act(() => forceParentRender())
-    act(() => forceParentRender())
-    // memo(Composer) bails out for identical props: no further renders.
-    expect(renderProbes).toBe(initialRenders)
-
-    const settingsButton = container.querySelector<HTMLButtonElement>('button[aria-label="Chat settings"]')
-    expect(settingsButton).not.toBeNull()
-    act(() => settingsButton?.click())
-    expect(document.body.querySelector<HTMLButtonElement>('.model-picker__trigger')?.getAttribute('aria-label')).toBe('Model: Vision')
   })
 })

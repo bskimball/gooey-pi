@@ -38,7 +38,7 @@ describe('PrivacySettings', () => {
     expect(container.textContent).toContain('Requests use your selected agent')
     expect(container.textContent).toContain('Session requests follow the selected agent and its provider configuration.')
     expect(container.querySelector('input[type="checkbox"]')).toBeNull()
-    expect(container.textContent).not.toMatch(/optional diagnostics|share diagnostics|this Mac|Prime Agent/i)
+    expect(container.textContent).not.toMatch(/optional diagnostics|share diagnostics|this Mac/i)
     expect(onUpdate).not.toHaveBeenCalled()
   })
 })

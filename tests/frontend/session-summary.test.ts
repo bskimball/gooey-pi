@@ -52,8 +52,8 @@ describe('recorded specialist outcomes', () => {
         { type: 'toolResult', name: 'task_close', text: 'lifecycle: closed' },
       ]),
     ]
-    expect(extractPiSessionWidgets(messages).specialists[0]).toMatchObject({ id: 'task_1', status: expected })
-    expect(extractPiSpecialistSessions(messages)[0]).toMatchObject({ id: 'task_1', status: expected })
+    expect(extractPiSessionWidgets(messages).specialists[0]).toMatchObject({ id: 'start-1', taskId: 'task_1', status: expected })
+    expect(extractPiSpecialistSessions(messages)[0]).toMatchObject({ id: 'start-1', taskId: 'task_1', status: expected })
   })
 
   it('uses structured lifecycle and chain status consistently, and retains older agents for transcript navigation', () => {
@@ -154,8 +154,8 @@ describe('recorded specialist outcomes', () => {
       ]),
     ]
     expect(extractPiSessionWidgets(parallel).specialists.map(({ id, status }) => ({ id, status }))).toEqual([
-      { id: 'task_1', status: 'done' },
-      { id: 'task_2', status: 'done' },
+      { id: 'c1', status: 'done' },
+      { id: 'c2', status: 'done' },
     ])
 
     const waitIdsClosed = [
@@ -171,8 +171,8 @@ describe('recorded specialist outcomes', () => {
       ]),
     ]
     expect(extractPiSessionWidgets(waitIdsClosed).specialists.map(({ id, status }) => ({ id, status }))).toEqual([
-      { id: 'task_1', status: 'done' },
-      { id: 'task_2', status: 'running' },
+      { id: 's1', status: 'done' },
+      { id: 's2', status: 'running' },
     ])
   })
 
@@ -195,16 +195,114 @@ describe('recorded specialist outcomes', () => {
     const select = createSessionSummarySelector()
     const toolMessages = [start1, start2, settledTool, closeBoth]
     expect(select(toolMessages).specialists.map(({ id, status }) => ({ id, status }))).toEqual([
-      { id: 'task_1', status: 'done' },
-      { id: 'task_2', status: 'error' },
+      { id: 's1', status: 'done' },
+      { id: 's2', status: 'error' },
     ])
 
     const settledText = message('async-text', [{ type: 'text', text: 'Async RPC worker settled:\ntask_1: settled\ntask_2: failed' }])
     const selectText = createSessionSummarySelector()
     expect(selectText([start1, start2, settledText, closeBoth]).specialists.map(({ id, status }) => ({ id, status }))).toEqual([
-      { id: 'task_1', status: 'done' },
-      { id: 'task_2', status: 'error' },
+      { id: 's1', status: 'done' },
+      { id: 's2', status: 'error' },
     ])
+  })
+
+  it('keeps recycled handles separate and applies receipts to the current worker', () => {
+    const launch = (callId: string, id: string, instanceId: string, agent: string, verb = 'started') => message(callId, [
+      { type: 'toolCall', id: callId, name: 'task_start', args: { agent, prompt: callId } },
+      { type: 'toolResult', name: 'task_start', text: `${verb} ${id}`, details: { worker: { id, instanceId } } },
+    ])
+    const first = launch('First scout', 'task_1', 'scout-instance', 'scout')
+    const historical = [
+      first,
+      launch('First advisor', 'task_7', 'advisor-instance', 'advisor'),
+      message('parent-reset', [
+        { type: 'toolCall', name: 'task_list', args: { include_settled: true } },
+        { type: 'toolResult', name: 'task_list', text: 'No async RPC workers.', details: { list: { includeSettled: true, total: 0, workers: [] } } },
+      ]),
+    ]
+    expect(extractPiSpecialistSessions(historical).map(({ id, status }) => [id, status])).toEqual([['worker:scout-instance', 'closed'], ['worker:advisor-instance', 'closed']])
+
+    const second = launch('Second worker', 'task_1', 'machinist-instance', 'machinist')
+    const recent = [...historical, second, message('receipts', [
+      { type: 'toolCall', name: 'task_status', args: { id: 'task_1' } },
+      { type: 'toolResult', name: 'task_status', text: 'lifecycle: failed', details: { worker: { id: 'task_1', instanceId: 'scout-instance', lifecycle: 'failed' } } },
+      { type: 'toolResult', name: 'Async Task Settled', text: 'Async RPC worker settled:\ntask_1: failed  agent=scout  gen=1  turns=2' },
+      { type: 'toolCall', name: 'task_wait', args: { ids: ['task_1'] } },
+      { type: 'toolResult', name: 'task_wait', text: 'task_1 settled\n--- result ---\nSecond worker report' },
+    ])]
+    const records = extractPiSpecialistSessions(recent)
+    expect(records.map(({ id, agent, instanceId, status, finalReport }) => ({ id, agent, instanceId, status, finalReport }))).toEqual([
+      { id: 'worker:scout-instance', agent: 'scout', instanceId: 'scout-instance', status: 'closed', finalReport: undefined },
+      { id: 'worker:advisor-instance', agent: 'advisor', instanceId: 'advisor-instance', status: 'closed', finalReport: undefined },
+      { id: 'worker:machinist-instance', agent: 'machinist', instanceId: 'machinist-instance', status: 'done', finalReport: 'Second worker report' },
+    ])
+    expect(records.at(-1)).toMatchObject({ taskId: 'task_1', launchCallId: 'Second worker' })
+    expect(createSessionSummarySelector()(recent).specialists.map(({ id, status }) => ({ id, status }))).toEqual(records.map(({ id, status }) => ({ id, status })))
+
+    expect(extractPiSpecialistSessions([second])[0]?.id).toBe(records.at(-1)?.id)
+
+    const reused = launch('Follow-up mission', 'task_1', 'machinist-instance', 'machinist', 'reused')
+    const replacement = launch('Fresh mission', 'task_1', 'oracle-instance', 'oracle')
+    const reusedRecords = extractPiSpecialistSessions([...recent, reused])
+    expect(reusedRecords).toHaveLength(3)
+    expect(reusedRecords.at(-1)).toMatchObject({ id: 'worker:machinist-instance', status: 'running', mission: 'Follow-up mission' })
+    expect(reusedRecords.at(-1)?.messages.filter(({ role }) => role === 'user')).toHaveLength(2)
+    expect(extractPiSpecialistSessions([...recent, reused, replacement]).slice(-2).map(({ id, status }) => [id, status])).toEqual([
+      ['worker:machinist-instance', 'closed'], ['worker:oracle-instance', 'running'],
+    ])
+  })
+
+  it('shows a failed launch without taking the handle from the active instance', () => {
+    const records = extractPiSpecialistSessions([message('m', [
+      { type: 'toolCall', id: 'active', name: 'task_start', args: { agent: 'scout', prompt: 'Active mission' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_3', details: { worker: { id: 'task_3', instanceId: 'active-worker' } } },
+      { type: 'toolCall', id: 'failed', name: 'task_start', args: { agent: 'oracle', prompt: 'Failed mission' } },
+      { type: 'toolResult', name: 'task_start', text: 'reused task_3', details: { worker: { id: 'task_3', instanceId: 'active-worker' } }, isError: true },
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_3' } },
+      { type: 'toolResult', name: 'task_wait', text: 'task_3 settled' },
+      { type: 'toolCall', id: 'first-error', name: 'task_start', args: { agent: 'scribe', prompt: 'Another failure' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_4', isError: true },
+    ])])
+    expect(records.map(({ id, taskId, agent, status }) => ({ id, taskId, agent, status }))).toEqual([
+      { id: 'worker:active-worker', taskId: 'task_3', agent: 'scout', status: 'done' },
+      { id: 'failed', taskId: 'task_3', agent: 'oracle', status: 'error' },
+      { id: 'first-error', taskId: 'task_4', agent: 'scribe', status: 'error' },
+    ])
+    expect(records[1]?.instanceId).toBeUndefined()
+
+    const [orphanFailure] = extractPiSpecialistSessions([message('failed-reuse', [
+      { type: 'toolCall', id: 'attempt', name: 'task_start', args: { agent: 'oracle' } },
+      { type: 'toolResult', name: 'task_start', text: 'reused task_3', isError: true, details: { worker: { id: 'task_3', instanceId: 'someone-else', sessionFile: '/other/worker.jsonl' } } },
+    ])])
+    expect(orphanFailure).toMatchObject({ id: 'attempt', status: 'error' })
+    expect(orphanFailure?.instanceId).toBeUndefined()
+    expect(orphanFailure?.sessionFile).toBeUndefined()
+  })
+
+  it('keeps legacy launch keys when an older worker with the same handle leaves the transcript window', () => {
+    const launch = (id: string) => message(id, [
+      { type: 'toolCall', id, name: 'task_start', args: { agent: 'scout' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1' },
+    ])
+    const recent = launch('new-call')
+    const full = extractPiSpecialistSessions([launch('old-call'), recent])
+    expect(full[0]?.id).not.toBe(full[1]?.id)
+    expect(extractPiSpecialistSessions([recent])[0]?.id).toBe(full[1]?.id)
+  })
+
+  it('routes the next control through a successful rebind without changing the UI key', () => {
+    const messages = [message('m', [
+      { type: 'toolCall', id: 'old', name: 'task_start', args: { agent: 'scout', prompt: 'First mission' } },
+      { type: 'toolResult', name: 'task_start', text: 'started task_1', details: { worker: { id: 'task_1', instanceId: 'scout-instance' } } },
+      { type: 'toolCall', name: 'task_rebind', args: {} },
+      { type: 'toolResult', name: 'task_rebind', text: 'rebound task_6 instance=scout-instance session_dir=/workers/scout' },
+      { type: 'toolCall', name: 'task_wait', args: { id: 'task_6' } },
+      { type: 'toolResult', name: 'task_wait', text: 'task_6 settled' },
+    ])]
+    const records = extractPiSpecialistSessions(messages)
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ id: 'worker:scout-instance', taskId: 'task_6', status: 'done' })
   })
 
   it('ignores failed todo_write, merges by id when merge=true, and extracts codemode todo_write', () => {
@@ -275,7 +373,7 @@ describe('incremental inspector summary', () => {
     const tail = (text: string) => message('tail', [start, result, { type: 'text', text }])
     const initial = select([...history, tail('Initial')])
     expect(initial.toolCount).toBe(1001)
-    expect(initial.specialists[0]?.id).toBe('task_1')
+    expect(initial.specialists[0]?.id).toBe('start')
     readParts.mockClear()
     readArgs.mockClear()
     for (let index = 0; index < 10; index++) {
@@ -559,7 +657,8 @@ describe('specialist record details', () => {
       ),
     ])
     expect(record).toMatchObject({
-      id: 'task_1',
+      id: 'worker:inst-1',
+      taskId: 'task_1',
       agent: 'scout',
       mission: 'Inspect the project',
       prompt: 'Inspect   the project',
@@ -630,7 +729,7 @@ describe('specialist record details', () => {
       ]),
     ]
     const [record] = extractPiSpecialistSessions(messages)
-    expect(record).toMatchObject({ id: 'task_1', status: 'running', mission: 'Inspect the project' })
+    expect(record).toMatchObject({ id: 'start-1', taskId: 'task_1', status: 'running', mission: 'Inspect the project' })
   })
 
   it('reads chain steps from their own details and settled result bodies', () => {

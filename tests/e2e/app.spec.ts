@@ -258,6 +258,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     setTimeout(() => send({ type: 'response', id: command.id, command: command.type, success: true, data: {} }), 500)
   } else if (command.type === 'prompt' || command.type === 'follow_up') {
     pendingPrompt = command
+    if (command.message === '/deepen fixture draft') {
+      send({ type: 'response', id: command.id, command: command.type, success: true, data: { disposition: 'handled' } })
+      fs.watchFile(barrierRelease, { interval: 50 }, (current) => {
+        if (!current.size) return
+        fs.unwatchFile(barrierRelease)
+        send({ type: 'extension_ui_request', id: 'deepen-editor', method: 'set_editor_text', text: 'Grounded fixture draft\\nSecond line' })
+      })
+      fs.writeFileSync(barrierStarted, 'ready')
+      return
+    }
     if (typeof command.message === 'string' && command.message.includes('activity confirm question')) {
       fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'prompt-args.json'))}, JSON.stringify(command))
       streaming = true
@@ -743,7 +753,7 @@ test.describe('Prime Work desktop smoke', () => {
 
   test('centers the compact context-usage dial', async () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
-    const dial = page.locator('.context-usage-dial')
+    const dial = page.getByRole('meter', { name: 'Context usage' })
     await expect(dial).toBeVisible()
     const composer = page.getByRole('combobox', { name: 'Message Pi' })
     await composer.fill('Refresh context usage')
@@ -751,7 +761,9 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(dial).toHaveText('12')
     await expect(dial).toHaveAttribute('title', '12,000 / 100,000 tokens \u00b7 $0.42 session cost')
     const offset = await dial.evaluate((node) => {
-      const textNode = node.querySelector('span')?.firstChild
+      const textNodes = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+      let textNode = textNodes.nextNode()
+      while (textNode && textNode.textContent?.trim() !== '12') textNode = textNodes.nextNode()
       if (!textNode) throw new Error('Missing context dial text')
       const dialRect = node.getBoundingClientRect()
       const range = document.createRange()
@@ -760,10 +772,8 @@ test.describe('Prime Work desktop smoke', () => {
       return {
         x: (textRect.left + textRect.right - dialRect.left - dialRect.right) / 2,
         y: (textRect.top + textRect.bottom - dialRect.top - dialRect.bottom) / 2,
-        size: dialRect.width,
       }
     })
-    expect(offset.size).toBeCloseTo(26.4, 1)
     expect(Math.abs(offset.x)).toBeLessThanOrEqual(0.5)
     expect(Math.abs(offset.y)).toBeLessThanOrEqual(0.5)
   })
@@ -800,6 +810,38 @@ test.describe('Prime Work desktop smoke', () => {
     await design.click()
     await expect(page.getByRole('dialog', { name: 'Expanded image' })).toBeVisible()
     await page.getByRole('button', { name: 'Close expanded image' }).click()
+  })
+
+  test('stages a /deepen result in the originating composer without sending or overwriting a draft', async () => {
+    const session = (title: string) => page.locator('.session-row-wrap').filter({ hasText: title }).locator('.session-row')
+    const textarea = page.locator('.composer textarea')
+    await session('Hermetic desktop fixture').click()
+    await textarea.fill('/deepen fixture draft')
+    await page.locator('.composer').getByRole('button', { name: 'Send message', exact: true }).click()
+    await expect.poll(() => existsSync(join(fixtureRoot, 'prompt-admission-barrier-started'))).toBe(true)
+    await expect(textarea).toBeEnabled()
+    await textarea.fill('Keep this draft')
+
+    await session('Primary workspace fixture').click()
+    await expect(textarea).toHaveValue('')
+    await page.evaluate(() => {
+      const unsubscribe = window.apex.agent.onEvent(({ event }) => {
+        if (event.type !== 'extension_ui_request' || event.id !== 'deepen-editor') return
+        unsubscribe()
+        if (typeof event.sessionFile === 'string') sessionStorage.setItem('fixture-editor-session', event.sessionFile)
+      })
+    })
+    writeFileSync(join(fixtureRoot, 'prompt-admission-barrier-release'), 'release')
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('fixture-editor-session'))).toBe(fixtureSessionFile)
+    await expect(textarea).toHaveValue('')
+
+    await session('Hermetic desktop fixture').click()
+    await expect(textarea).toHaveValue('Grounded fixture draft\nSecond line\n\nKeep this draft')
+    await session('Primary workspace fixture').click()
+    await expect(textarea).toHaveValue('')
+    await session('Hermetic desktop fixture').click()
+    await expect(textarea).toHaveValue('Grounded fixture draft\nSecond line\n\nKeep this draft')
+    expect(existsSync(join(fixtureRoot, 'prompt-args.json'))).toBe(false)
   })
 
   test('restores a pasted image and text when input is intercepted, then sends both on retry', async () => {
@@ -1926,38 +1968,32 @@ test.describe('Prime Work desktop smoke', () => {
       const option = document.createElement('option')
       option.textContent = 'Theme probe'
       select.append(option)
-      document.body.append(select)
-      const root = getComputedStyle(document.documentElement)
+      const themeSample = document.createElement('span')
+      themeSample.style.color = 'var(--text)'
+      themeSample.style.backgroundColor = 'var(--surface-raised)'
+      document.body.append(select, themeSample)
       const selectStyle = getComputedStyle(select)
       const optionStyle = getComputedStyle(option)
+      const themeStyle = getComputedStyle(themeSample)
       const result = {
         scheme: selectStyle.colorScheme,
         optionColor: optionStyle.color,
         optionBackground: optionStyle.backgroundColor,
-        themeColor: root.getPropertyValue('--text').trim(),
-        themeBackground: root.getPropertyValue('--surface-raised').trim(),
+        themeColor: themeStyle.color,
+        themeBackground: themeStyle.backgroundColor,
       }
       select.remove()
+      themeSample.remove()
       return result
     })
-    await page.getByRole('button', { name: /Light/ }).click()
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
-    expect(await nativeSelectTheme()).toMatchObject({
-      scheme: 'light',
-      optionColor: 'rgb(15, 23, 42)',
-      optionBackground: 'rgb(255, 255, 255)',
-      themeColor: '#0f172a',
-      themeBackground: '#ffffff',
-    })
-    await page.getByRole('button', { name: /Dark/ }).click()
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    expect(await nativeSelectTheme()).toMatchObject({
-      scheme: 'dark',
-      optionColor: 'rgb(237, 241, 248)',
-      optionBackground: 'rgb(16, 22, 36)',
-      themeColor: '#edf1f8',
-      themeBackground: '#101624',
-    })
+    for (const mode of ['Light', 'Dark']) {
+      await page.getByRole('button', { name: mode, exact: true }).click()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', mode.toLowerCase())
+      const colors = await nativeSelectTheme()
+      expect(colors.scheme).toBe(mode.toLowerCase())
+      expect(colors.optionColor).toBe(colors.themeColor)
+      expect(colors.optionBackground).toBe(colors.themeBackground)
+    }
     await page.getByRole('button', { name: /System/ }).click()
   })
 

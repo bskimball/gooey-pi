@@ -41,8 +41,8 @@ describe('specialist rosters', () => {
   it('summarizes the parent receipts without the worker transcripts', () => {
     const roster = rosterFromMessages(transcript([...started('task_1', 'scout', 'Map the repo'), ...started('task_2', 'oracle', 'Review the plan'), ...settled('task_2')]))
     expect(roster).toEqual([
-      expect.objectContaining({ id: 'task_1', agent: 'scout', mission: 'Map the repo', status: 'running' }),
-      expect.objectContaining({ id: 'task_2', agent: 'oracle', mission: 'Review the plan', status: 'done' }),
+      expect.objectContaining({ id: 'start-task_1', taskId: 'task_1', agent: 'scout', mission: 'Map the repo', status: 'running' }),
+      expect.objectContaining({ id: 'start-task_2', taskId: 'task_2', agent: 'oracle', mission: 'Review the plan', status: 'done' }),
     ])
     expect(roster[0]).not.toHaveProperty('messages')
   })
@@ -51,7 +51,7 @@ describe('specialist rosters', () => {
     const { registry, send } = harness({ '/sessions/a.jsonl': started('task_1', 'scout', 'Map') })
     const rosters = await registry.track(1, send, ['/sessions/a.jsonl', '/elsewhere/b.jsonl'])
     expect(Object.keys(rosters)).toEqual(['/sessions/a.jsonl'])
-    expect(rosters['/sessions/a.jsonl']).toEqual([expect.objectContaining({ id: 'task_1', status: 'running' })])
+    expect(rosters['/sessions/a.jsonl']).toEqual([expect.objectContaining({ id: 'start-task_1', taskId: 'task_1', status: 'running' })])
   })
 
   it('pushes a tracked session only when its roster actually changes', async () => {
@@ -66,7 +66,7 @@ describe('specialist rosters', () => {
     change('/sessions/a.jsonl')
     change('/sessions/a.jsonl')
     await vi.runAllTimersAsync()
-    expect(pushes).toEqual([{ channel: 'specialists:changed', payload: { filePath: '/sessions/a.jsonl', specialists: [expect.objectContaining({ id: 'task_1', status: 'done' })] } }])
+    expect(pushes).toEqual([{ channel: 'specialists:changed', payload: { filePath: '/sessions/a.jsonl', specialists: [expect.objectContaining({ id: 'start-task_1', taskId: 'task_1', status: 'done' })] } }])
   })
 
   it('ignores untracked sessions and rechecks every tracked session on catalog-wide changes', async () => {
@@ -80,7 +80,7 @@ describe('specialist rosters', () => {
     files.set('/sessions/a.jsonl', started('task_1', 'scout', 'Map'))
     change(undefined)
     await vi.runAllTimersAsync()
-    expect(pushes.map((push) => push.payload)).toEqual([{ filePath: '/sessions/a.jsonl', specialists: [expect.objectContaining({ id: 'task_1' })] }])
+    expect(pushes.map((push) => push.payload)).toEqual([{ filePath: '/sessions/a.jsonl', specialists: [expect.objectContaining({ id: 'start-task_1', taskId: 'task_1' })] }])
   })
 
   it('bounds tracked sessions and watched workers', async () => {

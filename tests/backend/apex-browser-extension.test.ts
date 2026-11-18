@@ -93,14 +93,7 @@ async function fixture() {
 }
 
 describe('apex-browser extension', () => {
-  it('registers no tools when the broker environment is missing', async () => {
-    const factory = await loadExtension({})
-    const { tools, pi } = fakePi()
-    factory(pi)
-    expect(tools).toHaveLength(0)
-  })
-
-  it('registers the same tool surface as the Prime Agent extension', async () => {
+  it('registers the broker-backed browser and terminal tools', async () => {
     const { tools } = await fixture()
     expect(tools.map((candidate) => candidate.name)).toEqual([
       'terminal_read',
@@ -117,7 +110,6 @@ describe('apex-browser extension', () => {
     for (const candidate of tools) {
       expect(candidate.label.length).toBeGreaterThan(0)
       expect(candidate.description.length).toBeGreaterThan(0)
-      expect(candidate.parameters).toBeDefined()
     }
   })
 

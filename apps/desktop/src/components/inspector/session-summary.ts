@@ -78,8 +78,10 @@ function extractWidgetsFromParts(flatParts: MessagePart[]): SessionWidgets {
       }
     }
   }
-  const specialists = parseSpecialistRecords(flatParts).map(({ id, agent, mission, status, activity, model, thinking }): PiSpecialistSummary => ({
+  const specialists = parseSpecialistRecords(flatParts).map(({ id, taskId, launchCallId, instanceId, agent, mission, status, activity, model, thinking }): PiSpecialistSummary => ({
     id,
+    ...(taskId && (taskId !== id || instanceId) ? { taskId, launchCallId } : {}),
+    ...(instanceId ? { instanceId } : {}),
     agent,
     mission,
     status,
@@ -129,6 +131,7 @@ const WIDGET_TOOLS = new Set([
   'task_close',
   'task_abort',
   'task_list',
+  'task_rebind',
   'Async Task Settled',
   'async-task-settled',
   'codemode',

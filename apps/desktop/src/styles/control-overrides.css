@@ -60,9 +60,27 @@
 /* The reply's footer carries a finished turn's duration and the typing bubble shows a live one; only a failed turn badges the prompt. */
 .transcript--chat .message--user > .message__turn-status:not(.is-failed) { display: none; }
 .transcript--chat .message--assistant { display: flex; flex-direction: column; align-items: flex-start; }
-.transcript--chat .message--assistant > .message__content,
+.transcript--chat .message--assistant > .message__content { position: relative; max-width: calc(100% - 36px); }
 .transcript--chat .message--assistant > .message__content > .message-actions { position: absolute; bottom: 0; left: 100%; margin: 0 0 0 4px; }
 
 /* Back-to-back collapsed work groups (separate tool calls with no prose between) stack as one list. */
 .work-group:has(+ .work-group) { margin-bottom: 2px; }
 .work-group + .work-group { margin-top: 0; }
+
+/* Tool-call rows adjust font color on hover instead of showing a background. */
+.activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled),
+.activity-run > .activity-run__summary,
+.activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled) :is(.activity-line__icon, .activity-line__kind, .activity-tool__command, .activity-tool__preview, .activity-tool__range),
+.activity-run > .activity-run__summary :is(.activity-line__icon, .activity-run__label, .activity-run__names) {
+	transition: color var(--fast);
+}
+.activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled):hover,
+.activity-run > .activity-run__summary:hover,
+.activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled):hover :is(.activity-line__icon, .activity-line__kind, .activity-tool__command),
+.activity-run > .activity-run__summary:hover :is(.activity-line__icon, .activity-run__label) {
+	color: var(--text);
+}
+.activity-line--tool:not(.activity-line--question) > .activity-tool__summary:not(:disabled):hover :is(.activity-tool__preview, .activity-tool__range),
+.activity-run > .activity-run__summary:hover .activity-run__names {
+	color: var(--text-secondary);
+}

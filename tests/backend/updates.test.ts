@@ -160,7 +160,10 @@ describe('automatic update service', () => {
     const updater = new FakeUpdater()
     const service = new UpdateService(updater as unknown as UpdateAdapter, { enabled: false })
     service.start()
-    await expect(service.check()).resolves.toMatchObject({ phase: 'unsupported' })
+    expect(service.isEnabled()).toBe(false)
+    const state = await service.check()
+    expect(state.phase).toBe('unsupported')
+    expect(manualUpdateNotification(state)).toMatchObject({ type: 'info', message: 'Apex Updates Unavailable' })
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
     await expect(service.downloadAndInstall()).resolves.toBe(false)
   })
@@ -233,10 +236,4 @@ describe('automatic update service', () => {
     service.dispose()
   })
 
-  it('reports that development builds cannot check for updates', () => {
-    const updater = new FakeUpdater()
-    const service = new UpdateService(updater as unknown as UpdateAdapter, { enabled: false })
-    expect(service.isEnabled()).toBe(false)
-    expect(manualUpdateNotification(service.getState())).toMatchObject({ type: 'info', message: 'Apex Updates Unavailable' })
-  })
 })
