@@ -39,6 +39,7 @@ export interface SessionLiveContext {
 
 export interface SessionLive extends SessionLiveContext {
   phase: SessionLivePhase
+  subAgentRunning?: boolean
 }
 
 export interface SessionLiveToolInfo {

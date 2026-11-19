@@ -271,6 +271,13 @@ export function reduceSessionLive(
     : { runtimeId, phase: 'idle', lastEventAt: now }
   const apply = (next: SessionLiveEvent) => putSessionLive(state, sessionFile, applySessionLiveEvent(base, next))
 
+  if (type === 'subagent_start') {
+    return putSessionLive(state, sessionFile, { ...base, subAgentRunning: true })
+  }
+  if (type === 'subagent_end') {
+    return putSessionLive(state, sessionFile, { ...base, subAgentRunning: false })
+  }
+
   if (type === 'agent_start' || type === 'turn_start') {
     return apply({ type: 'RUN_STARTED', now, resetClock: type === 'agent_start' && base.phase === 'idle' })
   }

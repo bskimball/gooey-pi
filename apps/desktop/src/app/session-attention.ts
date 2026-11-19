@@ -72,7 +72,7 @@ export function applySessionLifecycleEvent(
  */
 export function isSessionRunning(session: { status: SessionStatus } | undefined, live?: SessionLive): boolean {
   if (live?.pendingQuestion || session?.status === 'waiting') return false
-  return session?.status === 'running' || (live !== undefined && live.phase !== 'idle')
+  return session?.status === 'running' || (live !== undefined && live.phase !== 'idle') || (live?.subAgentRunning === true)
 }
 
 export function isSessionWaiting(session: { status: SessionStatus } | undefined): boolean {
