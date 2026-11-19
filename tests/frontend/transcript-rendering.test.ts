@@ -220,8 +220,9 @@ describe('transcript rendering', () => {
       expect(toggle.getAttribute('aria-expanded')).toBe('false')
       expect(first.querySelector('.subagent-lane__body')).toBeNull()
       expect(first.querySelector('.status-mark--running')).toBeNull()
-      expect(first.querySelector('.subagent-lane__status .status-mark--failed')).not.toBeNull()
-      expect(container.querySelector('.subagent-lane.is-running .status-mark--running')).not.toBeNull()
+      expect(first.querySelector('.subagent-lane__avatar')?.textContent).toBe('S')
+      expect(first.querySelector('.subagent-lane__avatar.is-error')).not.toBeNull()
+      expect(container.querySelector('.subagent-lane.is-running .subagent-lane__avatar')).not.toBeNull()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -707,7 +708,8 @@ describe('transcript rendering', () => {
     expect(html).toContain('>machinist</span>')
     expect(html).toContain('subagent-lane is-done')
     expect(html).toContain('subagent-lane is-running')
-    expect(doc.querySelector('.status-mark.status-mark--running')).not.toBeNull()
+    expect([...doc.querySelectorAll('.subagent-lane__avatar')].map((element) => element.textContent)).toEqual(['S', 'M'])
+    expect(doc.querySelector('.subagent-lane.is-running .subagent-lane__avatar')).not.toBeNull()
     // Single-line default: no stacked tree rail, no awaiting-update placeholder, no View full report row.
     expect(doc.querySelectorAll('.subagent-lane__tree')).toHaveLength(0)
     expect(doc.querySelectorAll('.subagent-lane__leaf')).toHaveLength(0)

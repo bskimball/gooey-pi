@@ -363,7 +363,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                     value={wizardContext.contexts[activeQuestion.id] ?? ''}
                     placeholder={writingAnswer ? 'Write your own answer' : 'Anything the agent should know about this choice'}
                     aria-label={writingAnswer ? 'Your answer' : 'Additional context'}
-                    containerClassName={`field extension-questionnaire__context ${sx(overlaysStyles.field, overlaysStyles.extensionQuestionnaireContext)}`}
+                    containerClassName={`extension-questionnaire__context ${sx(overlaysStyles.extensionQuestionnaireContext)}`}
                     onChange={(text) => dispatchWizard({ type: 'TYPE_CONTEXT', text })}
                   />
                   {inline ? null : <p className={`extension-questionnaire__hint ${sx(overlaysStyles.extensionQuestionnaireHint)}`}>{questionHint}</p>}

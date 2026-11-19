@@ -103,3 +103,6 @@
 	min-width: 0;
 	text-align: left;
 }
+
+/* Compaction card keeps its icon off the border: apex-overrides wins over StyleX paddingLeft:0. */
+.activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }

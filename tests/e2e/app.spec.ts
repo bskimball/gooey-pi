@@ -2085,6 +2085,10 @@ test.describe('Prime Work desktop smoke', () => {
 
     const dialog = page.getByRole('region', { name: 'Answer 2 questions' })
     await expect(dialog).toBeVisible()
+    const context = dialog.getByRole('textbox', { name: 'Additional context' })
+    const inputBox = await context.boundingBox()
+    const controlBox = await dialog.locator('.astryx-text-input').boundingBox()
+    expect(inputBox!.height).toBeLessThanOrEqual(controlBox!.height)
     await expect(page.getByRole('dialog', { name: 'Answer 2 questions' })).toHaveCount(0)
     await expect(page.locator('.conversation-bottom-dock')).toContainText('Question 1 of 2')
     await expect(page.locator('.work-disclosure.is-running')).toBeVisible()
@@ -2096,7 +2100,6 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.work-group__current .activity-line--question')).toBeVisible()
     await expect(page.locator('.thinking-dots')).toHaveCount(0)
     await expect(dialog).toContainText('Question 1 of 2')
-    const context = dialog.getByRole('textbox', { name: 'Additional context' })
     await context.fill('For the pilot')
     await dialog.getByRole('option', { name: 'Beta' }).click()
     await expect(dialog).toContainText('Question 2 of 2')

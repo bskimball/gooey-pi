@@ -5,8 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { createContext, memo, useContext, useId, useState, type ReactNode } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
 import { isLiveSpecialist, shortModelName, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
-import { ArrowUpRight, CaretRight, Check, Robot } from '../icons'
-import { StatusMark } from '../activity/StatusMark'
+import { ArrowUpRight, CaretRight, Check } from '../icons'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
@@ -267,7 +266,7 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   const canExpand = Boolean(report) || (Boolean(onOpen) && targets.length > 0 && !singleTarget)
   const isClickable = canExpand || Boolean(singleTarget)
   const hasBody = Boolean(report) || (Boolean(onOpen) && targets.length > 0)
-  const statusKey = isLiveSpecialist(state) ? 'running' : state
+  const avatarLetter = (roleLabel.trim().charAt(0) || 'A').toUpperCase()
   // Fusion workers all share one role, so the task id is what tells parallel lanes apart.
   const workerName = taskId && /^task_\d+$/.test(taskId) && part.name !== 'task_chain' ? taskId : undefined
   const resultWorker = workerDetails(latest.result?.details ?? result?.details)
@@ -282,9 +281,9 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
     setOpen((value) => !value)
   }
   const summaryContent = <>
-    <span className={`subagent-lane__status ${stylex.props(transcriptStyles.subagentLaneStatus).className ?? ''}`} aria-hidden="true">
-      <MorphInline morphKey={statusKey} instant={instant}>
-        {isLiveSpecialist(state) ? <StatusMark state="running" size={14} /> : state === 'error' ? <StatusMark state="failed" size={14} /> : state === 'done' ? <StatusMark state="done" size={14} /> : <Robot size={13} />}
+    <span className={`subagent-lane__avatar is-${state} ${stylex.props(transcriptStyles.subagentLaneAvatar).className ?? ''}`} aria-hidden="true">
+      <MorphInline morphKey={avatarLetter} instant={instant}>
+        {avatarLetter}
       </MorphInline>
     </span>
     <span className={`subagent-lane__main ${stylex.props(transcriptStyles.subagentLaneMain).className ?? ''}`}>
