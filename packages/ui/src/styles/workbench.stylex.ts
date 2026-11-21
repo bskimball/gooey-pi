@@ -357,6 +357,31 @@ export const styles = stylex.create({
     "fontSize": "var(--fs-micro)",
     "lineHeight": 1.4
   },
+  "projectRunMenuItem": {
+    "display": "flex",
+    "alignItems": "center",
+    "justifyContent": "space-between",
+    "padding": "8px 12px",
+    "borderRadius": "var(--radius-md)",
+    "color": "var(--text)",
+    "backgroundColor": { "default": "transparent", ":hover": "var(--surface-hover)" },
+    "cursor": "pointer",
+    "transition": "background var(--fast)"
+  },
+  "projectRunMenuItemText": {
+    "display": "flex",
+    "flexDirection": "column",
+    "alignItems": "flex-start",
+    "rowGap": "2px"
+  },
+  "projectRunMenuItemMono": {
+    "fontSize": "var(--fs-micro)",
+    "color": "var(--text-tertiary)",
+    "fontFamily": "var(--font-mono)"
+  },
+  "projectRunMenuItemCheck": {
+    "color": "var(--apex)"
+  },
   "buttonQuiet": {
     "color": "var(--text-secondary)",
     "backgroundColor": "transparent",

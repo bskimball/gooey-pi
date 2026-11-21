@@ -157,18 +157,18 @@ export function ProjectRunControl({ project, activeKind, onRun, onStop }: Projec
                   type="button"
                   role="menuitemradio"
                   aria-checked={isSelected}
-                  className={`project-run-menu__item${isSelected ? ' is-selected' : ''}`}
+                  className={`project-run-menu__item ${isSelected ? 'is-selected' : ''} ${stylex.props(workbenchStyles.projectRunMenuItem).className ?? ''}`}
                   onClick={() => {
                     selectScript(script)
                     setOpen(false)
                     startScript(script)
                   }}
                 >
-                  <span className="project-run-menu__item-text">
+                  <span className="project-run-menu__item-text" {...stylex.props(workbenchStyles.projectRunMenuItemText)}>
                     <strong>{script.name}</strong>
-                    <code className="mono">{script.command}</code>
+                    <code className="mono" {...stylex.props(workbenchStyles.projectRunMenuItemMono)}>{script.command}</code>
                   </span>
-                  <span className="project-run-menu__item-check" aria-hidden="true">
+                  <span className="project-run-menu__item-check" aria-hidden="true" {...stylex.props(workbenchStyles.projectRunMenuItemCheck)}>
                     {isSelected ? <Check size={12} /> : null}
                   </span>
                 </button>

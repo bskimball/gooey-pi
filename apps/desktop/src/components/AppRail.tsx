@@ -6,7 +6,7 @@ import { styles as voiceStyles } from 'apex-ui/styles/voice.stylex'
 import type { ProjectRecord, WorkspaceView } from '@/types/api'
 import { useI18n } from '@/lib/i18n'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
-import { Code, Gear, Terminal, SidebarLeft, Waveform } from './icons'
+import { Code, Gear, Terminal, SidebarLeft, Waveform, Play, Square } from './icons'
 import { IconButton } from './ui'
 
 const WindowsAppMenu = lazy(() => import('./WindowsAppMenu'))
@@ -14,6 +14,9 @@ const WindowsAppMenu = lazy(() => import('./WindowsAppMenu'))
 interface AppRailProps {
   view: WorkspaceView
   vscodeProject?: ProjectRecord
+  activeProjectScriptKind?: 'setup' | 'run'
+  onRunProjectScript?(target: { command: string; label?: string }): Promise<void> | void
+  onStopProjectScript?(): void
   terminalOpen?: boolean
   onToggleTerminal?(): void
   onOpenInVsCode?(path: string): void
@@ -25,7 +28,7 @@ interface AppRailProps {
   platform?: NodeJS.Platform
 }
 
-export function AppRail({ view, vscodeProject, terminalOpen = false, onToggleTerminal, onOpenInVsCode, sidebarOpen, onToggleSidebar, voiceOpen, onToggleVoice, onNavigate, platform = 'darwin' }: AppRailProps) {
+export function AppRail({ view, vscodeProject, activeProjectScriptKind, onRunProjectScript, onStopProjectScript, terminalOpen = false, onToggleTerminal, onOpenInVsCode, sidebarOpen, onToggleSidebar, voiceOpen, onToggleVoice, onNavigate, platform = 'darwin' }: AppRailProps) {
   const { t } = useI18n()
   const sidebarShortcut = shortcutLabel(platform, ['Primary', 'B'])
   const terminalShortcut = shortcutLabel(platform, ['Primary', 'J'])
@@ -37,6 +40,18 @@ export function AppRail({ view, vscodeProject, terminalOpen = false, onToggleTer
         <IconButton xstyle={[railStyles.button, sidebarOpen && railStyles.active]} className={sidebarOpen ? 'is-active' : ''} label={`${sidebarOpen ? 'Hide' : 'Show'} sidebar (${sidebarShortcut})`} aria-pressed={sidebarOpen} onClick={onToggleSidebar}><SidebarLeft size={16} /></IconButton>
       </div>
       <div className={`app-rail__bottom no-drag ${stylex.props(baseStyles.noDrag, railStyles.group, railStyles.bottom).className ?? ''}`}>
+        {onRunProjectScript && onStopProjectScript && vscodeProject ? (
+          <IconButton
+            xstyle={[railStyles.button, activeProjectScriptKind && railStyles.active]}
+            label={activeProjectScriptKind ? 'Stop project' : 'Run project'}
+            onClick={() => {
+              if (activeProjectScriptKind) onStopProjectScript()
+              else onRunProjectScript({ command: 'run' })
+            }}
+          >
+            {activeProjectScriptKind ? <Square size={16} fill="currentColor" /> : <Play size={16} />}
+          </IconButton>
+        ) : null}
         {onOpenInVsCode ? <IconButton xstyle={railStyles.button} label={vscodeProject ? `Open ${vscodeProject.name} in VS Code` : 'Open in VS Code'} disabled={!vscodeProject} onClick={() => { if (vscodeProject) onOpenInVsCode(vscodeProject.path) }}><Code size={16} /></IconButton> : null}
         {onToggleTerminal ? <IconButton xstyle={[railStyles.button, terminalOpen && railStyles.active]} className={terminalOpen ? 'is-active' : ''} label={`Toggle terminal (${terminalShortcut})`} aria-pressed={terminalOpen} onClick={onToggleTerminal}><Terminal size={16} /></IconButton> : null}
         <IconButton xstyle={[railStyles.button, voiceOpen && railStyles.active]} className={voiceOpen ? `is-active voice-toggle--active ${stylex.props(voiceStyles.voiceToggleActive).className}` : ''} label={voiceOpen ? 'Close realtime voice' : 'Open realtime voice'} aria-pressed={voiceOpen} onClick={onToggleVoice}><Waveform size={16} /></IconButton>
