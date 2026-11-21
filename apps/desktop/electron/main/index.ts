@@ -52,7 +52,7 @@ import { SideConversations } from "./side-conversations";
 import { FinishTaskService } from "./finish-task";
 import { WorktreeProvenance } from "./worktree-provenance";
 import { AgentCollaborationBridge } from "./collaboration/agent-bridge";
-import { ActivityCoordinatorService, COORDINATOR_INSTRUCTIONS, linkSpaceSession } from "./collaboration/coordinator";
+import { ActivityCoordinatorService, buildCoordinatorInstructions, linkSpaceSession } from "./collaboration/coordinator";
 import { BackgroundJobBridge } from "./background-jobs";
 import {
 	configureGooeyPiAgentMessageSigning,
@@ -1292,9 +1292,7 @@ async function bootstrap(): Promise<void> {
 				stateStore.getSettings().browserEnabled,
 			),
 			...collaborationBridge.environmentFor({ ...scope, harness: "pi" }),
-			GOOEYPI_COORDINATOR_INSTRUCTIONS: space ? `${COORDINATOR_INSTRUCTIONS.replace("app-wide Chief of Staff", "Space Chief of Staff").replace("Coordinate only currently authorized projects. Use gooeypi_session_projects to find an explicit cwd before creating a session.", "Coordinate only sessions in this Space project. Your access covers the whole project, not only linked sessions.")}
-Space name: ${JSON.stringify(space.name)}
-Space objective: ${JSON.stringify(space.objective)}` : isCoordinator ? COORDINATOR_INSTRUCTIONS : undefined,
+			GOOEYPI_COORDINATOR_INSTRUCTIONS: space ? buildCoordinatorInstructions(space) : isCoordinator ? buildCoordinatorInstructions() : undefined,
 			...jobsBridge.environmentFor(scope),
 			GOOEYPI_PI_FAST_MODE_EXTENSION_PATH: piFastModeExtensionPath,
 			GOOEYPI_CUA_DRIVER_PATH: stateStore.getSettings().computerUseEnabled
