@@ -94,30 +94,51 @@ export const AskUserCard = memo(function AskUserCard({ exchange, animateArrival 
   const numbered = items.length > 1
   return (
     <motion.section
-      className={`ask-user-card is-${state} ${stylex.props(styles.card, state === 'waiting' && styles.cardWaiting).className ?? ''}`}
+      className={`ask-user-card is-${state} ${stylex.props(
+        styles.card,
+        state === 'waiting' && styles.cardWaiting,
+        state === 'answered' && styles.cardAnswered,
+        state === 'dismissed' && styles.cardDismissed,
+        state === 'failed' && styles.cardFailed,
+      ).className ?? ''}`}
       aria-label={TITLES[state](items.length)}
       {...arrivalMotionProps(instant, animateArrival)}
     >
       <header {...stylex.props(styles.header)}>
-        <span {...stylex.props(styles.icon)} aria-hidden="true">
-          <ChatCircleDots size={14} />
+        <span
+          {...stylex.props(
+            styles.icon,
+            state === 'answered' && styles.iconAnswered,
+            state === 'dismissed' && styles.iconDismissed,
+            state === 'failed' && styles.iconFailed,
+          )}
+          aria-hidden="true"
+        >
+          {state === 'failed' ? <WarningCircle size={14} /> : state === 'answered' ? <Check size={14} weight="bold" /> : <ChatCircleDots size={14} />}
         </span>
         <span {...stylex.props(styles.title)}>{TITLES[state](items.length)}</span>
-        <span {...stylex.props(styles.status, state === 'waiting' && styles.statusWaiting, state === 'failed' && styles.statusFailed)}>
+        <span
+          {...stylex.props(
+            styles.status,
+            state === 'waiting' && styles.statusWaiting,
+            state === 'answered' && styles.statusAnswered,
+            state === 'failed' && styles.statusFailed,
+          )}
+        >
           <MorphInline morphKey={state} instant={instant}>
             {state === 'waiting' ? (
               <>
-                <StatusMark state="running" size={12} /> needs input
+                <StatusMark state="running" size={11} /> needs input
               </>
             ) : state === 'failed' ? (
               <>
-                <WarningCircle size={12} /> failed
+                <WarningCircle size={11} /> failed
               </>
             ) : state === 'dismissed' ? (
-              'no answer'
+              'dismissed'
             ) : (
               <>
-                <Check size={12} /> answered
+                <Check size={11} weight="bold" /> answered
               </>
             )}
           </MorphInline>
@@ -125,7 +146,7 @@ export const AskUserCard = memo(function AskUserCard({ exchange, animateArrival 
       </header>
       <ol {...stylex.props(styles.list)}>
         {items.map((item, index) => (
-          <li key={index} {...stylex.props(styles.item)}>
+          <li key={index} {...stylex.props(styles.item, index > 0 && styles.itemDivider)}>
             {numbered ? <span {...stylex.props(styles.index)}>{index + 1}</span> : null}
             <div {...stylex.props(styles.itemBody)}>
               <p {...stylex.props(styles.question)}>{item.question}</p>

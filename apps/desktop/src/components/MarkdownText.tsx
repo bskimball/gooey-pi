@@ -10,6 +10,8 @@ import { HtmlFence } from './HtmlFence'
 import { ProjectPreview } from './ProjectPreview'
 import { parseProjectPreview } from 'apex-core/interactive-preview'
 import { WorkspaceImage } from './WorkspaceImage'
+import { parseRichWidget, RichWidget, StreamingWidgetSkeleton } from 'apex-ui/RichWidgets'
+import { useInteractiveChat } from './InteractiveChatContext'
 
 interface MarkdownTextProps {
   text: string
@@ -138,11 +140,19 @@ function MarkdownCode({ node: _node, block = false, className, ...props }: Compo
 }
 
 function MarkdownPre({ node, children, ...props }: ComponentProps<'pre'> & ExtraProps) {
+  const rendering = useContext(MarkdownRenderContext)
+  const chat = useInteractiveChat()
   const sourceXstyle = useMarkdownStyles('pre')
   const source = fenceSource(children, ['html', 'htm'])
   const projectSource = fenceSource(children, ['apex-preview'])
+  const widgetSource = fenceSource(children, ['apex-ui', 'apex-widget'])
   const project = projectSource === undefined ? null : parseProjectPreview(projectSource)
   if (project) return <ProjectPreview key={project.url} preview={project} />
+  if (widgetSource !== undefined) {
+    const widget = parseRichWidget(widgetSource)
+    if (widget) return <RichWidget widget={widget} onAction={chat?.onSendFeedback} actionsDisabled={chat?.disabled} />
+    if (rendering.streaming) return <StreamingWidgetSkeleton />
+  }
   if (source !== undefined) return <HtmlFence source={source} sourceXstyle={sourceXstyle} xstyle={[node?.data && 'proseFirst' in node.data && node.data.proseFirst === true && markdownStyles.firstBlock, node?.data && 'proseLast' in node.data && node.data.proseLast === true && markdownStyles.lastBlock]} />
   return <MarkdownBlock {...props} node={node} as="pre">{isValidElement<{ block?: boolean }>(children) ? cloneElement(children, { block: true }) : children}</MarkdownBlock>
 }

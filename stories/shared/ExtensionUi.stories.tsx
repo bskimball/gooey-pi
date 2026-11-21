@@ -45,6 +45,34 @@ const requests = {
       { id: 'validation', title: 'How should we validate?', options: ['Focused tests and manual review', 'Manual keyboard review'], index: 1 },
     ],
   },
+  richQuestionnaire: {
+    method: 'questionnaire',
+    id: 'rich-questionnaire',
+    title: 'Design the main-thread rollout',
+    total: 3,
+    complete: true,
+    timeout: 180_000,
+    questions: [
+      {
+        id: 'surface',
+        title: 'Which question surfaces should share the new visual language?',
+        options: ['Inline panel + transcript AskUserCard', 'All three including Activity cards', 'Inline panel only', 'Other (type your own answer)'],
+        index: 0,
+      },
+      {
+        id: 'widgets',
+        title: 'Which native React widget should we prioritize first in main-thread responses?',
+        options: ['Comparison & tradeoff cards', 'Metrics & KPI grids', 'Interactive checklists & step pipelines', 'Other (type your own answer)'],
+        index: 1,
+      },
+      {
+        id: 'verification',
+        title: 'How should we verify before merging?',
+        options: ['Storybook visual pass + Vitest + typecheck', 'Full Electron e2e suite'],
+        index: 2,
+      },
+    ],
+  },
 } satisfies Record<string, ExtensionUiRequest>
 type Props = Pick<ComponentProps<typeof ExtensionUiModal>, 'request' | 'presentation' | 'deadline'>
 function RequestDemo({ request, presentation = 'modal', deadline }: Props) {
@@ -80,6 +108,8 @@ export const Select = { args: { request: requests.select } } satisfies Story
 export const SearchableSelect = { args: { request: requests.searchable } } satisfies Story
 export const MultiQuestionFlow = { args: { request: requests.questionnaire } } satisfies Story
 export const InlineQuestionnaire = { args: { request: requests.questionnaire, presentation: 'inline' } } satisfies Story
+export const RichInlineQuestionnaire = { args: { request: requests.richQuestionnaire, presentation: 'inline' } } satisfies Story
+export const RichInlineQuestionnaireDark = { args: { request: requests.richQuestionnaire, presentation: 'inline' }, globals: { theme: 'dark' } } satisfies Story
 export const WaitingForQuestions = {
   args: { request: { ...requests.questionnaire, complete: false, questions: requests.questionnaire.questions.slice(0, 1) }, presentation: 'inline' },
 } satisfies Story
