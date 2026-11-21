@@ -20,7 +20,7 @@ import {
   resolveNpmGlobalLayout,
   verifyPinnedNpmArtifact,
 } from '../scripts/release/bootstrap-npm.mjs'
-import { installAppDependencies, patchPiDurableSubmissionWait, qualifyWinptyBatchPaths } from '../scripts/release/install-app-deps.mjs'
+import { installAppDependencies, patchNodePtyConsoleListAgent, patchPiDurableSubmissionWait, qualifyWinptyBatchPaths } from '../scripts/release/install-app-deps.mjs'
 import {
   artifactArchitectures,
   assertArchitectureCoverage,
@@ -1537,6 +1537,37 @@ describe('cross-platform packaging repair', () => {
       expect(() => patchPiDurableSubmissionWait(packageUrl)).toThrow('Unexpected Pi Durable 1.5.2')
       writeFileSync(manifest, JSON.stringify({ version: '1.5.1' }))
       expect(() => patchPiDurableSubmissionWait(packageUrl)).not.toThrow()
+      expect(readFileSync(sourcePath, 'utf8')).toBe('unexpected source')
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('patches only node-pty 1.1.0 console list agent idempotently and rejects unexpected source', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'node-pty-agent-patch-'))
+    const packageUrl = pathToFileURL(`${directory}/`)
+    const manifest = new URL('package.json', packageUrl)
+    const sourcePath = new URL('lib/conpty_console_list_agent.js', packageUrl)
+    const original = [
+      '"use strict";',
+      'var shellPid = parseInt(process.argv[2], 10);',
+      'var consoleProcessList = getConsoleProcessList(shellPid);',
+      'process.send({ consoleProcessList: consoleProcessList });',
+    ].join('\n')
+    try {
+      mkdirSync(new URL('lib/', packageUrl), { recursive: true })
+      writeFileSync(manifest, JSON.stringify({ version: '1.1.0' }))
+      writeFileSync(sourcePath, original)
+      patchNodePtyConsoleListAgent(packageUrl)
+      const patched = readFileSync(sourcePath, 'utf8')
+      expect(patched).toContain('var consoleProcessList = [shellPid];')
+      expect(patched).toContain('catch (_e)')
+      patchNodePtyConsoleListAgent(packageUrl)
+      expect(readFileSync(sourcePath, 'utf8')).toBe(patched)
+      writeFileSync(sourcePath, 'unexpected source')
+      expect(() => patchNodePtyConsoleListAgent(packageUrl)).toThrow('Unexpected node-pty 1.1.0 conpty_console_list_agent')
+      writeFileSync(manifest, JSON.stringify({ version: '1.2.0' }))
+      expect(() => patchNodePtyConsoleListAgent(packageUrl)).not.toThrow()
       expect(readFileSync(sourcePath, 'utf8')).toBe('unexpected source')
     } finally {
       rmSync(directory, { recursive: true, force: true })

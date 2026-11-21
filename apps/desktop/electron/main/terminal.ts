@@ -104,6 +104,26 @@ function terminalEnvironment(commandRunner: boolean): Record<string, string> {
 }
 
 
+type WindowsPtyWithAgent = pty.IPty & {
+  _agent?: {
+    _getConsoleProcessList?: () => Promise<number[]>
+  }
+}
+
+/**
+ * Closes a Windows ConPTY handle without forking node-pty's conpty_console_list_agent.
+ * Apex already terminates the Windows process tree with `taskkill /T /F`, and packaged
+ * Electron disables the RunAsNode fuse, so forking that helper either races a dead or
+ * closed console (`AttachConsole failed`) or cannot execute under packaged fuses.
+ */
+function killWindowsPtyAfterTreeTermination(terminal: pty.IPty): void {
+  const agent = (terminal as WindowsPtyWithAgent)._agent
+  if (agent && typeof agent._getConsoleProcessList === 'function') {
+    agent._getConsoleProcessList = () => Promise.resolve([])
+  }
+  terminal.kill()
+}
+
 export class TerminalService {
   private readonly terminals = new Map<string, OwnedTerminal>()
   private readonly activeBySession = new Map<string, string>()
@@ -162,7 +182,18 @@ export class TerminalService {
       workspaceUse.release()
       throw error
     }
-    if (owner.isDestroyed()) { try { terminal.kill() } catch { /* owner closed during spawn */ }; workspaceUse.release(); throw new Error('Terminal owner was closed') }
+    if (owner.isDestroyed()) {
+      if (process.platform === 'win32') {
+        void killProcessTree(terminal.pid, {
+          ladder: [{ signal: 'SIGKILL', waitMs: 0 }],
+          signalDirect: () => killWindowsPtyAfterTreeTermination(terminal),
+        }).catch(() => undefined)
+      } else {
+        try { terminal.kill() } catch { /* owner closed during spawn */ }
+      }
+      workspaceUse.release()
+      throw new Error('Terminal owner was closed')
+    }
     const owned: OwnedTerminal = { terminal, owner, ownerId: owner.id, cwd, shell, sessionPath, outputWindowStartedAt: Date.now(), outputWindowBytes: 0, pendingOutput: '', pendingOutputBytes: 0, lifecycle: createTerminalLifecycle(), workspaceUse }
     this.terminals.set(terminalId, owned)
     terminal.onData((data) => this.forwardOutput(terminalId, owned, data))
@@ -335,7 +366,10 @@ export class TerminalService {
       hasExited: () => isTerminalExited(owned.lifecycle),
       waitForExit: (timeoutMs) => this.waitForExit(owned, timeoutMs),
       descendants,
-      signalDirect: (signal) => owned.terminal.kill(process.platform === 'win32' ? undefined : signal),
+      signalDirect: (signal) => {
+        if (process.platform === 'win32') killWindowsPtyAfterTreeTermination(owned.terminal)
+        else owned.terminal.kill(signal)
+      },
     })
     if (process.platform === 'win32') {
       if (!graceful) throw new Error('Terminal did not exit after process-tree termination')
