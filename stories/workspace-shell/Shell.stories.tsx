@@ -108,8 +108,6 @@ function Workspace({ narrow = false, loading = false, empty = false }: { narrow?
           view={view}
           inspectorOpen={inspector}
           onToggleInspector={() => setInspector(!inspector)}
-          onRunProjectScript={() => setNotice('Project command captured, no process started.')}
-          onStopProjectScript={noop}
           sessionActions={
             <SessionControls
               projects={empty ? [] : [project]}

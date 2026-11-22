@@ -8,7 +8,6 @@ import { GitBranch, SidebarRight } from './icons'
 import { IconButton } from './ui'
 import type { ProjectRecord, WorkspaceView } from '@/types/api'
 import { useI18n, type MessageKey } from '@/lib/i18n'
-import { ProjectRunControl, type ProjectScriptKind, type ProjectScriptTarget } from './ProjectRunControl'
 import type { ReactNode } from 'react'
 
 const styles = stylex.create({
@@ -51,9 +50,6 @@ interface TitleToolbarProps {
   view: WorkspaceView
   /** Active harness product name; the session view's fallback title. */
   productName?: string
-  activeProjectScriptKind?: ProjectScriptKind
-  onRunProjectScript?(target: ProjectScriptTarget): Promise<void> | void
-  onStopProjectScript?(): void
   /** Subtle session status shown beside project controls. */
   sessionActions?: ReactNode
   inspectorOpen?: boolean
@@ -61,7 +57,7 @@ interface TitleToolbarProps {
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, sessionTitle, gitBranch, view, productName = 'Apex', activeProjectScriptKind, sessionActions, onRunProjectScript, onStopProjectScript, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, sessionTitle, gitBranch, view, productName = 'Apex', sessionActions, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const branch = gitBranch ?? project?.gitBranch
   return (
@@ -77,9 +73,6 @@ export function TitleToolbar({ project, sessionTitle, gitBranch, view, productNa
         {branch && view === 'session' ? <Badge icon={<GitBranch size={12} />} label={branch} className="branch-pill" xstyle={[workbenchStyles.branchPill, styles.branchBadge, responsiveStyles.branchPill]} /> : null}
       </div>
       <div className={`title-toolbar__actions no-drag ${stylex.props(baseStyles.noDrag, workbenchStyles.titleToolbarActions).className ?? ""}`}>
-        {view === 'session' && project && onRunProjectScript && onStopProjectScript
-          ? <ProjectRunControl project={project} activeKind={activeProjectScriptKind} onRun={onRunProjectScript} onStop={onStopProjectScript} />
-          : null}
         {view === 'session' ? sessionActions : null}
         {onToggleInspector && (view === 'session' || view === 'activity') ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" aria-pressed={inspectorOpen} onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>
