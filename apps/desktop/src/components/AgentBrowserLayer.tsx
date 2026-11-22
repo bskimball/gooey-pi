@@ -263,7 +263,7 @@ const AgentTabView = memo(function AgentTabView({
 	// src stays about:blank permanently: the main process drives all navigation,
 	// and rewriting src on re-render would reload the guest.
 	return (
-		<div className={[`agent-browser-tab ${visible ? "is-visible" : ""}`, stylex.props(inspectorStyles.agentBrowserTab).className].filter(Boolean).join(' ')}>
+		<div className={[`agent-browser-tab ${visible ? "is-visible" : ""}`, stylex.props(inspectorStyles.agentBrowserTab, visible && inspectorStyles.agentBrowserTabIsVisible).className].filter(Boolean).join(' ')}>
 			{createElement("webview" as never, {
 				ref: (node: AgentWebviewElement | null) => {
 					viewRef.current = node;
