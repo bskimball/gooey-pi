@@ -208,7 +208,7 @@ describe('extension broker HTTP contract', () => {
     }
   })
 
-  it('delivers a sanitized capture when the broker does not own the selected tab', async () => {
+  it('shares tabs with a desktop client while Chrome reconnects and replicates sanitized captures', async () => {
     const session = resolve('/sessions/remote.jsonl')
     const { bridge, base, token } = await fixture('vscode')
     bridge.setContext(() => ({ activeSessionKey: 'other-session', tabs: [] }))
@@ -222,10 +222,21 @@ describe('extension broker HTTP contract', () => {
     try {
       await desktop.setActiveSession(session)
       await remoteBridge.startOrConnect(undefined, base)
+      expect(remoteBridge.isConnected()).toBe(false)
       expect((await desktop.listTabs(session)).tabs).toEqual([expect.objectContaining({ selection: expect.objectContaining({ selector: '#card', tagName: 'article', text: 'Weekly limit' }) })])
       await post({ type: 'tab_updated', chromeTabId: 8, url: 'https://remote.test/next' })
       await remoteBridge.refreshState()
       expect(desktop.state().tabs[0]?.selection).toBeUndefined()
+
+      const nextSession = resolve('/sessions/next.jsonl')
+      await desktop.setActiveSession(nextSession)
+      expect(await (await fetch(`${base}/v1/extension/hello`)).json()).toMatchObject({ activeSessionKey: nextSession })
+      const extension = await stubExtension(base, token)
+      try {
+        expect((await post({ type: 'tab_paired', chromeTabId: 9, url: 'https://next.test/' })).status).toBe(200)
+        await remoteBridge.refreshState()
+        expect(desktop.state().tabs.find((tab) => tab.chromeTabId === 9)).toMatchObject({ sessionFile: nextSession })
+      } finally { await extension.stop() }
     } finally { desktop.beginShutdown() }
   })
 
@@ -246,11 +257,16 @@ describe('extension broker HTTP contract', () => {
       expect((await fetch(`${base}/v1/extension/execute`, { ...request, headers: { ...request.headers, Authorization: `Bearer ${token}`, Origin } })).status).toBe(403)
     }
   })
-  it('returns a typed error without a connected extension', async () => {
+  it('returns a typed error for tab commands without a connected extension', async () => {
     const { base, token } = await fixture()
-    const response = await fetch(`${base}/v1/extension/execute`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'create_tab', params: {} }) })
-    expect(response.status).toBe(503)
-    expect(await response.json()).toEqual({ error: 'extension_not_connected' })
+    for (const command of [
+      { method: 'create_tab', params: {} },
+      { method: 'sync_tab_state', params: { activeSessionKey: 'session', chromeTabId: 1, paused: true } },
+    ]) {
+      const response = await fetch(`${base}/v1/extension/execute`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command) })
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({ error: 'extension_not_connected' })
+    }
   })
   it('dispatches client commands through the real SSE result correlation', async () => {
     const { base, token } = await fixture()

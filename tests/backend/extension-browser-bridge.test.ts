@@ -110,6 +110,7 @@ async function fixture() {
 		post,
 		commands,
 		hello,
+		controller,
 		setResponder: (fn: typeof respond) => {
 			respond = fn;
 		},
@@ -167,8 +168,8 @@ describe("ExtensionBrowserBridge", () => {
 		expect(second.port).not.toBe(bridge.port);
 	});
 
-	it("routes external URLs, materializes lazy tabs without blank tabs and reuses user-shared tabs", async () => {
-		const { service, commands, post } = await fixture();
+	it.each([false, true])("routes external URLs and shares tabs with the active thread after reconnecting (switch during handshake: %s)", async (duringHandshake) => {
+		const { service, commands, post, bridge, base, headers, controller } = await fixture();
 		const pending = await service.openTab(sessionA, {});
 		expect(commands).toHaveLength(0);
 		expect(pending.backend).toBe("extension");
@@ -202,6 +203,30 @@ describe("ExtensionBrowserBridge", () => {
 			method: "focus_tab",
 			params: { chromeTabId: 99 },
 		});
+
+		controller.abort();
+		await vi.waitFor(() => expect(bridge.isConnected()).toBe(false));
+		const sessionB = resolve("/sessions/b.jsonl");
+		if (!duringHandshake) await service.setActiveSession(sessionB);
+		const handshake = await (await fetch(`${base}/hello`, { headers })).json();
+		expect(handshake).toMatchObject({ activeSessionKey: duringHandshake ? sessionA : sessionB });
+		if (duringHandshake) await service.setActiveSession(sessionB);
+		const reconnect = new AbortController();
+		try {
+			const stream = await fetch(`${base}/events`, { headers, signal: reconnect.signal });
+			expect(stream.ok).toBe(true);
+			const frame = await stream.body?.pipeThrough(new TextDecoderStream()).getReader().read();
+			expect(frame?.value).toBe(`: connected ${JSON.stringify({ activeSessionKey: sessionB, activeSessionLabel: null })}\n\n`);
+			expect((await post("event", {
+				type: "tab_paired",
+				chromeTabId: 100,
+				url: "https://second.example/",
+				title: "Second shared tab",
+			})).status).toBe(200);
+			expect(service.state().tabs.find((tab) => tab.chromeTabId === 100)).toMatchObject({ sessionFile: sessionB, title: "Second shared tab" });
+		} finally {
+			reconnect.abort();
+		}
 	});
 
 	it("records the element selected in a shared tab and drops it when the page changes", async () => {

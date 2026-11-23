@@ -173,7 +173,9 @@ export class ApexSession implements vscode.Disposable {
     try {
       await this.browser.start()
       if (generation !== this.launchGeneration) return
-      await this.browser.service.setActiveSession(this.browserSessionKey)
+      await this.browser.service.setActiveSession(this.browserSessionKey).catch((error: unknown) => {
+        if (generation === this.launchGeneration) this.notice(`Could not set the browser sharing destination: ${error instanceof Error ? error.message : String(error)}`)
+      })
       if (generation !== this.launchGeneration) return
       if (this.browser.bridge.port !== 29301 && !this.browserPortNotice) {
         this.browserPortNotice = true

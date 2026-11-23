@@ -253,13 +253,13 @@ export class ExtensionBrowserService {
     // A newer call owns the extension's destination.
     if (this.activeSessionKey !== sessionKey) return
     this.activeSessionLabel = label ?? null
-    await this.options.extensionBridge.setActiveSession(this.activeSessionKey)
-    if (this.options.extensionBridge?.isConnected())
-      await this.options.extensionBridge.call('sync_tab_state', {
-        activeSessionKey: this.activeSessionKey,
-        activeSessionLabel: this.activeSessionLabel,
-        tabs: this.state().tabs,
-      })
+    await this.options.extensionBridge.setActiveSession(sessionKey)
+    if (this.activeSessionKey !== sessionKey) return
+    await this.options.extensionBridge.call('sync_tab_state', {
+      activeSessionKey: sessionKey,
+      activeSessionLabel: this.activeSessionLabel,
+      tabs: this.state().tabs,
+    })
     this.push()
   }
 

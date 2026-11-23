@@ -389,7 +389,7 @@ describe('VS Code handoff lifecycle', () => {
     expect(session.browser.start).not.toHaveBeenCalled()
   })
 
-  it('reports ready with a notice when reading Pi state fails after launch', async () => {
+  it('reports ready with notices when the browser destination sync fails and Pi state is unavailable', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'apex-fake-pi-'))
     directories.push(directory)
     // A real child reports its launch contract; refreshAll is stubbed to reject.
@@ -413,7 +413,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
       browser: {
         bridge: { port: 29301 }, extensionPath: join(directory, 'extension'), start: vi.fn(async () => undefined),
         capability: { revoke: vi.fn(), environmentFor: () => ({ APEX_BROWSER_TOKEN: 'fixture-token' }) },
-        service: { setActiveSession: vi.fn(async () => undefined) },
+        service: { setActiveSession: vi.fn().mockRejectedValue(new Error('broker unavailable')) },
       },
       refreshAll: vi.fn().mockRejectedValue(new Error('state unavailable')),
     })
@@ -423,7 +423,10 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
       expect(session.refreshAll).toHaveBeenCalledOnce()
       expect(canAct(session.connectionActor.getSnapshot())).toBe(true)
       expect(session.state).toMatchObject({ status: 'ready', connection: 'standalone' })
-      expect(session.pendingOps.at(-1)).toMatchObject({ kind: 'notice', text: "Could not read Pi's state: state unavailable" })
+      expect([...session.ops, ...session.pendingOps]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'notice', text: 'Could not set the browser sharing destination: broker unavailable' }),
+        expect.objectContaining({ kind: 'notice', text: "Could not read Pi's state: state unavailable" }),
+      ]))
       const launch = await session.rpc.command('launch_contract')
       expect(launch).toMatchObject({
         args: ['--mode', 'rpc', '--extension', join(directory, 'extension'), '--extension', join(directory, 'extensions', 'apex-browser-agent.ts'), '--extension', join(directory, 'extensions', 'editor-extension.ts')],

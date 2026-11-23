@@ -241,8 +241,6 @@ async function connect() {
     }
     const response = await fetch(`${base}/v1/extension/events`, { headers: { Authorization: `Bearer ${token}` } })
     if (!response.ok || !response.body) throw new Error('Cannot open extension event stream')
-    connected = true
-    retryMs = 1000
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -255,6 +253,17 @@ async function connect() {
         const block = buffer.slice(0, boundary)
         buffer = buffer.slice(boundary + 2)
         boundary = buffer.indexOf('\n\n')
+        const ready = ': connected'
+        if (block === ready || block.startsWith(`${ready} `)) {
+          if (block !== ready) {
+            const destination = JSON.parse(block.slice(ready.length + 1))
+            activeSessionKey = destination.activeSessionKey
+            activeSessionLabel = destination.activeSessionLabel
+          }
+          connected = true
+          retryMs = 1000
+          continue
+        }
         if (!block.startsWith('data: ')) continue
         const command = JSON.parse(block.slice(6))
         void execute(command).then(

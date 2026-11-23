@@ -16,6 +16,12 @@ import {
 /** Matches desktop-link.ts: a lost command may already have run in Chrome, so callers must not blindly retry. */
 const UNKNOWN_OUTCOME = 'command outcome unknown. Do not retry automatically.'
 
+function isDestinationSync(method: string, params: Record<string, unknown>): boolean {
+  return method === 'sync_tab_state'
+    && (typeof params.activeSessionKey === 'string' || params.activeSessionKey === null)
+    && !('chromeTabId' in params) && !('paused' in params)
+}
+
 export interface ExtensionCommand {
   id: string
   method: string
@@ -142,6 +148,16 @@ export class ExtensionBrowserBridge {
 
   private emitEvent(event: Record<string, unknown>): void {
     for (const listener of this.events) listener(event)
+  }
+
+  private destination(context = this.context()): { activeSessionKey: string | null; activeSessionLabel: string | null } {
+    if (typeof this.latestSession === 'string') {
+      return { activeSessionKey: this.latestSession, activeSessionLabel: this.latestSessionLabel }
+    }
+    return {
+      activeSessionKey: typeof context.activeSessionKey === 'string' ? context.activeSessionKey : null,
+      activeSessionLabel: typeof context.activeSessionLabel === 'string' ? context.activeSessionLabel : null,
+    }
   }
 
   private snapshot(): Record<string, unknown>[] {
@@ -315,6 +331,8 @@ export class ExtensionBrowserBridge {
         this.latestSession = typeof params.activeSessionKey === 'string' ? params.activeSessionKey : null
         this.latestSessionLabel = typeof params.activeSessionLabel === 'string' ? params.activeSessionLabel.slice(0, 400) : null
       }
+      // Chrome reads the destination on its next handshake. No tab commands can run offline.
+      if (!this.isConnected() && isDestinationSync(method, params)) return true
       if (Array.isArray(params.tabs)) {
         this.rememberTabs(params.tabs, remote)
         params = { ...params, tabs: this.snapshot() }
@@ -409,8 +427,8 @@ export class ExtensionBrowserBridge {
       if ((url.pathname === '/v1/extension/hello' && request.method === 'GET') || (url.pathname === '/v1/extension/connect' && ['GET', 'POST'].includes(request.method ?? ''))) {
         if (!this.token) this.token = randomBytes(32).toString('hex')
         // Report the destination popup pairing actually uses: the latest session either app synced, else this host's.
-        const destination = typeof this.latestSession === 'string' ? { activeSessionKey: this.latestSession, activeSessionLabel: this.latestSessionLabel } : {}
-        json(200, { ...this.context(), ...destination, token: this.token, tabs: this.snapshot() })
+        const context = this.context()
+        json(200, { ...context, ...this.destination(context), token: this.token, tabs: this.snapshot() })
         return
       }
       if (!this.token || request.headers.authorization !== `Bearer ${this.token}`) {
@@ -430,7 +448,8 @@ export class ExtensionBrowserBridge {
           'Content-Type': 'text/event-stream',
           Connection: 'keep-alive',
         })
-        response.write(': connected\n\n')
+        // A thread switch can land after /hello but before the stream opens.
+        response.write(`: connected ${JSON.stringify(this.destination())}\n\n`)
         this.heartbeat = setInterval(() => {
           response.write(': heartbeat\n\n')
         }, 15_000)
@@ -450,12 +469,13 @@ export class ExtensionBrowserBridge {
         // This server binds only to 127.0.0.1. Native clients reuse the
         // existing unauthenticated hello token, not agent capability claims.
         if (typeof body.method !== 'string' || !body.method || !body.params || typeof body.params !== 'object' || Array.isArray(body.params)) throw new TypeError('Expected method and params')
-        if (!this.isConnected() && body.method !== 'release_tab') {
+        const params = body.params as Record<string, unknown>
+        if (!this.isConnected() && body.method !== 'release_tab' && !isDestinationSync(body.method, params)) {
           json(503, { error: 'extension_not_connected' })
           return
         }
         if (body.sessionKey !== undefined && typeof body.sessionKey !== 'string') throw new TypeError('Invalid sessionKey')
-        json(200, { result: await this.call(body.method, body.params as Record<string, unknown>, body.sessionKey as string | undefined, true) })
+        json(200, { result: await this.call(body.method, params, body.sessionKey as string | undefined, true) })
         return
       }
       if (url.pathname === '/v1/extension/result') {
@@ -476,7 +496,7 @@ export class ExtensionBrowserBridge {
           const previous = this.tabState.get(body.chromeTabId)
           // Popup pairing has no caller identity. Unregistered shared tabs
           // belong to the most recently active session across both apps.
-          body.sessionKey = previous?.sessionKey ?? body.sessionKey ?? this.latestSession ?? this.context().activeSessionKey
+          body.sessionKey = previous?.sessionKey ?? body.sessionKey ?? this.destination().activeSessionKey
           if (body.type === 'tab_paired') this.releasedTabs.delete(body.chromeTabId)
           if (body.type === 'tab_closed' || body.type === 'tab_unpaired') {
             this.releasedTabs.add(body.chromeTabId)
