@@ -55,6 +55,7 @@ export interface BrowserPreviewContext {
 }
 
 export type BrowserPreviewEvent =
+	| { type: "GUEST_MOUNTING" }
 	| { type: "DOM_READY"; webContentsId: number | null }
 	| { type: "DID_START_LOADING" }
 	| {
@@ -137,26 +138,19 @@ export const browserPreviewMachine = setup({
 	states: {
 		dom: {
 			initial: "mounting",
+			on: {
+				GUEST_MOUNTING: {
+					target: ".mounting",
+					actions: assign({ previewWebContentsId: null, canBack: false, canForward: false }),
+				},
+				DOM_READY: {
+					target: ".ready",
+					actions: assign(({ event }) => ({ previewWebContentsId: event.webContentsId })),
+				},
+			},
 			states: {
-				mounting: {
-					on: {
-						DOM_READY: {
-							target: "ready",
-							actions: assign(({ event }) => ({
-								previewWebContentsId: event.webContentsId,
-							})),
-						},
-					},
-				},
-				ready: {
-					on: {
-						DOM_READY: {
-							actions: assign(({ event }) => ({
-								previewWebContentsId: event.webContentsId,
-							})),
-						},
-					},
-				},
+				mounting: {},
+				ready: {},
 			},
 		},
 		network: {

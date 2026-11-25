@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useActorRef, useMachine, useSelector } from "@xstate/react";
 import type {
@@ -144,6 +144,8 @@ export function BrowserPanel({
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
+	const previewHostRef = useRef<HTMLDivElement>(null);
+	const previousHome = useRef(home);
 	const { popup } = useContext(InspectorWindowContext);
 	const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
 	const previewActorRef = useActorRef(browserPreviewMachine, { input: { home } });
@@ -193,13 +195,8 @@ export function BrowserPanel({
 	useEffect(() => {
 		if (previewWebContentsId === null || !agentSessionKey) return;
 		onPreviewContextRef.current?.(previewWebContentsId, agentSessionKey);
+		return () => onPreviewContextRef.current?.(null, null);
 	}, [previewWebContentsId, agentSessionKey]);
-	useEffect(
-		() => () => {
-			onPreviewContextRef.current?.(null, null);
-		},
-		[],
-	);
 
 	// The agent webviews live in the always-mounted AgentBrowserLayer, not in
 	// this panel; report where the layer should overlay while an agent tab is
@@ -286,9 +283,24 @@ export function BrowserPanel({
 		};
 	}, [sliding, publishAgentSlot]);
 
+	// Remove the guest before InspectorWindowMount moves its host. Chromium owns
+	// each guest in one window and can crash if a live webview changes documents.
+	useLayoutEffect(() => () => {
+		webviewRef.current?.remove();
+		webviewRef.current = null;
+	}, [popup]);
+
 	useEffect(() => {
-		const view = webviewRef.current;
-		if (!view) return;
+		const host = previewHostRef.current;
+		if (!host) return;
+		const view = host.ownerDocument.createElement("webview") as WebviewElement;
+		view.className = "browser-webview";
+		view.setAttribute("partition", BROWSER_PARTITION);
+		view.setAttribute("webpreferences", "contextIsolation=yes,sandbox=yes,nodeIntegration=no");
+		const startUrl = previousHome.current === home ? previewActorRef.getSnapshot().context.currentUrl : home;
+		previousHome.current = home;
+		view.setAttribute("src", startUrl);
+		previewActorRef.send({ type: "GUEST_MOUNTING" });
 		const readNavigation = () => {
 			try {
 				return {
@@ -332,14 +344,18 @@ export function BrowserPanel({
 		view.addEventListener("did-stop-loading", didStop);
 		view.addEventListener("did-navigate", didNavigate);
 		view.addEventListener("did-navigate-in-page", didNavigate);
+		webviewRef.current = view;
+		host.append(view);
 		return () => {
 			view.removeEventListener("dom-ready", onDomReady);
 			view.removeEventListener("did-start-loading", didStart);
 			view.removeEventListener("did-stop-loading", didStop);
 			view.removeEventListener("did-navigate", didNavigate);
 			view.removeEventListener("did-navigate-in-page", didNavigate);
+			view.remove();
+			webviewRef.current = null;
 		};
-	}, [home, previewActorRef, sendAnnotation]);
+	}, [home, popup, previewActorRef, sendAnnotation]);
 
 	// While annotation mode is on, the picker runs inside the page; poll it for
 	// the element the user clicked. Stopping cleans up the page-side listeners.
@@ -422,7 +438,13 @@ export function BrowserPanel({
 	const navigate = useCallback((value: string) => {
 		const url = normalizeUrl(value);
 		previewActorRef.send({ type: "NAVIGATE", url });
-		void webviewRef.current?.loadURL(url).catch((error: unknown) => {
+		const view = webviewRef.current;
+		if (!view) return;
+		if (!previewActorRef.getSnapshot().matches({ dom: "ready" })) {
+			view.setAttribute("src", url);
+			return;
+		}
+		void view.loadURL(url).catch((error: unknown) => {
 			if (!String(error).includes("ERR_ABORTED"))
 				console.error("Browser navigation failed", error);
 		});
@@ -484,23 +506,6 @@ export function BrowserPanel({
 		sendAnnotation({ type: "SAVED" });
 		return true;
 	};
-
-	const mountPreview = useCallback((host: HTMLDivElement | null) => {
-		if (!host) return;
-		// Electron's webview methods belong to the window that created the element.
-		// The main document outlives the inspector even when Preview first opens there.
-		const view = document.createElement("webview") as WebviewElement;
-		view.className = "browser-webview";
-		view.setAttribute("partition", BROWSER_PARTITION);
-		view.setAttribute("webpreferences", "contextIsolation=yes,sandbox=yes,nodeIntegration=no");
-		view.setAttribute("src", home);
-		host.append(view);
-		webviewRef.current = view;
-		return () => {
-			webviewRef.current = null;
-			view.remove();
-		};
-	}, [home]);
 
 	const count = annotations.annotations.length;
 	const staleCount = annotations.annotations.filter(
@@ -678,7 +683,7 @@ export function BrowserPanel({
 					</div>
 				) : null}
 				<div className={[`browser-viewport ${picking ? "is-annotating" : ""}`, stylex.props(inspectorStyles.browserViewport, (picking) && inspectorStyles.browserViewportIsAnnotating).className].filter(Boolean).join(' ')}>
-					<div ref={mountPreview} style={{ display: "contents" }} />
+					<div ref={previewHostRef} style={{ display: "contents" }} />
 					{picking || capturingSelection ? (
 						<div className={`annotation-hint ${stylex.props(inspectorStyles.annotationHint).className ?? ""}`} role="status">
 							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : isDirectArmed ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}

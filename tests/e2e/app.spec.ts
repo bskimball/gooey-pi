@@ -2427,25 +2427,40 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('keeps the browser preview address when moving the inspector and follows Activity', async () => {
-    const server = createServer((_request, response) => response.end('Inspector preview fixture'))
+    const server = createServer((request, response) => {
+      response.setHeader('Content-Type', 'text/html')
+      response.end(request.url === '/next' ? '<title>Next page</title>' : '<title>Inspector preview</title>')
+    })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     try {
       const address = server.address()
       if (!address || typeof address === 'string') throw new Error('Expected an HTTP port')
       const url = `http://127.0.0.1:${address.port}/preview`
-      const guestUrl = (host: Page) => host.locator('webview').first().evaluate((node) => {
+      const guestUrl = (host: Page) => host.locator('.browser-webview').evaluate((node) => {
         try { return (node as Electron.WebviewTag).getURL() } catch { return '' }
       })
       const child = await detachInspector()
       await child.getByRole('tab', { name: 'Browser' }).click()
       await expect.poll(() => guestUrl(child)).toBe('about:blank')
-      await child.locator('webview').first().evaluate((node, target) => (node as Electron.WebviewTag).loadURL(target), url)
+      const addressField = child.getByRole('textbox', { name: 'Browser address' })
+      await addressField.fill(url)
+      await addressField.press('Enter')
       await expect.poll(() => guestUrl(child)).toBe(url)
       await page.getByRole('button', { name: 'Dock inspector' }).click()
       await expect.poll(() => guestUrl(page)).toBe(url)
       const reopened = await detachInspector()
       await expect.poll(() => guestUrl(reopened)).toBe(url)
+      // An adopted webview keeps its old window's prototype even when its ownerDocument changes.
+      expect(await reopened.locator('.browser-webview').evaluate((node) => node instanceof HTMLElement)).toBe(true)
+      const next = new URL('/next', url).href
+      const detachedAddress = reopened.getByRole('textbox', { name: 'Browser address' })
+      await detachedAddress.fill(next)
+      await detachedAddress.press('Enter')
+      await expect.poll(() => guestUrl(reopened)).toBe(next)
       await reopened.getByRole('button', { name: 'Dock inspector' }).click()
+      await expect.poll(() => page.locator('.browser-webview').evaluate(async (node) => {
+        try { return await (node as Electron.WebviewTag).executeJavaScript('document.title') } catch { return '' }
+      })).toBe('Next page')
       await page.getByRole('button', { name: 'Activity', exact: true }).click()
       const activity = await detachInspector()
       await expect(activity.getByRole('complementary', { name: 'Space details' })).toContainText('Global Chief')
