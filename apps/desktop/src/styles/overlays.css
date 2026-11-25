@@ -6,8 +6,6 @@
 .field input, .field textarea, .field select { width: 100%; min-width: 0; }
 .field textarea { height: auto; padding: 8px; resize: vertical; }
 .extension-question__field { margin-top: 0; }
-.extension-questionnaire__question h3 { margin: 0 0 2px; color: var(--text); font-size: var(--fs-body); font-weight: 600; line-height: 1.4; text-wrap: pretty; }
-.extension-questionnaire kbd, .extension-questionnaire-inline__footer kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: var(--radius-xs); color: var(--text-secondary); background: var(--surface-raised); font: inherit; font-size: 10.5px; }
 .command-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: var(--fs-body); }
 .command-search > button { padding: 0; background: transparent; }
 .command-search kbd { padding: 3px 5px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-subtle); }

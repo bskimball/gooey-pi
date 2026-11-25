@@ -6,7 +6,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react'
 import type { ExtensionUiRequest } from '@/lib/extension-ui'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
-import { ArrowLeft, ArrowRight, ChatCircleDots, Check, CheckCircle, Clock, PencilSimple } from './icons'
+import { ChatCircleDots, Check, Clock } from './icons'
 import { ApexButton, Modal } from './ui'
 import {
   OTHER_OPTION,
@@ -178,7 +178,8 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
     : undefined
   const activeSelected = activeQuestion ? wizardContext.selectedByQuestion[activeQuestion.id] ?? 0 : 0
   const writingAnswer = activeQuestion?.options[activeSelected] === OTHER_OPTION
-  const canSubmit = (wizard.matches('answering') || wizard.matches('reviewing')) && selectQuestionnaireComplete(wizardContext)
+  const allAnswered = selectQuestionnaireComplete(wizardContext)
+  const canSubmit = (wizard.matches('answering') || wizard.matches('reviewing')) && allAnswered
 
   const selectQuestionOption = (index: number) => {
     if (activeQuestion) dispatchWizard({ type: 'SELECT', index })
@@ -233,6 +234,11 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
       navigateQuestion(questionIndex + 1)
       return
     }
+    // Step and edit buttons keep native Enter activation. Enter on the current
+    // Review step is also the keyboard shortcut to submit the summary.
+    if (event.key === 'Enter' && event.target instanceof HTMLButtonElement
+      && event.target.getAttribute('role') !== 'option'
+      && !(questionIndex === questionnaire.questions.length && event.target.getAttribute('aria-current') === 'step')) return
     if (questionIndex === questionnaire.questions.length) {
       if (event.key === 'Enter') {
         event.preventDefault()
@@ -270,59 +276,32 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
   const remainingSeconds = remainingMs === undefined ? undefined : Math.max(0, Math.ceil(remainingMs / 1_000))
 
   const inline = presentation === 'inline' && Boolean(questionnaire)
-  const questionHint = (
-    <>
-      <kbd>{shortcutLabel(platform, ['Primary', 'ArrowLeft'])}</kbd> <kbd>{shortcutLabel(platform, ['Primary', 'ArrowRight'])}</kbd> questions · <kbd>↑</kbd> <kbd>↓</kbd> choices · <kbd>1–9</kbd> select · <kbd>Enter</kbd> continue
-    </>
-  )
-  const answeredCount = questionnaire
-    ? questionnaire.questions.filter((question) => Boolean(wizardContext.answeredByQuestion[question.id])).length
-    : 0
-  const progressRatio = questionnaire && questionnaire.questions.length > 0
-    ? Math.min(1, answeredCount / questionnaire.questions.length)
-    : 0
-  const showStepNav = Boolean(questionnaire?.complete && questionnaire.questions.length > 1)
   const footer = (
     <>
-      {showStepNav ? (
-        <div className={sx(overlaysStyles.extensionQuestionnaireNavGroup)}>
-          <ApexButton
-            variant="quiet"
-            compact
-            disabled={questionIndex <= 0}
-            icon={<ArrowLeft size={12} />}
-            onClick={() => navigateQuestion(questionIndex - 1)}
-          >
-            Back
-          </ApexButton>
-          {activeQuestion ? (
-            <ApexButton
-              variant="quiet"
-              compact
-              onClick={() => navigateQuestion(questionIndex + 1)}
-            >
-              {questionIndex + 1 === questionnaire!.questions.length ? 'Review' : 'Next'}
-              <ArrowRight size={12} />
-            </ApexButton>
-          ) : null}
-        </div>
-      ) : null}
+      {questionnaire?.complete && activeQuestion && (
+        <details className={sx(overlaysStyles.extensionQuestionnaireShortcuts)}>
+          <summary className={sx(overlaysStyles.extensionQuestionnaireShortcutsLabel)}>Keyboard shortcuts</summary>
+          <div className={sx(overlaysStyles.extensionQuestionnaireHint)}>
+            <span><kbd>↑ ↓</kbd> or <kbd>1–9</kbd> choose</span>
+            <span><kbd>Enter</kbd> confirm</span>
+            <span><kbd>{shortcutLabel(platform, ['Primary', 'ArrowLeft'])}</kbd> / <kbd>{shortcutLabel(platform, ['Primary', 'ArrowRight'])}</kbd> switch question</span>
+          </div>
+        </details>
+      )}
       <ApexButton variant="quiet" onClick={cancel}>Cancel</ApexButton>
       {request.method === 'confirm' ? <ApexButton variant="primary" onClick={() => onRespond({ confirmed: true })}>Confirm</ApexButton> : null}
       {request.method === 'input' || request.method === 'editor' ? <ApexButton variant="primary" disabled={!value.trim()} onClick={() => onRespond({ value })}>Continue</ApexButton> : null}
-      {questionnaire ? <ApexButton variant="primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</ApexButton> : null}
+      {questionnaire && (
+        questionnaire.complete && activeQuestion && !allAnswered ? (
+          <ApexButton variant="primary" onClick={() => commitQuestion()}>
+            {questionIndex + 1 === questionnaire.questions.length ? 'Review answers' : 'Next'}
+          </ApexButton>
+        ) : <ApexButton variant="primary" disabled={!canSubmit} onClick={submitQuestionnaire}>Submit answers</ApexButton>
+      )}
     </>
   )
   const questionnaireContent = questionnaire ? (
-        <div ref={questionnaireRef} className="extension-questionnaire" onKeyDown={handleQuestionnaireKeyDown}>
-          {inline && questionnaire.complete ? (
-            <div className={sx(overlaysStyles.extensionQuestionnaireProgressBar)} aria-hidden="true">
-              <div
-                className={sx(overlaysStyles.extensionQuestionnaireProgressFill)}
-                style={{ transform: `scaleX(${Math.max(0.06, progressRatio)})` }}
-              />
-            </div>
-          ) : null}
+        <div ref={questionnaireRef} className={`extension-questionnaire ${sx(inline && overlaysStyles.extensionQuestionnaireInlineBody)}`} onKeyDown={handleQuestionnaireKeyDown}>
           {!questionnaire.complete ? (
             <>
               {inline ? <h2 className={`extension-questionnaire__inline-title ${sx(overlaysStyles.extensionQuestionnaireInlineTitle)}`}>{request.title}</h2> : null}
@@ -332,12 +311,10 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
             <>
               <div className={`extension-questionnaire__header ${sx(overlaysStyles.extensionQuestionnaireHeader)}`}>
                 <span className={`extension-questionnaire__step ${sx(overlaysStyles.extensionQuestionnaireStep)}`}>
-                  <span className={sx(overlaysStyles.extensionQuestionnaireStepIconWrap)} aria-hidden="true">
-                    <ChatCircleDots size={13} className={sx(overlaysStyles.extensionQuestionnaireStepIcon)} />
-                  </span>
-                  {activeQuestion ? `Question ${questionIndex + 1} of ${questionnaire.questions.length}` : 'Review answers'}
+                  <ChatCircleDots size={15} aria-hidden="true" />
+                  {activeQuestion ? `Question ${questionIndex + 1} of ${questionnaire.questions.length}` : `${questionnaire.questions.length} ${questionnaire.questions.length === 1 ? 'question' : 'questions'}`}
                 </span>
-                <div className={`extension-questionnaire__progress ${sx(overlaysStyles.extensionQuestionnaireProgress)}`} aria-label="Question progress">
+                <div className={`extension-questionnaire__progress ${sx(overlaysStyles.extensionQuestionnaireProgress)}`} role="group" aria-label="Question progress">
                   {questionnaire.questions.map((question, index) => {
                     const active = questionIndex === index
                     const answered = Boolean(wizardContext.answeredByQuestion[question.id])
@@ -347,10 +324,10 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                         key={question.id}
                         aria-current={active ? 'step' : undefined}
                         aria-label={`Question ${index + 1}${answered ? ', answered' : ''}`}
-                        className={`${active ? 'is-active' : ''} ${sx(overlaysStyles.extensionQuestionnaireStepButton, answered && overlaysStyles.extensionQuestionnaireStepButtonAnswered, active && overlaysStyles.extensionQuestionnaireStepButtonActive)}`}
+                        className={`${active ? 'is-active' : ''} ${sx(overlaysStyles.extensionQuestionnaireStepButton, active && overlaysStyles.extensionQuestionnaireStepButtonActive)}`}
                         onClick={() => navigateQuestion(index)}
                       >
-                        {answered ? <Check size={10} weight="bold" aria-hidden="true" className={sx(overlaysStyles.extensionQuestionnaireStepCheck)} /> : null}
+                        {answered && <Check size={10} weight="bold" aria-hidden="true" />}
                         {index + 1}
                       </button>
                     )
@@ -377,29 +354,21 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
               {inline ? <h2 className={`extension-questionnaire__inline-title ${sx(overlaysStyles.extensionQuestionnaireInlineTitle)}`}>{activeQuestion?.title ?? 'Review your answers'}</h2> : null}
               {activeQuestion ? (
                 <div className="extension-questionnaire__question">
-                  {inline ? null : <h3 className={sx(overlaysStyles.extensionQuestionnaireModalTitle)}>{activeQuestion.title}</h3>}
+                  {inline ? null : <h3 className={sx(overlaysStyles.extensionQuestionnaireInlineTitle)}>{activeQuestion.title}</h3>}
                   <div className={`extension-question__options ${sx(overlaysStyles.extensionQuestionOptions)}`} role="listbox" aria-label={activeQuestion.title}>
                     {activeQuestion.options.map((option, index) => {
                       const isSelected = activeSelected === index
-                      const isOther = option === OTHER_OPTION
                       return <button
                         type="button"
                         role="option"
                         aria-selected={isSelected}
-                        className={`${isSelected ? 'is-selected' : ''} ${sx(overlaysStyles.extensionQuestionOption, isOther && overlaysStyles.extensionQuestionOptionOther, isSelected && overlaysStyles.extensionQuestionOptionSelected)}`}
+                        className={`${isSelected ? 'is-selected' : ''} ${sx(overlaysStyles.extensionQuestionOption, isSelected && overlaysStyles.extensionQuestionOptionSelected)}`}
                         key={`${option}-${index}`}
                         onClick={() => commitQuestion(index)}
                       >
-                        <span className={`extension-question__option-index ${sx(overlaysStyles.extensionQuestionOptionIndex, isSelected && overlaysStyles.extensionQuestionOptionIndexSelected)}`}>{index + 1}</span>
-                        {isOther ? <PencilSimple size={13} aria-hidden="true" className={sx(overlaysStyles.extensionQuestionOptionOtherIcon)} /> : null}
+                        <span aria-hidden="true" className={`extension-question__option-index ${sx(overlaysStyles.extensionQuestionOptionIndex)}`}>{index + 1}</span>
                         <span className={sx(overlaysStyles.extensionQuestionOptionLabel)}>{option}</span>
-                        {isSelected ? (
-                          <span className={sx(overlaysStyles.extensionQuestionOptionCheck)} aria-hidden="true">
-                            <CheckCircle size={16} weight="fill" />
-                          </span>
-                        ) : (
-                          <span className={sx(overlaysStyles.extensionQuestionOptionRadio)} aria-hidden="true" />
-                        )}
+                        {isSelected && <Check size={16} weight="bold" aria-hidden="true" className={sx(overlaysStyles.extensionQuestionOptionCheck)} />}
                       </button>
                     })}
                   </div>
@@ -410,17 +379,19 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                     size="sm"
                     width="100%"
                     value={wizardContext.contexts[activeQuestion.id] ?? ''}
-                    placeholder={writingAnswer ? 'Write your own answer' : 'Anything the agent should know about this choice'}
+                    placeholder={writingAnswer ? 'Write your own answer' : 'Add a detail about your choice'}
                     aria-label={writingAnswer ? 'Your answer' : 'Additional context'}
-                    containerClassName={`extension-questionnaire__context ${sx(overlaysStyles.extensionQuestionnaireContext, writingAnswer && overlaysStyles.extensionQuestionnaireContextRequired)}`}
+                    containerClassName={`extension-questionnaire__context ${sx(overlaysStyles.extensionQuestionnaireContext)}`}
                     onChange={(text) => dispatchWizard({ type: 'TYPE_CONTEXT', text })}
                   />
-                  {inline ? null : <p className={`extension-questionnaire__hint ${sx(overlaysStyles.extensionQuestionnaireHint)}`}>{questionHint}</p>}
                 </div>
               ) : (
-                <div className={`extension-questionnaire__submit ${sx(overlaysStyles.extensionQuestionnaireSubmit)}`} role="listbox" aria-label="Submit answers">
+                <div className={`extension-questionnaire__submit ${sx(overlaysStyles.extensionQuestionnaireSubmit)}`} role="group" aria-label="Review answers">
+                  {inline ? null : <h3 className={sx(overlaysStyles.extensionQuestionnaireInlineTitle)}>Review your answers</h3>}
                   {questionnaire.questions.map((question) => {
-                    const answer = questionnaireAnswer(question, wizardContext.selectedByQuestion[question.id] ?? 0, wizardContext.contexts)
+                    const answer = wizardContext.answeredByQuestion[question.id]
+                      ? questionnaireAnswer(question, wizardContext.selectedByQuestion[question.id] ?? 0, wizardContext.contexts)
+                      : undefined
                     return (
                       <button
                         type="button"
@@ -428,15 +399,10 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                         className={sx(overlaysStyles.extensionQuestionnaireReviewRow)}
                         onClick={() => navigateQuestion(question.index)}
                       >
-                        <span className={`extension-question__option-index ${sx(overlaysStyles.extensionQuestionOptionIndex, Boolean(answer) && overlaysStyles.extensionQuestionOptionIndexSelected)}`}>{question.index + 1}</span>
+                        <span aria-hidden="true" className={sx(overlaysStyles.extensionQuestionOptionIndex)}>{question.index + 1}</span>
                         <span className={sx(overlaysStyles.extensionQuestionnaireReviewBody)}>
                           <span className={sx(overlaysStyles.extensionQuestionnaireReviewQuestion)}>{question.title}</span>
                           <span className={sx(overlaysStyles.extensionQuestionnaireReviewAnswer, !answer && overlaysStyles.extensionQuestionnaireReviewMissing)}>
-                            {answer ? (
-                              answer.answerSource === 'freeform'
-                                ? <PencilSimple size={11} aria-hidden="true" />
-                                : <Check size={11} weight="bold" aria-hidden="true" />
-                            ) : null}
                             {answer?.answer ?? 'Not answered'}
                           </span>
                           {answer && 'context' in answer && answer.context ? <span className={sx(overlaysStyles.extensionQuestionnaireReviewContext)}>{answer.context}</span> : null}
@@ -463,7 +429,6 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
     >
       {questionnaireContent}
       <div className={`extension-questionnaire-inline__footer ${sx(overlaysStyles.extensionQuestionnaireInlineFooter)}`}>
-        {activeQuestion ? <p className={`extension-questionnaire__hint ${sx(overlaysStyles.extensionQuestionnaireHint, overlaysStyles.extensionQuestionnaireHintInline)}`}>{questionHint}</p> : null}
         {footer}
       </div>
     </motion.section>
@@ -506,7 +471,7 @@ export function ExtensionUiModal({ request, onRespond, platform = 'darwin', dead
                   onClick={() => { setSelected(position); onRespond({ value: option }) }}
                   onFocus={() => setSelected(position)}
                 >
-                  {searchable ? null : <span className={`extension-question__option-index ${sx(overlaysStyles.extensionQuestionOptionIndex, highlighted?.index === index && overlaysStyles.extensionQuestionOptionIndexSelected)}`}>{index + 1}</span>}
+                  {searchable ? null : <span className={`extension-question__option-index ${sx(overlaysStyles.extensionQuestionOptionIndex)}`}>{index + 1}</span>}
                   <span className={sx(overlaysStyles.extensionQuestionOptionLabel)}>{option}</span>
                 </button>
               ))}

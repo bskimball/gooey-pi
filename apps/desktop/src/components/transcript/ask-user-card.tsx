@@ -5,8 +5,7 @@ import { memo } from 'react'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { ChatCircleDots, Check, PencilSimple, WarningCircle } from '../icons'
-import { StatusMark } from '../activity/StatusMark'
-import { arrivalMotionProps, MorphInline, useInstantMotion } from '../ContentMotion'
+import { arrivalMotionProps, useInstantMotion } from '../ContentMotion'
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 type ToolResult = Extract<MessagePart, { type: 'toolResult' }>
@@ -91,86 +90,41 @@ const TITLES: Record<AskUserExchange['state'], (count: number) => string> = {
 export const AskUserCard = memo(function AskUserCard({ exchange, animateArrival = false }: { exchange: AskUserExchange; animateArrival?: boolean }) {
   const instant = useInstantMotion()
   const { state, items, response } = exchange
-  const numbered = items.length > 1
+  const title = TITLES[state](items.length)
+  const Icon = state === 'failed' ? WarningCircle : state === 'answered' ? Check : ChatCircleDots
   return (
     <motion.section
-      className={`ask-user-card is-${state} ${stylex.props(
-        styles.card,
-        state === 'waiting' && styles.cardWaiting,
-        state === 'answered' && styles.cardAnswered,
-        state === 'dismissed' && styles.cardDismissed,
-        state === 'failed' && styles.cardFailed,
-      ).className ?? ''}`}
-      aria-label={TITLES[state](items.length)}
+      className={`ask-user-card is-${state} ${stylex.props(styles.exchange).className ?? ''}`}
+      aria-label={title}
       {...arrivalMotionProps(instant, animateArrival)}
     >
       <header {...stylex.props(styles.header)}>
-        <span
-          {...stylex.props(
-            styles.icon,
-            state === 'answered' && styles.iconAnswered,
-            state === 'dismissed' && styles.iconDismissed,
-            state === 'failed' && styles.iconFailed,
-          )}
+        <Icon
+          size={15}
           aria-hidden="true"
-        >
-          {state === 'failed' ? <WarningCircle size={14} /> : state === 'answered' ? <Check size={14} weight="bold" /> : <ChatCircleDots size={14} />}
-        </span>
-        <span {...stylex.props(styles.title)}>{TITLES[state](items.length)}</span>
-        <span
-          {...stylex.props(
-            styles.status,
-            state === 'waiting' && styles.statusWaiting,
-            state === 'answered' && styles.statusAnswered,
-            state === 'failed' && styles.statusFailed,
-          )}
-        >
-          <MorphInline morphKey={state} instant={instant}>
-            {state === 'waiting' ? (
-              <>
-                <StatusMark state="running" size={11} /> needs input
-              </>
-            ) : state === 'failed' ? (
-              <>
-                <WarningCircle size={11} /> failed
-              </>
-            ) : state === 'dismissed' ? (
-              'dismissed'
-            ) : (
-              <>
-                <Check size={11} weight="bold" /> answered
-              </>
-            )}
-          </MorphInline>
-        </span>
+          {...stylex.props(styles.icon, state === 'waiting' && styles.waiting, state === 'answered' && styles.answered, state === 'failed' && styles.failed)}
+        />
+        {title}
       </header>
-      <ol {...stylex.props(styles.list)}>
-        {items.map((item, index) => (
-          <li key={index} {...stylex.props(styles.item, index > 0 && styles.itemDivider)}>
-            {numbered ? <span {...stylex.props(styles.index)}>{index + 1}</span> : null}
-            <div {...stylex.props(styles.itemBody)}>
-              <p {...stylex.props(styles.question)}>{item.question}</p>
+      <div {...stylex.props(styles.body)}>
+        <ol {...stylex.props(styles.list, items.length > 1 && styles.numbered)}>
+          {items.map((item, index) => (
+            <li key={index} {...stylex.props(styles.item)}>
+              <p {...stylex.props(styles.question, state === 'answered' && styles.answeredQuestion)}>{item.question}</p>
               {item.answer ? (
-                <div {...stylex.props(styles.answerRow)}>
-                  <span {...stylex.props(styles.answer)}>
-                    {item.freeform ? (
-                      <PencilSimple size={12} {...stylex.props(styles.answerIcon)} aria-hidden="true" />
-                    ) : (
-                      <Check size={12} weight="bold" {...stylex.props(styles.answerIcon)} aria-hidden="true" />
-                    )}
-                    <span>{boundText(item.answer, 2_000, '…')}</span>
-                  </span>
-                  {item.freeform ? <span {...stylex.props(styles.answerSource)}>written answer</span> : null}
-                </div>
-              ) : (state === 'answered' && !response) || state === 'dismissed' ? (
-                <span {...stylex.props(styles.missing)}>No answer</span>
+                <p {...stylex.props(styles.answer)}>
+                  {item.freeform && <PencilSimple size={12} role="img" aria-label="Written answer" {...stylex.props(styles.answerIcon)} />}
+                  {boundText(item.answer, 2_000, '…')}
+                </p>
+              ) : state === 'answered' && !response ? (
+                <p {...stylex.props(styles.note)}>No answer</p>
               ) : null}
-              {item.context ? <p {...stylex.props(styles.context)}>{boundText(item.context, 2_000, '…')}</p> : null}
-            </div>
-          </li>
-        ))}
-      </ol>
-      {response ? <p {...stylex.props(styles.response, state === 'failed' && styles.responseFailed)}>{boundText(response, 2_000, '…')}</p> : null}
+              {item.context && <p {...stylex.props(styles.note)}>{boundText(item.context, 2_000, '…')}</p>}
+            </li>
+          ))}
+        </ol>
+        {response && <p {...stylex.props(styles.response, state === 'failed' && styles.failed)}>{boundText(response, 2_000, '…')}</p>}
+      </div>
     </motion.section>
   )
 })

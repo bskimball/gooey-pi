@@ -108,6 +108,15 @@ export const Select = { args: { request: requests.select } } satisfies Story
 export const SearchableSelect = { args: { request: requests.searchable } } satisfies Story
 export const MultiQuestionFlow = { args: { request: requests.questionnaire } } satisfies Story
 export const InlineQuestionnaire = { args: { request: requests.questionnaire, presentation: 'inline' } } satisfies Story
+export const ReviewAnswers = {
+  args: { request: requests.questionnaire, presentation: 'inline' },
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement)
+    await userEvent.click(await page.findByRole('option', { name: 'Desktop and VS Code' }))
+    await userEvent.click(await page.findByRole('option', { name: 'Focused tests and manual review' }))
+    await expect(page.getByRole('button', { name: 'Submit answers' })).toBeEnabled()
+  },
+} satisfies Story
 export const RichInlineQuestionnaire = { args: { request: requests.richQuestionnaire, presentation: 'inline' } } satisfies Story
 export const RichInlineQuestionnaireDark = { args: { request: requests.richQuestionnaire, presentation: 'inline' }, globals: { theme: 'dark' } } satisfies Story
 export const WaitingForQuestions = {

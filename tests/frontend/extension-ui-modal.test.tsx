@@ -125,6 +125,16 @@ describe('extension questionnaire keyboard handling', () => {
 })
 
 describe('extension questionnaire wizard', () => {
+  it('shows unvisited questions as unanswered in review', async () => {
+    await act(async () => { root.render(<ExtensionUiModal request={request} onRespond={vi.fn()} />) })
+    const review = questionnaireElement().querySelector<HTMLButtonElement>('.extension-questionnaire__progress button:last-child')!
+    await clickButton(review)
+    const rows = questionnaireElement().querySelectorAll('.extension-questionnaire__submit button')
+    expect(rows[0].textContent).toContain('React')
+    expect(rows[1].textContent).toContain('Not answered')
+    expect(rows[1].textContent).not.toContain('TypeScript')
+  })
+
   it('counts down from the host deadline instead of restarting on mount', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
     try {

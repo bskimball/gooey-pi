@@ -372,12 +372,18 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const prompt = pendingPrompt
     pendingPrompt = undefined
     fs.writeFileSync(${JSON.stringify(join(fixtureRoot, 'questionnaire-values.json'))}, JSON.stringify(prompt.values))
-    send({ type: 'tool_execution_end', toolCallId: 'ask-2', toolName: 'ask_user', result: { values: prompt.values } })
+    const values = ['fixture-question-1', 'fixture-question-2'].map(id => prompt.values[id])
+    const answers = values.every(value => typeof value === 'string') ? values.map(value => JSON.parse(value)) : []
+    const result = {
+      details: { answers, cancelled: answers.length === 0 },
+      content: [{ type: 'text', text: 'The questionnaire answers are ready.' }],
+    }
+    send({ type: 'tool_execution_end', toolCallId: 'ask-2', toolName: 'ask_user', result })
     send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'The questionnaire answers are ready.' } })
     const completedAt = new Date().toISOString()
     fs.appendFileSync(sessionFile, [
       JSON.stringify({ type: 'message', id: 'fixture-live-assistant-multi', parentId: 'fixture-goal-summary', message: { role: 'assistant', timestamp: completedAt, content: [{ type: 'toolCall', id: 'ask-2', name: 'ask_user', arguments: { questions: [{ question: 'Which release channel?', options: ['Stable', 'Beta'] }, { question: 'What should I optimize for?', options: ['Speed', 'Safety'] }] } }] } }),
-      JSON.stringify({ type: 'message', id: 'fixture-live-result-multi', parentId: 'fixture-live-assistant-multi', message: { role: 'toolResult', timestamp: completedAt, toolCallId: 'ask-2', toolName: 'ask_user', content: JSON.stringify({ values: prompt.values }) } }),
+      JSON.stringify({ type: 'message', id: 'fixture-live-result-multi', parentId: 'fixture-live-assistant-multi', message: { role: 'toolResult', timestamp: completedAt, toolCallId: 'ask-2', toolName: 'ask_user', ...result } }),
       JSON.stringify({ type: 'message', id: 'fixture-live-final-multi', parentId: 'fixture-live-result-multi', message: { role: 'assistant', timestamp: completedAt, content: 'The questionnaire answers are ready.' } }),
     ].join('\\n') + '\\n')
     send({ type: 'agent_end' })
@@ -2127,9 +2133,10 @@ test.describe('Prime Work desktop smoke', () => {
     const workStatus = page.locator('.work-disclosure__status')
     await expect(workStatus).toHaveAttribute('role', 'status')
     await expect(workStatus).toContainText('Waiting for your answer')
-    // The pending question is the live step; the reasoning before it folds into the summary row.
-    await expect(page.locator('.work-group.is-live .work-group__summary')).toContainText('Thought')
-    await expect(page.locator('.work-group__current .activity-line--question')).toBeVisible()
+    const work = page.getByRole('region', { name: 'Agent work activity' })
+    await expect(work.getByRole('button', { name: 'Thought', exact: true })).toBeVisible()
+    const exchange = work.getByRole('region', { name: 'Waiting for your answers to 2 questions' })
+    await expect(exchange.getByText('Which release channel?', { exact: true })).toBeVisible()
     await expect(page.locator('.thinking-dots')).toHaveCount(0)
     await expect(dialog).toContainText('Question 1 of 2')
     await context.fill('For the pilot')
@@ -2163,12 +2170,13 @@ test.describe('Prime Work desktop smoke', () => {
     })
     const runtimeArgs = JSON.parse(readFileSync(join(fixtureRoot, 'pi-runtime-args.json'), 'utf8')) as string[]
     expect(runtimeArgs).toContain(join(process.cwd(), 'apps', 'desktop', 'assets', 'extensions', 'apex-ask-user.ts'))
-    const worked = page.locator('.work-group__summary').last()
-    await expect(worked).toContainText(/asked 1 question/i)
-    await expect(worked).toHaveAttribute('aria-expanded', 'false')
+    const answered = page.getByRole('region', { name: 'You answered 2 questions' })
+    const releaseAnswer = answered.getByRole('listitem').filter({ hasText: 'Which release channel?' })
+    await expect(releaseAnswer.getByText('Beta', { exact: true })).toBeVisible()
+    await expect(releaseAnswer.getByText('For the pilot', { exact: true })).toBeVisible()
+    const priorityAnswer = answered.getByRole('listitem').filter({ hasText: 'What should I optimize for?' })
+    await expect(priorityAnswer.getByText('A custom priority', { exact: true })).toBeVisible()
     await expect(page.locator('.activity-line--reasoning')).toHaveCount(0)
-    await worked.click()
-    await expect(page.locator('.activity-line--question')).toContainText('What should I optimize for?')
 
     const completedRow = page.locator('.session-row-wrap').filter({ hasText: 'Post-completion catalog refresh' })
     await expect(completedRow).toHaveCount(1)

@@ -5,6 +5,7 @@
 .activity-peek__actions .button--compact { min-height: 28px; gap: 5px; padding-inline: 9px; font-size: var(--fs-meta); }
 .project-run-menu > footer .button { min-height: 28px; font-size: var(--fs-meta); }
 .changes-toolbar > .button { font-size: var(--fs-meta); }
+.modal:has(.extension-questionnaire) { background-image: none; }
 
 .compact-state > .empty-state { height: auto; min-height: 0; padding: 16px 10px; }
 .compact-state > .empty-state h2 { margin: 0; color: var(--text-tertiary); font-size: var(--fs-ui); font-weight: 400; overflow-wrap: anywhere; }

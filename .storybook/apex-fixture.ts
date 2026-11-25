@@ -23,6 +23,7 @@ export function createApexStoryFixture(overrides: ApexStoryOverrides = {}, initi
       openExternal: unsupported('app.openExternal'),
       revealPath: unsupported('app.revealPath'),
       openInVsCode: unsupported('app.openInVsCode'),
+      prepareInspectorWindow: unsupported('app.prepareInspectorWindow'),
       resolveBrowserSource: unsupported('app.resolveBrowserSource'),
       readWorkspaceImage: unsupported('app.readWorkspaceImage'),
       popupMenu: unsupported('app.popupMenu'),
