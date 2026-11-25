@@ -728,7 +728,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.activity-main')).not.toHaveAttribute('inert', '')
   })
 
-  test('steers the active turn with Ctrl+Enter', async () => {
+  test('steers the active turn with Enter and queues with Ctrl+Enter', async () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
     const composer = page.getByRole('combobox', { name: 'Message Pi' })
     await composer.fill('stay busy while I steer')
@@ -738,7 +738,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.locator('.project-group').filter({ has: page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }) }).getByRole('img', { name: 'Agent working' })).toBeVisible()
 
     await composer.fill('send this queued task now')
-    await composer.press('Enter')
+    await composer.press('Control+Enter')
     const queuedTray = page.getByRole('region', { name: 'Queued messages' })
     await queuedTray.locator('.composer-queue__item').hover()
     await expect(queuedTray.locator('.composer-queue__actions')).toHaveCSS('opacity', '1')
@@ -751,7 +751,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect.poll(() => existsSync(queuedSteerMarker)).toBe(true)
     expect(JSON.parse(readFileSync(queuedSteerMarker, 'utf8'))).toMatchObject({ type: 'steer', message: 'send this queued task now' })
     await composer.fill('change direction now')
-    await composer.press('Control+Enter')
+    await composer.press('Enter')
     await expect(page.locator('.message--user').filter({ hasText: 'change direction now' })).toBeVisible()
     const marker = join(fixtureRoot, 'steer-args.json')
     await expect.poll(() => {
@@ -771,7 +771,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.getByRole('button', { name: 'Stop Pi' })).toBeVisible()
 
     await composer.fill('barrier follow-up')
-    await composer.press('Enter')
+    await composer.press('Control+Enter')
     const queuedTray = page.getByRole('region', { name: 'Queued messages' })
     await expect(queuedTray.locator('.composer-queue__item')).toHaveCount(1)
 

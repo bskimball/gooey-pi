@@ -6,21 +6,21 @@ const event = (overrides: Partial<MessageShortcutEvent> = {}): MessageShortcutEv
 })
 
 describe('message shortcuts', () => {
-  it('defaults Enter to queue and Ctrl+Enter to steer', () => {
-    expect(messageActionForKey(event())).toBe('queue')
-    expect(messageActionForKey(event({ ctrlKey: true }))).toBe('steer')
+  it('defaults Enter to steer and Ctrl+Enter to queue', () => {
+    expect(messageActionForKey(event())).toBe('steer')
+    expect(messageActionForKey(event({ ctrlKey: true }))).toBe('queue')
   })
 
-  it('treats Cmd+Enter as the macOS alias for steering', () => {
-    expect(messageActionForKey(event({ metaKey: true }))).toBe('steer')
-    expect(messageActionForKey(event({ metaKey: true, ctrlKey: true }))).toBe('steer')
+  it('treats Cmd+Enter as the macOS alias for queueing', () => {
+    expect(messageActionForKey(event({ metaKey: true }))).toBe('queue')
+    expect(messageActionForKey(event({ metaKey: true, ctrlKey: true }))).toBe('queue')
     expect(messageActionForKey(event({ metaKey: true, shiftKey: true }))).toBeNull()
   })
 
-  it('swaps queue and steer for every harness when Enter is configured to steer', () => {
-    expect(messageActionForKey(event(), 'steer')).toBe('steer')
-    expect(messageActionForKey(event({ ctrlKey: true }), 'steer')).toBe('queue')
-    expect(messageActionForKey(event({ metaKey: true }), 'steer')).toBe('queue')
+  it('swaps the shortcuts when Enter is configured to queue', () => {
+    expect(messageActionForKey(event(), 'queue')).toBe('queue')
+    expect(messageActionForKey(event({ ctrlKey: true }), 'queue')).toBe('steer')
+    expect(messageActionForKey(event({ metaKey: true }), 'queue')).toBe('steer')
   })
 
   it('leaves newlines, composition, and unsupported modifiers alone', () => {

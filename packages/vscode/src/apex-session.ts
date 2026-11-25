@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { canonicalSessionPath } from 'apex-core/session-paths'
+import { DEFAULT_MESSAGE_ENTER_ACTION } from 'apex-core/types/api'
 import { isPathWithin, requireExistingPath } from 'apex-core/validation'
 import { createPiSessionMetadataReader } from 'apex-core/sessions/pi'
 import * as vscode from 'vscode'
@@ -86,7 +87,7 @@ export class ApexSession implements vscode.Disposable {
     commands: [],
     statuses: {},
     queued: [],
-    messageEnterAction: 'queue',
+    messageEnterAction: DEFAULT_MESSAGE_ENTER_ACTION,
   }
 
   private get turnActor(): ActorRefFrom<typeof apexSessionTurnMachine> {
@@ -166,7 +167,7 @@ export class ApexSession implements vscode.Disposable {
       contextUsage: undefined,
       sessionUsage: undefined,
       cwd: this.cwd,
-      messageEnterAction: config.get('messageEnterAction', 'queue'),
+      messageEnterAction: config.get('messageEnterAction', DEFAULT_MESSAGE_ENTER_ACTION),
     })
     let rpc: PiRpc
     let launchToken: string | undefined

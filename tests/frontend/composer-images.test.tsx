@@ -41,7 +41,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
 })
 
-function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction: 'queue' | 'steer' = 'queue', extra: Partial<ComponentProps<typeof Composer>> = {}) {
+function renderComposer(onSend = vi.fn(), imageInputSupported = true, busy = false, messageEnterAction?: 'queue' | 'steer', extra: Partial<ComponentProps<typeof Composer>> = {}) {
   act(() => root.render(<Composer
     {...extra}
     busy={busy}
@@ -505,36 +505,36 @@ describe('Composer message delivery shortcuts', () => {
     })
   }
 
-  it('queues with Enter and steers with Ctrl+Enter while Pi is working', async () => {
+  it('steers with Enter and queues with Ctrl+Enter while Pi is working', async () => {
     const onSend = renderComposer(vi.fn(async () => undefined), true, true)
-    await enterDraft('Queue this')
-    await enterDraft('Steer with this', { ctrlKey: true })
+    await enterDraft('Steer with this')
+    await enterDraft('Queue this', { ctrlKey: true })
 
-    expect(onSend).toHaveBeenNthCalledWith(1, 'Queue this', [], 'queue')
-    expect(onSend).toHaveBeenNthCalledWith(2, 'Steer with this', [], 'steer')
+    expect(onSend).toHaveBeenNthCalledWith(1, 'Steer with this', [], 'steer')
+    expect(onSend).toHaveBeenNthCalledWith(2, 'Queue this', [], 'queue')
   })
 
-  it('allows Ctrl+Enter steering while an earlier delivery callback is still pending', async () => {
+  it('allows Enter to steer while an earlier delivery callback is still pending', async () => {
     let release: (() => void) | undefined
     const pending = new Promise<void>((resolve) => { release = resolve })
     const onSend = renderComposer(vi.fn(() => pending), true, true)
 
-    await enterDraft('Queue this')
-    await enterDraft('Steer immediately', { ctrlKey: true })
+    await enterDraft('Queue this', { ctrlKey: true })
+    await enterDraft('Steer immediately')
 
     expect(onSend).toHaveBeenNthCalledWith(1, 'Queue this', [], 'queue')
     expect(onSend).toHaveBeenNthCalledWith(2, 'Steer immediately', [], 'steer')
     await act(async () => { release?.(); await pending })
   })
 
-  it('uses the shared persisted Enter action regardless of the active harness', async () => {
-    const onSend = renderComposer(vi.fn(async () => undefined), true, true, 'steer')
-    await enterDraft('Steer this')
-    await enterDraft('Queue this', { ctrlKey: true })
+  it('honors a saved queue-on-Enter preference', async () => {
+    const onSend = renderComposer(vi.fn(async () => undefined), true, true, 'queue')
+    await enterDraft('Queue this')
+    await enterDraft('Steer this', { ctrlKey: true })
     await enterDraft('Keep editing', { shiftKey: true })
 
-    expect(onSend).toHaveBeenNthCalledWith(1, 'Steer this', [], 'steer')
-    expect(onSend).toHaveBeenNthCalledWith(2, 'Queue this', [], 'queue')
+    expect(onSend).toHaveBeenNthCalledWith(1, 'Queue this', [], 'queue')
+    expect(onSend).toHaveBeenNthCalledWith(2, 'Steer this', [], 'steer')
     expect(onSend).toHaveBeenCalledTimes(2)
   })
 })

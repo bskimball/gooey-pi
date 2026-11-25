@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import * as vscode from 'vscode'
 import { connectDesktopSession, type DesktopSessionClient } from 'apex-core/sessions/desktop-link'
+import { DEFAULT_MESSAGE_ENTER_ACTION } from 'apex-core/types/api'
 import { isRecord } from 'apex-core/validation'
 import type { HostMessage, HostState, ModelDescriptor, WebviewMessage } from './protocol'
 import { editorPromptContext, scopedEditorRequest } from './editor'
@@ -37,7 +38,7 @@ export class AttachedSession {
   }
 
   constructor(readonly path: string, private readonly cwd: string, private readonly publish: (message: HostMessage) => void, private readonly onDisconnected: (error: string) => void) {
-    this.state = { status: 'starting', connection: 'desktop', homeDir: homedir(), cwd, isStreaming: false, thinkingLevel: 'off', thinkingLevels: ['off'], models: [], providers: [], commands: [], statuses: {}, queued: [], messageEnterAction: vscode.workspace.getConfiguration('apex').get('messageEnterAction', 'queue') }
+    this.state = { status: 'starting', connection: 'desktop', homeDir: homedir(), cwd, isStreaming: false, thinkingLevel: 'off', thinkingLevels: ['off'], models: [], providers: [], commands: [], statuses: {}, queued: [], messageEnterAction: vscode.workspace.getConfiguration('apex').get('messageEnterAction', DEFAULT_MESSAGE_ENTER_ACTION) }
   }
 
   async connect(): Promise<boolean> {

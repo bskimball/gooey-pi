@@ -2,7 +2,7 @@ import * as stylex from '@stylexjs/stylex'
 import type { ReactNode, Ref } from 'react'
 import { SpacesPage } from '@/components/activity/SpacesPage'
 import type { ActivityControls } from '@/hooks/useActivityControls'
-import type { ApexApi, ProjectRecord, SessionRecord } from '@/types/api'
+import type { ApexApi, MessageEnterAction, ProjectRecord, SessionRecord } from '@/types/api'
 
 export interface ActivityPageProps {
   renderInspector?(content: ReactNode): ReactNode
@@ -14,6 +14,7 @@ export interface ActivityPageProps {
   controls?: ActivityControls
   showReasoning?: boolean
   showTools?: boolean
+  messageEnterAction?: MessageEnterAction
 }
 
 const styles = stylex.create({ content: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 } })

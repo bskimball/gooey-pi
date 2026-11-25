@@ -262,7 +262,7 @@ export function App() {
                   loading={!state}
                   admitting={state?.status === 'starting'}
                   disabled={state?.status === 'exited'}
-                  messageEnterAction={state?.messageEnterAction ?? 'queue'}
+                  messageEnterAction={state?.messageEnterAction}
                   model={state?.model ?? ''}
                   effort={(state?.thinkingLevel ?? 'off') as ApexThinkingLevel}
                   modelsByProvider={modelsByProvider}

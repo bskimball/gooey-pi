@@ -142,8 +142,8 @@ Use `⌘` on macOS and `Ctrl` on Linux or Windows.
 | `⌘/Ctrl+Shift+B` | Open the browser |
 | `⌘/Ctrl+J` | Toggle the terminal |
 | `⌘/Ctrl+,` | Open Settings |
-| `Enter` | Queue a message while the agent is working |
-| `⌘/Ctrl+Enter` | Steer the current turn while the agent is working |
+| `Enter` | Steer the current turn while the agent is working |
+| `⌘/Ctrl+Enter` | Queue a message for after the current turn |
 | `Shift+Enter` | Add a new line |
 | `Esc` | Close the active menu, dialog, or overlay |
 

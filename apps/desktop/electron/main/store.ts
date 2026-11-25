@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 import {
   type AppSettings,
   type AutomationScheduleRecord,
+  DEFAULT_MESSAGE_ENTER_ACTION,
   INTERFACE_FONT_SCALES,
   APEX_THINKING_LEVELS,
   PROJECT_SORT_MODES,
@@ -162,7 +163,7 @@ export function defaultSettings(): AppSettings {
     reduceMotion: false,
     showReasoningSummaries: true,
     showToolCalls: true,
-    messageEnterAction: 'queue',
+    messageEnterAction: DEFAULT_MESSAGE_ENTER_ACTION,
     runtimePaths: { pi: '' },
     enabledHarnesses: ['pi'],
     telemetry: false,

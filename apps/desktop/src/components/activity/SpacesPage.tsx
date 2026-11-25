@@ -15,7 +15,7 @@ import type { SpaceRecord } from '@/types/api'
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-export function SpacesPage({ bridge, sessions, projects, controls, showReasoning, showTools, renderInspector, contentRef, contentInert }: ActivityPageProps) {
+export function SpacesPage({ bridge, sessions, projects, controls, showReasoning, showTools, messageEnterAction, renderInspector, contentRef, contentInert }: ActivityPageProps) {
   const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
   const [spaces, setSpaces] = useState<SpaceRecord[]>([])
   const [selectedId, setSelectedId] = useState<string>('global')
@@ -277,7 +277,7 @@ export function SpacesPage({ bridge, sessions, projects, controls, showReasoning
                 transition={instant ? { duration: 0 } : { duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
                 {...stylex.props(styles.content)}
               >
-                <ActivityCoordinator key={selectedId} embedded actionsTarget={chatActions} bridge={bridge ?? null} controls={controls} showReasoning={showReasoning} showTools={showTools} spaceId={space?.id} projectName={project?.name} />
+                <ActivityCoordinator key={selectedId} embedded actionsTarget={chatActions} bridge={bridge ?? null} controls={controls} showReasoning={showReasoning} showTools={showTools} messageEnterAction={messageEnterAction} spaceId={space?.id} projectName={project?.name} />
               </motion.div>
             )}
           </AnimatePresence>

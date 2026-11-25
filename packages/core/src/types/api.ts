@@ -535,6 +535,7 @@ export type BackgroundJobEvent =
   | { type: 'removed'; key: string }
 
 export type MessageEnterAction = 'queue' | 'steer'
+export const DEFAULT_MESSAGE_ENTER_ACTION: MessageEnterAction = 'steer'
 export type PromptDeliveryIntent = 'queue' | 'steer'
 
 export interface PetDefinition {

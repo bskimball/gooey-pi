@@ -1,5 +1,5 @@
 import type { EditorFileContext, HostMessage, HostState, SessionSummary, TranscriptOp } from '../../packages/vscode/src/protocol'
-import type { TranscriptMessage } from '../../packages/core/src/types/api'
+import { DEFAULT_MESSAGE_ENTER_ACTION, type TranscriptMessage } from '../../packages/core/src/types/api'
 
 export const sessionPath = '/storybook/apex/sessions/keyboard.jsonl'
 export const catalog: SessionSummary[] = [
@@ -58,7 +58,7 @@ export const readyState: HostState = {
   commands: [{ name: 'review', description: 'Review the current changes', source: 'prompt' }],
   statuses: {},
   queued: [],
-  messageEnterAction: 'queue',
+  messageEnterAction: DEFAULT_MESSAGE_ENTER_ACTION,
   contextUsage: { tokens: 24000, contextWindow: 200000, percent: 12 },
   sessionUsage: { cost: 0.12 },
 }

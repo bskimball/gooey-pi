@@ -17,7 +17,7 @@ import { useCoordinatorRuntime } from '@/hooks/useCoordinatorRuntime'
 import { useProviderCatalog } from '@/hooks/useProviderCatalog'
 import { EMPTY_GIT_STATUS } from '@/lib/workspace'
 import type { ActivityControls } from '@/hooks/useActivityControls'
-import type { ApexApi } from '@/types/api'
+import type { ApexApi, MessageEnterAction } from '@/types/api'
 import { ArrowCounterClockwise, ArrowsClockwise, ChatCircleDots, WarningCircle } from '@/components/icons'
 import { ActivityQuestionCard } from './ActivityQuestionCard'
 import { ChiefOfStaffOpening } from './ChiefOfStaffOpening'
@@ -28,6 +28,7 @@ interface ActivityCoordinatorProps {
   controls?: ActivityControls
   showReasoning?: boolean
   showTools?: boolean
+  messageEnterAction?: MessageEnterAction
   spaceId?: string
   projectName?: string
   embedded?: boolean
@@ -50,7 +51,7 @@ const spaceStyles = stylex.create({
 // EMPTY_GIT_STATUS prevents it from rendering any changes action.
 const unreachableTranscriptAction = () => undefined
 
-export function ActivityCoordinator({ bridge, controls, showReasoning, showTools, spaceId, projectName, embedded = false, actionsTarget }: ActivityCoordinatorProps) {
+export function ActivityCoordinator({ bridge, controls, showReasoning, showTools, messageEnterAction, spaceId, projectName, embedded = false, actionsTarget }: ActivityCoordinatorProps) {
   const coordinator = useCoordinatorRuntime(bridge, controls?.onRecoverQuestion, spaceId)
   const { state } = coordinator
   const ready = state.phase === 'ready'
@@ -237,6 +238,7 @@ export function ActivityCoordinator({ bridge, controls, showReasoning, showTools
             draftKey={`activity:${spaceId ?? 'global-chief'}`}
             isolatedDraft
             conversationOnly
+            messageEnterAction={messageEnterAction}
             busy={busy}
             admitting={coordinator.sending}
             disabled={!ready || state.disconnected}

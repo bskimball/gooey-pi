@@ -152,13 +152,13 @@ describe('composer dictation controls', () => {
     expect(cancel).toHaveBeenCalledOnce()
   })
 
-  it('transcribes, inserts, and sends when Send is clicked during recording', async () => {
+  it('transcribes and steers the active turn when Send is clicked during recording', async () => {
     finish.mockResolvedValue('ship the voice feature')
     const onSend = vi.fn().mockResolvedValue(undefined)
     vi.mocked(useDictation).mockReturnValue({ state: 'recording', start, finish, cancel })
-    act(() => root.render(<Composer {...composerProps({ onSend })} />))
+    act(() => root.render(<Composer {...composerProps({ busy: true, onSend })} />))
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Transcribe and send message"]')?.click())
     expect(finish).toHaveBeenCalledOnce()
-    expect(onSend).toHaveBeenCalledWith('ship the voice feature', [], 'queue')
+    expect(onSend).toHaveBeenCalledWith('ship the voice feature', [], 'steer')
   })
 })

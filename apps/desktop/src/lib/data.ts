@@ -1,3 +1,4 @@
+import { DEFAULT_MESSAGE_ENTER_ACTION } from '@/types/api'
 import type {
   AppSettings,
   GitStatus,
@@ -31,7 +32,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reduceMotion: false,
   showReasoningSummaries: true,
   showToolCalls: true,
-  messageEnterAction: 'queue',
+  messageEnterAction: DEFAULT_MESSAGE_ENTER_ACTION,
   runtimePaths: { pi: '' },
   enabledHarnesses: ['pi'],
   telemetry: false,

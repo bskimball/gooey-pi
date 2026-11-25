@@ -190,13 +190,14 @@ describe('JsonStateStore', () => {
   it('defaults and validates the configurable message Enter action', () => {
     const dir = makeDirectory()
     const path = join(dir, 'state.json')
-    const settings = { ...defaultSettings(), messageEnterAction: 'steer' }
+    expect(defaultSettings().messageEnterAction).toBe('steer')
+    const settings = { ...defaultSettings(), messageEnterAction: 'queue' }
     writeFileSync(path, JSON.stringify({ version: 1, projects: [], settings, archivedSessions: [], dismissedProjectPaths: [] }))
-    expect(new JsonStateStore(path).snapshot().settings.messageEnterAction).toBe('steer')
+    expect(new JsonStateStore(path).snapshot().settings.messageEnterAction).toBe('queue')
 
     settings.messageEnterAction = 'invalid' as typeof settings.messageEnterAction
     writeFileSync(path, JSON.stringify({ version: 1, projects: [], settings, archivedSessions: [], dismissedProjectPaths: [] }))
-    expect(new JsonStateStore(path).snapshot().settings.messageEnterAction).toBe('queue')
+    expect(new JsonStateStore(path).snapshot().settings.messageEnterAction).toBe('steer')
   })
 
   it('defaults missing or invalid checkout strategies to worktrees', () => {

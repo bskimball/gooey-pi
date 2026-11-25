@@ -37,6 +37,8 @@ import {
 	takeComposerDraft,
 } from "@/lib/composer-draft";
 import { messageActionForKey } from "@/lib/message-shortcuts";
+import { detectRendererPlatform, shortcutLabel } from "@/lib/platform-shortcuts";
+import { DEFAULT_MESSAGE_ENTER_ACTION } from "@/types/api";
 import {
 	appendSessionRouting,
 	findSessionMentions,
@@ -224,7 +226,7 @@ export const Composer = memo(function Composer({
 	shortName = "Pi",
 	harness = "pi",
 	imageInputSupported,
-	messageEnterAction = "queue",
+	messageEnterAction = DEFAULT_MESSAGE_ENTER_ACTION,
 	voice,
 	transcriptionProvider = "openai-live",
 	skills,
@@ -555,7 +557,7 @@ export const Composer = memo(function Composer({
 	}, [sendSignal]);
 
 	const submit = async (
-		intent: PromptDeliveryIntent = "queue",
+		intent: PromptDeliveryIntent = messageEnterAction,
 		valueOverride?: string,
 	) => {
 		const currentExcerpts = excerpts;
@@ -586,7 +588,7 @@ export const Composer = memo(function Composer({
 				!hasTerminalSelection && currentExcerpts.length === 0) ||
 			loading ||
 			disabled ||
-			(intent !== "steer" && !busy && (admitting || submittingRef.current))
+			(!busy && (admitting || submittingRef.current))
 		)
 			return;
 		if (currentExcerpts.some((excerpt) => excerpt.text.length > EXCERPT_LIMIT)) {
@@ -763,7 +765,7 @@ export const Composer = memo(function Composer({
 			? `${value.trimEnd()} ${transcript}`
 			: transcript;
 		setValue(next);
-		if (send) await submit("queue", next);
+		if (send) await submit(messageEnterAction, next);
 		else requestAnimationFrame(() => textareaRef.current?.focus());
 	};
 
@@ -971,9 +973,7 @@ export const Composer = memo(function Composer({
 								: loading
 									? "Loading session…"
 									: busy
-										? messageEnterAction === "steer"
-											? "Steer this run… (Enter to steer, Ctrl+Enter to queue)"
-											: "Steer this run… (Ctrl+Enter to steer, Enter to queue)"
+								? `Enter to ${messageEnterAction}, ${shortcutLabel(detectRendererPlatform(), ["Primary", "Enter"])} to ${messageEnterAction === "steer" ? "queue" : "steer"}…`
 										: admitting
 											? `Starting ${shortName}…`
 											: `Ask ${shortName} anything  ·  @ files  / commands  $ skills`
