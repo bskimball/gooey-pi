@@ -1,3 +1,4 @@
+import { prepareInspectorWindow } from "./inspector-window";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { stat } from "node:fs/promises";
 import {
@@ -249,6 +250,7 @@ export function registerIpc(
 			requireMenuCoordinate(y),
 		),
 	);
+	handle("app:prepare-inspector-window", (event) => prepareInspectorWindow(event.sender));
 	handle("app:set-title-bar-theme", (event, theme) =>
 		services.setTitleBarTheme(event.sender, requireResolvedTheme(theme)),
 	);

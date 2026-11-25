@@ -37,6 +37,7 @@ const INVOKE_CASES: Array<[domain: string, method: string, channel: string, args
   ['app', 'readWorkspaceImage', 'app:read-workspace-image', ['/repo', 'design.png']],
   ['app', 'popupMenu', 'app:popup-menu', ['file', 10, 20]],
   ['app', 'setTitleBarTheme', 'app:set-title-bar-theme', ['dark']],
+  ['app', 'prepareInspectorWindow', 'app:prepare-inspector-window', []],
   ['updates', 'getState', 'updates:get-state', []],
   ['updates', 'check', 'updates:check', []],
   ['updates', 'downloadAndInstall', 'updates:download-and-install', []],

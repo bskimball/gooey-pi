@@ -79,6 +79,7 @@ const api: ApexApi = {
 		readWorkspaceImage: (cwd, path) => invoke("app:read-workspace-image", cwd, path),
 		popupMenu: (menu, x, y) => invoke("app:popup-menu", menu, x, y),
 		setTitleBarTheme: (theme) => invoke("app:set-title-bar-theme", theme),
+		prepareInspectorWindow: () => invoke("app:prepare-inspector-window"),
 		onOpenSettings: (callback) =>
 			subscribeSignal("app:open-settings", callback),
 		pathForFile: (file) => {

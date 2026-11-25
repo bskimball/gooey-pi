@@ -71,6 +71,14 @@ function closePrompts(target: ElectronApplication): Promise<CapturedClosePrompt[
   return target.evaluate(() => (globalThis as { __closePrompts?: unknown[] }).__closePrompts ?? []) as Promise<CapturedClosePrompt[]>
 }
 
+async function detachInspector() {
+  const [child] = await Promise.all([
+    app!.waitForEvent('window', (candidate) => candidate.evaluate(() => window.name.startsWith('apex-inspector-')).catch(() => false)),
+    page.getByRole('button', { name: 'Detach inspector', exact: true }).click(),
+  ])
+  return child
+}
+
 function processIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -2368,6 +2376,86 @@ test.describe('Prime Work desktop smoke', () => {
     await undoDialog.getByRole('button', { name: 'Undo changes', exact: true }).click()
     await expect.poll(() => readFileSync(join(fixtureRoot, 'secondary-project', 'secondary-change.txt'), 'utf8')).toMatch(/^base\r?\n$/)
     await expect(page.locator('.file-changes')).toContainText('No unstaged changes.')
+  })
+
+  test('detaches the live inspector and docks it from either window control', async () => {
+    await page.locator('.session-row[title="Hermetic desktop fixture"]').click()
+    const detach = page.getByRole('button', { name: 'Detach inspector', exact: true })
+    const chat = page.locator('.conversation-column')
+    const dockedWidth = (await chat.boundingBox())!.width
+    await page.getByRole('tab', { name: 'Browser' }).click()
+    const popup = await detachInspector()
+    await expect(popup.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('.inspector')).toHaveCount(0)
+    await expect.poll(async () => (await chat.boundingBox())!.width).toBeGreaterThan(dockedWidth + 200)
+    const native = await app!.browserWindow(popup)
+    expect(await native.evaluate((win) => win.isMovable() && win.isResizable())).toBe(true)
+    await native.evaluate((win) => win.setBounds({ x: 120, y: 120, width: 680, height: 600 }))
+    await expect.poll(() => popup.locator('.inspector').evaluate((node) => Math.abs(node.clientWidth - innerWidth))).toBeLessThanOrEqual(1)
+    const guest = popup.locator('.browser-webview')
+    await expect.poll(() => guest.evaluate((node) => {
+      try { return (node as Electron.WebviewTag).getWebContentsId() > 0 } catch { return false }
+    })).toBe(true)
+    await popup.getByRole('tab', { name: 'Changes' }).click()
+    await popup.locator('.file-changes > button').first().click()
+    await popup.getByRole('button', { name: 'Undo changes', exact: true }).click()
+    const dialog = popup.getByRole('dialog', { name: 'Undo file changes?' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+    await popup.getByRole('tab', { name: 'Browser' }).click()
+    await popup.getByRole('tab', { name: 'Browser' }).press('ArrowLeft')
+    await expect(popup.getByRole('tab', { name: 'Files' })).toBeFocused()
+    await page.locator('.session-row[title="Pi hermetic fixture"]').click()
+    await expect(popup).toHaveTitle(/Pi hermetic fixture/)
+    await expect(popup.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
+    await popup.screenshot({ path: test.info().outputPath('detached-inspector.png') })
+    await popup.getByRole('button', { name: 'Dock inspector' }).click()
+    await expect(detach).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
+    await expect.poll(async () => (await chat.boundingBox())!.width).toBeCloseTo(dockedWidth, 0)
+    const reopened = await detachInspector()
+    await expect(reopened.getByRole('button', { name: 'Dock inspector' })).toBeVisible()
+    await page.setViewportSize({ width: 700, height: 700 })
+    await expect(page.getByRole('button', { name: /Show sidebar/ })).toBeVisible()
+    await expect(chat).not.toHaveAttribute('inert')
+    await (await app!.browserWindow(reopened)).evaluate((win) => win.close())
+    await expect(detach).toBeVisible()
+    await expect(chat).toHaveAttribute('inert')
+    await expect.poll(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1)
+    expect(actionableErrors).toEqual([])
+  })
+
+  test('keeps the browser preview address when moving the inspector and follows Activity', async () => {
+    const server = createServer((_request, response) => response.end('Inspector preview fixture'))
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('Expected an HTTP port')
+      const url = `http://127.0.0.1:${address.port}/preview`
+      const guestUrl = (host: Page) => host.locator('webview').first().evaluate((node) => {
+        try { return (node as Electron.WebviewTag).getURL() } catch { return '' }
+      })
+      const child = await detachInspector()
+      await child.getByRole('tab', { name: 'Browser' }).click()
+      await expect.poll(() => guestUrl(child)).toBe('about:blank')
+      await child.locator('webview').first().evaluate((node, target) => (node as Electron.WebviewTag).loadURL(target), url)
+      await expect.poll(() => guestUrl(child)).toBe(url)
+      await page.getByRole('button', { name: 'Dock inspector' }).click()
+      await expect.poll(() => guestUrl(page)).toBe(url)
+      const reopened = await detachInspector()
+      await expect.poll(() => guestUrl(reopened)).toBe(url)
+      await reopened.getByRole('button', { name: 'Dock inspector' }).click()
+      await page.getByRole('button', { name: 'Activity', exact: true }).click()
+      const activity = await detachInspector()
+      await expect(activity.getByRole('complementary', { name: 'Space details' })).toContainText('Global Chief')
+      await page.getByRole('button', { name: 'Projects', exact: true }).click()
+      await expect.poll(() => activity.isClosed()).toBe(true)
+      expect(actionableErrors).toEqual([])
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
   })
 
   test('resizes the inspector horizontally and terminal vertically', async () => {

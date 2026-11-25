@@ -1,6 +1,8 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
-import { createElement, memo, useEffect, useRef } from "react";
+import { createElement, memo, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { InspectorWindowContext } from "./InspectorWindow";
 import type { StampedPointerEvent } from "@/hooks/useAgentBrowserTabs";
 import { type AgentBrowserTabRecord, BROWSER_PARTITION } from "@/types/api";
 
@@ -54,7 +56,30 @@ const CURSOR_IDLE_MS = 3_500;
  * tear down the guest). Tabs driven through the browser extension have no
  * guest here.
  */
-export function AgentBrowserLayer({
+export function AgentBrowserLayer(props: AgentBrowserLayerProps) {
+	const { popup } = useContext(InspectorWindowContext);
+	const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
+	const activeId = props.visibleTabId;
+	useEffect(() => {
+		if (!popup) {
+			if (moved.size) setMoved(new Set());
+		} else if (activeId && !moved.has(activeId)) {
+			// Keep background guests in their original window while other sessions are running.
+			setMoved(new Set([...moved, activeId]));
+		}
+	}, [popup, activeId, moved]);
+	const floating = popup && !popup.closed;
+	const inPopup = floating && activeId !== null && moved.has(activeId);
+	return <>
+		<GuestLayer {...props} tabs={floating ? props.tabs.filter((tab) => !moved.has(tab.tabId)) : props.tabs} rect={floating ? null : props.rect} />
+		{floating && createPortal(
+			<GuestLayer {...props} tabs={props.tabs.filter((tab) => moved.has(tab.tabId))} rect={inPopup ? props.rect : null} />,
+			popup.document.body,
+		)}
+	</>;
+}
+
+function GuestLayer({
 	tabs,
 	visibleTabId,
 	interactive = true,

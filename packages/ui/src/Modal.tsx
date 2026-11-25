@@ -4,7 +4,7 @@ import * as stylex from '@stylexjs/stylex'
 import { usePresence, useReducedMotion } from 'motion/react'
 import { X } from './icons'
 import { IconButton, focusableSelector, useAppShellOverlay } from './ui'
-import { useCallback, useEffect, useId, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 const modalIn = stylex.keyframes({
@@ -135,13 +135,16 @@ function ensureDialogModalMethods(dialog: HTMLDialogElement | null): void {
   }
 }
 
+export const ModalContainerContext = createContext<HTMLElement | null>(null)
+
 export function Modal({ title, children, onClose, footer }: { title: string; children: ReactNode; onClose(): void; footer?: ReactNode }) {
+  const container = useContext(ModalContainerContext)
   const titleId = useId()
   const [isPresent, safeToRemove] = usePresence()
   const instant = Boolean(useReducedMotion())
     || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
     || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-  useAppShellOverlay(isPresent)
+  useAppShellOverlay(isPresent && !container)
   useEffect(() => {
     if (isPresent) return
     if (instant) {
@@ -184,6 +187,6 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
       <div className={`modal__body ${stylex.props(overlaysStyles.modalBody, styles.modalBody).className ?? ""}`} style={bodyStylex.style}>{children}</div>
       {footer ? <div className={`modal__footer ${stylex.props(overlaysStyles.modalFooter, styles.modalFooter).className ?? ""}`} style={footerStylex.style}>{footer}</div> : null}
     </Dialog>,
-    document.body,
+    container ?? document.body,
   )
 }

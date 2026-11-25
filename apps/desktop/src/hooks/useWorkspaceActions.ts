@@ -87,7 +87,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
     const next = !(settingsState.sidebarOpen && !layout.sidebarSuppressed)
     layout.setSmallestSidebarAllowed(next)
     layout.compactRestoreRef.current = null
-    if (layout.compactLayout && next && settingsState.inspectorOpen) {
+    if (layout.compactLayout && !layout.inspectorDetached && next && settingsState.inspectorOpen) {
       layout.setSmallestInspectorAllowed(false)
       settingsState.setInspectorOpen(false)
     }
@@ -721,18 +721,15 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       if (found) void selectSession(found)
     }).catch(reportError)
   }
-  const openBrowser = () => {
-    const { layout, settingsState, setView } = getDeps()
-    if (layout.compactLayout && settingsState.sidebarOpen) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
-    setView('session')
-    settingsState.selectInspectorTab('browser')
-    if (!settingsState.inspectorOpen) persistPanel({ inspectorOpen: true })
-  }
   const openInspectorTab = (tab: InspectorTab) => {
     const { layout, settingsState } = getDeps()
-    if (layout.compactLayout && settingsState.sidebarOpen) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
+    if (layout.compactLayout && !layout.inspectorDetached && settingsState.sidebarOpen) { layout.setSmallestSidebarAllowed(false); settingsState.setSidebarOpen(false) }
     settingsState.selectInspectorTab(tab)
     if (!settingsState.inspectorOpen) persistPanel({ inspectorOpen: true })
+  }
+  const openBrowser = () => {
+    getDeps().setView('session')
+    openInspectorTab('browser')
   }
   const openChanges = () => openInspectorTab('changes')
 

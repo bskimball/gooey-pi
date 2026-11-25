@@ -31,6 +31,7 @@ import { createReadinessSelector } from "./inspector/readiness";
 import { createSessionSummarySelector } from "./inspector/session-summary";
 import { IconButton } from "./ui";
 import { inspectorTabs as tabs } from "./inspector/tabs";
+import { InspectorWindowButton } from "./InspectorWindow";
 import { InspectorShell } from "./InspectorShell";
 
 export interface InspectorProps {
@@ -241,7 +242,7 @@ export const Inspector = memo(function Inspector({
 		(path: string) => onOpenExternal(pathToFileUrl(path)),
 		[onOpenExternal],
 	);
-	const moveTab = (current: number, key: string) => {
+	const moveTab = (current: number, key: string, ownerDocument: Document) => {
 		let next = current;
 		if (key === "ArrowRight") next = (current + 1) % tabs.length;
 		else if (key === "ArrowLeft")
@@ -253,7 +254,7 @@ export const Inspector = memo(function Inspector({
 		if (tab.id !== activeTab) keyboardNavRef.current = true;
 		onTabChange(tab.id);
 		requestAnimationFrame(() =>
-			document.getElementById(`inspector-tab-${tab.id}`)?.focus(),
+			ownerDocument.getElementById(`inspector-tab-${tab.id}`)?.focus(),
 		);
 	};
 	return (
@@ -278,7 +279,7 @@ export const Inspector = memo(function Inspector({
 								["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)
 							) {
 								event.preventDefault();
-								moveTab(index, event.key);
+								moveTab(index, event.key, event.currentTarget.ownerDocument);
 							}
 						}}
 						title={tab.label}
@@ -306,6 +307,7 @@ export const Inspector = memo(function Inspector({
 					</button>
 				))}
 				<span className={`inspector__tab-spacer ${stylex.props(inspectorStyles.inspectorTabSpacer).className ?? ""}`} />
+				<InspectorWindowButton />
 				{onToggleExpanded && !overlay ? <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label={expanded ? "Restore inspector width" : "Expand inspector"} onClick={onToggleExpanded}>{expanded ? <ArrowsInSimple size={16} /> : <ArrowsOutSimple size={16} />}</IconButton> : null}
 				{overlay ? <IconButton xstyle={inspectorStyles.inspectorHeaderButton} label="Close inspector" onClick={onClose}>
 					<SidebarRight size={16} />

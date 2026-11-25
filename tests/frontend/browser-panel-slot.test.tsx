@@ -9,6 +9,7 @@ import {
 	agentSlotClipPath,
 } from "../../apps/desktop/src/components/AgentBrowserLayer";
 import { BrowserPanel } from "../../apps/desktop/src/components/inspector/BrowserPanel";
+import { InspectorWindowContext } from "../../apps/desktop/src/components/InspectorWindow";
 import type { ExtensionTabControls } from "../../apps/desktop/src/hooks/useAgentBrowserTabs";
 import type { BrowserAnnotationsApi } from "../../apps/desktop/src/hooks/useBrowserAnnotations";
 import type { AgentBrowserTabRecord } from "../../apps/desktop/src/types/api";
@@ -570,6 +571,29 @@ describe("BrowserPanel extension-backed tabs", () => {
 			container.querySelector('[data-testid="browser-pop-out-button"]'),
 		).toBeNull();
 		expect(container.textContent).toContain("Extension offline");
+	});
+
+	it("moves the displayed agent tab and keeps the background session's guest alive", async () => {
+		const frame = document.createElement("iframe");
+		document.body.append(frame);
+		const popup = frame.contentWindow!;
+		const background = { ...agentTab, tabId: "background", sessionFile: "/sessions/other.jsonl" };
+		const renderLayer = (target: Window | null) => act(async () => {
+			root.render(<InspectorWindowContext value={{ popup: target, toggle: undefined }}>
+				<AgentBrowserLayer tabs={[agentTab, background]} visibleTabId={agentTab.tabId}
+					rect={{ left: 0, top: 0, width: 400, height: 300 }} pointerEvent={null} onAttach={() => undefined} />
+			</InspectorWindowContext>);
+		});
+		await renderLayer(null);
+		const backgroundGuest = container.querySelectorAll("webview")[1];
+		await renderLayer(popup);
+		expect(popup.document.querySelector(".agent-browser-layer.is-visible webview")).not.toBeNull();
+		expect(container.querySelectorAll("webview")).toHaveLength(1);
+		expect(container.querySelector("webview")).toBe(backgroundGuest);
+		await renderLayer(null);
+		expect(popup.document.querySelector("webview")).toBeNull();
+		expect(container.querySelectorAll("webview")[1]).toBe(backgroundGuest);
+		frame.remove();
 	});
 
 	it("mounts webview guests only for in-app tabs in the agent browser layer", async () => {

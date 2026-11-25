@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
-import { createElement, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useActorRef, useMachine, useSelector } from "@xstate/react";
 import type {
@@ -27,6 +27,7 @@ import {
 	type BrowserSourceResult,
 } from "@/types/api";
 import { AgentCursorOverlay, type AgentSlotRect } from "../AgentBrowserLayer";
+import { InspectorWindowContext } from "../InspectorWindow";
 import {
 	ExtensionStatusIndicator,
 	ExtensionTabCard,
@@ -143,6 +144,7 @@ export function BrowserPanel({
 	platform = detectRendererPlatform(),
 }: BrowserPanelProps) {
 	const webviewRef = useRef<WebviewElement | null>(null);
+	const { popup } = useContext(InspectorWindowContext);
 	const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
 	const previewActorRef = useActorRef(browserPreviewMachine, { input: { home } });
 	const previewSnapshot = useSelector(previewActorRef, (snapshot) => snapshot);
@@ -256,16 +258,17 @@ export function BrowserPanel({
 		const observer =
 			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(report);
 		if (observer && slotRef.current) observer.observe(slotRef.current);
-		window.addEventListener("resize", report);
+		const slotWindow = popup ?? window;
+		slotWindow.addEventListener("resize", report);
 		const interval = window.setInterval(report, 400);
 		return () => {
 			observer?.disconnect();
-			window.removeEventListener("resize", report);
+			slotWindow.removeEventListener("resize", report);
 			window.clearInterval(interval);
 			reportAgentSlotRef.current = null;
 			publish(null);
 		};
-	}, [publishAgentSlot]);
+	}, [popup, publishAgentSlot]);
 
 	// While the pane slides, follow it every frame (bounded by the transition),
 	// then publish the settled, unclipped rect once.
@@ -482,15 +485,22 @@ export function BrowserPanel({
 		return true;
 	};
 
-	const webview = createElement("webview" as never, {
-		ref: (node: WebviewElement | null) => {
-			webviewRef.current = node;
-		},
-		src: home,
-		className: "browser-webview",
-		partition: BROWSER_PARTITION,
-		webpreferences: "contextIsolation=yes,sandbox=yes,nodeIntegration=no",
-	});
+	const mountPreview = useCallback((host: HTMLDivElement | null) => {
+		if (!host) return;
+		// Electron's webview methods belong to the window that created the element.
+		// The main document outlives the inspector even when Preview first opens there.
+		const view = document.createElement("webview") as WebviewElement;
+		view.className = "browser-webview";
+		view.setAttribute("partition", BROWSER_PARTITION);
+		view.setAttribute("webpreferences", "contextIsolation=yes,sandbox=yes,nodeIntegration=no");
+		view.setAttribute("src", home);
+		host.append(view);
+		webviewRef.current = view;
+		return () => {
+			webviewRef.current = null;
+			view.remove();
+		};
+	}, [home]);
 
 	const count = annotations.annotations.length;
 	const staleCount = annotations.annotations.filter(
@@ -668,7 +678,7 @@ export function BrowserPanel({
 					</div>
 				) : null}
 				<div className={[`browser-viewport ${picking ? "is-annotating" : ""}`, stylex.props(inspectorStyles.browserViewport, (picking) && inspectorStyles.browserViewportIsAnnotating).className].filter(Boolean).join(' ')}>
-					{webview}
+					<div ref={mountPreview} style={{ display: "contents" }} />
 					{picking || capturingSelection ? (
 						<div className={`annotation-hint ${stylex.props(inspectorStyles.annotationHint).className ?? ""}`} role="status">
 							<Crosshair size={12} /> {capturingSelection ? "Preparing element preview…" : isDirectArmed ? "Click an element to attach it to chat. Escape cancels." : "Click an element in the page to comment on it"}

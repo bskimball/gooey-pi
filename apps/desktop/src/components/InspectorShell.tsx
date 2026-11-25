@@ -3,8 +3,9 @@ import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex'
 import { motion, useAnimationControls, useReducedMotion } from 'motion/react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode, Ref } from 'react'
+import { InspectorWindowContext, InspectorWindowMount } from './InspectorWindow'
 import { useFocusTrap } from './ui'
 
 const INSPECTOR_WIDTH = 'var(--inspector-width, clamp(340px, 42vw, 410px))'
@@ -54,6 +55,7 @@ export function InspectorShell({
   onMotionComplete,
   viewportRef,
 }: InspectorShellProps) {
+  const { popup } = useContext(InspectorWindowContext)
   const inspectorRef = useFocusTrap<HTMLElement>(overlay && visible, onClose)
   const frameControls = useAnimationControls()
   const asideControls = useAnimationControls()
@@ -158,7 +160,7 @@ export function InspectorShell({
   const isSettledOpen = visible && (skipMotion || settledOpen)
 
   return (
-    <motion.div
+    <InspectorWindowMount><motion.div
       ref={viewportRef}
       initial={initialState.current}
       variants={FRAME_VARIANTS}
@@ -176,7 +178,7 @@ export function InspectorShell({
     >
       <motion.aside
         ref={inspectorRef}
-        className={`inspector ${stylex.props(inspectorStyles.inspector, [responsiveStyles.inspector, responsiveLayoutStyles.inspector], isHidden && inspectorStyles.inspectorHidden).className ?? ''}`}
+        className={`inspector ${stylex.props(inspectorStyles.inspector, !popup && [responsiveStyles.inspector, responsiveLayoutStyles.inspector], isHidden && inspectorStyles.inspectorHidden).className ?? ''}`}
         hidden={isHidden}
         inert={!visible}
         aria-hidden={!visible || undefined}
@@ -192,6 +194,6 @@ export function InspectorShell({
       >
         {children}
       </motion.aside>
-    </motion.div>
+    </motion.div></InspectorWindowMount>
   )
 }

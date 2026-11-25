@@ -35,6 +35,7 @@ interface UsePanelLayoutOptions {
   sidebarOpen: boolean
   setSidebarOpen(value: boolean): void
   inspectorOpen: boolean
+  inspectorDetached?: boolean
   inspectorTab?: InspectorTab
   setInspectorOpen(value: boolean): void
   closeSmallestPanels(patch: { sidebarOpen?: false; inspectorOpen?: false }): void
@@ -46,6 +47,7 @@ export function usePanelLayout({
   sidebarOpen,
   setSidebarOpen,
   inspectorOpen,
+  inspectorDetached = false,
   inspectorTab,
   setInspectorOpen,
   closeSmallestPanels,
@@ -82,9 +84,9 @@ export function usePanelLayout({
   const compactRestoreRef = useRef<'inspector' | null>(null)
   const restoreSnapshotRef = useRef(initialTransition(inspectorRestoreMachine)[0])
   const sidebarSuppressed = smallestLayout && sidebarOpen && !smallestSidebarAllowed
-  const inspectorSuppressed = smallestLayout && inspectorOpen && !smallestInspectorAllowed
+  const inspectorSuppressed = !inspectorDetached && smallestLayout && inspectorOpen && !smallestInspectorAllowed
   const visibleSidebarOpen = sidebarOpen && !sidebarSuppressed
-  const visibleInspectorOpen = inspectorOpen && !inspectorSuppressed
+  const visibleInspectorOpen = !inspectorDetached && inspectorOpen && !inspectorSuppressed
 
   useEffect(() => {
     const sync = () => {
@@ -166,6 +168,7 @@ export function usePanelLayout({
   const selectedInspectorWidth = browserSelected ? browserWidth : inspectorWidth
   return {
     compactLayout,
+    inspectorDetached,
     sidebarWidth,
     setSidebarWidth,
     sidebarMax,

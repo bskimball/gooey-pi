@@ -74,9 +74,11 @@ export const styles = stylex.create({
   "branchPill": { "display": { "default": "inline-flex", "@media (max-width: 720px)": "none" } },
   "iconButton": { "width": { "default": null, "@media (max-width: 720px)": "36px" }, "height": { "default": null, "@media (max-width: 720px)": "36px" } },
   "inspectorTabs": {
+    "flexBasis": { "default": "43px", "@media (max-width: 720px)": "45px" },
     "height": { "default": null, "@media (max-width: 720px)": "45px" },
     "paddingLeft": { "default": null, "@media (max-width: 720px)": "6px" },
     "overflowX": { "default": null, "@media (max-width: 720px)": "auto" },
+    "overflowY": { "default": null, "@media (max-width: 720px)": "hidden" },
   },
   "transcript": {
     "paddingTop": { "default": null, "@media (max-width: 720px)": "20px" },

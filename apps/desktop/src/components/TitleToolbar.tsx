@@ -57,11 +57,12 @@ interface TitleToolbarProps {
   /** Subtle session status shown beside project controls. */
   sessionActions?: ReactNode
   inspectorOpen?: boolean
+  inspectorDetached?: boolean
   onToggleInspector?(): void
   platform?: NodeJS.Platform
 }
 
-export function TitleToolbar({ project, sessionTitle, gitBranch, view, instant = false, productName = 'Apex', sessionActions, inspectorOpen = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
+export function TitleToolbar({ project, sessionTitle, gitBranch, view, instant = false, productName = 'Apex', sessionActions, inspectorOpen = false, inspectorDetached = false, onToggleInspector, platform = 'darwin' }: TitleToolbarProps) {
   const { t } = useI18n()
   const reduced = useInstantMotion()
   const branch = gitBranch ?? project?.gitBranch
@@ -79,7 +80,7 @@ export function TitleToolbar({ project, sessionTitle, gitBranch, view, instant =
       </div></WorkspaceTransition>
       <div className={`title-toolbar__actions no-drag ${stylex.props(baseStyles.noDrag, workbenchStyles.titleToolbarActions).className ?? ""}`}>
         {view === 'session' ? sessionActions : null}
-        {onToggleInspector && (view === 'session' || view === 'activity') ? <IconButton className={inspectorOpen ? 'is-active' : ''} label="Toggle inspector" aria-pressed={inspectorOpen} onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
+        {onToggleInspector && (view === 'session' || view === 'activity') ? <IconButton className={inspectorOpen ? 'is-active' : ''} label={inspectorDetached ? 'Dock inspector' : 'Toggle inspector'} aria-pressed={inspectorDetached ? undefined : inspectorOpen} onClick={onToggleInspector}><SidebarRight size={16} /></IconButton> : null}
       </div>
     </header>
   )

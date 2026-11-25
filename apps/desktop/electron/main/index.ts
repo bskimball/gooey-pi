@@ -40,6 +40,7 @@ import {
 } from "../../src/types/api";
 import { AgentRpcManager, PI_RPC_ADAPTER } from "./agent-rpc";
 import { installApplicationMenu } from "./application-menu";
+import { enableInspectorWindow } from "./inspector-window";
 import { MacBackgroundController, shouldStartInBackground } from "./background";
 import { AgentBrowserBridge } from "./browser/agent-bridge";
 import { AgentBrowserService } from "./browser/agent-service";
@@ -641,6 +642,7 @@ async function createWindow(): Promise<BrowserWindow | null> {
 	const renderer = window.webContents;
 	const rendererId = renderer.id;
 	hardenRenderer(window);
+	enableInspectorWindow(window, (child) => hardenRenderer(child, () => "about:blank"), keepTestWindowsHidden);
 	renderer.on("before-input-event", (event, input) => {
 		if (!isMacWindowCloseShortcut(input)) return;
 		event.preventDefault();

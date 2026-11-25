@@ -28,7 +28,7 @@ import {
   type SelectHTMLAttributes,
 } from 'react'
 
-export { Modal } from './Modal'
+export { Modal, ModalContainerContext } from './Modal'
 
 const apexAstryxTheme = defineTheme({
   name: 'apex',
