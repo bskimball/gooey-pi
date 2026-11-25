@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
 
 export interface InteractiveChatContextValue {
   sessionKey: string
@@ -8,7 +8,8 @@ export interface InteractiveChatContextValue {
 
 const InteractiveChatContext = createContext<InteractiveChatContextValue | null>(null)
 
-export function InteractiveChatProvider({ children, ...value }: InteractiveChatContextValue & { children: ReactNode }) {
+export function InteractiveChatProvider({ children, sessionKey, disabled, onSendFeedback }: InteractiveChatContextValue & { children: ReactNode }) {
+  const value = useMemo(() => ({ sessionKey, disabled, onSendFeedback }), [sessionKey, disabled, onSendFeedback])
   return <InteractiveChatContext.Provider value={value}>{children}</InteractiveChatContext.Provider>
 }
 

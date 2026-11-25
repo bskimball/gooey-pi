@@ -26,8 +26,8 @@ import {
   SidebarLeft,
   Trash,
 } from './icons'
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion, useIsPresent, useReducedMotion, type Variants } from 'motion/react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
+import { AnimatePresence, motion, useIsPresent, type Variants } from 'motion/react'
 import { PROJECT_SORT_MODES, type HarnessId, type ProjectRecord, type ProjectSortMode, type RuntimeOwnerView, type SessionRecord, type SideConversation, type WorkspaceView } from '@/types/api'
 import { formatRelative } from '@/lib/data'
 import { HARNESS_PRODUCT_NAMES } from '@/lib/harness'
@@ -39,8 +39,9 @@ import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { ApexButton, EmptyState, IconButton, Modal, useFocusTrap } from './ui'
+import { prefersInstantMotion, useInstantMotion } from './ContentMotion'
+import { ProjectSessionList, SidebarPresenceRow, SidebarSelectionMark, SIDEBAR_SELECTION_TRANSITION } from './SidebarMotion'
 import { SessionStatusGlyph, SidebarAttentionGroups, WorkingDot } from './SidebarAttention'
-import { useTaskWorkflowContext } from '@/lib/task-context'
 import type { SpecialistRosters } from '@/hooks/useSpecialistRosters'
 import { SidebarSubagents, sidebarSubagentRows } from './SidebarSubagents'
 
@@ -92,6 +93,8 @@ export interface SidebarProps {
   /** Sessions held by another live Apex app, keyed by session file path. */
   runtimeOwners?: ReadonlyMap<string, RuntimeOwnerView>
   onContinueInVsCode?(session: SessionRecord): void
+  finishedSessions?: ReadonlySet<string>
+  taskActionPending?: boolean
   sideConversations?: readonly SideConversation[]
   onOpenSideConversation?(sessionFile: string): void
   overlay?: boolean
@@ -195,69 +198,19 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-const ROW_ENTER_EASE = [0.23, 1, 0.32, 1] as const
-const ROW_EXIT_EASE = [0.23, 1, 0.32, 1] as const
-
-/** Keep exiting controls inert until their visual exit finishes. */
-function SidebarPresenceRow({ skipMotion, menuOpen = false, children }: { skipMotion: boolean; menuOpen?: boolean; children: ReactNode }) {
-  const isPresent = useIsPresent()
-  return (
-    <motion.div
-      inert={!isPresent}
-      initial={skipMotion ? false : { height: 0, opacity: 0, x: -8, overflow: 'hidden' }}
-      animate={skipMotion ? undefined : {
-        height: 'auto',
-        opacity: 1,
-        x: 0,
-        overflow: menuOpen ? 'visible' : 'hidden',
-        transitionEnd: { overflow: 'visible' },
-      }}
-      exit={skipMotion ? undefined : {
-        height: 0,
-        opacity: 0,
-        x: -12,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        transition: {
-          x: { duration: 0.15, ease: ROW_EXIT_EASE },
-          opacity: { duration: 0.14, ease: ROW_EXIT_EASE },
-          height: { duration: 0.14, delay: 0.03, ease: [0.2, 0, 0, 1] },
-        },
-      }}
-      transition={skipMotion ? { duration: 0 } : {
-        height: { duration: 0.17, ease: ROW_ENTER_EASE },
-        opacity: { duration: 0.18, delay: 0.02, ease: ROW_ENTER_EASE },
-        x: { duration: 0.19, ease: ROW_ENTER_EASE },
-      }}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
 const SIDEBAR_WIDTH_VAR = 'var(--sidebar-width, 252px)'
 const SIDEBAR_DOCK_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] } as const
 const SIDEBAR_OPACITY_TRANSITION = { duration: 0.14, ease: [0.23, 1, 0.32, 1] } as const
 
-function isReducedOrTestMotion(): boolean {
-  if (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) {
-    return true
-  }
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true
-  return Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-}
-
-function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, specialistRosters = NO_ROSTERS, openSpecialistId = null, onOpenSpecialist, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, sideConversations, onOpenSideConversation, overlay = false, instant = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, loading = false, activeProjectId, activeSessionId, activeView, activeHarness = 'pi', clearedAttention = {}, liveBySession = NO_LIVE, specialistRosters = NO_ROSTERS, openSpecialistId = null, onOpenSpecialist, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, projectSortMode = 'recent', onSetProjectSortMode = () => undefined, onTogglePinProject = () => undefined, onClose, onRenameSession, onArchiveSession, runtimeOwners, onContinueInVsCode, finishedSessions, taskActionPending, sideConversations, onOpenSideConversation, overlay = false, instant = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
-  const workflow = useTaskWorkflowContext()
+  const selectionScope = useId()
   const isPresent = useIsPresent()
-  const prefersReducedMotion = useReducedMotion()
-  const skipMotion = Boolean(prefersReducedMotion) || isReducedOrTestMotion()
+  const skipMotion = useInstantMotion()
   const skipEnter = skipMotion || instant
   const frameVariants = useMemo<Variants>(() => ({
     exit: (customInstant?: boolean) => {
-      const snap = Boolean(customInstant) || skipMotion || isReducedOrTestMotion()
+      const snap = Boolean(customInstant) || skipMotion || prefersInstantMotion()
       return {
         width: 0,
         overflow: 'hidden',
@@ -269,7 +222,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   }), [overlay, skipMotion])
   const asideVariants = useMemo<Variants>(() => ({
     exit: (customInstant?: boolean) => {
-      const snap = Boolean(customInstant) || skipMotion || isReducedOrTestMotion()
+      const snap = Boolean(customInstant) || skipMotion || prefersInstantMotion()
       return {
         x: -16,
         opacity: 0,
@@ -286,6 +239,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
   const [collapsedSubagents, setCollapsedSubagents] = useState<Record<string, boolean>>({})
   useEffect(() => saveCollapsedProjects(collapsed), [collapsed])
   const revealProject = (projectId: string) => {
+    if (collapsed[projectId] === false) return
     const next = { ...collapsed, [projectId]: false }
     // Compact-layout selection unmounts the drawer before a state effect can persist this.
     saveCollapsedProjects(next)
@@ -427,9 +381,10 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         </div>
       </nav>
 
-      <div className={`sidebar__scroll scroll-area ${stylex.props(baseStyles.scrollArea, sidebarStyles.sidebarScroll).className ?? ""}`}>
+      <motion.div layoutScroll className={`sidebar__scroll scroll-area ${stylex.props(baseStyles.scrollArea, sidebarStyles.sidebarScroll).className ?? ""}`}>
         {normalized ? null : (
           <SidebarAttentionGroups
+            instant={instant}
             attention={attentionSessions}
             running={runningSessions}
             liveBySession={liveBySession}
@@ -445,7 +400,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
         {projectSections.filter((section) => section.projects.length > 0).map((section) => (
           <section key={section.id} className="sidebar__project-section" aria-label={section.label}>
             {normalized ? <h2 className={`sidebar__group-heading ${stylex.props(sidebarStyles.sidebarGroupHeading).className ?? ""}`}>{section.label}</h2> : null}
-            {section.projects.map((project) => {
+            {section.projects.map((project, projectIndex) => {
               const allSessions = sessionsByProject.get(project.id) ?? []
               const projectSessions = normalized ? matchingSessions.get(project.id) ?? [] : allSessions
               const isCollapsed = normalized ? section.id === 'project-matches' : collapsed[project.id] ?? true
@@ -459,7 +414,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
               const attentionCount = allSessions.filter(needsAttention).length
               const rowId = `${section.id}:${project.id}`
               return (
-                <div className={`project-group ${stylex.props(sidebarStyles.projectGroup).className ?? ""}`} key={project.id}>
+                <motion.div layout={skipMotion ? false : 'position'} layoutDependency={projectIndex} transition={{ layout: SIDEBAR_SELECTION_TRANSITION }} className={`project-group ${stylex.props(sidebarStyles.projectGroup).className ?? ""}`} key={project.id}>
                   <div
                     className={[`project-row ${activeProjectId === project.id && activeView === 'session' ? 'is-selected' : ''} ${projectMenu === rowId ? 'is-menu-open' : ''}`, stylex.props(sidebarStyles.projectRow, (projectMenu === rowId) && sidebarStyles.projectRowIsMenuOpen).className].filter(Boolean).join(' ')}
                     onContextMenu={(event) => { event.preventDefault(); setProjectMenu(rowId) }}
@@ -478,19 +433,9 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                   </div>
                   <AnimatePresence initial={false}>
                     {!isCollapsed ? (
-                      <motion.div
-                        key="session-list"
-                        className={`session-list ${stylex.props(sidebarStyles.sessionList).className ?? ""}`}
-                        initial={skipMotion ? false : { height: 0, opacity: 0, overflow: 'hidden' }}
-                        animate={skipMotion ? undefined : { height: 'auto', opacity: 1, overflow: 'hidden', transitionEnd: { overflow: 'visible' } }}
-                        exit={skipMotion ? undefined : { height: 0, opacity: 0, overflow: 'hidden', transition: { duration: 0.13, ease: [0.2, 0, 0, 1] } }}
-                        transition={skipMotion ? { duration: 0 } : {
-                          height: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
-                          opacity: { duration: 0.15, ease: [0.23, 1, 0.32, 1] },
-                        }}
-                      >
+                      <ProjectSessionList key="session-list" instant={skipEnter}>
                         <AnimatePresence initial={false}>
-                          {visibleSessions.map((session) => {
+                          {visibleSessions.map((session, index) => {
                             const isSelected = activeSessionId === session.id && activeView === 'session'
                             const hasAttn = needsAttention(session)
                             const roster = onOpenSpecialist ? specialistRosters[session.filePath] : undefined
@@ -498,8 +443,9 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                             const subagentsCollapsed = Boolean(collapsedSubagents[session.id])
                             const menuOpen = sessionMenu === session.id
                             return (
-                              <SidebarPresenceRow key={session.id} skipMotion={skipMotion} menuOpen={menuOpen}>
+                              <SidebarPresenceRow key={session.id} index={index} skipMotion={skipMotion} menuOpen={menuOpen}>
                                 <div className={[`session-row-wrap session-row-wrap--${session.status} ${hasAttn ? 'has-attention' : ''} ${isSelected ? 'is-selected' : ''} ${menuOpen ? 'is-menu-open' : ''}`, stylex.props(sidebarStyles.sessionRowWrap, menuOpen && sidebarStyles.sessionRowWrapIsMenuOpen, isSelected && sidebarStyles.sessionRowWrapIsSelected).className].filter(Boolean).join(' ')}>
+                                  {isSelected ? <SidebarSelectionMark scope={`${selectionScope}-${section.id}-session`} instant={skipEnter} /> : null}
                                   {hasSubagents ? (
                                     <button
                                       type="button"
@@ -514,7 +460,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                                   ) : null}
                                   <button type="button" title={session.title} aria-current={isSelected ? 'page' : undefined} className={`session-row ${stylex.props(sidebarStyles.sessionRow, hasSubagents && sidebarStyles.sessionRowHasSubagents).className ?? ""}`} onClick={() => openSession(session, project.id)} onContextMenu={(event) => { event.preventDefault(); setSessionMenu(session.id) }}>
                                     <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{statusLabel[session.status]}: </span>
-                                    <span className={`session-row__text ${stylex.props(sidebarStyles.sessionRowText).className ?? ""}`}><span className={`session-row__title ${stylex.props(sidebarStyles.sessionRowTitle).className ?? ""}`}>{session.title}{workflow?.finished.has(session.filePath) ? <span className={`task-finished-badge ${stylex.props(taskWorkflowsStyles.taskFinishedBadge).className ?? ""}`}>Finished</span> : null}</span><span className={`session-row__meta ${stylex.props(sidebarStyles.sessionRowMeta).className ?? ""}`} title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
+                                    <span className={`session-row__text ${stylex.props(sidebarStyles.sessionRowText).className ?? ""}`}><span className={`session-row__title ${stylex.props(sidebarStyles.sessionRowTitle).className ?? ""}`}>{session.title}{finishedSessions?.has(session.filePath) ? <span className={`task-finished-badge ${stylex.props(taskWorkflowsStyles.taskFinishedBadge).className ?? ""}`}>Finished</span> : null}</span><span className={`session-row__meta ${stylex.props(sidebarStyles.sessionRowMeta).className ?? ""}`} title={formatRelative(session.updatedAt)}>{sessionRowMeta(session, runtimeOwners?.get(session.filePath), liveBySession[session.filePath])}</span></span>
                                     <SessionStatusGlyph session={session} attention={hasAttn} live={liveBySession[session.filePath]} />
                                   </button>
                                   <button type="button"
@@ -539,7 +485,7 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                                       title={isRunning(session) || isSessionWaiting(session) ? 'Stop the current run before continuing in VS Code.' : 'Move this session to VS Code. You can close Desktop afterward.'}
                                       onClick={() => { setSessionMenu(null); onContinueInVsCode(session) }}
                                     ><Code size={12}/> Continue in VS Code</button> : null}
-                                    {workflow?.sessionFile === session.filePath && onOpenSideConversation ? sideConversations?.map((side, index) => <button key={side.sessionFile} type="button" disabled={workflow.pending} onClick={() => { setSessionMenu(null); onOpenSideConversation(side.sessionFile) }}><ChatCircleDots size={12} /> Open side conversation {index + 1}</button>) : null}
+                                    {activeSessionId === session.id && onOpenSideConversation ? sideConversations?.map((side, index) => <button key={side.sessionFile} type="button" disabled={taskActionPending} onClick={() => { setSessionMenu(null); onOpenSideConversation(side.sessionFile) }}><ChatCircleDots size={12} /> Open side conversation {index + 1}</button>) : null}
                                   </motion.div> : null}</AnimatePresence>
                                 </div>
                                 {roster?.length && onOpenSpecialist ? <SidebarSubagents session={session} specialists={roster} selected={isSelected} collapsed={subagentsCollapsed} openSpecialistId={isSelected ? openSpecialistId : null} onOpen={onOpenSpecialist} /> : null}
@@ -549,15 +495,15 @@ function SidebarView({ projects, sessions, loading = false, activeProjectId, act
                           {projectSessions.length === 0 ? <SidebarPresenceRow key={`empty:${project.id}`} skipMotion={skipMotion}><button type="button" title={`New session in ${project.name}`} className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => { setProjectMenu(null); onNewSession(project) }}><NotePencil size={12} /> New session</button></SidebarPresenceRow> : null}
                         </AnimatePresence>
                         {remaining > 0 ? <button type="button" className={`session-row session-row--empty ${stylex.props(sidebarStyles.sessionRow, sidebarStyles.sessionRowEmpty).className ?? ""}`} onClick={() => (normalized ? setSearchLimits : setSessionLimits)((limits) => ({ ...limits, [project.id]: limit + SIDEBAR_SESSION_LIMIT }))}>{normalized ? `Show more matches (${remaining} remaining)` : `Show older sessions (${remaining})`}</button> : null}
-                      </motion.div>
+                      </ProjectSessionList>
                     ) : null}
                   </AnimatePresence>
-                </div>
+                </motion.div>
               )
             })}
           </section>
         ))}
-      </div>
+      </motion.div>
 
       <AnimatePresence initial={false}>
         {renameTarget ? <Modal key="rename-session" title="Rename session" onClose={() => setRenameTarget(null)} footer={<><ApexButton variant="quiet" onClick={() => setRenameTarget(null)}>Cancel</ApexButton><ApexButton variant="primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>Rename</ApexButton></>}><TextInput label="Session name" hasAutoFocus value={renameValue} containerClassName="field" onChange={(nextValue) => setRenameValue(nextValue.slice(0, 200))} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }} /></Modal> : null}
@@ -595,6 +541,8 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onArchiveSession === next.onArchiveSession
     && previous.runtimeOwners === next.runtimeOwners
     && previous.onContinueInVsCode === next.onContinueInVsCode
+    && previous.finishedSessions === next.finishedSessions
+    && previous.taskActionPending === next.taskActionPending
     && previous.sideConversations === next.sideConversations
     && previous.onOpenSideConversation === next.onOpenSideConversation
     && previous.overlay === next.overlay

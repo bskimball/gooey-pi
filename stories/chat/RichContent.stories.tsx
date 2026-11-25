@@ -6,6 +6,9 @@ import { HtmlFence } from '../../apps/desktop/src/components/HtmlFence'
 import { ProjectPreview } from '../../apps/desktop/src/components/ProjectPreview'
 import { InteractiveChatProvider } from '../../apps/desktop/src/components/InteractiveChatContext'
 import { TranscriptImage, ImageParts } from '../../apps/desktop/src/components/transcript/TranscriptImage'
+import { UserMessage } from '../../apps/desktop/src/components/transcript/messages'
+import appIcon from '../../apps/desktop/assets/icon.iconset/icon_256x256.png?inline'
+import mascot from '../../apps/desktop/public/gooeypi-mascot.png?inline'
 import { image, imageUrl } from './data'
 import { installChatFixture, withoutHost } from './fixtures'
 
@@ -111,6 +114,19 @@ export const ImageLoadedAndZoom: Story = {
       <ImageParts images={[image]} />
     </>
   ),
+}
+export const ImageCarousel: Story = {
+  render: () => <UserMessage message={{
+    id: 'image-comparison',
+    role: 'user',
+    parts: [
+      { type: 'text', text: 'Compare the app icon and the desktop companion.' },
+      ...[appIcon, mascot].map((url) => ({ ...image, data: url.slice(url.indexOf(',') + 1) })),
+    ],
+  }} />,
+}
+export const MarkdownImageCarousel: Story = {
+  render: () => <MarkdownText text={`![App icon](${appIcon})\n\n![Desktop companion](${mascot})`} />,
 }
 export const ImageZoom: Story = {
   render: () => <TranscriptImage source={imageUrl} alt="Zoomed sample" />,

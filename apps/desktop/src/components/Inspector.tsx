@@ -21,7 +21,7 @@ import type {
 	TranscriptMessage,
 } from "@/types/api";
 import type { AgentSlotRect } from "./AgentBrowserLayer";
-import { ArrowsInSimple, ArrowsOutSimple, Folder, GitDiff, Globe, Info, Robot, SidebarRight } from "./icons";
+import { ArrowsInSimple, ArrowsOutSimple, SidebarRight } from "./icons";
 import { BrowserPanel } from "./inspector/BrowserPanel";
 import { ChangesPanel } from "./inspector/ChangesPanel";
 import { FilesPanel } from "./inspector/FilesPanel";
@@ -30,6 +30,7 @@ import { SummaryPanel } from "./inspector/SummaryPanel";
 import { createReadinessSelector } from "./inspector/readiness";
 import { createSessionSummarySelector } from "./inspector/session-summary";
 import { IconButton } from "./ui";
+import { inspectorTabs as tabs } from "./inspector/tabs";
 import { InspectorShell } from "./InspectorShell";
 
 export interface InspectorProps {
@@ -88,13 +89,6 @@ export interface InspectorProps {
 	browserActive?: boolean;
 }
 
-const tabs: Array<{ id: InspectorTab; label: string; Icon: typeof Info }> = [
-	{ id: "changes", label: "Changes", Icon: GitDiff },
-	{ id: "summary", label: "Overview", Icon: Info },
-	{ id: "specialists", label: "Agents", Icon: Robot },
-	{ id: "files", label: "Files", Icon: Folder },
-	{ id: "browser", label: "Browser", Icon: Globe },
-];
 
 const tabIndex = (id: InspectorTab) => tabs.findIndex((tab) => tab.id === id);
 const SLIDE_TRANSITION = { duration: 0.22, ease: [0.23, 1, 0.32, 1] as const };

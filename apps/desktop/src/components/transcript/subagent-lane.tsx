@@ -1,17 +1,17 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { createContext, memo, useContext, useId, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { arrivalMotionProps, collapseMotionProps, MorphInline, prefersInstantMotion, useInstantMotion } from '../ContentMotion'
+import { createContext, memo, useContext, useId, useState } from 'react'
 import type { PiSpecialistSummary } from '../inspector/session-summary'
 import { isLiveSpecialist, shortModelName, specialistOutcome, workerDetails, type SpecialistStatus } from '@/lib/specialist-status'
-import { ArrowUpRight, CaretRight, Check } from '../icons'
+import { ArrowUpRight, CaretRight } from '../icons'
+import { PlanStatusMark } from '../PlanStatusMark'
 import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
 
-const EASE_OUT = [0.23, 1, 0.32, 1] as const
-const EASE_EXIT = [0.2, 0, 0, 1] as const
 const DISCLOSURE_SPRING = { type: 'spring', stiffness: 380, damping: 27, mass: 0.8 } as const
 const DISCLOSURE_TRANSITION = { height: DISCLOSURE_SPRING, y: DISCLOSURE_SPRING, opacity: { duration: 0.14 } } as const
 const laneStyles = stylex.create({
@@ -31,60 +31,6 @@ const laneStyles = stylex.create({
     outlineOffset: -2,
   },
 })
-
-function prefersInstantMotion(): boolean {
-  return (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
-    || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
-    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-}
-
-export function useInstantMotion(): boolean {
-  return Boolean(useReducedMotion()) || prefersInstantMotion()
-}
-
-export function collapseMotionProps(instant: boolean) {
-  return {
-    initial: instant ? (false as const) : { height: 0, opacity: 0 },
-    animate: { height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' as const } },
-    exit: instant ? undefined : { height: 0, opacity: 0, overflow: 'hidden' as const, transition: { duration: 0.125, ease: EASE_EXIT } },
-    transition: instant ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT },
-    style: { overflow: 'hidden' as const },
-  }
-}
-
-export function arrivalMotionProps(instant: boolean, animateArrival: boolean) {
-  return {
-    initial: instant || !animateArrival ? (false as const) : { opacity: 0 },
-    animate: { opacity: 1 },
-    transition: instant ? { duration: 0 } : { duration: 0.15, ease: EASE_OUT },
-  }
-}
-
-export function MorphInline({
-  morphKey,
-  instant,
-  children,
-}: {
-  morphKey: string
-  instant: boolean
-  children: ReactNode
-}) {
-  if (instant) return <>{children}</>
-  return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      <motion.span
-        key={morphKey}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 'inherit' }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0, transition: { duration: 0.08, ease: EASE_EXIT } }}
-        transition={{ duration: 0.15, ease: EASE_OUT }}
-      >
-        {children}
-      </motion.span>
-    </AnimatePresence>
-  )
-}
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 type ToolResult = Extract<MessagePart, { type: 'toolResult' }>
@@ -340,34 +286,39 @@ export const SubagentLane = memo(function SubagentLane({ part, result, followUps
   </motion.div>
 })
 
-type TodoStatus = 'completed' | 'in_progress' | 'pending' | 'cancelled'
-interface TodoItem { content: string; status: TodoStatus }
+type TodoStatus = 'completed' | 'in_progress' | 'pending' | 'blocked' | 'cancelled'
+interface TodoItem { id: string; content: string; status: TodoStatus }
 
 function todoItems(args: unknown): TodoItem[] {
   const todos = record(args)?.todos
   if (!Array.isArray(todos)) return []
-  return todos.flatMap((item) => {
+  return todos.flatMap((item, index) => {
     const todo = record(item)
     const content = text(todo?.content)
     if (!content) return []
     const status = todo?.status
-    return [{ content, status: status === 'completed' || status === 'in_progress' || status === 'cancelled' ? status : 'pending' }]
+    return [{ id: text(todo?.id) ?? `todo-${index + 1}`, content, status: status === 'completed' || status === 'in_progress' || status === 'blocked' || status === 'cancelled' ? status : 'pending' }]
   })
 }
 
 /** A plan update reads as the step header for the work that follows it. */
 export const TodoStep = memo(function TodoStep({ part, animateArrival = false }: { part: ToolCall; animateArrival?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [keyboardToggle, setKeyboardToggle] = useState(false)
   const listId = useId()
   const instant = useInstantMotion()
   const todos = todoItems(part.args)
   const done = todos.filter((todo) => todo.status === 'completed').length
   const active = todos.find((todo) => todo.status === 'in_progress')
-  const finished = todos.length > 0 && done === todos.length
-  const countText = `${done}/${todos.length} done`
+  const total = todos.filter((todo) => todo.status !== 'cancelled').length
+  const finished = total > 0 && done === total
+  const countText = `${done}/${total} done`
   const labelText = active?.content ?? (finished ? 'All steps complete' : 'Plan updated')
   return <motion.div className={[`todo-step ${finished ? 'is-finished' : ''}`, stylex.props(transcriptStyles.todoStep).className].filter(Boolean).join(' ')} {...arrivalMotionProps(instant, animateArrival)}>
-    <button type="button" className={`todo-step__summary ${stylex.props(transcriptStyles.todoStepSummary).className ?? ""}`} disabled={!todos.length} aria-expanded={todos.length ? open : undefined} aria-controls={todos.length && open ? listId : undefined} onClick={() => setOpen((value) => !value)}>
+    <button type="button" className={`todo-step__summary ${stylex.props(transcriptStyles.todoStepSummary).className ?? ""}`} disabled={!todos.length} aria-expanded={todos.length ? open : undefined} aria-controls={todos.length && open ? listId : undefined} onClick={(event) => {
+      setKeyboardToggle(event.detail === 0)
+      setOpen((value) => !value)
+    }}>
       <span className={`todo-step__count ${stylex.props(transcriptStyles.todoStepCount).className ?? ""}`}>
         <MorphInline morphKey={countText} instant={instant}>{countText}</MorphInline>
       </span>
@@ -377,12 +328,13 @@ export const TodoStep = memo(function TodoStep({ part, animateArrival = false }:
       {todos.length ? <CaretRight className={`disclosure-caret ${stylex.props(transcriptStyles.disclosureCaret).className ?? ""}`} size={13} /> : null}
     </button>
     <AnimatePresence initial={false}>
-      {open ? <motion.ol key="todo-list" className={`todo-step__list ${stylex.props(transcriptStyles.todoStepList).className ?? ""}`} id={listId} {...collapseMotionProps(instant)}>
-        {todos.map((todo, index) => <li key={`${index}-${todo.content}`} className={`is-${todo.status}`}>
-          <span className={`todo-step__mark ${stylex.props(transcriptStyles.todoStepMark).className ?? ""}`} aria-hidden="true">{todo.status === 'completed' ? <Check size={10} /> : null}</span>
+      {open ? <motion.ol key="todo-list" className={`todo-step__list ${stylex.props(transcriptStyles.todoStepList).className ?? ""}`} id={listId} {...collapseMotionProps(instant || keyboardToggle)}>
+        <AnimatePresence mode="popLayout" initial={false}>{todos.map((todo) => <motion.li key={todo.id} layout={instant ? false : 'position'} className={`is-${todo.status}`}
+          initial={instant ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={instant ? undefined : { opacity: 0 }} transition={{ duration: instant ? 0 : 0.16 }}>
+          <PlanStatusMark status={todo.status} instant={instant} size={12} />
           <span>{todo.content}</span>
           <span className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`}>{todo.status.replace('_', ' ')}</span>
-        </li>)}
+        </motion.li>)}</AnimatePresence>
       </motion.ol> : null}
     </AnimatePresence>
   </motion.div>

@@ -5,10 +5,11 @@ import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
-import { ArrowsClockwise, Keyboard, Robot, ShieldCheck } from '@/components/icons'
+import { ArrowsClockwise, Keyboard, Robot } from '@/components/icons'
 import { ApexButton } from '@/components/ui'
 import { useState } from 'react'
 import { HARNESS_IDS, type HarnessId } from '@/types/api'
+import { useI18n } from '@/lib/i18n'
 import { errorMessage } from '@/lib/errors'
 import { HARNESS_AGENT_NAMES } from '@/lib/harness'
 import { detectRendererPlatform, shortcutLabel } from '@/lib/platform-shortcuts'
@@ -17,6 +18,7 @@ import { DraftSettingField } from './DraftSettingField'
 import { SettingsToggle } from './SettingsToggle'
 
 export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: SettingsMetaSectionProps) {
+  const { t } = useI18n()
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
   const platform = meta?.platform ?? detectRendererPlatform()
@@ -31,12 +33,12 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
   }
   const runtimePathValidation = (value: string, harness: HarnessId): string => {
     if (!value) return ''
-    const absolute = meta?.platform === 'win32' ? /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\') : value.startsWith('/')
+    const absolute = platform === 'win32' ? /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\') : value.startsWith('/')
     return absolute ? '' : `${HARNESS_AGENT_NAMES[harness]} path must be absolute (or blank for automatic discovery)`
   }
   return (
     <>
-      <header><h1>Pi</h1><p>Runtime discovery, model providers, and workspace permissions.</p></header>
+      <header><h1>{t('settings.harness')}</h1><p>Configure the Pi executable, transcript, and message shortcuts.</p></header>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}>
           <h2>Runtime</h2>
@@ -59,7 +61,7 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
             </div>
           )
         })}
-        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Discovery checks a saved override first, then the harness environment variable, bundled files, PATH, and standard install directories. Refreshing updates future sessions without restarting Apex.</p>
+        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Refresh after installing Pi or changing its location. New sessions use the detected executable.</p>
         {HARNESS_IDS.map((harness) => <DraftSettingField
           key={harness}
           id={`runtime-path-${harness}`}
@@ -76,13 +78,13 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Transcript</h2>
-        <SettingsToggle checked={settings.showReasoningSummaries} onChange={(showReasoningSummaries) => { void onUpdate({ showReasoningSummaries }) }} label="Show reasoning summaries" description="Display reasoning summaries and traces, during and after a turn. Each Thought can be folded." />
+        <SettingsToggle checked={settings.showReasoningSummaries} onChange={(showReasoningSummaries) => { void onUpdate({ showReasoningSummaries }) }} label="Show reasoning summaries" description="Show expandable thoughts in the transcript." />
         <SettingsToggle checked={settings.showToolCalls} onChange={(showToolCalls) => { void onUpdate({ showToolCalls }) }} label="Show tool calls" description="Display compact tool activity, arguments, and expandable results." />
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Message shortcuts</h2>
         <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
-          <span><strong>Primary Enter action while an agent is working</strong><small>{oppositeActionShortcut} always uses the opposite action. {newLineShortcut} adds a new line.</small></span>
+          <span><strong>Enter while Pi is working</strong><small>{oppositeActionShortcut} always uses the opposite action. {newLineShortcut} adds a new line.</small></span>
           <SegmentedControl
             label="Primary Enter action"
             size="sm"
@@ -104,10 +106,6 @@ export function AgentSettings({ settings, meta, onUpdate, onRefreshHarnesses }: 
         </div>
         <div className={`shortcut-row ${stylex.props(settingsStyles.shortcutRow).className ?? ""}`}><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Queue message' : 'Steer current turn'}</span><kbd>Enter</kbd></div>
         <div className={`shortcut-row ${stylex.props(settingsStyles.shortcutRow).className ?? ""}`}><span><Keyboard size={14} />{settings.messageEnterAction === 'queue' ? 'Steer current turn' : 'Queue message'}</span><kbd>{oppositeActionShortcut}</kbd></div>
-      </section>
-      <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
-        <h2>Permissions</h2>
-        <div className={`info-row ${stylex.props(settingsStyles.infoRow).className ?? ""}`}><ShieldCheck size={15} /><div><strong>Workspace access</strong><small>The active agent only receives the project folders attached to a session.</small></div></div>
       </section>
     </>
   )

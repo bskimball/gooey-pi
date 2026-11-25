@@ -6,7 +6,7 @@ import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, memo, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { CaretRight, Check, Copy, Crosshair, PencilSimple, X } from '../icons'
-import { collapseMotionProps, useInstantMotion } from './subagent-lane'
+import { collapseMotionProps, useInstantMotion } from '../ContentMotion'
 import type { GitStatus, HarnessId, MessagePart, TranscriptMessage } from '@/types/api'
 import { parseAnnotationReferences, splitAnnotationBlock } from '@/lib/browser-annotations'
 import { BrowserReferenceCards } from './BrowserReferenceCards'
@@ -19,7 +19,7 @@ import { HARNESS_SHORT_NAMES } from '@/lib/harness'
 import { MarkdownText } from '../MarkdownText'
 import { PiMark } from '../ui'
 import { InlineText } from './syntax'
-import { ImageParts } from './TranscriptImage'
+import { ImageParts, imageRunAt } from './TranscriptImage'
 import { isSubagentTool, pairSubagentCalls } from './subagent-lane'
 import { WorkingDot } from '../SidebarAttention'
 import { activeWorkLabel, classifyTool, formatWorkedDuration, liveWorkStatus, LiveElapsed, WorkTimeline } from './timeline'
@@ -28,17 +28,13 @@ import { WorkGroup } from './work-group'
 import { ContextExcerpt } from '../ContextExcerpt'
 import { splitTaskContext, useTaskWorkflowContext } from '@/lib/task-context'
 
-function renderImage(part: Extract<MessagePart, { type: 'image' }>, key: string) {
-  return <ImageParts key={key} images={[part]} />
-}
-
 export function renderNarrative(parts: MessagePart[], keyPrefix: string, streaming = false, source = 'Assistant narrative') {
   return parts.map((part, index) => {
     if (part.type === 'text') {
       if (streaming && !part.text.trim()) return null
       return <ContextExcerpt key={`${keyPrefix}-${index}`} source={source} text={part.text}><MarkdownText text={part.text} streaming={streaming && index === parts.length - 1} /></ContextExcerpt>
     }
-    if (part.type === 'image') return renderImage(part, `${keyPrefix}-${index}`)
+    if (part.type === 'image') return imageRunAt(parts, index, part.partId ?? `${keyPrefix}-${index}`)
     if (part.type === 'toolResult') return <ImageParts key={`${keyPrefix}-${index}`} images={part.images} />
     return null
   })
@@ -272,17 +268,32 @@ function UserText({ text, images, onOpenSessionReference }: { text: string; imag
   )
 }
 
-export const UserMessage = memo(function UserMessage({ message, turnLabel, turnSince, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnSince?: string | number; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
+function UserWorkflowActions({ messageId }: { messageId: string }) {
   const workflow = useTaskWorkflowContext()
-  const receipt = workflow?.receipts.find((run) => run.memberUserEntryIds.includes(message.id) || run.anchorUserEntryId === message.id)
+  if (!workflow) return null
+  const saved = workflow.persistedUserIds.has(messageId)
+  const receipt = workflow.receipts.find((run) => run.anchorUserEntryId === messageId || run.memberUserEntryIds.includes(messageId))
+  return (
+    <>
+      <button type="button" disabled={!workflow.idle || workflow.pending || !saved} title={!saved ? 'Waiting for the saved prompt entry' : !workflow.idle ? 'Available when this saved Pi session is idle' : undefined} onClick={() => workflow.edit(messageId)}><PencilSimple size={12} />Edit from here</button>
+      {receipt && receipt.state !== 'open' ? <button type="button" onClick={() => workflow.review(receipt)}>Review run{receipt.state === 'incomplete' ? ' · incomplete' : ''}</button> : null}
+    </>
+  )
+}
+
+export const UserMessage = memo(function UserMessage({ message, turnLabel, turnSince, turnRunning = false, turnFailed = false, onOpenSessionReference }: { message: TranscriptMessage; turnLabel?: string; turnSince?: string | number; turnRunning?: boolean; turnFailed?: boolean; onOpenSessionReference?(sessionId: string, harness: HarnessId): void }) {
   const copyableText = message.parts.filter((part) => part.type === 'text').map((part) => visibleUserText(part.text)).filter(Boolean).join('\n')
   const turnState = turnRunning ? 'running' : turnFailed ? 'failed' : turnLabel ? 'done' : undefined
   const images = message.parts.filter((part): part is Extract<MessagePart, { type: 'image' }> => part.type === 'image')
   const referencedImages = new Set(message.parts.flatMap((part) => part.type === 'text' ? parseAnnotationReferences(splitAnnotationBlock(splitTerminalContextBlock(part.text).text).block ?? '').flatMap((reference) => reference.imageIndex === undefined ? [] : [reference.imageIndex]) : []))
+  let imageIndex = 0
+  const visibleParts = referencedImages.size
+    ? message.parts.filter((part) => part.type !== 'image' || !referencedImages.has(imageIndex++))
+    : message.parts
   return (
     <article className={`message message--user ${stylex.props(transcriptStyles.message, transcriptStyles.messageUser).className ?? ""}`}>
       <div className={`user-bubble ${stylex.props(transcriptStyles.userBubble).className ?? ""}`}>
-        {message.parts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} images={images} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' && !referencedImages.has(images.indexOf(part)) ? renderImage(part, `user-${index}`) : null))}
+        {visibleParts.map((part, index) => (part.type === 'text' ? <UserText key={index} text={part.text} images={images} onOpenSessionReference={onOpenSessionReference} /> : part.type === 'image' ? imageRunAt(visibleParts, index, part.partId ?? `user-${index}`) : null))}
       </div>
       {turnState ? (
         <span className={[`message__turn-status is-${turnState}`, stylex.props(transcriptStyles.messageTurnStatus, (turnState === 'done') && transcriptStyles.messageTurnStatusDone, (turnState === 'running') && transcriptStyles.messageTurnStatusRunning, (turnState === 'failed') && transcriptStyles.messageTurnStatusFailed).className].filter(Boolean).join(' ')}>
@@ -301,8 +312,7 @@ export const UserMessage = memo(function UserMessage({ message, turnLabel, turnS
       {message.steerState ? <div className={[`message__steer-state is-${message.steerState}`, stylex.props(transcriptStyles.messageSteerState, ((message.steerState === "read")) && transcriptStyles.messageSteerStateIsRead).className].filter(Boolean).join(' ')} role="status">{message.steerState === 'accepted' ? 'Accepted — waiting for the next safe steering point' : 'Read by agent'}</div> : null}
       {/* Workflow actions sit in the hover-revealed row beside Copy, styled like it. */}
       <MessageActions message={message} text={copyableText}>
-        {workflow ? <button type="button" disabled={!workflow.idle || workflow.pending || !workflow.persistedUserIds.has(message.id)} title={!workflow.persistedUserIds.has(message.id) ? 'Waiting for the saved prompt entry' : !workflow.idle ? 'Available when this saved Pi session is idle' : undefined} onClick={() => workflow.edit(message.id)}><PencilSimple size={12} />Edit from here</button> : null}
-        {workflow && receipt && receipt.state !== 'open' ? <button type="button" onClick={() => workflow.review(receipt)}>Review run{receipt.state === 'incomplete' ? ' · incomplete' : ''}</button> : null}
+        <UserWorkflowActions messageId={message.id} />
       </MessageActions>
     </article>
   )

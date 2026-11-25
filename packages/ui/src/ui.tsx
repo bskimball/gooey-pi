@@ -4,7 +4,7 @@ import { styles as settingsStyles } from './styles/settings.stylex'
 import { motionMarker } from './styles/motion.stylex'
 import { styles as logosStyles } from './styles/logos.stylex'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
-import { ButtonGroup } from '@astryxdesign/core/ButtonGroup'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { EmptyState as AstryxEmptyState } from '@astryxdesign/core/EmptyState'
 import { Selector, type SelectorOptionData } from '@astryxdesign/core/Selector'
 import { defineTheme, registerTheme } from '@astryxdesign/core/theme'
@@ -635,30 +635,6 @@ export function SelectControl({ icon, compact, fullWidth = false, placement = 'b
   )
 }
 
-function SegmentedOptionButton({
-  optionLabel,
-  active,
-  onSelect,
-}: {
-  optionLabel: string
-  active: boolean
-  onSelect(): void
-}) {
-  const buttonRef = useSyncedAstryxButtonDom(false, undefined)
-  return (
-    <AstryxButton
-      ref={buttonRef}
-      label={optionLabel}
-      variant="ghost"
-      size="sm"
-      aria-pressed={active}
-      onClick={onSelect}
-      className={active ? 'is-active' : ''}
-      xstyle={[styles.segmentedItem, active && styles.segmentedItemActive]}
-    />
-  )
-}
-
 export function Segmented<T extends string>({ value, options, onChange, label }: {
   value: T
   options: Array<{ value: T; label: string }>
@@ -666,21 +642,17 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   label: string
 }) {
   return (
-    <ButtonGroup
-      label={label}
-      size="sm"
-      className="segmented"
-      xstyle={styles.segmentedGroup}
-    >
+    <SegmentedControl label={label} size="sm" className="segmented" xstyle={styles.segmentedGroup}
+      value={value} onChange={(selected) => {
+        const option = options.find((item) => item.value === selected)
+        if (option) onChange(option.value)
+      }}>
       {options.map((option) => (
-        <SegmentedOptionButton
-          key={option.value}
-          optionLabel={option.label}
-          active={value === option.value}
-          onSelect={() => onChange(option.value)}
-        />
+        <SegmentedControlItem key={option.value} value={option.value} label={option.label}
+          className={option.value === value ? 'is-active' : ''}
+          xstyle={[styles.segmentedItem, option.value === value && styles.segmentedItemActive]} />
       ))}
-    </ButtonGroup>
+    </SegmentedControl>
   )
 }
 

@@ -4,7 +4,10 @@ import type { ProjectRecord, SessionRecord, WorkspaceView } from '@/types/api'
 import { isSessionRunning } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
 import type { SessionLive } from '@/app/sessionLiveMachine'
-import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useIsPresent } from 'motion/react'
+import { useId } from 'react'
+import { useInstantMotion } from './ContentMotion'
+import { SidebarPresenceRow, SidebarSelectionMark } from './SidebarMotion'
 import { StatusMark } from './activity/StatusMark'
 
 const dotStyles = stylex.create({
@@ -19,7 +22,7 @@ const dotStyles = stylex.create({
 
 /** Small pulsing dot for live work; static under reduced motion. Decorative: callers carry the label. */
 export function WorkingDot() {
-  const skipMotion = useSkipMotion()
+  const skipMotion = useInstantMotion()
   return (
     <motion.span
       {...stylex.props(dotStyles.workingDot)}
@@ -43,6 +46,7 @@ export function SessionStatusGlyph({ session, attention, live }: { session: Sess
 }
 
 interface SidebarAttentionGroupsProps {
+  instant?: boolean
   attention: SessionRecord[]
   running: SessionRecord[]
   liveBySession?: SessionLiveMap
@@ -56,16 +60,9 @@ const ROW_ENTER_EASE = [0.23, 1, 0.32, 1] as const
 const ROW_EXIT_EASE = [0.23, 1, 0.32, 1] as const
 const HEIGHT_EXIT_EASE = [0.2, 0, 0, 1] as const
 
-function useSkipMotion(): boolean {
-  const prefersReducedMotion = useReducedMotion()
-  return Boolean(prefersReducedMotion)
-    || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
-    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-}
-
 /** Cross-project groups shown above the project tree. Empty groups render nothing. */
 export function SidebarAttentionGroups({ attention, running, ...shared }: SidebarAttentionGroupsProps) {
-  const skipMotion = useSkipMotion()
+  const skipMotion = useInstantMotion()
   return (
     <AnimatePresence initial={false}>
       {attention.length ? <AttentionGroup key="needs-you" label="Needs you" sessions={attention} attention skipMotion={skipMotion} {...shared} /> : null}
@@ -75,8 +72,11 @@ export function SidebarAttentionGroups({ attention, running, ...shared }: Sideba
 }
 
 /** Keep exiting rows inert until their slide, fade, and height collapse complete. */
-function AttentionPresenceRow({ skipMotion, session, projectId, projectName, selected, attention, live, onOpenSession }: {
+function AttentionPresenceRow({ skipMotion, index, scope, instant, session, projectId, projectName, selected, attention, live, onOpenSession }: {
   skipMotion: boolean
+  index: number
+  scope: string
+  instant: boolean
   session: SessionRecord
   projectId?: string
   projectName?: string
@@ -87,45 +87,20 @@ function AttentionPresenceRow({ skipMotion, session, projectId, projectName, sel
 }) {
   const isPresent = useIsPresent()
   return (
-    <motion.div
-      inert={!isPresent}
-      initial={skipMotion ? false : { height: 0, opacity: 0, x: -8, overflow: 'hidden' }}
-      animate={skipMotion ? undefined : {
-        height: 'auto',
-        opacity: 1,
-        x: 0,
-        overflow: 'hidden',
-        transitionEnd: { overflow: 'visible' },
-      }}
-      exit={skipMotion ? undefined : {
-        height: 0,
-        opacity: 0,
-        x: -12,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        transition: {
-          x: { duration: 0.15, ease: ROW_EXIT_EASE },
-          opacity: { duration: 0.14, ease: ROW_EXIT_EASE },
-          height: { duration: 0.14, delay: 0.03, ease: HEIGHT_EXIT_EASE },
-        },
-      }}
-      transition={skipMotion ? { duration: 0 } : {
-        height: { duration: 0.17, ease: ROW_ENTER_EASE },
-        opacity: { duration: 0.18, delay: 0.02, ease: ROW_ENTER_EASE },
-        x: { duration: 0.19, ease: ROW_ENTER_EASE },
-      }}
-    >
+    <SidebarPresenceRow skipMotion={skipMotion} index={index}>
       <button
         type="button"
         title={session.title}
+        aria-current={selected ? 'page' : undefined}
         className={[`sidebar-attention__row ${selected ? 'is-selected' : ''}`, stylex.props(sidebarStyles.sidebarAttentionRow, (selected) && sidebarStyles.sidebarAttentionRowIsSelected).className].filter(Boolean).join(' ')}
         onClick={() => { if (isPresent) onOpenSession(session, projectId) }}
       >
+        {selected ? <SidebarSelectionMark scope={scope} instant={instant} /> : null}
         <span className={`sidebar-attention__title ${stylex.props(sidebarStyles.sidebarAttentionTitle).className ?? ""}`}>{session.title}</span>
         <span className={`sidebar-attention__project ${stylex.props(sidebarStyles.sidebarAttentionProject).className ?? ""}`}>{projectName}</span>
         <SessionStatusGlyph session={session} attention={attention} live={live} />
       </button>
-    </motion.div>
+    </SidebarPresenceRow>
   )
 }
 
@@ -136,7 +111,8 @@ type AttentionGroupProps = Omit<SidebarAttentionGroupsProps, 'attention' | 'runn
   skipMotion: boolean
 }
 
-function AttentionGroup({ label, sessions, attention, skipMotion, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
+function AttentionGroup({ label, sessions, attention, skipMotion, instant = false, liveBySession, projects, activeSessionId, activeView, onOpenSession }: AttentionGroupProps) {
+  const scope = useId()
   const isPresent = useIsPresent()
   return (
     <motion.section
@@ -165,12 +141,15 @@ function AttentionGroup({ label, sessions, attention, skipMotion, liveBySession,
     >
       <h2 className={`sidebar__label ${stylex.props(sidebarStyles.sidebarLabel).className ?? ""}`}>{label} <span className="n">{sessions.length}</span></h2>
       <AnimatePresence initial={false}>
-        {sessions.map((session) => {
+        {sessions.map((session, index) => {
           const project = projects.find((candidate) => candidate.path === session.projectPath || candidate.folders.includes(session.projectPath))
           const selected = activeSessionId === session.id && activeView === 'session'
           return (
             <AttentionPresenceRow
               key={session.id}
+              index={index}
+              scope={scope}
+              instant={skipMotion || instant}
               skipMotion={skipMotion}
               session={session}
               projectId={project?.id}

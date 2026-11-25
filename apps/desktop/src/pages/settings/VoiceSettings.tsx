@@ -8,7 +8,7 @@ import * as stylex from '@stylexjs/stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useMachine } from '@xstate/react'
-import { ArrowsClockwise, Broadcast, Check, CircleNotch, HardDrives, Key, Laptop, MicrophoneStage, ShieldCheck, ShieldWarning, Trash, Waves } from '@/components/icons'
+import { ArrowsClockwise, Check, CircleNotch, HardDrives, Key, Laptop, ShieldWarning, Trash } from '@/components/icons'
 import { AnimatePresence } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { ApexButton, IconButton, Modal, SelectControl } from '@/components/ui'
@@ -57,7 +57,7 @@ function ModelSelect({ label, description, value, options, onChange }: { label: 
     <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
       <span><strong>{label}</strong><small>{description}</small></span>
       <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
-        <SelectControl label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+        <SelectControl fullWidth label={label} value={value} onChange={(event) => onChange(event.target.value)}>
           {choices.map((option) => <option key={option.value} value={option.value}>{`${option.label}${option.recommended ? ' · Recommended' : ''}`}</option>)}
         </SelectControl>
         {selected ? <small>{selected.detail}</small> : null}
@@ -185,10 +185,7 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
   return (
     <>
-      <header className={`voice-settings-header ${stylex.props(settingsStyles.voiceSettingsHeader).className ?? ""}`}>
-        <span className={`voice-settings-header__icon ${stylex.props(settingsStyles.voiceSettingsHeaderIcon).className ?? ""}`}><MicrophoneStage size={19} /></span>
-        <div><h1>Voice</h1><p>Connect a speech service, choose a model, then use the microphone or realtime orb.</p></div>
-      </header>
+      <header><h1>Voice</h1><p>Manage speech services for dictation and the realtime orb.</p></header>
 
       {serviceState === 'restart-required' ? (
         <div className={`voice-bridge-notice ${stylex.props(settingsStyles.voiceBridgeNotice, [responsiveStyles.voiceBridgeNotice, responsiveLayoutStyles.voiceBridgeNotice]).className ?? ""}`} role="status">
@@ -199,7 +196,6 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
       <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-connections-title">
         <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
-          <span><ShieldCheck size={15} /></span>
           <div><h2 id="voice-connections-title">Connections</h2><p>Add a key for any hosted service you want to use. Secure storage keeps keys encrypted between app sessions; otherwise they stay only in memory until Apex quits.</p></div>
         </div>
         {serviceState === 'ready' && status && !secureStorageAvailable ? (
@@ -235,14 +231,13 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
       <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-dictation-title">
         <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
-          <span><Waves size={15} /></span>
           <div><h2 id="voice-dictation-title">Dictation</h2><p>This controls the microphone beside Send.</p></div>
         </div>
         <div className={`voice-setup-card ${stylex.props(settingsStyles.voiceSetupCard).className ?? ""}`}>
           <label className={`voice-choice-row ${stylex.props(settingsStyles.voiceChoiceRow, [responsiveStyles.voiceChoiceRow, responsiveLayoutStyles.voiceChoiceRow]).className ?? ""}`}>
             <span><strong>Service</strong><small>Choose where your microphone audio is transcribed.</small></span>
             <span className={`voice-choice-control ${stylex.props(settingsStyles.voiceChoiceControl).className ?? ""}`}>
-              <SelectControl label="Dictation service" value={settings.voiceTranscriptionProvider} onChange={(event) => update('voiceTranscriptionProvider', event.target.value as VoiceTranscriptionProvider)}>
+              <SelectControl fullWidth label="Dictation service" value={settings.voiceTranscriptionProvider} onChange={(event) => update('voiceTranscriptionProvider', event.target.value as VoiceTranscriptionProvider)}>
                 {VOICE_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{`${option.label}${option.recommended ? ' · Recommended' : ''}`}</option>)}
               </SelectControl>
               <small>{provider.detail}</small>
@@ -313,7 +308,6 @@ export function VoiceSettings({ settings, onUpdate, voice, platform = 'darwin' }
 
       <section className={`voice-section ${stylex.props(settingsStyles.voiceSection).className ?? ""}`} aria-labelledby="voice-realtime-title">
         <div className={`voice-section__heading ${stylex.props(settingsStyles.voiceSectionHeading).className ?? ""}`}>
-          <span><Broadcast size={15} /></span>
           <div><h2 id="voice-realtime-title">Realtime orb</h2><p>The draggable voice agent. It uses your OpenAI connection.</p></div>
         </div>
         <div className={`voice-setup-card ${stylex.props(settingsStyles.voiceSetupCard).className ?? ""}`}>

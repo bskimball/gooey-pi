@@ -508,6 +508,25 @@ test.describe('Prime Work desktop smoke', () => {
     currentFixture = undefined
   })
 
+  test('keeps session history focused and drafts scoped when switching chats', async () => {
+    const first = page.locator('.session-row[title="Hermetic desktop fixture"]')
+    const second = page.locator('.session-row[title="Ownership peer fixture"]')
+    const history = page.getByRole('button', { name: 'Session history', exact: true })
+    const composer = page.locator('.composer textarea')
+    await first.click()
+    await composer.fill('Draft for the desktop fixture')
+    await history.click()
+    await page.getByRole('dialog', { name: 'Session history' }).getByRole('button', { name: /Ownership peer fixture/ }).press('Enter')
+    await expect(history).toBeFocused()
+    await expect(second).toHaveAttribute('aria-current', 'page')
+    await expect(composer).toHaveValue('')
+    await expect(page.locator('.transcript')).toHaveCount(1)
+    await expect(page.locator('.transcript')).toContainText('Ownership peer fixture')
+    await first.click()
+    await expect(first).toHaveAttribute('aria-current', 'page')
+    await expect(composer).toHaveValue('Draft for the desktop fixture')
+  })
+
   test('runs interactive chat previews without desktop or network access', async () => {
     let requests = 0
     const server = createServer((_request, response) => { requests += 1; response.end('unexpected') })
@@ -1332,7 +1351,7 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.getByRole('heading', { name: 'Pi not detected' })).toBeVisible()
     await expect(page.getByText('Install Pi to get started.', { exact: false })).toBeVisible()
     await page.getByRole('button', { name: 'Take me there' }).click()
-    await expect(page.getByRole('heading', { name: 'Pi', exact: true, level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Harness', exact: true, level: 1 })).toBeVisible()
     const refresh = page.getByRole('button', { name: 'Refresh harnesses' })
     await expect(refresh).toBeVisible()
     await expect(page.getByLabel('Pi executable override')).toBeVisible()
@@ -1678,6 +1697,10 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
   test('reveals session options on focus and starts a new session from a hovered project', async () => {
+    // Hidden Electron windows can suspend the compositor during an opacity transition.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    // The fixture expands the project with a click, leaving the pointer over its row.
+    await page.getByRole('textbox', { name: 'Search projects and sessions' }).hover()
     const sessionOptions = page.locator('.session-row__more').first()
     await sessionOptions.focus()
     await expect(sessionOptions).toBeVisible()
@@ -1693,7 +1716,8 @@ test.describe('Prime Work desktop smoke', () => {
     await projectSession.click()
 
     await expect(projectRow).toHaveClass(/is-selected/)
-    await expect(page.locator('.session-row-wrap.is-selected')).toHaveCount(0)
+    await expect(page.locator('.session-row[aria-current="page"]')).toHaveAttribute('title', 'Untitled session')
+    await expect(page.getByRole('heading', { name: 'What should we work on?' })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Message Pi' })).toHaveValue('')
   })
 
@@ -2330,34 +2354,19 @@ test.describe('Prime Work desktop smoke', () => {
     await page.locator('.session-row').filter({ hasText: 'Hermetic desktop fixture' }).click()
     await expect(page.locator('.file-changes')).toContainText('secondary-change.txt')
     await page.getByRole('button', { name: /Stage$/ }).last().click()
-    await page.getByRole('button', { name: 'Staged', exact: true }).click()
+    await page.getByRole('radio', { name: 'Staged', exact: true }).click()
     await expect(page.locator('.file-changes')).toContainText('secondary-change.txt')
     await page.getByRole('button', { name: /Unstage$/ }).last().click()
   })
-  test('dismisses the file changes popup, disables it in settings, and undoes a file', async () => {
+  test('undoes a file from the Changes tab', async () => {
     await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
-    const changesCard = page.locator('.changes-card')
-    await expect(changesCard).toBeVisible()
-    await changesCard.getByRole('button', { name: 'Dismiss file changes' }).click()
-    await expect(changesCard).toHaveCount(0)
-
-    await page.keyboard.press('Meta+,')
-    const popupToggle = page.getByRole('checkbox', { name: 'Show file changes popup' })
-    await expect(popupToggle).toBeChecked()
-    await popupToggle.focus()
-    await popupToggle.press('Space')
-    await expect(popupToggle).not.toBeChecked()
-    await expect.poll(() => page.evaluate(async () => (await window.apex.settings.get()).showFileChangesPopup)).toBe(false)
-    await page.locator('.session-row-wrap').filter({ hasText: 'Hermetic desktop fixture' }).locator('.session-row').click()
-    await expect(page.locator('.changes-card')).toHaveCount(0)
-
     await page.getByRole('tab', { name: 'Changes' }).click()
     await page.locator('.file-changes > button').first().click()
     await page.getByRole('button', { name: 'Undo changes', exact: true }).click()
     const undoDialog = page.getByRole('dialog', { name: 'Undo file changes?' })
     await expect(undoDialog).toContainText('staged and unstaged changes')
     await undoDialog.getByRole('button', { name: 'Undo changes', exact: true }).click()
-    await expect.poll(() => readFileSync(join(fixtureRoot, 'secondary-project', 'secondary-change.txt'), 'utf8')).toBe('base\n')
+    await expect.poll(() => readFileSync(join(fixtureRoot, 'secondary-project', 'secondary-change.txt'), 'utf8')).toMatch(/^base\r?\n$/)
     await expect(page.locator('.file-changes')).toContainText('No unstaged changes.')
   })
 

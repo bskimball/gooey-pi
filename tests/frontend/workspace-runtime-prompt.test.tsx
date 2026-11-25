@@ -222,24 +222,32 @@ describe('prompt admission versus background transcript reads', () => {
     expect(latest.messages.some((message) => message.id === 'user-1754500000000')).toBe(true)
   })
 
-  it('applies a background read normally when no prompt raced it', async () => {
+  it('reads a selected session during activation and ignores the previous session’s late reply', async () => {
+    const other = { ...session, id: 'other', filePath: '/sessions/other.jsonl' }
     let resolveRead!: (value: TranscriptMessage[]) => void
-    const read = vi.fn(() => new Promise<TranscriptMessage[]>((resolve) => { resolveRead = resolve }))
+    const read = vi.fn((_filePath: string) => new Promise<TranscriptMessage[]>((resolve) => { resolveRead = resolve }))
     const bridge = {
       sessions: { read },
       agent: { list: vi.fn(async () => []) },
     } as unknown as ApexApi
 
-    await act(async () => { root.render(createElement(Probe, { bridge })) })
+    await act(async () => { root.render(createElement(Probe, { bridge, sessions: [session, other] })) })
     await flush()
+    const resolvePrevious = resolveRead
+    act(() => {
+      latest.activateWorkspace(project, other)
+      expect(read.mock.calls).toEqual([[session.filePath], [other.filePath]])
+    })
 
     await act(async () => {
       resolveRead([{ id: 'record-1', role: 'assistant', timestamp: 0, parts: [{ type: 'text', text: 'persisted answer' }] }])
+      resolvePrevious([])
     })
     await flush()
 
     expect(latest.messages.map((message) => message.id)).toEqual(['record-1'])
     expect(latest.loadingSession).toBe(false)
+    expect(read).toHaveBeenCalledTimes(2)
   })
 
   it('does not insert an optimistic streaming assistant into a replacement workspace when followUp resolves after a switch', async () => {

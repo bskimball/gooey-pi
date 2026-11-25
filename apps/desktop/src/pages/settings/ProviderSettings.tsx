@@ -120,8 +120,12 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
 
   return (
     <section className={`settings-group provider-settings ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
-      <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}><h2>{agentName} catalogue</h2><div className={`provider-heading-actions ${stylex.props(settingsStyles.providerHeadingActions).className ?? ""}`}>{catalog && disabledCount < providerCount ? <ApexButton variant="danger" disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</ApexButton> : null}{disabledCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</ApexButton> : null}<IconButton xstyle={[workbenchStyles.button]} className="button button--icon" label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></IconButton></div></div>
-      <div className={`provider-catalog-summary ${stylex.props(settingsStyles.providerCatalogSummary).className ?? ""}`}><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} models are shown in Apex; ${agentName} checks credentials when you launch one`}</small> : null}</div>
+      <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}><h2>{agentName} catalogue</h2><div className={`provider-heading-actions ${stylex.props(settingsStyles.providerHeadingActions).className ?? ""}`}>{catalog && disabledCount < providerCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void disableAll()}>Hide all</ApexButton> : null}{disabledCount ? <ApexButton disabled={Boolean(busyProvider)} onClick={() => void enableAll()}>Show all</ApexButton> : null}<IconButton xstyle={[workbenchStyles.button]} className="button button--icon" label="Refresh providers" disabled={Boolean(busyProvider)} onClick={() => void run('refresh', onRefresh)}><ArrowsClockwise size={13} /></IconButton></div></div>
+      <div className={`provider-catalog-summary ${stylex.props(settingsStyles.providerCatalogSummary).className ?? ""}`}><strong>{catalog ? `${providerCount.toLocaleString()} providers · ${modelCount.toLocaleString()} models` : 'Loading provider catalogue…'}</strong>{catalog ? <small>{`${availableModelCount.toLocaleString()} ${availableModelCount === 1 ? 'model' : 'models'} available`}</small> : null}</div>
+      <div {...stylex.props(settingsStyles.providerCredentials)}>
+        <small>Credentials managed by the pi CLI</small>
+        <ApexButton compact variant="quiet" icon={<ArrowSquareOut size={12} />} onClick={onOpenDocs}>Credential setup</ApexButton>
+      </div>
       {catalog?.warning ? <Banner xstyle={[settingsStyles.providerCatalogWarning]} status="warning" role="status" className="provider-catalog-warning" title={catalog.warning} /> : null}
       <TabList
         value={view}
@@ -166,8 +170,7 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
               onChange={(checked) => void run(provider.id, () => onSetEnabled(provider.id, checked))}
               className={`provider-row__toggle ${stylex.props(settingsStyles.providerRowToggle).className ?? ""}`}
             />
-            <div className={`provider-row__identity ${stylex.props(settingsStyles.providerRowIdentity).className ?? ""}`}><strong>{provider.name}</strong><small>{`Credentials managed by the pi CLI · ${provider.availableModelCount.toLocaleString()} models`}</small></div>
-            <div className={`provider-row__actions ${stylex.props(settingsStyles.providerRowActions).className ?? ""}`}><ApexButton icon={<ArrowSquareOut size={13} />} onClick={onOpenDocs}>Credential setup</ApexButton></div>
+            <div className={`provider-row__identity ${stylex.props(settingsStyles.providerRowIdentity).className ?? ""}`}><strong>{provider.name}</strong><small>{provider.availableModelCount.toLocaleString()} {provider.availableModelCount === 1 ? 'model' : 'models'} available</small></div>
           </div>
         })}
       </div> : <div className={`provider-list provider-model-list ${stylex.props(settingsStyles.providerList).className ?? ""}`}>
@@ -214,7 +217,7 @@ export function ProviderSettings({ harness = 'pi', catalog, onRefresh, onSetEnab
 }
 
 const PROVIDERS_PAGE_INTROS: Record<HarnessId, string> = {
-  pi: 'Choose which Pi providers and models appear in Apex. These visibility settings do not change Pi itself; Pi provider authentication is managed by the pi CLI. You may need to log in to or out of providers in the Pi CLI before they appear on this screen.',
+  pi: 'Choose which providers and models appear in the model picker.',
 }
 
 /** The Providers settings page: heading plus the provider/model catalog section. */

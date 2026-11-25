@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { replaceEqualDeep } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SessionRecord, SpecialistRosterEntry } from '@/types/api'
 import { isSessionRunning, isSessionWaiting } from '@/app/session-attention'
 import type { SessionLiveMap } from '@/app/session-live'
@@ -23,30 +24,39 @@ const EMPTY: SpecialistRosters = {}
  * session's task_* receipts and pushes a new roster whenever that session file changes.
  */
 export function useSpecialistRosters(sessions: readonly SessionRecord[], activeSessionId: string | undefined, liveBySession: SessionLiveMap): SpecialistRosters {
-  const targets = sidebarRosterTargets(sessions, activeSessionId, liveBySession)
-  const targetKey = targets.join('\n')
+  const targetKey = useMemo(() => sidebarRosterTargets(sessions, activeSessionId, liveBySession).join('\n'), [sessions, activeSessionId, liveBySession])
   const [rosters, setRosters] = useState<SpecialistRosters>(EMPTY)
-
-  useEffect(() => {
-    const api = typeof window === 'undefined' ? undefined : window.apex?.specialists
-    if (!api?.onChanged) return
-    return api.onChanged((change) => {
-      setRosters((current) => change.filePath in current ? { ...current, [change.filePath]: change.specialists } : current)
-    })
-  }, [])
 
   useEffect(() => {
     const api = typeof window === 'undefined' ? undefined : window.apex?.specialists
     if (!api?.track) return
     let cancelled = false
     const paths = targetKey ? targetKey.split('\n') : []
-    // Keep what we already know while the main process reads; drop sessions no longer tracked.
-    setRosters((current) => Object.fromEntries(paths.map((path) => [path, current[path] ?? []])))
-    void api.track(paths).then((next) => {
-      if (cancelled) return
-      setRosters((current) => Object.fromEntries(paths.map((path) => [path, next[path] ?? current[path] ?? []])))
+    const pushed = new Set<string>()
+    // Absence and an empty roster both render no rows. Keep only visible entries.
+    const select = (current: SpecialistRosters, snapshot: SpecialistRosters = EMPTY) => {
+      const next: Record<string, readonly SpecialistRosterEntry[]> = {}
+      for (const path of paths) {
+        const entries = pushed.has(path) ? current[path] : snapshot[path] ?? current[path]
+        if (entries?.length) next[path] = entries
+      }
+      return replaceEqualDeep(current, next)
+    }
+    setRosters((current) => select(current))
+    const unsubscribe = api.onChanged?.(({ filePath, specialists }) => {
+      if (!paths.includes(filePath)) return
+      pushed.add(filePath)
+      setRosters((current) => {
+        const next = { ...current }
+        if (specialists.length) next[filePath] = specialists
+        else delete next[filePath]
+        return replaceEqualDeep(current, next)
+      })
+    })
+    void api.track(paths).then((snapshot) => {
+      if (!cancelled) setRosters((current) => select(current, snapshot))
     }).catch(() => undefined)
-    return () => { cancelled = true }
+    return () => { cancelled = true; unsubscribe?.() }
   }, [targetKey])
 
   useEffect(() => () => {

@@ -49,3 +49,22 @@ body.is-resizing-horizontal .terminal-drawer, body.is-resizing-horizontal .termi
 .icon-button:active:not(:disabled) { transform: scale(.96); }
 .icon-button.is-active { color: var(--text); background: var(--surface-selected); }
 .button:active:not(:disabled) { transform: scale(.96); }
+/* The rail and sidebar stay live while React exchanges snapshots of the workspace. */
+:root:active-view-transition-type(workspace-navigation)::view-transition { pointer-events: none; }
+::view-transition-group(workspace-body), ::view-transition-group(workspace-title) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out);
+}
+::view-transition-old(workspace-body), ::view-transition-old(workspace-title) {
+  animation: workspace-leave 120ms ease-out both;
+}
+::view-transition-new(workspace-body), ::view-transition-new(workspace-title) {
+  animation: workspace-enter 180ms var(--ease-out) both;
+}
+@keyframes workspace-leave { to { opacity: 0; transform: translateY(-2px); } }
+@keyframes workspace-enter { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(workspace-body), ::view-transition-group(workspace-title),
+  ::view-transition-old(workspace-body), ::view-transition-new(workspace-body),
+  ::view-transition-old(workspace-title), ::view-transition-new(workspace-title) { animation-duration: 0s; }
+}

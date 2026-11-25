@@ -106,3 +106,17 @@
 
 /* Compaction card keeps its icon off the border: apex-overrides wins over StyleX paddingLeft:0. */
 .activity-line--compaction .activity-tool__summary { min-height: 32px; padding-inline: 10px; }
+/* Give disclosure icons the press feedback of compact buttons without moving the row or its hit target. */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root:not(.reduce-motion) :where(button[aria-expanded], .sidebar__destinations > button) > svg {
+    transition: scale 120ms var(--ease-out), transform 160ms var(--ease-out), color var(--fast);
+  }
+  :root:not(.reduce-motion) :where(button[aria-expanded], .sidebar__destinations > button):enabled:hover > svg { scale: 1.06; }
+  :root:not(.reduce-motion) :where(button[aria-expanded], .sidebar__destinations > button):enabled:active:not(:focus-visible) > svg { scale: .94; }
+}
+/* Astryx owns the scroll track and slide wrappers. Each preview fills one snap stop. */
+.chat-image-carousel [aria-roledescription="carousel"] > [role="group"] { width: 100%; }
+.chat-image-carousel [aria-roledescription="slide"] { flex: 0 0 100%; min-width: 0; }
+.chat-image-carousel .image-part__preview { width: 100%; height: 100%; margin: 0; }
+.chat-image-carousel .image-part { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.chat-image-carousel__expanded .image-lightbox__image { max-height: calc(100dvh - 120px); }

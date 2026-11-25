@@ -93,12 +93,11 @@
 .subagent-lane.is-stopped .subagent-lane__state, .subagent-lane.is-closed .subagent-lane__state { color: var(--text-secondary); }
 /* Plan updates head the steps that follow them: the count and active step read as a section label, not a tool call. */
 .todo-step__summary:hover:not(:disabled) { background: var(--surface-subtle); }
+.todo-step__summary[aria-expanded="true"] .disclosure-caret { transform: rotate(90deg); }
 .todo-step.is-finished .todo-step__count { color: var(--success); background: var(--success-soft); }
 .todo-step__list>li { display: flex; align-items: baseline; gap: 8px; color: var(--text-secondary); font-size: var(--chat-meta); line-height: 1.5; }
 .todo-step__list>li.is-completed { color: var(--text-tertiary); }
-.todo-step__list>li.is-completed .todo-step__mark { border-color: var(--success); color: var(--canvas); background: var(--success); }
 .todo-step__list>li.is-in_progress { color: var(--text); font-weight: 550; }
-.todo-step__list>li.is-in_progress .todo-step__mark { border-color: var(--apex); background: radial-gradient(circle, var(--apex) 0 2.5px, transparent 3px); }
 .todo-step__list>li.is-cancelled { color: var(--text-tertiary); text-decoration: line-through; }
 /* The settled turn's closing line: outcome and scale, then the working-tree diff it left behind. */
 .turn-receipt__outcome>svg { color: var(--success); }
@@ -161,3 +160,7 @@ article.message--user:last-of-type { animation: row-in 240ms cubic-bezier(.23, 1
 @media (prefers-reduced-motion: reduce) {
   .work-group__summary .disclosure-caret { transition: none; }
 }
+[data-session-motion='full'] .transcript__inner { transition: opacity 140ms var(--ease-out); }
+[data-session-motion='full'] .transcript[aria-busy='true'] .transcript__inner { opacity: 0.7; }
+[data-session-motion='full'] .transcript-loading { animation: session-loading-appear 100ms ease-out 100ms backwards; }
+@keyframes session-loading-appear { from { opacity: 0; } to { opacity: 1; } }

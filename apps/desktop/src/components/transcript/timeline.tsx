@@ -25,23 +25,14 @@ import type { MessagePart, TranscriptMessage } from '@/types/api'
 import { writeClipboardText } from '@/lib/clipboard'
 import { boundText } from '@/lib/render-bounds'
 import { MarkdownText } from '../MarkdownText'
-import { ImageParts } from './TranscriptImage'
+import { ImageParts, imageRunAt } from './TranscriptImage'
 import { StatusMark } from '../activity/StatusMark'
 import { SyntaxText } from './syntax'
 import { RECENT_TIMELINE_PAGES, TIMELINE_PAGE_SIZE, TimelinePage } from './TimelinePage'
 import { diffCounts, EditDiff, editDiffLines, isEditTool } from './edit-diff'
 import { AskUserCard, askUserExchange } from './ask-user-card'
-import {
-  arrivalMotionProps,
-  collapseMotionProps,
-  isSubagentTool,
-  MorphInline,
-  pairSubagentCalls,
-  SubagentLane,
-  TodoStep,
-  useInstantMotion,
-  type SubagentPairs,
-} from './subagent-lane'
+import { isSubagentTool, pairSubagentCalls, SubagentLane, TodoStep, type SubagentPairs } from './subagent-lane'
+import { arrivalMotionProps, collapseMotionProps, MorphInline, useInstantMotion } from '../ContentMotion'
 
 function timestamp(value?: string | number): number | undefined {
   if (value === undefined) return undefined
@@ -449,7 +440,7 @@ export function WorkTimeline({ id, parts, showReasoning, showTools, streaming = 
       return <ToolPart key={key} part={part} result={result} animateArrival={streaming} />
     }
     if (part.type === 'toolResult') return showTools ? <StandaloneToolResult key={key} part={part} animateArrival={streaming} /> : <ImageParts key={key} images={part.images} />
-    if (part.type === 'image') return <ImageParts key={key} images={[part]} />
+    if (part.type === 'image') return imageRunAt(parts, index, key)
     if (part.type === 'agentMessage') return <AgentActivityPart key={key} part={part} animateArrival={streaming} />
     if (part.type === 'text') return part.text.trim() || !streaming ? <motion.div className={`activity-line activity-line--note ${stylex.props(transcriptStyles.activityLine, transcriptStyles.activityLineNote).className ?? ""}`} key={key} {...arrivalMotionProps(instant, streaming)}><MarkdownText variant="note" text={part.text} streaming={isTailPart} /></motion.div> : null
     return null

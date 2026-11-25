@@ -6,7 +6,7 @@ import { styles as workbenchStyles } from 'apex-ui/styles/workbench.stylex'
 import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { AnimatePresence, motion } from 'motion/react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { memo, useMemo, useState, type ReactNode, type RefObject } from 'react'
 import * as stylex from '@stylexjs/stylex'
 import { CaretDown, CircleNotch } from './icons'
 import type { GitStatus, HarnessId, TranscriptMessage } from '@/types/api'
@@ -18,7 +18,9 @@ import { ActivityMessage, AgentMessage, AssistantMessage, GoalMessage, SteerRead
 import { useTranscriptScroll } from './transcript/scroll'
 import { createAssistantTurnCoalescer } from './transcript/grouping'
 import { createSessionSummarySelector } from './inspector/session-summary'
-import { SubagentContext, useInstantMotion } from './transcript/subagent-lane'
+import { SubagentContext } from './transcript/subagent-lane'
+import { useInstantMotion } from './ContentMotion'
+import { TranscriptHeader } from './TranscriptHeader'
 import { TurnNavigator } from './transcript/turn-navigator'
 import { formatWorkedDuration } from './transcript/timeline'
 import { WorkspaceImageContext } from './WorkspaceImage'
@@ -26,16 +28,6 @@ import { BrowserReferenceContext } from './transcript/BrowserReferenceCards'
 import type { BrowserReference } from '@/lib/browser-annotations'
 
 const styles = stylex.create({
-  header: {
-    position: 'relative', zIndex: 20, width: '100%',
-    backgroundColor: 'var(--canvas)', boxShadow: '0 6px 16px -8px rgb(0 0 0 / 0.45)',
-    flexShrink: 0,
-  },
-  headerInner: {
-    width: '100%', maxWidth: 'var(--transcript-measure)', marginInline: 'auto',
-    display: 'flex', alignItems: 'center', gap: 12, paddingInline: { default: 24, '@media (max-width: 720px)': 18 }, paddingBlock: 4, minHeight: 36,
-  },
-  currentTurn: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden' },
   hidden: { display: 'none' },
   jumpToBottomWrap: {
     position: 'sticky',
@@ -118,6 +110,8 @@ interface TranscriptProps {
   /** Reserve room for bottom-docked changes and queued-message affordances. */
   bottomDockHasChanges?: boolean
   queuedMessageCount?: number
+  /** A persistent workspace header owns turn navigation for this scroller. */
+  externalScrollRef?: RefObject<HTMLDivElement | null>
   sessionActions?: ReactNode
   onOpenSessionReference?(sessionId: string, harness: HarnessId): void
   onOpenSpecialist?(id: string): void
@@ -128,14 +122,14 @@ interface TranscriptProps {
 }
 
 
-export function Transcript({ messages, git, cwd, onRevealBrowserReference, harness = 'pi', loading, hidden = false, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, sessionActions, onOpenSessionReference, onOpenSpecialist, variant = 'thread', shortName }: TranscriptProps) {
+export const Transcript = memo(function Transcript({ messages, git, cwd, onRevealBrowserReference, harness = 'pi', loading, hidden = false, active = false, showReasoning = true, showTools = true, onOpenChanges, onSuggestion, suggestionsDisabled, showPinnedChanges = true, bottomDockHasChanges = false, queuedMessageCount = 0, externalScrollRef, sessionActions, onOpenSessionReference, onOpenSpecialist, variant = 'thread', shortName }: TranscriptProps) {
   const workingName = shortName ?? HARNESS_SHORT_NAMES[harness]
   const [selectSummary] = useState(createSessionSummarySelector)
   const { specialists } = selectSummary(messages)
   const subagentContext = useMemo(() => ({ specialists, onOpen: onOpenSpecialist }), [specialists, onOpenSpecialist])
   const [coalesce] = useState(createAssistantTurnCoalescer)
   const groupedMessages = useMemo(() => coalesce(messages), [coalesce, messages])
-  const { announcement, hiddenCount, isPinned, scrollRef, scrollToBottom, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages, active)
+  const { announcement, hiddenCount, isPinned, scrollRef, scrollToBottom, showEarlier, updatePinnedState, visibleMessages } = useTranscriptScroll(groupedMessages, active, externalScrollRef)
   const instant = useInstantMotion()
   const activeAssistantId = useMemo(() => active && groupedMessages.at(-1)?.role === 'assistant' ? groupedMessages.at(-1)?.id : undefined, [active, groupedMessages])
   // Workspace changes belong to the newest settled turn; older turns cannot claim the current working tree.
@@ -164,12 +158,7 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
   ].filter(Boolean).join(' ')
 
   return <BrowserReferenceContext.Provider value={onRevealBrowserReference}><WorkspaceImageContext.Provider value={cwd}><SubagentContext.Provider value={subagentContext}>
-    {sessionActions ? <div {...stylex.props(styles.header, hidden && styles.hidden)}>
-      <div {...stylex.props(styles.headerInner)}>
-        <div {...stylex.props(styles.currentTurn)}>{!loading ? <TurnNavigator scrollRef={scrollRef} active={active} inline /> : null}</div>
-        {sessionActions}
-      </div>
-    </div> : null}
+    {sessionActions && !hidden ? <TranscriptHeader scrollRef={scrollRef} active={active} loading={loading}>{sessionActions}</TranscriptHeader> : null}
     <div ref={scrollRef} className={[[`${transcriptClasses} `].filter(Boolean).join(' '), stylex.props(baseStyles.scrollArea, transcriptStyles.transcript, queuedMessageCount > 0 && transcriptStyles.transcriptHasQueuedMessages, showPinnedChanges && git.files.length > 0 && transcriptStyles.transcriptHasPinnedChanges, hidden && styles.hidden, [responsiveStyles.transcript, responsiveLayoutStyles.transcript]).className].filter(Boolean).join(" ")} aria-busy={loading} onScroll={updatePinnedState}>
       <div className={`sr-only ${stylex.props(baseStyles.srOnly).className ?? ""}`} role="status" aria-live="polite">{announcement}</div>
       <div className={`transcript__inner ${stylex.props(workbenchStyles.transcriptInner, transcriptStyles.transcriptInner, responsiveStyles.transcriptInner).className ?? ""}`}>
@@ -245,7 +234,7 @@ export function Transcript({ messages, git, cwd, onRevealBrowserReference, harne
         ) : null}
       </AnimatePresence>
     </div>
-    {!hidden && !loading && !sessionActions ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
+    {!hidden && !loading && !sessionActions && !externalScrollRef ? <TurnNavigator scrollRef={scrollRef} active={active} /> : null}
     {!hidden && showPinnedChanges && git.files.length ? <div className={`transcript-changes-pin ${stylex.props(workbenchStyles.transcriptChangesPin, transcriptStyles.transcriptChangesPin).className ?? ""}`}><ChangesCard git={git} onOpenChanges={onOpenChanges} /></div> : null}
   </SubagentContext.Provider></WorkspaceImageContext.Provider></BrowserReferenceContext.Provider>
-}
+})

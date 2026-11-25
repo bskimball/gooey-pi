@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { TranscriptMessage } from '@/types/api'
 import { newestWindow } from '@/lib/render-bounds'
 
@@ -11,8 +11,9 @@ function pinScrollerToBottom(scroller: HTMLDivElement, lastScrollTopRef: { curre
   lastScrollTopRef.current = scroller.scrollTop
 }
 
-export function useTranscriptScroll(messages: TranscriptMessage[], active = false) {
-  const scrollRef = useRef<HTMLDivElement>(null)
+export function useTranscriptScroll(messages: TranscriptMessage[], active = false, externalScrollRef?: RefObject<HTMLDivElement | null>) {
+  const localScrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = externalScrollRef ?? localScrollRef
   const previousCountRef = useRef(0)
   const previousStreamingRef = useRef(false)
   const pinnedToBottomRef = useRef(true)
@@ -40,7 +41,7 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
     else if (!previousStreamingRef.current && streaming) setAnnouncement('Pi is working.')
     previousStreamingRef.current = streaming
     previousCountRef.current = messages.length
-  }, [live, messages, streaming])
+  }, [live, messages, scrollRef, streaming])
 
   useEffect(() => {
     if (!live || typeof ResizeObserver === 'undefined') return
@@ -54,7 +55,7 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
     })
     observer.observe(inner)
     return () => observer.disconnect()
-  }, [live])
+  }, [live, scrollRef])
 
   const updatePinnedState = () => {
     const scroller = scrollRef.current
@@ -84,7 +85,7 @@ export function useTranscriptScroll(messages: TranscriptMessage[], active = fals
       scroller.scrollTop = targetTop
     }
     lastScrollTopRef.current = targetTop
-  }, [])
+  }, [scrollRef])
 
   const showEarlier = () => setVisibleLimit((limit) => Math.min(messages.length, limit + 250))
 

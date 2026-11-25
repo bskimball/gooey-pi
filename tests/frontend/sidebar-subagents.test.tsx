@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from '../../apps/desktop/src/components/Sidebar'
 import { sidebarSubagentRows } from '../../apps/desktop/src/components/SidebarSubagents'
 import { orderSpecialistTabs, SpecialistsPanel } from '../../apps/desktop/src/components/inspector/SpecialistsPanel'
-import { MAX_SIDEBAR_ROSTERS, nextLiveSpecialistId, sidebarRosterTargets, useOpenSessionSpecialist } from '../../apps/desktop/src/hooks/useSpecialistRosters'
+import { MAX_SIDEBAR_ROSTERS, nextLiveSpecialistId, sidebarRosterTargets, useOpenSessionSpecialist, useSpecialistRosters, type SpecialistRosters } from '../../apps/desktop/src/hooks/useSpecialistRosters'
 import { shortModelName } from '../../apps/desktop/src/lib/specialist-status'
-import type { ProjectRecord, SessionRecord, SpecialistRosterEntry, TranscriptMessage } from '../../apps/desktop/src/types/api'
+import type { ProjectRecord, SessionRecord, SpecialistRosterChange, SpecialistRosterEntry, TranscriptMessage } from '../../apps/desktop/src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -43,6 +43,37 @@ afterEach(async () => {
 const noop = () => undefined
 
 describe('sidebar sub-agent rows', () => {
+  it('keeps a newer roster event when the initial snapshot arrives late', async () => {
+    const selected = session('current')
+    const sessions = [selected]
+    let resolveSnapshot!: (value: SpecialistRosters) => void
+    let onChange!: (change: SpecialistRosterChange) => void
+    const snapshot = new Promise<SpecialistRosters>((resolve) => { resolveSnapshot = resolve })
+    vi.stubGlobal('apex', { specialists: {
+      track: () => snapshot,
+      onChanged: (listener: typeof onChange) => { onChange = listener; return noop },
+    } })
+    let latest: SpecialistRosters = {}
+    function Probe() {
+      latest = useSpecialistRosters(sessions, selected.id, {})
+      return null
+    }
+    try {
+      await act(async () => root.render(<Probe />))
+      const empty = latest
+      act(() => onChange({ filePath: selected.filePath, specialists: [] }))
+      expect(latest).toBe(empty)
+      const worker = agent('live', 'running')
+      act(() => onChange({ filePath: selected.filePath, specialists: [worker] }))
+      const updated = latest
+      await act(async () => resolveSnapshot({ [selected.filePath]: [] }))
+      expect(latest).toBe(updated)
+      expect(latest[selected.filePath]).toEqual([worker])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('lists only live work for other sessions and live-then-recent work for the open one', () => {
     const roster = [agent('1', 'done'), agent('2', 'running'), agent('3', 'error'), agent('4', 'waiting'), agent('5', 'done')]
     expect(sidebarSubagentRows(roster, false)).toEqual({ shown: [roster[1], roster[3]], hidden: [] })

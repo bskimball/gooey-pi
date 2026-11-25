@@ -33,9 +33,9 @@ describe('PrivacySettings', () => {
     act(() => root.render(<PrivacySettings settings={{ ...DEFAULT_SETTINGS, activeHarness: harness, telemetry }} onUpdate={onUpdate} />))
 
     expect(container.textContent).toContain('Understand how Apex stores settings and connects to agents.')
-    expect(container.textContent).toContain('Settings stay on this device')
+    expect(container.textContent).toContain('Local data')
     expect(container.textContent).toContain('Project metadata and interface settings are stored locally on this device.')
-    expect(container.textContent).toContain('Requests use your selected agent')
+    expect(container.textContent).toContain('Agent requests')
     expect(container.textContent).toContain('Session requests follow the selected agent and its provider configuration.')
     expect(container.querySelector('input[type="checkbox"]')).toBeNull()
     expect(container.textContent).not.toMatch(/optional diagnostics|share diagnostics|this Mac/i)

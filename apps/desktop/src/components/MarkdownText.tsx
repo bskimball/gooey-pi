@@ -1,7 +1,7 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { styles as markdownStyles } from 'apex-ui/styles/markdown.stylex'
-import { cloneElement, createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react'
+import { Children, cloneElement, createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react'
 import type { Components, ExtraProps, UrlTransform } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -10,6 +10,8 @@ import { HtmlFence } from './HtmlFence'
 import { ProjectPreview } from './ProjectPreview'
 import { parseProjectPreview } from 'apex-core/interactive-preview'
 import { WorkspaceImage } from './WorkspaceImage'
+import { markdownImageGalleries } from './markdown-image-galleries'
+import { ImageCarousel } from './transcript/ImageCarousel'
 import { parseRichWidget, RichWidget, StreamingWidgetSkeleton } from 'apex-ui/RichWidgets'
 import { useInteractiveChat } from './InteractiveChatContext'
 
@@ -87,7 +89,7 @@ function markdownEdges() {
   }
 }
 
-const markdownRehypePlugins = [markdownEdges]
+const markdownRehypePlugins = [markdownImageGalleries, markdownEdges]
 
 type MarkdownBlockTag = 'p' | 'blockquote' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'ul' | 'ol' | 'li' | 'pre' | 'table' | 'td' | 'th' | 'hr' | 'strong'
 
@@ -158,6 +160,7 @@ function MarkdownPre({ node, children, ...props }: ComponentProps<'pre'> & Extra
 }
 
 const markdownComponents: Components = {
+  figure: ({ children }) => <ImageCarousel>{Children.toArray(children)}</ImageCarousel>,
   a: ({ node: _node, ...props }) => <MarkdownLink {...props} />,
   blockquote: (props) => <MarkdownBlock {...props} as="blockquote" />,
   code: MarkdownCode,

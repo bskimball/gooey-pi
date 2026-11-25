@@ -69,17 +69,10 @@ export function WorkspaceImage({ src, alt }: ComponentProps<'img'>) {
     return <TranscriptImage source={inlineDataUrl} alt={label} />
   }
 
-  if (!canReadWorkspace) {
-    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Image: {label}]</span>
-  }
-
-  if (!resolved || resolved.key !== requestKey || resolved.status === 'loading') {
-    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Loading image: {label}]</span>
-  }
-
-  if (resolved.status === 'error' || !resolved.dataUrl) {
-    return <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[Image unavailable: {label}]</span>
-  }
-
-  return <TranscriptImage source={resolved.dataUrl} alt={label} />
+  const current = canReadWorkspace && resolved?.key === requestKey ? resolved : null
+  if (current?.dataUrl) return <TranscriptImage source={current.dataUrl} alt={label} />
+  const status = !canReadWorkspace ? 'Image' : current?.status === 'error' ? 'Image unavailable' : 'Loading image'
+  return <TranscriptImage alt={label} placeholder={
+    <span className={`markdown-image-placeholder ${stylex.props(transcriptStyles.markdownImagePlaceholder).className ?? ""}`}>[{status}: {label}]</span>
+  } />
 }

@@ -3,6 +3,7 @@ node_modules
 /dist/
 /release/
 /coverage/
+/tmp/
 playwright-report
 test-results
 .DS_Store

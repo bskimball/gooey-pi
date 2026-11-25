@@ -10,6 +10,7 @@ import * as rich from './RichContent.stories'
 import * as task from './TaskWorkflow.stories'
 
 type ChatSources = {
+  'apps/desktop/src/components/ContentMotion.tsx': typeof import('../../apps/desktop/src/components/ContentMotion')
   'apps/desktop/src/components/Composer.tsx': typeof import('../../apps/desktop/src/components/Composer')
   'apps/desktop/src/components/ComposerBusyIndicator.tsx': typeof import('../../apps/desktop/src/components/ComposerBusyIndicator')
   'apps/desktop/src/components/ComposerQueue.tsx': typeof import('../../apps/desktop/src/components/ComposerQueue')
@@ -32,6 +33,7 @@ type ChatSources = {
   'apps/desktop/src/components/transcript/turn-navigator.tsx': typeof import('../../apps/desktop/src/components/transcript/turn-navigator')
   'apps/desktop/src/components/transcript/turn-receipt.tsx': typeof import('../../apps/desktop/src/components/transcript/turn-receipt')
   'apps/desktop/src/components/transcript/BrowserReferenceCards.tsx': typeof import('../../apps/desktop/src/components/transcript/BrowserReferenceCards')
+  'apps/desktop/src/components/transcript/ImageCarousel.tsx': typeof import('../../apps/desktop/src/components/transcript/ImageCarousel')
   'apps/desktop/src/components/transcript/TranscriptImage.tsx': typeof import('../../apps/desktop/src/components/transcript/TranscriptImage')
   'apps/desktop/src/components/MarkdownText.tsx': typeof import('../../apps/desktop/src/components/MarkdownText')
   'apps/desktop/src/components/WorkspaceImage.tsx': typeof import('../../apps/desktop/src/components/WorkspaceImage')
@@ -79,7 +81,7 @@ export const chatCoverage = {
   WorkTimeline: story('apps/desktop/src/components/transcript/timeline.tsx', transcript, 'TimelineStates'),
   WorkDisclosure: story('apps/desktop/src/components/transcript/timeline.tsx', transcript, 'TimelineStates'),
   WorkGroup: story('apps/desktop/src/components/transcript/work-group.tsx', transcript, 'WorkGroups'),
-  MorphInline: story('apps/desktop/src/components/transcript/subagent-lane.tsx', agents, 'TodoStates'),
+  MorphInline: story('apps/desktop/src/components/ContentMotion.tsx', agents, 'TodoStates'),
   SubagentLane: story('apps/desktop/src/components/transcript/subagent-lane.tsx', agents, 'SpecialistStates'),
   TodoStep: story('apps/desktop/src/components/transcript/subagent-lane.tsx', agents, 'TodoStates'),
   SubagentContext: story('apps/desktop/src/components/transcript/subagent-lane.tsx', agents, 'SpecialistStates'),
@@ -93,6 +95,7 @@ export const chatCoverage = {
   BrowserReferenceCards: story('apps/desktop/src/components/transcript/BrowserReferenceCards.tsx', browser, 'Connected'),
   BrowserReferenceContext: story('apps/desktop/src/components/transcript/BrowserReferenceCards.tsx', browser, 'Connected'),
   TranscriptImage: story('apps/desktop/src/components/transcript/TranscriptImage.tsx', rich, 'ImageLoadedAndZoom'),
+  ImageCarousel: story('apps/desktop/src/components/transcript/ImageCarousel.tsx', rich, 'ImageCarousel'),
   ImageParts: story('apps/desktop/src/components/transcript/TranscriptImage.tsx', rich, 'ImageBrokenAndUnavailable'),
   MarkdownText: story('apps/desktop/src/components/MarkdownText.tsx', rich, 'MarkdownDocument'),
   MarkdownScopeContext: story('apps/desktop/src/components/MarkdownText.tsx', rich, 'MarkdownScopes'),

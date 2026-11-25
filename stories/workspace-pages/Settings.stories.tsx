@@ -65,6 +65,7 @@ const config = {
   component: Settings,
   beforeEach: fixedClock,
   parameters: { layout: 'fullscreen' },
+  decorators: [(Story) => <div style={{ height: '100dvh' }}><Story /></div>],
   args: { section: 'general', failure: false, loading: false, update: 'idle' },
   argTypes: {
     section: { control: 'select', options: ['general', 'appearance', 'agent', 'providers', 'voice', 'pets', 'browser', 'terminal', 'privacy', 'about'] },

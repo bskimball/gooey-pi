@@ -5,6 +5,16 @@ import { MarkdownText } from '../../apps/desktop/src/components/MarkdownText'
 import { applyVisualPreviewGuideline, VISUAL_PREVIEW_GUIDELINE } from '../../apps/desktop/assets/extensions/apex-visual-previews'
 
 describe('chat Markdown rendering', () => {
+  it('groups consecutive image paragraphs and retains text around individual inline images', () => {
+    const src = 'data:image/png;base64,iVBORw0KGgo='
+    const html = renderToStaticMarkup(createElement(MarkdownText, {
+      text: `![First](${src})\n\n![Second](${src})\n\nSee ![Detail](${src}) here.`,
+    }))
+    expect(html.match(/aria-roledescription="carousel"/g)).toHaveLength(1)
+    expect(html.match(/aria-roledescription="slide"/g)).toHaveLength(2)
+    expect(html).toMatch(/<p\b[^>]*>See <button[^>]*>[\s\S]*?alt="Detail"[\s\S]*?<\/button> here\.<\/p>/)
+  })
+
   it('renders common Markdown structures instead of exposing their markers', () => {
     const html = renderToStaticMarkup(createElement(MarkdownText, {
       text: '## Result\n\n**Done** with `code`.\n\n- one\n- two\n\n```ts\nconst ok = true\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |',

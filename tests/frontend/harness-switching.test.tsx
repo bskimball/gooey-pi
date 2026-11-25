@@ -1274,13 +1274,13 @@ describe('harness settings surfaces', () => {
     await act(async () => { root.render(renderSettings('general')) })
     expect(container.querySelector('h1')?.textContent).toBe('General')
     await act(async () => { root.render(renderSettings('agent')); await Promise.resolve() })
-    expect(container.querySelector('h1')?.textContent).toBe('Pi')
-    expect(container.querySelector('.settings-nav .is-active')?.textContent).toContain('Harness')
+    expect(container.querySelector('h1')?.textContent).toBe('Harness')
+    expect(container.querySelector('.settings-nav [aria-current="page"]')?.textContent).toContain('Harness')
 
     await click([...container.querySelectorAll<HTMLButtonElement>('.settings-nav button')].find((button) => button.textContent?.includes('General'))!)
     expect(container.querySelector('h1')?.textContent).toBe('General')
     await act(async () => { root.render(renderSettings('agent', 1)); await Promise.resolve() })
-    expect(container.querySelector('h1')?.textContent).toBe('Pi')
+    expect(container.querySelector('h1')?.textContent).toBe('Harness')
   })
 
   it('refreshes Pi discovery without changing settings', async () => {

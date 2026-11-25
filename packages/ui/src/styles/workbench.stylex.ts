@@ -443,6 +443,7 @@ export const styles = stylex.create({
     "whiteSpace": "nowrap",
     "textOverflow": "ellipsis"
   },
+  workspacePage: { display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0 },
   "workbenchContent": {
     "flexGrow": 1,
     "flexShrink": 1,

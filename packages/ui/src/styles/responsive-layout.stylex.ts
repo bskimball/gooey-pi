@@ -624,20 +624,6 @@ export const styles = stylex.create({
       }
     }
   },
-  "themeOptions": {
-    "rowGap": {
-      "default": "8px",
-      "@media (max-width: 720px)": {
-        "default": "5px"
-      }
-    },
-    "columnGap": {
-      "default": "8px",
-      "@media (max-width: 720px)": {
-        "default": "5px"
-      }
-    }
-  },
   "settingsRowTextSize": {
     "alignItems": {
       "default": "center",
@@ -722,88 +708,4 @@ export const styles = stylex.create({
       }
     }
   },
-  "settingsPage": {
-    "display": {
-      "default": "grid",
-      "@media (max-width: 720px)": {
-        "default": "flex"
-      }
-    }
-  },
-  "settingsNav": {
-    "display": {
-      "default": "flex",
-      "@media (max-width: 720px)": {
-        "default": "flex"
-      }
-    },
-    "paddingTop": {
-      "default": "20px",
-      "@media (max-width: 720px)": {
-        "default": "5px"
-      }
-    },
-    "paddingRight": {
-      "default": "10px",
-      "@media (max-width: 720px)": {
-        "default": "7px"
-      }
-    },
-    "paddingBottom": {
-      "default": "20px",
-      "@media (max-width: 720px)": {
-        "default": "5px"
-      }
-    },
-    "paddingLeft": {
-      "default": "10px",
-      "@media (max-width: 720px)": {
-        "default": "7px"
-      }
-    },
-    "borderRightWidth": {
-      "default": "1px",
-      "@media (max-width: 720px)": {
-        "default": 0
-      }
-    },
-    "borderRightStyle": {
-      "default": "solid",
-      "@media (max-width: 720px)": {
-        "default": "none"
-      }
-    },
-    "borderRightColor": {
-      "default": "var(--edge)",
-      "@media (max-width: 720px)": {
-        "default": "currentColor"
-      }
-    }
-  },
-  "settingsContentInner": {
-    "paddingTop": {
-      "default": "36px",
-      "@media (max-width: 720px)": {
-        "default": "25px"
-      }
-    },
-    "paddingRight": {
-      "default": "32px",
-      "@media (max-width: 720px)": {
-        "default": "18px"
-      }
-    },
-    "paddingBottom": {
-      "default": "70px",
-      "@media (max-width: 720px)": {
-        "default": "55px"
-      }
-    },
-    "paddingLeft": {
-      "default": "32px",
-      "@media (max-width: 720px)": {
-        "default": "18px"
-      }
-    }
-  }
 });

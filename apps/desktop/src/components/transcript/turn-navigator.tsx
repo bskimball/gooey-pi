@@ -4,7 +4,7 @@ import { useEffect, useState, type RefObject } from 'react'
 import * as stylex from '@stylexjs/stylex'
 import { ArrowUp } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
-import { useInstantMotion } from './subagent-lane'
+import { useInstantMotion } from '../ContentMotion'
 import { isOverlayOpen } from '@/lib/app-shortcuts'
 import { shortcutLabel, detectRendererPlatform } from '@/lib/platform-shortcuts'
 
@@ -23,8 +23,20 @@ interface CurrentTurn {
   text: string
 }
 
-function prompts(scroller: HTMLElement): HTMLElement[] {
-  return [...scroller.querySelectorAll<HTMLElement>('.message--user')]
+function prompts(scroller: HTMLElement) {
+  return scroller.querySelectorAll<HTMLElement>('.message--user')
+}
+
+// Prompts appear in vertical order. Only measure the rows needed to locate the viewport.
+function firstPromptAt(list: NodeListOf<HTMLElement>, reached: (top: number) => boolean): number {
+  let start = 0
+  let end = list.length
+  while (start < end) {
+    const middle = Math.floor((start + end) / 2)
+    if (reached(list[middle].getBoundingClientRect().top)) end = middle
+    else start = middle + 1
+  }
+  return start
 }
 
 function prefersReducedMotion(): boolean {
@@ -36,9 +48,9 @@ function jumpToTurn(scroller: HTMLElement, direction: -1 | 1): void {
   const top = scroller.getBoundingClientRect().top
   const list = prompts(scroller)
   const target = direction < 0
-    ? list.filter((prompt) => prompt.getBoundingClientRect().top < top - 4).at(-1)
+    ? list[firstPromptAt(list, (y) => y >= top - 4) - 1]
     // Past the scroll-margin a jump leaves, so a just-reached prompt is not re-selected.
-    : list.find((prompt) => prompt.getBoundingClientRect().top > top + 24)
+    : list[firstPromptAt(list, (y) => y > top + 24)]
   target?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
 }
 
@@ -58,12 +70,7 @@ export function TurnNavigator({ scrollRef, active, inline = false }: { scrollRef
       frame = 0
       const top = scroller.getBoundingClientRect().top
       const list = prompts(scroller)
-      let index = -1
-      for (let candidate = 0; candidate < list.length; candidate += 1) {
-        // A prompt resting just under the header's height still owns the view.
-        if (list[candidate].getBoundingClientRect().top >= top + 40) break
-        index = candidate
-      }
+      const index = firstPromptAt(list, (y) => y >= top + 40) - 1
       const prompt = list[index]
       // The header only stands in for a prompt that has scrolled fully out of view.
       if (!prompt || prompt.getBoundingClientRect().bottom > top + 8) {

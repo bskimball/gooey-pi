@@ -6,7 +6,7 @@ import type { MessagePart } from '@/types/api'
 import { boundText } from '@/lib/render-bounds'
 import { ChatCircleDots, Check, PencilSimple, WarningCircle } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
-import { arrivalMotionProps, MorphInline, useInstantMotion } from './subagent-lane'
+import { arrivalMotionProps, MorphInline, useInstantMotion } from '../ContentMotion'
 
 type ToolCall = Extract<MessagePart, { type: 'toolCall' }>
 type ToolResult = Extract<MessagePart, { type: 'toolResult' }>

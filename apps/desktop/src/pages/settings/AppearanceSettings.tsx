@@ -57,7 +57,7 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
       <header><h1>{t('appearance.title')}</h1><p>{t('appearance.description')}</p></header>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>{t('appearance.theme.title')}</h2>
-        <div className={`theme-options ${stylex.props(settingsStyles.themeOptions, [responsiveStyles.themeOptions, responsiveLayoutStyles.themeOptions]).className ?? ""}`}>
+        <div className={`theme-options ${stylex.props(settingsStyles.themeOptions).className ?? ""}`}>
           {themes.map((item) => {
             const Icon = item.icon
             const active = settings.theme === item.id
@@ -67,10 +67,12 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
                 label={t(item.label)}
                 variant="ghost"
                 aria-pressed={active}
-                className={active ? 'is-active' : ''}
+                icon={<Icon size={15} />}
+                endContent={active ? <Check size={12} /> : undefined}
+                xstyle={[settingsStyles.themeOption, active && settingsStyles.themeOptionSelected]}
                 onClick={() => { void onUpdate({ theme: item.id }) }}
               >
-                <span><Icon size={17} /></span><strong>{t(item.label)}</strong>{active ? <Check size={13} /> : null}
+                {t(item.label)}
               </AstryxButton>
             )
           })}
@@ -80,7 +82,7 @@ export function AppearanceSettings({ settings, onUpdate }: SettingsSectionProps)
         <h2>{t('appearance.language.title')}</h2>
         <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
           <span><strong>{t('appearance.language.label')}</strong><small>{t('appearance.language.description')} {t('appearance.language.available', { count: locales.length - 1 })}</small></span>
-          <SelectControl label={t('appearance.language.label')} value={settings.locale} onChange={(event) => { void onUpdate({ locale: event.target.value as LocalePreference }) }}>
+          <SelectControl fullWidth xstyle={settingsStyles.select} label={t('appearance.language.label')} value={settings.locale} onChange={(event) => { void onUpdate({ locale: event.target.value as LocalePreference }) }}>
             {locales.map((locale) => <option key={locale.value} value={locale.value}>{t(locale.label)}</option>)}
           </SelectControl>
         </div>

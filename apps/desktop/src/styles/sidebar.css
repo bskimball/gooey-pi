@@ -16,8 +16,6 @@
 .sidebar__destinations > button { position: relative; height: 36px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-tertiary); background: transparent; transition: color var(--fast), background var(--fast); }
 .sidebar__destinations > button:hover { color: var(--text); background: var(--surface-hover); }
 .sidebar__destinations > button.is-active { color: var(--text); background: transparent; }
-.sidebar__destinations > button > svg { transition: transform 120ms ease-out; }
-.sidebar__destinations > button:active > svg { transform: scale(.88); }
 .sidebar__destinations .nav-count { position: absolute; top: 2px; left: calc(50% + 4px); min-width: 15px; height: 15px; padding: 0 4px; font-size: var(--fs-micro); }
 @keyframes badge-in { from { opacity: 0; transform: scale(.6); } }
 .sidebar-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: var(--fs-ui); }

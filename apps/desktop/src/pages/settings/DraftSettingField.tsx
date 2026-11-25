@@ -90,26 +90,29 @@ export function DraftSettingField({
         <label htmlFor={id}><strong>{label}</strong></label>
         <small>{description}</small>
       </span>
-      <TextInput
-        id={id}
-        label={label}
-        isLabelHidden
-        controlClassName={className}
-        value={state.value}
-        status={state.error ? { type: 'error' } : undefined}
-        aria-invalid={Boolean(state.error)}
-        aria-describedby={state.error ? errorId : undefined}
-        onChange={onChange}
-        onBlur={() => { void commit() }}
-        onKeyDown={onKeyDown}
-      />
+      <div {...stylex.props(settingsStyles.draftControls)}>
+        <TextInput
+          width="100%"
+          id={id}
+          label={label}
+          isLabelHidden
+          controlClassName={className}
+          value={state.value}
+          status={state.error ? { type: 'error' } : undefined}
+          aria-invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+          onChange={onChange}
+          onBlur={() => { void commit() }}
+          onKeyDown={onKeyDown}
+        />
+        <ApexButton
+          disabled={!state.dirty || Boolean(state.error) || isCommitting}
+          onClick={() => { void commit() }}
+        >
+          {isCommitting ? 'Saving…' : 'Save'}
+        </ApexButton>
+      </div>
       {state.error ? <Banner xstyle={[inspectorStyles.settingsError]} id={errorId} status="error" role="alert" className="settings-error" title={state.error} /> : null}
-      <ApexButton
-        disabled={!state.dirty || Boolean(state.error) || isCommitting}
-        onClick={() => { void commit() }}
-      >
-        {isCommitting ? 'Saving…' : 'Save'}
-      </ApexButton>
     </div>
   )
 }

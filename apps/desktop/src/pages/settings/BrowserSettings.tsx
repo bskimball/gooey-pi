@@ -16,7 +16,7 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
     <>
       <header><h1>Browser</h1><p>Manage the isolated profile used inside Apex.</p></header>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
-        <h2>Startup</h2>
+        <h2>Browsing</h2>
         <DraftSettingField
           id="browser-home"
           label="Home page"
@@ -30,8 +30,8 @@ export function BrowserSettings({ settings, onUpdate, onRequestReset }: BrowserS
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Browser data</h2>
-        <div className={`danger-row ${stylex.props(settingsStyles.dangerRow).className ?? ""}`}>
-          <span><strong>Clear browsing data</strong><small>Remove cookies, cache, permissions, and browsing history.</small></span>
+        <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
+          <span><strong>Clear browsing data</strong><small>Remove cookies, cached files, and site storage.</small></span>
           <ApexButton icon={<ArrowCounterClockwise size={13} />} onClick={onRequestReset}>Clear data</ApexButton>
         </div>
       </section>

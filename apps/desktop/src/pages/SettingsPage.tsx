@@ -1,14 +1,13 @@
-import { styles as responsiveLayoutStyles } from 'apex-ui/styles/responsive-layout.stylex';
+import { SurfaceSwap, useInstantMotion } from '@/components/ContentMotion'
 import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
-import { styles as responsiveStyles } from 'apex-ui/styles/responsive.stylex'
 import { styles as baseStyles } from 'apex-ui/styles/base.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 import * as stylex from '@stylexjs/stylex'
-import { ArrowLeft, CaretRight, Cube, Info, LockKey, PawPrint, Robot, SlidersHorizontal, Sun, Terminal, Waveform } from '@/components/icons'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useState, type ComponentType } from 'react'
+import { ArrowLeft, Cube, Info, LockKey, PawPrint, Robot, SlidersHorizontal, Sun, Terminal, Waveform } from '@/components/icons'
+import { AnimatePresence, motion } from 'motion/react'
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react'
 import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
@@ -29,7 +28,7 @@ import { VoiceSettings } from './settings/VoiceSettings'
 const navStyles = stylex.create({
   itemWrap: {
     position: 'relative',
-    width: '100%',
+    flexShrink: 0,
   },
   activePill: {
     position: 'absolute',
@@ -76,9 +75,6 @@ const navStyles = stylex.create({
     color: 'var(--text)',
     backgroundColor: 'var(--surface-selected)',
   },
-  close: {
-    marginBottom: 12,
-  },
 })
 
 const sections: Array<{ id: SettingsSection; label: MessageKey; icon: ComponentType<{ size?: number }> }> = [
@@ -124,7 +120,13 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
   const [resetError, setResetError] = useState('')
   const { t } = useI18n()
   const platform = meta?.platform ?? detectRendererPlatform()
-  const instant = Boolean(useReducedMotion()) || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion')) || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
+  const instant = useInstantMotion()
+  const contentRef = useRef<HTMLDivElement>(null)
+  const activeNavRef = useRef<HTMLButtonElement>(null)
+  useLayoutEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0
+    activeNavRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [section])
 
   useEffect(() => { setSection(initialSection) }, [initialSection, initialSectionRequestId])
 
@@ -157,15 +159,15 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
   })()
 
   return (
-    <div className={`settings-page ${stylex.props(settingsStyles.settingsPage, [responsiveStyles.settingsPage, responsiveLayoutStyles.settingsPage]).className ?? ""}`}>
-      <nav className={`settings-nav ${stylex.props(settingsStyles.settingsNav, [responsiveStyles.settingsNav, responsiveLayoutStyles.settingsNav]).className ?? ""}`} aria-label={t('settings.sections')}>
+    <div className={`settings-page ${stylex.props(settingsStyles.settingsPage).className ?? ""}`}>
+      <nav className={`settings-nav ${stylex.props(settingsStyles.settingsNav).className ?? ""}`} aria-label={t('settings.sections')}>
         <AstryxButton
           label="Back to session"
           variant="ghost"
           size="sm"
           icon={<ArrowLeft size={14} />}
           className="settings-nav__close"
-          xstyle={[settingsStyles.settingsNavClose, navStyles.item, navStyles.close, responsiveStyles.settingsNavClose]}
+          xstyle={[navStyles.item, settingsStyles.settingsNavClose]}
           onClick={onClose}
         >
           <span>Back to session</span>
@@ -184,11 +186,12 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
                 />
               ) : null}
               <AstryxButton
+                ref={active ? activeNavRef : undefined}
                 label={t(item.label)}
                 variant="ghost"
                 size="sm"
                 icon={<Icon size={14} />}
-                endContent={<CaretRight size={12} />}
+                aria-current={active ? 'page' : undefined}
                 className={active ? 'is-active' : ''}
                 xstyle={[navStyles.item, active && (instant ? navStyles.itemActiveStatic : navStyles.itemActive)]}
                 onClick={() => setSection(item.id)}
@@ -199,19 +202,9 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
           )
         })}
       </nav>
-      <div className={`settings-content scroll-area ${stylex.props(baseStyles.scrollArea, settingsStyles.settingsContent).className ?? ""}`}>
-        <div className={`settings-content__inner ${stylex.props(settingsStyles.settingsContentInner, [responsiveStyles.settingsContentInner, responsiveLayoutStyles.settingsContentInner]).className ?? ""}`}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={section}
-              initial={instant ? false : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={instant ? undefined : { opacity: 0, y: -2 }}
-              transition={{ duration: instant ? 0 : 0.15, ease: [0.23, 1, 0.32, 1] }}
-            >
-              {content}
-            </motion.div>
-          </AnimatePresence>
+      <div ref={contentRef} className={`settings-content scroll-area ${stylex.props(baseStyles.scrollArea, settingsStyles.settingsContent).className ?? ""}`}>
+        <div className={`settings-content__inner ${stylex.props(settingsStyles.settingsContentInner).className ?? ""}`}>
+          <SurfaceSwap contentKey={section} instant={instant}>{content}</SurfaceSwap>
         </div>
       </div>
       <AnimatePresence initial={false}>
@@ -227,7 +220,7 @@ export function SettingsPage({ settings, meta, providerCatalog, voice, pets, upd
               </>
             )}
           >
-            <p>This signs you out of websites opened in Apex and removes history, cache, cookies, and saved permissions. This cannot be undone.</p>
+            <p>This clears cookies, cached files, and site storage for the built-in browser and signs you out of websites.</p>
             {resetError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={resetError} /> : null}
           </Modal>
         ) : null}

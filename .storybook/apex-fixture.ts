@@ -6,8 +6,8 @@ export type ApexStoryOverrides = { [Domain in keyof ApexApi]?: Partial<ApexApi[D
 const unsupported = (method: string) => () => unsupportedHostMethod(method)
 
 /** All state belongs to this fixture instance. No host transport is imported. */
-export function createApexStoryFixture(overrides: ApexStoryOverrides = {}): ApexApi {
-  let settings = createStorySettings()
+export function createApexStoryFixture(overrides: ApexStoryOverrides = {}, initialSettings = createStorySettings()): ApexApi {
+  let settings = initialSettings
   let catalog = createStoryModelCatalog()
   function channel<T>() {
     const events = createStoryEvents<T>()

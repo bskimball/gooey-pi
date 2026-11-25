@@ -116,11 +116,11 @@ export const StageAndUnstage: Story = {
     const canvas = within(canvasElement)
     await userEvent.click(await canvas.findByRole('button', { name: 'Stage' }))
     await waitFor(() => expect(canvas.getByText('No unstaged changes.')).toBeVisible())
-    await userEvent.click(canvas.getByRole('button', { name: 'Staged' }))
+    await userEvent.click(canvas.getByRole('radio', { name: 'Staged' }))
     await waitFor(() => expect(canvas.getByText('2 changed files')).toBeVisible())
     await userEvent.click(await canvas.findByRole('button', { name: 'Unstage' }))
     await waitFor(() => expect(canvas.getByText('1 changed file')).toBeVisible())
-    await userEvent.click(canvas.getByRole('button', { name: 'Unstaged' }))
+    await userEvent.click(canvas.getByRole('radio', { name: 'Unstaged' }))
     await waitFor(() => expect(canvas.getByRole('button', { name: /navigation.tsx/ })).toBeVisible())
     await expect(canvas.getByText('1 changed file')).toBeVisible()
   },

@@ -59,7 +59,7 @@ export function useTaskWorkflowCommands({ workspaceRef, onSend, ...options }: Op
       recover(submission.target.sessionFile, submission.text)
       return
     }
-    if (workflow.pending || options.busy || workflow.context.sessionFile !== submission.target.sessionFile) return
+    if (workflow.pending || options.busy || options.loading || workflow.context.sessionFile !== submission.target.sessionFile) return
     submitted.current = submission
     setSubmission(undefined)
     const excerpts = workflow.context.excerpts

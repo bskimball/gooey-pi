@@ -4,7 +4,7 @@ import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useId, useState } from 'react'
 import { CaretRight, Check, WarningCircle } from '../icons'
-import { collapseMotionProps, useInstantMotion } from '../transcript/subagent-lane'
+import { collapseMotionProps, useInstantMotion } from '../ContentMotion'
 import type { EffectiveCapability, EffectiveInstructionSource, EffectiveRunConfig, RuntimeInfo } from '@/types/api'
 
 const NOT_REPORTED = 'Not yet reported'

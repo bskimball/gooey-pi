@@ -6,7 +6,6 @@ import type { SettingsSectionProps } from './contracts'
 import { shortcutLabel } from '@/lib/platform-shortcuts'
 import { terminalShellValidation } from './draft-state'
 import { DraftSettingField } from './DraftSettingField'
-import { SettingsToggle } from './SettingsToggle'
 
 export function TerminalSettings({ settings, onUpdate, platform = 'darwin' }: SettingsSectionProps & { platform?: NodeJS.Platform }) {
   return (
@@ -23,7 +22,6 @@ export function TerminalSettings({ settings, onUpdate, platform = 'darwin' }: Se
           onCommit={(terminalShell) => onUpdate({ terminalShell })}
           className={`mono ${stylex.props(activityStyles.mono).className ?? ""}`}
         />
-        <SettingsToggle checked={settings.terminalOpen} onChange={(terminalOpen) => { void onUpdate({ terminalOpen }) }} label="Open terminal with new sessions" description="Show the terminal drawer when a new project session starts." />
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Keyboard shortcut</h2>

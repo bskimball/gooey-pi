@@ -170,46 +170,6 @@ export function useWorkspaceRuntime({
     setActiveSessionId(session.id)
   }, [])
 
-  const activateWorkspace = useCallback((project?: ProjectRecord, session?: SessionRecord, nextRuntime?: RuntimeInfo) => {
-    pendingAgentEventsRef.current = []
-    reconcileOnVisibleRef.current = false
-    if (agentEventFrameRef.current !== null) {
-      cancelAnimationFrame(agentEventFrameRef.current)
-      agentEventFrameRef.current = null
-    }
-    if (chunkedFlushTimerRef.current !== null) {
-      window.clearTimeout(chunkedFlushTimerRef.current)
-      chunkedFlushTimerRef.current = null
-    }
-    const generation = workspaceRef.current.generation + 1
-    workspaceRef.current = {
-      generation,
-      project,
-      session,
-      cwd: workspaceCwd(project, session),
-      sessionFile: session?.filePath,
-    }
-    loadActor.send({
-      type: 'ACTIVATE',
-      load: bridge && session?.filePath
-        ? { generation, sessionFile: session.filePath, eventBuffer: createApexEventBuffer(), reconciliation: false, admissionRevision: 0 }
-        : null,
-    })
-    const queueOwner = queuedPromptOwner(project, session, nextRuntime, generation)
-    const queuedPrompts = queueOwner ? queuedPromptsByOwnerRef.current.get(queueOwner) ?? [] : []
-    activeQueuedPromptOwnerRef.current = queueOwner
-    pendingQueuedPromptsRef.current = queuedPrompts
-    setWorkspaceGeneration(generation)
-    setPendingQueuedPrompts(queuedPrompts)
-    setActiveProjectId(project?.id)
-    setActiveSessionId(session?.id)
-    attachRuntime(nextRuntime, generation)
-    if (bridge) {
-      setMessages([])
-    }
-    return generation
-  }, [attachRuntime, bridge, loadActor])
-
   const reconcileRuntime = useCallback(async (generation: number) => {
     if (!bridge) return
     const selected = workspaceRef.current
@@ -293,6 +253,53 @@ export function useWorkspaceRuntime({
       },
     })
   }, [bridge, flushAgentEvents, loadActor, reportError])
+
+  const activateWorkspace = useCallback((project?: ProjectRecord, session?: SessionRecord, nextRuntime?: RuntimeInfo) => {
+    pendingAgentEventsRef.current = []
+    reconcileOnVisibleRef.current = false
+    if (agentEventFrameRef.current !== null) {
+      cancelAnimationFrame(agentEventFrameRef.current)
+      agentEventFrameRef.current = null
+    }
+    if (chunkedFlushTimerRef.current !== null) {
+      window.clearTimeout(chunkedFlushTimerRef.current)
+      chunkedFlushTimerRef.current = null
+    }
+    const generation = workspaceRef.current.generation + 1
+    workspaceRef.current = {
+      generation,
+      project,
+      session,
+      cwd: workspaceCwd(project, session),
+      sessionFile: session?.filePath,
+    }
+    loadActor.send({
+      type: 'ACTIVATE',
+      load: bridge && session?.filePath
+        ? { generation, sessionFile: session.filePath, eventBuffer: createApexEventBuffer(), reconciliation: false, admissionRevision: 0 }
+        : null,
+    })
+    const queueOwner = queuedPromptOwner(project, session, nextRuntime, generation)
+    const queuedPrompts = queueOwner ? queuedPromptsByOwnerRef.current.get(queueOwner) ?? [] : []
+    activeQueuedPromptOwnerRef.current = queueOwner
+    pendingQueuedPromptsRef.current = queuedPrompts
+    setWorkspaceGeneration(generation)
+    setPendingQueuedPrompts(queuedPrompts)
+    setActiveProjectId(project?.id)
+    setActiveSessionId(session?.id)
+    attachRuntime(nextRuntime, generation)
+    if (bridge) {
+      setMessages([])
+      const admitted = loadActor.getSnapshot().context.load
+      if (session && admitted) {
+        // Start I/O in the selection event so it overlaps the first render of the new workspace.
+        lastTranscriptReadWorkspaceRef.current = { generation, sessionFile: session.filePath }
+        lastObservedCatalogRef.current = { generation, filePath: session.filePath, updatedAt: session.updatedAt, syncRevision: session.syncRevision }
+        startTranscriptRead(workspaceRef.current, false, undefined, admitted)
+      }
+    }
+    return generation
+  }, [attachRuntime, bridge, loadActor, startTranscriptRead])
 
   const runOverflowReconciliation = useCallback(() => {
     reconcileOnVisibleRef.current = false

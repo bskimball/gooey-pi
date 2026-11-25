@@ -263,13 +263,6 @@ export const styles = stylex.create({
     "fontSize": "var(--fs-meta)",
     "lineHeight": "1.5"
   },
-  "heroHint": {
-    "display": "block",
-    "marginTop": "9px",
-    "color": "var(--text-tertiary)",
-    "fontSize": "var(--fs-micro)",
-    "lineHeight": "1.45"
-  },
   "choiceImage": {
     "width": "54px",
     "height": "54px",

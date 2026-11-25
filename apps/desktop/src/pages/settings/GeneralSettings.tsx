@@ -1,5 +1,6 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as settingsStyles } from 'apex-ui/styles/settings.stylex'
+import { inspectorTabs } from '@/components/inspector/tabs'
 import { SelectControl } from '@/components/ui'
 import type { AppSettings } from '@/types/api'
 import type { SettingsSectionProps } from './contracts'
@@ -12,8 +13,7 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Window</h2>
         <SettingsToggle checked={settings.sidebarOpen} onChange={(sidebarOpen) => { void onUpdate({ sidebarOpen }) }} label="Show project sidebar" description="Keep projects and sessions visible when the app opens." />
-        <SettingsToggle checked={settings.inspectorOpen} onChange={(inspectorOpen) => { void onUpdate({ inspectorOpen }) }} label="Open session inspector" description="Show the summary pane for newly opened sessions." />
-        <SettingsToggle checked={settings.showFileChangesPopup} onChange={(showFileChangesPopup) => { void onUpdate({ showFileChangesPopup }) }} label="Show file changes popup" description="Show the review card above the composer when the workspace has uncommitted changes." />
+        <SettingsToggle checked={settings.inspectorOpen} onChange={(inspectorOpen) => { void onUpdate({ inspectorOpen }) }} label="Open session inspector" description="Show session details beside the conversation." />
       </section>
       {platform === 'darwin' ? (
         <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
@@ -25,8 +25,8 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Session defaults</h2>
         <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
-          <span><strong>Git checkout style</strong><small>Worktrees use separate folders for safe parallel tasks. Branches reuse the same folder and require a clean, idle project.</small></span>
-          <SelectControl label="Git checkout style" value={settings.checkoutStrategy} onChange={(event) => {
+          <span><strong>Git checkout style</strong><small>Worktrees use separate folders. Branches use the same folder and require a clean, idle project.</small></span>
+          <SelectControl fullWidth xstyle={settingsStyles.select} label="Git checkout style" value={settings.checkoutStrategy} onChange={(event) => {
             const checkoutStrategy = event.target.value
             if (checkoutStrategy === 'worktree' || checkoutStrategy === 'branch') void onUpdate({ checkoutStrategy })
           }}>
@@ -35,12 +35,9 @@ export function GeneralSettings({ settings, onUpdate, platform }: SettingsSectio
           </SelectControl>
         </div>
         <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}>
-          <span><strong>Default inspector tab</strong><small>The first detail surface shown in a session.</small></span>
-          <SelectControl label="Default inspector tab" value={settings.defaultInspectorTab} onChange={(event) => { void onUpdate({ defaultInspectorTab: event.target.value as AppSettings['defaultInspectorTab'] }) }}>
-            <option value="summary">Summary</option>
-            <option value="changes">Changes</option>
-            <option value="browser">Browser</option>
-            <option value="files">Files</option>
+          <span><strong>Default inspector tab</strong><small>Choose the tab shown when the inspector first opens.</small></span>
+          <SelectControl fullWidth xstyle={settingsStyles.select} label="Default inspector tab" value={settings.defaultInspectorTab} onChange={(event) => { void onUpdate({ defaultInspectorTab: event.target.value as AppSettings['defaultInspectorTab'] }) }}>
+            {inspectorTabs.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
           </SelectControl>
         </div>
       </section>

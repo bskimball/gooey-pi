@@ -6,7 +6,7 @@ import { styles as activityStyles } from 'apex-ui/styles/activity.stylex'
 import { styles as overlaysStyles } from 'apex-ui/styles/overlays.stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { Banner } from '@astryxdesign/core/Banner'
-import { ArrowsClockwise, PawPrint, Sparkle } from '@/components/icons'
+import { ArrowsClockwise, PawPrint } from '@/components/icons'
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { PetAvatar } from '@/components/PetAvatar'
 import { ApexButton } from '@/components/ui'
@@ -44,13 +44,13 @@ export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps 
       <header><h1>Pets</h1><p>Choose a companion that reacts while Pi works.</p></header>
       <section className={`pet-hero ${stylex.props(petsStyles.petHero).className ?? ""}`}>
         <div className={`pet-hero__stage ${stylex.props(petsStyles.petHeroStage).className ?? ""}`}><PetAvatar pet={selected} pets={pets} activity="speaking" size={Math.round(96 * settings.petSize / 100)} reduceMotion={settings.reduceMotion} /></div>
-        <div><span className={`pet-kicker ${stylex.props(petsStyles.petKicker).className ?? ""}`}><Sparkle size={12} /> Active companion</span><h2 {...stylex.props(petContext.heroHeading)}>{selected.displayName}</h2><p {...stylex.props(petContext.heroDescription)}>{selected.description}</p><small {...stylex.props(petContext.heroHint)}>Drag the pet around the workspace. It runs while moving, reviews while an agent works, and waves during voice mode.</small></div>
+        <div><h2 {...stylex.props(petContext.heroHeading)}>{selected.displayName}</h2><p {...stylex.props(petContext.heroDescription)}>{selected.description}</p></div>
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <h2>Companion</h2>
         <SettingsToggle checked={settings.petEnabled} onChange={(petEnabled) => { void onUpdate({ petEnabled }) }} label="Show desktop pet" description="Keep your selected companion floating above the workspace." />
         <div className={`settings-row pet-size-row ${stylex.props(petsStyles.petSizeRow, settingsStyles.settingsRow).className ?? ""}`}>
-          <span><label htmlFor="pet-size"><strong>Pet size</strong></label><small>Scale the companion without shrinking its voice controls.</small></span>
+          <span><label htmlFor="pet-size"><strong>Pet size</strong></label><small>Adjust the size of the floating pet.</small></span>
           <div className={`pet-size-control ${stylex.props(petsStyles.petSizeControl).className ?? ""}`}>
             <input {...stylex.props(petContext.sizeInput, petContext.sizeTrack, petContext.sizeThumb)} id="pet-size" type="range" min="50" max="125" step="5" value={settings.petSize} style={{ '--pet-size-progress': `${(settings.petSize - 50) / .75}%` } as CSSProperties} onChange={(event) => { void onUpdate({ petSize: Number(event.target.value) }) }} />
             <output {...stylex.props(petContext.sizeOutput)} htmlFor="pet-size">{settings.petSize}%</output>
@@ -76,7 +76,7 @@ export function PetsSettings({ settings, onUpdate, pets }: SettingsSectionProps 
       </section>
       <section className={`settings-group ${stylex.props(settingsStyles.settingsGroup).className ?? ""}`}>
         <div className={`settings-group__heading ${stylex.props(settingsStyles.settingsGroupHeading).className ?? ""}`}><h2>Codex Pets</h2><ApexButton compact disabled={!pets || loading} icon={<ArrowsClockwise size={12} className={[loading ? 'spin' : '', stylex.props((loading) && activityStyles.spin, (loading) && overlaysStyles.spin).className].filter(Boolean).join(' ')} />} onClick={() => { void refresh() }}>Refresh</ApexButton></div>
-        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Apex safely discovers compatible packages in <code>~/.codex/pets</code>. Codex is optional; Orb and Apex are always bundled.</p>
+        <p className={`settings-group__description ${stylex.props(settingsStyles.settingsGroupDescription).className ?? ""}`}>Refresh to find companions installed in <code>~/.codex/pets</code>.</p>
         <div className={`settings-row ${stylex.props(settingsStyles.settingsRow).className ?? ""}`}><span><strong>{codexCount ? `${codexCount} Codex ${codexCount === 1 ? 'pet' : 'pets'} found` : 'No additional Codex pets found'}</strong><small>{codexCount ? 'They are available in the companion picker above.' : 'Install or hatch pets later, then refresh this list.'}</small></span></div>
         {loadError ? <Banner xstyle={[inspectorStyles.settingsError]} status="error" role="alert" className="settings-error" title={loadError} /> : null}
       </section>

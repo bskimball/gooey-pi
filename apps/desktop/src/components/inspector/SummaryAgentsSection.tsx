@@ -1,8 +1,9 @@
 import * as stylex from '@stylexjs/stylex'
 import { styles as inspectorStyles } from 'apex-ui/styles/inspector.stylex'
 import { styles as transcriptStyles } from 'apex-ui/styles/transcript.stylex'
-import { AnimatePresence, animate, motion, useInstantLayoutTransition, useMotionValue, useReducedMotion, type AnimationPlaybackControls, type Transition } from 'motion/react'
+import { AnimatePresence, animate, motion, useInstantLayoutTransition, useMotionValue, type AnimationPlaybackControls, type Transition } from 'motion/react'
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { prefersInstantMotion, useInstantMotion } from '../ContentMotion'
 import { CaretRight } from '../icons'
 import { StatusMark } from '../activity/StatusMark'
 import type { PiSpecialistSummary } from './session-summary'
@@ -14,17 +15,6 @@ const EASE_OUT: Transition['ease'] = [0.23, 1, 0.32, 1]
 const EASE_IN: Transition['ease'] = [0.2, 0, 0, 1]
 const DISCLOSURE_SPRING = { type: 'spring', stiffness: 380, damping: 27, mass: 0.8 } as const
 const styles = stylex.create({ instantTransition: { transitionProperty: 'none' } })
-
-/** Live (not render-sampled) instant-motion check: app reduce-motion class, OS preference, or test act env. */
-function prefersInstantMotion(): boolean {
-  return (typeof document !== 'undefined' && document.documentElement.classList.contains('reduce-motion'))
-    || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
-    || Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT)
-}
-
-function useSkipMotion(): boolean {
-  return Boolean(useReducedMotion()) || prefersInstantMotion()
-}
 
 interface FinishedItem {
   key: string
@@ -45,7 +35,7 @@ interface SummaryAgentsSectionProps {
 
 /** Overview Agents section: live workers stay on top; finished ones collapse into a horizontal strip of chips. */
 export function SummaryAgentsSection({ specialists, onOpenSpecialist }: SummaryAgentsSectionProps) {
-  const skipMotion = useSkipMotion()
+  const skipMotion = useInstantMotion()
   const startInstantLayoutTransition = useInstantLayoutTransition()
   const [finishedCollapsed, setFinishedCollapsed] = useState(true)
   // Decided at click time from live preferences, so a stale render-time sample cannot snap a pointer toggle.

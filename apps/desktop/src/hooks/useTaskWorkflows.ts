@@ -1,23 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { replaceEqualDeep } from '@tanstack/react-query'
+import { useStableCallback } from './useStableCallback'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ApexApi, FinishedTask, FinishReview, RewindPreview, RunReceipt, RuntimeInfo, SessionRecord, SideConversation } from '@/types/api'
 import { errorMessage } from '@/lib/errors'
 import { startWorkspaceRuntime } from '@/lib/runtime-start'
 import { EXCERPT_LIMIT, type TaskExcerpt, type TaskWorkflowContextValue } from '@/lib/task-context'
 
+const EMPTY_EXCERPTS: TaskExcerpt[] = []
+const NO_RECEIPTS: RunReceipt[] = []
+const NO_CHILDREN: SideConversation[] = []
+const NO_USER_IDS: ReadonlySet<string> = new Set()
+
 export type TaskDialog = { kind: 'rewind'; preview: RewindPreview; runtimeId: string; sessionFile: string } | { kind: 'finish'; review: FinishReview; runtimeId: string; sessionFile: string } | { kind: 'history'; receipt: RunReceipt; sessionFile: string }
 
-export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, selectSession, reportError }: {
-  bridge: ApexApi | null; session?: SessionRecord; runtime: RuntimeInfo | null; busy: boolean
+export function useTaskWorkflows({ bridge, session, runtime, busy, loading = false, setSessions, selectSession, reportError }: {
+  bridge: ApexApi | null; session?: SessionRecord; runtime: RuntimeInfo | null; busy: boolean; loading?: boolean
   setSessions: Dispatch<SetStateAction<SessionRecord[]>>
   selectSession(session: SessionRecord): Promise<void>
   reportError(error: unknown): void
 }) {
   const sessionFile = session?.filePath
-  const [receipts, setReceipts] = useState<RunReceipt[]>([])
-  const [persistedUserIds, setPersistedUserIds] = useState<ReadonlySet<string>>(new Set())
+  const [receipts, setReceipts] = useState(NO_RECEIPTS)
+  const [persistedUserIds, setPersistedUserIds] = useState(NO_USER_IDS)
   const [finishedTasks, setFinishedTasks] = useState<FinishedTask[]>([])
   const [side, setSide] = useState<SideConversation | null>(null)
-  const [children, setChildren] = useState<SideConversation[]>([])
+  const [children, setChildren] = useState(NO_CHILDREN)
   const [contexts, setContexts] = useState<Record<string, TaskExcerpt[]>>({})
   const [draft, setDraft] = useState<{ sessionFile: string; id: number; text: string }>()
   const [dialog, setDialog] = useState<TaskDialog | null>(null)
@@ -28,7 +35,7 @@ export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, 
   const active = useRef(sessionFile)
   active.current = sessionFile
   // Saved sessions can be resumed for review without admitting a prompt.
-  const idle = Boolean(bridge && sessionFile && session?.harness === 'pi' && !busy
+  const idle = Boolean(bridge && sessionFile && session?.harness === 'pi' && !busy && !loading
     && !(runtime?.sessionFile === sessionFile && (runtime?.isStreaming || runtime?.isCompacting)))
   const selection = useRef({ file: sessionFile, revision: 0, idle })
   if (selection.current.file !== sessionFile) selection.current.revision += 1
@@ -42,22 +49,23 @@ export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, 
     try {
       const markers = await bridge.sessions.listFinishedTasks()
       if (sequence !== refreshSequence.current) return
-      setFinishedTasks(markers)
+      setFinishedTasks((current) => replaceEqualDeep(current, markers))
       if (!sessionFile) return
       const [runs, saved, relation, descendants] = await Promise.all([
         bridge.sessions.listRunReceipts(sessionFile), bridge.sessions.read(sessionFile),
         bridge.sessions.getSideConversation(sessionFile), bridge.sessions.listSideConversations(sessionFile),
       ])
       if (sequence !== refreshSequence.current || active.current !== sessionFile) return
-      setReceipts(runs)
-      setPersistedUserIds(new Set(saved.filter((message) => message.role === 'user' && !message.id.startsWith('desktop-user-')).map((message) => message.id)))
-      setSide(relation); setChildren(descendants)
+      setReceipts((current) => replaceEqualDeep(current, runs))
+      const userIds = new Set(saved.filter((message) => message.role === 'user' && !message.id.startsWith('desktop-user-')).map((message) => message.id))
+      setPersistedUserIds((current) => current.size === userIds.size && [...userIds].every((id) => current.has(id)) ? current : userIds)
+      setSide((current) => replaceEqualDeep(current, relation))
+      setChildren((current) => replaceEqualDeep(current, descendants))
     } catch (reason) { if (sequence === refreshSequence.current) setError(errorMessage(reason)) }
   }, [bridge, sessionFile, setError])
   useEffect(() => {
-    setReceipts([]); setPersistedUserIds(new Set()); setSide(null); setChildren([]); setDialog(null)
+    setReceipts(NO_RECEIPTS); setPersistedUserIds(NO_USER_IDS); setSide(null); setChildren(NO_CHILDREN); setDialog(null)
     setFailure((current) => current?.sessionFile === sessionFile ? current : undefined)
-    void refresh()
     return () => { refreshSequence.current += 1 }
   }, [refresh, sessionFile])
   useEffect(() => { void refresh() }, [busy, runtime?.runtimeId, refresh])
@@ -118,32 +126,33 @@ export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, 
     // Existing navigation only detaches the view. It never stops the parent runtime.
     await selectSession(target)
   }
-  const attachTo = (target: string, excerpt: Omit<TaskExcerpt, 'id'>) => {
+  const attachTo = useCallback((target: string, excerpt: Omit<TaskExcerpt, 'id'>) => {
     if (!excerpt.text.trim()) return
     if (excerpt.text.length > EXCERPT_LIMIT) throw new Error('Select at most 32,768 characters.')
     setContexts((current) => ({ ...current, [target]: [...(current[target] ?? []), { ...excerpt, id: crypto.randomUUID() }] }))
-  }
-  const createSide = (excerpt?: string) => { void run(async () => {
-    if (!bridge || !sessionFile) return
-    const created = await bridge.sessions.createSideConversation(sessionFile, { excerpt, harness: 'pi' })
-    if (created.initialContext) attachTo(created.sessionFile, { source: 'Parent conversation', sessionFile, text: created.initialContext })
-    await navigate(created.sessionFile)
-  }) }
-  const bringBack = (text: string) => { void run(async () => {
-    if (!bridge || !side) return
-    const guard = guardSelection(false)
-    const parent = await ensureRuntime(side.parentSession, guard, true)
-    guard()
-    const result = await bridge.sessions.prepareSideReturn(parent.runtimeId, side.sessionFile, text)
-    guard()
-    attachTo(side.parentSession, { source: 'Side conversation reply', sessionFile: result.sourceSession, text: result.text })
-    await navigate(side.parentSession, guard)
-  }) }
-  const context: TaskWorkflowContextValue = {
-    sessionFile, excerpts: sessionFile ? contexts[sessionFile] ?? [] : [], receipts, persistedUserIds, idle, pending,
-    attach: (excerpt) => { if (sessionFile) { try { attachTo(sessionFile, excerpt) } catch (reason) { setError(errorMessage(reason)) } } },
-    remove: (ids) => { if (sessionFile) setContexts((current) => ({ ...current, [sessionFile]: (current[sessionFile] ?? []).filter((excerpt) => !ids.includes(excerpt.id)) })) },
-    edit: (userEntryId) => { void run(async () => {
+  }, [])
+  const createSide = useStableCallback((excerpt?: string) => {
+    void run(async () => {
+      if (!bridge || !sessionFile) return
+      const created = await bridge.sessions.createSideConversation(sessionFile, { excerpt, harness: 'pi' })
+      if (created.initialContext) attachTo(created.sessionFile, { source: 'Parent conversation', sessionFile, text: created.initialContext })
+      await navigate(created.sessionFile)
+    })
+  })
+  const bringBack = useStableCallback((text: string) => {
+    void run(async () => {
+      if (!bridge || !side) return
+      const guard = guardSelection(false)
+      const parent = await ensureRuntime(side.parentSession, guard, true)
+      guard()
+      const result = await bridge.sessions.prepareSideReturn(parent.runtimeId, side.sessionFile, text)
+      guard()
+      attachTo(side.parentSession, { source: 'Side conversation reply', sessionFile: result.sourceSession, text: result.text })
+      await navigate(side.parentSession, guard)
+    })
+  })
+  const edit = useStableCallback((userEntryId: string) => {
+    void run(async () => {
       if (!idle || !bridge || !sessionFile || !persistedUserIds.has(userEntryId)) return
       const guard = guardSelection(true)
       const owner = await ensureRuntime(sessionFile, guard)
@@ -151,10 +160,16 @@ export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, 
       const preview = await bridge.sessions.previewRewind(owner.runtimeId, sessionFile, userEntryId)
       guard()
       setDialog({ kind: 'rewind', preview, runtimeId: owner.runtimeId, sessionFile })
-    }) },
+    })
+  })
+  const excerpts = (sessionFile && contexts[sessionFile]) || EMPTY_EXCERPTS
+  const finished = useMemo(() => new Set(finishedTasks.map((task) => task.sessionFile)), [finishedTasks])
+  const context = useMemo<TaskWorkflowContextValue>(() => ({
+    sessionFile, excerpts, receipts, persistedUserIds, idle, pending, finished, createSide, bringBack, edit, isSide: Boolean(side),
+    attach: (excerpt) => { if (sessionFile) { try { attachTo(sessionFile, excerpt) } catch (reason) { setError(errorMessage(reason)) } } },
+    remove: (ids) => { if (sessionFile) setContexts((current) => ({ ...current, [sessionFile]: (current[sessionFile] ?? []).filter((excerpt) => !ids.includes(excerpt.id)) })) },
     review: (receipt) => { if (sessionFile) setDialog({ kind: 'history', receipt, sessionFile }) },
-    createSide, bringBack, isSide: Boolean(side), finished: new Set(finishedTasks.map((task) => task.sessionFile)),
-  }
+  }), [sessionFile, excerpts, receipts, persistedUserIds, idle, pending, finished, createSide, bringBack, edit, side, attachTo, setError])
   const reviewFinish = () => { void run(async () => {
     if (!idle || !bridge || !sessionFile) return
     const guard = guardSelection(true)
@@ -192,8 +207,9 @@ export function useTaskWorkflows({ bridge, session, runtime, busy, setSessions, 
       setFailure({ sessionFile: result.sessionFile, message }); reportError(message)
     }
   }) }
+  const openConversation = useStableCallback((file: string) => { void run(() => navigate(file)) })
   return { context, side, children, dialog, pending, error, idle, createSide, reviewFinish, confirm,
-    navigate: (file: string) => { void run(() => navigate(file)) },
+    navigate: openConversation,
     close: () => { if (!pending) setDialog(null) },
     insertDraft: draft?.sessionFile === sessionFile ? draft : undefined,
     draftInserted: (id: number) => setDraft((current) => current?.id === id ? undefined : current),

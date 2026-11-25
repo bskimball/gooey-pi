@@ -566,7 +566,19 @@ describe('transcript rendering', () => {
     expect(html).toContain('src="data:image/png;base64,iVBORw0KGgo="')
     expect(html).toContain('aria-label="Expand image"')
     expect(html).toContain('Image attachment unavailable')
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect(doc.querySelector('[aria-roledescription="carousel"]')?.querySelectorAll('[aria-roledescription="slide"]')).toHaveLength(2)
     expect(html).not.toContain('src="data:image/png;base64,truncated"')
+  })
+
+  it('keeps groups of assistant images on their respective sides of a caption', () => {
+    const image = { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' } as const
+    const html = render([{ id: 'image-groups', role: 'assistant', parts: [image, image, { type: 'text', text: 'After the edit' }, image] }])
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect(doc.querySelectorAll('[aria-roledescription="carousel"]')).toHaveLength(1)
+    expect(doc.querySelectorAll('[aria-roledescription="slide"]')).toHaveLength(2)
+    expect(doc.querySelectorAll('.image-part__preview')).toHaveLength(3)
+    expect(doc.querySelector('p')?.textContent).toBe('After the edit')
   })
 
   it('keeps assistant images visible while streaming without activity and after settling', () => {
