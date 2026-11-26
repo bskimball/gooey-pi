@@ -276,6 +276,7 @@ describe('background Pi runtime event isolation', () => {
 })
 
 describe('Pi Fusion pair reporting', () => {
+  beforeEach(() => window.localStorage.clear())
   const pairA = { lead: { provider: 'openai', modelId: 'gpt-6-astra', thinking: 'xhigh' }, sidekick: { provider: 'claude-bridge', modelId: 'claude-opus-5-5', thinking: 'medium' } }
   const pairB = { lead: { provider: 'anthropic', modelId: 'claude-fable-5-1', thinking: 'high' }, sidekick: { provider: 'openai', modelId: 'gpt-6-mini', thinking: 'low' } }
   const pairCatalog: ApexModelCatalog = {
@@ -359,6 +360,25 @@ describe('Pi Fusion pair reporting', () => {
     await render(undefined, 'hydra:max')
     expect(document.querySelector('[role="combobox"][aria-label="Behavior mode"]')?.textContent).toBe('Hydra')
     expect(document.querySelector('[role="combobox"][aria-label="Hydra tier"]')?.textContent).toBe('Hydra: Max')
+  })
+
+  it('keeps background mode and tier reports out of new session defaults', async () => {
+    const { render, emit, onCommand } = setup()
+    await render('foreground')
+    emit('foreground', status('hydra', 'hydra:standard'))
+    emit('foreground', status('hydra'))
+    emit('foreground', status('mode', 'Work'))
+    emit('background', status('mode', 'Utopia'))
+    emit('background', status('hydra', 'hydra:max'))
+
+    await render(undefined)
+    expect(container.querySelector('[aria-label="Behavior mode"]')?.textContent).toBe('Work')
+    await click(container.querySelector('[aria-label="Behavior mode"]')!)
+    await click([...document.querySelectorAll('[role="option"]')].find((item) => item.textContent?.startsWith('Hydra'))!)
+    expect(onCommand).toHaveBeenLastCalledWith('/mode hydra standard')
+    await render('background')
+    expect(container.querySelector('[aria-label="Behavior mode"]')?.textContent).toBe('Utopia')
+    expect(container.querySelector('[aria-label="Hydra tier"]')?.textContent).toBe('Hydra: Max')
   })
 
   it('switches into Hydra mode, syncs routed runtime state, and switches cleanly to Apex or Work', async () => {
@@ -708,6 +728,78 @@ describe('Pi provider catalog authority', () => {
     await act(async () => { root.render(<CatalogProbe activeSession={sessionB} />); await Promise.resolve() })
     expect(state.model).toBe(apexCatalog.models[0].key)
     expect(state.effort).toBe('high')
+  })
+
+  it('does not carry model, thinking or fast mode from a live session into a detached one', async () => {
+    const preferred = apexCatalog.models[0]
+    const other = { ...preferred, key: 'openai-codex/other', id: 'other' }
+    const bridge = { providers: { catalog: async () => ({ ...apexCatalog, models: [preferred, other] }) } } as unknown as ApexApi
+    const reportError = vi.fn()
+    const syncRuntime = async () => undefined
+    function Selection({ session, runtime }: { session?: SessionRecord; runtime: RuntimeInfo | null }) {
+      const { model, effort, fast } = useProviderCatalog({ bridge, activeSession: session, runtime, lastSelectedModel: preferred.key, syncRuntime, reportError })
+      return <output>{`${model} ${effort} ${fast}`}</output>
+    }
+    const live = { ...apexRuntime, model: { provider: other.provider, id: other.id }, thinkingLevel: 'high', serviceTier: 'priority' } as const
+    await act(async () => root.render(<Selection session={apexSession} runtime={live} />))
+    expect(container.textContent).toBe(`${other.key} high true`)
+    await act(async () => root.render(<Selection runtime={null} />))
+    expect(container.textContent).toBe(`${preferred.key} medium false`)
+    await act(async () => root.render(<Selection session={apexSession} runtime={live} />))
+    await act(async () => root.render(<Selection session={{ ...piSession, provider: preferred.provider, model: preferred.id }} runtime={null} />))
+    expect(container.textContent).toBe(`${preferred.key} medium false`)
+  })
+
+  it('keeps a submitted draft’s model bound to its own startup even after switching to another draft', async () => {
+    const first = apexCatalog.models[0]
+    const chosen = { ...first, key: 'openai-codex/chosen', id: 'chosen' }
+    const command = vi.fn(async () => ({}))
+    const bridge = { providers: { catalog: async () => ({ ...apexCatalog, models: [first, chosen] }) }, agent: { command } } as unknown as ApexApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let provider!: ReturnType<typeof useProviderCatalog>
+    function Probe({ generation }: { generation: number }) {
+      provider = useProviderCatalog({ bridge, workspaceGeneration: generation, runtime: null, syncRuntime, reportError })
+      return null
+    }
+    await act(async () => root.render(<Probe generation={1} />))
+    act(() => provider.changeModel(chosen.key))
+    const flushSubmission = provider.flushPendingMutations
+    const startup = deferred<RuntimeInfo>()
+    const sending = startup.promise.then((runtime) => flushSubmission(runtime))
+    await act(async () => root.render(<Probe generation={2} />))
+    act(() => provider.changeEffort('low'))
+    await act(async () => {
+      startup.resolve({ ...apexRuntime, model: { provider: first.provider, id: first.id }, thinkingLevel: 'medium' })
+      await sending
+    })
+    expect(command.mock.calls).toEqual([
+      [apexRuntime.runtimeId, { type: 'set_model', provider: chosen.provider, modelId: chosen.id }],
+      [apexRuntime.runtimeId, { type: 'set_thinking_level', level: 'medium' }],
+    ])
+    expect(provider).toMatchObject({ model: first.key, effort: 'low' })
+    expect(syncRuntime).not.toHaveBeenCalled()
+  })
+
+  it('restores the pending Fast toggle when returning to a session before its runtime reattaches', async () => {
+    const toggle = deferred<Record<string, unknown>>()
+    const bridge = { providers: { catalog: async () => apexCatalog }, agent: { command: () => toggle.promise } } as unknown as ApexApi
+    const syncRuntime = vi.fn(async () => undefined)
+    const reportError = vi.fn()
+    let provider!: ReturnType<typeof useProviderCatalog>
+    function Probe({ session, runtime }: { session: SessionRecord; runtime: RuntimeInfo | null }) {
+      provider = useProviderCatalog({ bridge, activeSession: session, runtime, syncRuntime, reportError })
+      return null
+    }
+    const live = { ...apexRuntime, model: apexCatalog.models[0], serviceTier: 'default' } as const
+    await act(async () => root.render(<Probe session={apexSession} runtime={live} />))
+    act(() => provider.changeFast(true))
+    await act(async () => root.render(<Probe session={piSession} runtime={null} />))
+    expect(provider.fast).toBe(false)
+    await act(async () => root.render(<Probe session={apexSession} runtime={null} />))
+    await act(async () => root.render(<Probe session={apexSession} runtime={live} />))
+    expect(provider.fast).toBe(true)
+    await act(async () => toggle.resolve({}))
   })
 
   it('keeps an unsent selection per tab and prefers it over session metadata', async () => {

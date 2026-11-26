@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { extensionUiMachine } from './extensionUiMachine'
 import type { AgentTurnHandle } from '@/app/agentTurnMachine'
@@ -267,13 +267,6 @@ export function useExtensionUi({
       if (activeRuntimeIdRef.current === runtimeId) {
         savePiHydraTier(tier ?? 'off')
         savePiBehaviorMode(effectiveMode)
-      } else if (effectiveMode !== 'apex-orchestrate') {
-        try {
-          if (typeof window !== 'undefined') {
-            if (tier) window.localStorage?.setItem('gooeypi:pi-hydra-tier', tier)
-            window.localStorage?.setItem('gooeypi:pi-behavior-mode', effectiveMode)
-          }
-        } catch { /* ignore storage errors */ }
       }
       if (tier && bridge) {
         void bridge.agent.command(runtimeId, { type: 'get_state' })
@@ -311,10 +304,6 @@ export function useExtensionUi({
         if (activeRuntimeIdRef.current === runtimeId) {
           if (mode === 'utopia') publishActivePiHydraTier(activeHydra ?? 'off')
           savePiBehaviorMode(effectiveMode)
-        } else if (effectiveMode !== 'apex-orchestrate') {
-          try {
-            if (typeof window !== 'undefined') window.localStorage?.setItem('gooeypi:pi-behavior-mode', effectiveMode)
-          } catch { /* ignore storage errors */ }
         }
       }
       return
@@ -417,7 +406,7 @@ export function useExtensionUi({
     return false
   }, [actor, runtimeSessionsRef])
 
-  useEffect(() => { showPendingForActiveRuntime() }, [activeRuntimeId, activeSessionMode, showPendingForActiveRuntime])
+  useLayoutEffect(() => { showPendingForActiveRuntime() }, [activeRuntimeId, activeSessionFile, activeSessionMode, showPendingForActiveRuntime])
 
   useLayoutEffect(() => () => {
     send({ type: 'RESET' })

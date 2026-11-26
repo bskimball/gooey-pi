@@ -345,7 +345,8 @@ describe('first prompt navigation', () => {
   })
 
   it('delivers a submitted prompt once even when navigation wins the startup race', async () => {
-    const state = fixture({ withSession: false })
+    const flushPendingMutations = vi.fn(async () => undefined)
+    const state = fixture({ withSession: false, flushPendingMutations })
     let resolveStart!: (value: RuntimeInfo) => void
     state.start.mockImplementationOnce(() => new Promise((resolve) => { resolveStart = resolve }))
     const sending = state.actions.sendPrompt('Keep this long first prompt before any assistant response')
@@ -354,6 +355,7 @@ describe('first prompt navigation', () => {
     state.workspace.setMessages([])
     resolveStart(runtime('started-runtime'))
     await sending
+    expect(flushPendingMutations).toHaveBeenCalledWith(expect.objectContaining({ runtimeId: 'started-runtime' }), false)
     expect(state.command).toHaveBeenCalledWith('started-runtime', expect.objectContaining({
       type: 'prompt', message: 'Keep this long first prompt before any assistant response',
     }))

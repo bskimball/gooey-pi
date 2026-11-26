@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex'
-import { Fragment, useEffect, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, type ReactNode } from 'react'
 import { useMachine } from '@xstate/react'
 import { Command, Gauge } from './icons'
 import { SelectControl } from './ui'
@@ -172,7 +172,7 @@ export function usePiModeController(onCommand: PiModeControlProps['onCommand'], 
   const [snapshot, send, actor] = useMachine(piModeControlMachine)
   const { mode, hydraTier, pair, pendingCommand: pending } = snapshot.context
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onModeChange = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail
       if (isPiBehaviorMode(detail)) send({ type: 'SYNC_MODE', mode: detail })

@@ -1251,6 +1251,34 @@ test.describe('Prime Work desktop smoke', () => {
 
 
 
+  test('shows background Fusion settings only when returning to their session', async () => {
+    const first = page.locator('.session-row[title="Hermetic desktop fixture"]')
+    const settings = page.getByRole('button', { name: 'Chat settings' })
+    const mode = page.getByRole('combobox', { name: 'Behavior mode' })
+    await first.click()
+    const runtimeId = () => page.evaluate(async (file) => (await window.apex.agent.list()).find((runtime) => runtime.sessionFile === file)?.runtimeId, fixtureSessionFile)
+    await expect.poll(runtimeId).toBeTruthy()
+    const id = await runtimeId()
+    await page.locator('.session-row[title="Ownership peer fixture"]').click()
+    await app!.evaluate(({ BrowserWindow }, runtimeId) => {
+      const renderer = BrowserWindow.getAllWindows()[0].webContents
+      const pair = { lead: { provider: 'openai-codex', modelId: 'gpt-fixture', thinking: 'high' }, sidekick: { provider: 'anthropic', modelId: 'claude-fixture', thinking: 'low' } }
+      for (const [statusKey, statusText] of [['mode', 'Fusion'], ['fusion-pair', JSON.stringify(pair)]]) {
+        renderer.send('agent:event', { runtimeId, event: { type: 'extension_ui_request', method: 'setStatus', id: statusKey, statusKey, statusText } })
+      }
+    }, id)
+    await page.locator('.session-row[title="Primary workspace fixture"]').click()
+    await settings.click()
+    await expect(mode).toHaveText('Apex')
+    await expect(page.getByRole('button', { name: /^Model:/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await first.click()
+    await settings.click()
+    await expect(mode).toHaveText('Fusion')
+    await expect(page.getByRole('button', { name: /Lead model: .*GPT[ -]Fixture/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Sidekick model: .*Claude[ -]Fixture/i })).toBeVisible()
+  })
+
   test('searches and filters the custom model picker by provider', async () => {
     await page.locator('.session-row__title').filter({ hasText: 'Pi hermetic fixture' }).click()
 
@@ -1669,7 +1697,7 @@ test.describe('Prime Work desktop smoke', () => {
   })
 
 
-  test('reflects an external JSONL append without reselecting the live session', async () => {
+  test('reflects an external JSONL append without reselecting the session or interrupting Composer typing', async () => {
     await expect(page.locator('.transcript').getByText('Hermetic desktop fixture', { exact: true })).toBeVisible()
     await expect.poll(async () => (await page.evaluate(() => window.apex.agent.list()))
       .some((runtime) => runtime.sessionFile === fixtureSessionFile)).toBe(true)
@@ -1679,6 +1707,9 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(selectedSession).toHaveCount(1)
 
     const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const composer = page.getByRole('combobox', { name: 'Message Pi' })
+    await composer.fill('before refresh')
+    await composer.evaluate((node) => (node as HTMLTextAreaElement).setSelectionRange(0, 0))
     const reasoning = `External live reasoning ${nonce}`
     const answer = `External live answer ${nonce}`
     const timestamp = new Date().toISOString()
@@ -1700,6 +1731,9 @@ test.describe('Prime Work desktop smoke', () => {
 `)
 
     await expect(page.locator('.transcript').getByText(answer, { exact: true })).toHaveCount(1)
+    await expect(composer).toBeFocused()
+    await page.keyboard.type('still typing ')
+    await expect(composer).toHaveValue('still typing before refresh')
     const worked = page.locator('.work-group__summary').last()
     await expect(worked).toHaveAttribute('aria-expanded', 'false')
     await expect(worked).toContainText('Thought, used 1 tool')

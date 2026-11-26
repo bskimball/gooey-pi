@@ -682,6 +682,24 @@ describe("Composer skill mentions", () => {
 		expect(composerTextarea().value).toBe("/compact ");
 	});
 
+	it("keeps the draft editable during a transcript read without sending or executing a command", async () => {
+		const onCommand = vi.fn();
+		const sessions = [sessionRecord("Release prep")];
+		const { onSend } = renderComposer({ sessions, composerProps: { loading: true, onCommand } });
+		expect(composerTextarea().disabled).toBe(false);
+		await setDraft("still writing");
+		await pressKey("Enter");
+		expect(onSend).not.toHaveBeenCalled();
+		expect(composerTextarea().value).toBe("still writing");
+		await setDraft("/resume release");
+		expect(optionLabels()).toEqual([]);
+		await pressKey("Enter");
+		expect(onCommand).not.toHaveBeenCalled();
+		renderComposer({ sessions, composerProps: { loading: false, onCommand } });
+		await pressKey("Enter");
+		expect(onCommand).toHaveBeenCalledWith({ type: "resume", sessionId: sessions[0].id });
+	});
+
 	it("lists runtime commands with fuzzy matching and runs local commands without sending them", async () => {
 		const onCommand = vi.fn();
 		const onEffortChange = vi.fn();

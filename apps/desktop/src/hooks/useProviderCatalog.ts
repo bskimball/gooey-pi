@@ -26,6 +26,22 @@ function findSessionModel(catalog: ApexModelCatalog, session: Pick<SessionRecord
 
 interface PendingSelection { model: string; effort: ApexThinkingLevel; fast: boolean }
 
+function preferredModel(catalog: ApexModelCatalog | null | undefined, remembered: string) {
+  return catalog?.models.find((candidate) => candidate.key === remembered && isUsable(candidate)) ?? catalog?.models.find(isUsable)
+}
+
+function sessionSelection(catalog: ApexModelCatalog | null, session: SessionRecord | undefined, remembered: string, runtime: RuntimeInfo | null, pending?: PendingSelection): PendingSelection {
+  const pendingModel = pending && catalog?.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
+  const live = runtime?.model
+  const liveModel = live && catalog?.models.find((candidate) => candidate.provider === live.provider && candidate.id === live.id && isUsable(candidate))
+  const saved = catalog ? findSessionModel(catalog, session) : undefined
+  const model = pendingModel ?? liveModel ?? saved ?? preferredModel(catalog, remembered)
+  const levels = model?.availableThinkingLevels ?? DEFAULT_REASONING_LEVELS
+  const requested = pendingModel ? pending?.effort : (liveModel && runtime?.thinkingLevel) ?? (saved && session?.thinkingLevel)
+  const effort = levels.find((level) => level === requested) ?? (levels.includes('medium') ? 'medium' : levels[0] ?? 'off')
+  return { model: model?.key ?? '', effort, fast: pendingModel ? Boolean(pendingModel.fastModeSupported && pending?.fast) : runtime?.serviceTier === 'priority' }
+}
+
 export function groupModelsByProvider(models: readonly ApexModelDescriptor[] | undefined): Map<string, ApexModelDescriptor[]> {
   const grouped = new Map<string, ApexModelDescriptor[]>()
   for (const model of models ?? []) {
@@ -44,6 +60,8 @@ interface UseProviderCatalogOptions {
   /** Harness whose model catalog is shown; catalogs are cached per harness. */
   harness?: HarnessId
   runtime: RuntimeInfo | null
+  /** Owns provisional choices until a newly created workspace receives its session ID. */
+  workspaceGeneration?: number
   /** Active session metadata if available. */
   activeSession?: SessionRecord
   /** Updates session records when the active session's model or thinking level changes. */
@@ -55,10 +73,7 @@ interface UseProviderCatalogOptions {
   reportError(error: unknown): void
 }
 
-export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runtime, activeSession, setSessions, lastSelectedModel = '', rememberModel, syncRuntime, reportError }: UseProviderCatalogOptions) {
-  const [model, setModel] = useState('')
-  const [effort, setEffort] = useState<ApexThinkingLevel>('medium')
-  const [fast, setFast] = useState(false)
+export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runtime, activeSession, workspaceGeneration, setSessions, lastSelectedModel = '', rememberModel, syncRuntime, reportError }: UseProviderCatalogOptions) {
   // Per-harness cache: switching back to a harness shows its last catalog
   // immediately while the background refresh updates it.
   const [catalogs, setCatalogs] = useState<Partial<Record<HarnessId, ApexModelCatalog>>>({})
@@ -66,11 +81,45 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const setCatalogFor = useCallback((target: HarnessId, next: ApexModelCatalog) => {
     setCatalogs((current) => ({ ...current, [target]: next }))
   }, [])
+  const draftKey = workspaceGeneration === undefined ? '' : `draft:${workspaceGeneration}`
+  const sessionKey = activeSession?.id ?? draftKey
+  // A send may outlive navigation. Its flush keeps the same choice slot even when a draft gets a session ID.
+  const draftSlot = useMemo<{ pending?: PendingSelection }>(() => ({}), [workspaceGeneration])
+  const parked = useRef(new Map<string, typeof draftSlot>())
+  const sessionId = activeSession?.id
+  const slot = useMemo(() => sessionId ? parked.current.get(sessionId) ?? (workspaceGeneration === undefined ? {} : draftSlot) : draftSlot, [draftSlot, sessionId, workspaceGeneration])
+  const activeSlot = useRef(slot)
+  useLayoutEffect(() => {
+    activeSlot.current = slot
+    if (sessionId && slot.pending) parked.current.set(sessionId, slot)
+  }, [sessionId, slot])
+  const parkSelection = useCallback((selection: PendingSelection) => {
+    slot.pending = selection
+    if (sessionId) parked.current.set(sessionId, slot)
+  }, [sessionId, slot])
+  const pendingMutations = useRef(new Map<string, { revision: number; selection: PendingSelection }>())
+  const [owner, setOwner] = useState(sessionKey)
+  const [model, setModel] = useState('')
+  const [effort, setEffort] = useState<ApexThinkingLevel>('medium')
+  const [fast, setFast] = useState(false)
+  if (owner !== sessionKey) {
+    // Reset before children render: a newly mounted composer also snapshots its props into its draft.
+    const pending = (runtime && pendingMutations.current.get(runtime.runtimeId)?.selection) ?? slot.pending
+    const next = sessionSelection(catalog, activeSession, lastSelectedModel, runtime, pending)
+    setOwner(sessionKey)
+    setModel(next.model)
+    setEffort(next.effort)
+    setFast(next.fast)
+  }
   const modelRef = useRef(model)
   const effortRef = useRef(effort)
   const fastRef = useRef(fast)
   const mutationRevisionRef = useRef(0)
-  const pendingMutationRuntimeRef = useRef<{ runtimeId: string; revision: number } | null>(null)
+  useLayoutEffect(() => {
+    modelRef.current = model
+    effortRef.current = effort
+    fastRef.current = fast
+  }, [sessionKey, model, effort, fast])
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const runtimeIdRef = useRef(runtime?.runtimeId)
   useLayoutEffect(() => { runtimeIdRef.current = runtime?.runtimeId })
@@ -83,43 +132,38 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     runtimeId: string,
     command: () => Promise<void>,
     rollback: () => void,
+    selection: PendingSelection = { model: modelRef.current, effort: effortRef.current, fast: fastRef.current },
   ) => {
     const revision = ++mutationRevisionRef.current
-    pendingMutationRuntimeRef.current = { runtimeId, revision }
-    mutationQueueRef.current = mutationQueueRef.current.then(async () => {
+    pendingMutations.current.set(runtimeId, { revision, selection })
+    const isCurrent = () => pendingMutations.current.get(runtimeId)?.revision === revision && runtimeIdRef.current === runtimeId
+    const operation = mutationQueueRef.current.then(async () => {
       try {
         try {
           await command()
         } catch (error) {
-          if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
+          if (isCurrent()) {
             rollback()
             try { await syncRuntime(runtimeId) } catch (syncError) { reportError(syncError) }
           }
           reportError(error)
-          return
+          throw error
         }
-        if (mutationRevisionRef.current === revision && runtimeIdRef.current === runtimeId) {
+        if (isCurrent()) {
           try { await syncRuntime(runtimeId) } catch (error) { reportError(error) }
         }
       } finally {
-        if (pendingMutationRuntimeRef.current?.revision === revision) {
-          pendingMutationRuntimeRef.current = null
+        if (pendingMutations.current.get(runtimeId)?.revision === revision) {
+          pendingMutations.current.delete(runtimeId)
         }
       }
     })
+    mutationQueueRef.current = operation.catch(() => undefined)
+    return operation
   }, [reportError, syncRuntime])
 
-  const flushPendingMutations = useCallback((targetRuntime?: RuntimeInfo) => {
-    if (targetRuntime) {
-      runtimeIdRef.current = targetRuntime.runtimeId
-      applyPendingSelectionToRuntimeRef.current(targetRuntime, sessionKeyRef.current)
-    }
-    return mutationQueueRef.current
-  }, [])
-
   useEffect(() => () => {
-    mutationRevisionRef.current += 1
-    pendingMutationRuntimeRef.current = null
+    pendingMutations.current.clear()
     runtimeIdRef.current = undefined
   }, [])
 
@@ -135,20 +179,11 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const rememberSelectionRef = useRef(rememberSelection)
   useLayoutEffect(() => { rememberSelectionRef.current = rememberSelection })
 
-  const firstUsableModel = useCallback((nextCatalog: ApexModelCatalog | null | undefined) => (
-    nextCatalog?.models.find((candidate) => candidate.enabled !== false && candidate.available)
-  ), [])
-
   const activeSessionRef = useRef(activeSession)
   useLayoutEffect(() => { activeSessionRef.current = activeSession })
-  const fallbackModel = useCallback((nextCatalog: ApexModelCatalog | null | undefined) => {
-    if (nextCatalog) {
-      const sessionModel = findSessionModel(nextCatalog, activeSessionRef.current)
-      if (sessionModel) return sessionModel
-    }
-    return nextCatalog?.models.find((candidate) => candidate.key === lastSelectedModel && candidate.enabled !== false && candidate.available)
-      ?? firstUsableModel(nextCatalog)
-  }, [firstUsableModel, lastSelectedModel])
+  const fallbackModel = useCallback((nextCatalog: ApexModelCatalog | null | undefined) => nextCatalog && (
+    findSessionModel(nextCatalog, activeSessionRef.current) ?? preferredModel(nextCatalog, lastSelectedModel)
+  ), [lastSelectedModel])
 
   const selectedModel = useMemo<ApexModelDescriptor | undefined>(() => {
     return catalog?.models.find((candidate) => candidate.key === model && candidate.enabled !== false && candidate.available)
@@ -203,15 +238,10 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (!fallback?.fastModeSupported) updateFast(false)
   }, [catalog, fallbackModel, harness, rememberSelection, updateFast, updateModel])
 
-  // Selections made while a session has no live runtime are only local state,
-  // so they are parked per session (new tabs share the '' key) until a runtime
-  // reports them back or the user returns to that tab.
-  const pendingSelectionsRef = useRef(new Map<string, PendingSelection>())
-  const sessionKey = activeSession?.id ?? ''
   const sessionKeyRef = useRef(sessionKey)
-  useLayoutEffect(() => { sessionKeyRef.current = sessionKey })
+  useLayoutEffect(() => { sessionKeyRef.current = sessionKey }, [sessionKey])
   const syncActiveSessionChoice = useCallback((providerId: string | undefined, modelId: string | undefined, thinkingLevel?: ApexThinkingLevel) => {
-    const sessionId = sessionKeyRef.current
+    const sessionId = activeSessionRef.current?.id
     if (!sessionId || !setSessions) return
     setSessions((items) => items.map((item) => {
       if (item.id !== sessionId) return item
@@ -222,34 +252,34 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       return { ...item, provider: nextProvider, model: nextModel, thinkingLevel: nextThinking }
     }))
   }, [setSessions])
-  const applyPendingSelectionToRuntime = useCallback((targetRuntime: RuntimeInfo, targetSessionKey: string): boolean => {
-    const pending = pendingSelectionsRef.current.get(targetSessionKey)
-    if (!pending) return false
-    pendingSelectionsRef.current.delete(targetSessionKey)
-    if (!bridge || !catalog) return false
+  const applyPendingSelectionToRuntime = useCallback((targetRuntime: RuntimeInfo, foreground: boolean) => {
+    const pending = slot.pending
+    if (!pending || !bridge || !catalog) return
+    delete slot.pending
+    if (sessionId && parked.current.get(sessionId) === slot) parked.current.delete(sessionId)
     const runtimeModel = targetRuntime.model?.provider && targetRuntime.model.id
       ? catalog.models.find((candidate) => candidate.provider === targetRuntime.model?.provider && candidate.id === targetRuntime.model?.id && isUsable(candidate))
       : undefined
     const pendingModel = catalog.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
-    if (!pendingModel) return false
+    if (!pendingModel) return
     const nextEffort = pendingModel.availableThinkingLevels.includes(pending.effort)
       ? pending.effort
       : pendingModel.availableThinkingLevels.includes('medium') ? 'medium' : pendingModel.availableThinkingLevels[0] ?? 'off'
     const modelChanged = runtimeModel?.key !== pendingModel.key
     const effortChanged = targetRuntime.thinkingLevel !== nextEffort
-    if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
-    if (effortRef.current !== nextEffort) updateEffort(nextEffort)
     const nextFast = pendingModel.fastModeSupported && pending.fast
-    const fastChanged = (targetRuntime.serviceTier === 'priority') !== nextFast
-    updateFast(nextFast)
-    syncActiveSessionChoice(pendingModel.provider, pendingModel.id, nextEffort)
-    if (!modelChanged && !effortChanged && !fastChanged) return false
-    const previousModel = runtimeModel?.key ?? modelRef.current
-    const previousEffort = (targetRuntime.thinkingLevel && runtimeModel?.availableThinkingLevels.includes(targetRuntime.thinkingLevel as ApexThinkingLevel)
-      ? targetRuntime.thinkingLevel
-      : effortRef.current) as ApexThinkingLevel
     const previousFast = targetRuntime.serviceTier === 'priority'
-    queueRuntimeMutation(
+    const fastChanged = previousFast !== nextFast
+    if (foreground) {
+      updateModel(pendingModel.key)
+      updateEffort(nextEffort)
+      updateFast(nextFast)
+      syncActiveSessionChoice(pendingModel.provider, pendingModel.id, nextEffort)
+    }
+    if (!modelChanged && !effortChanged && !fastChanged) return
+    const previousModel = runtimeModel?.key ?? pending.model
+    const previousEffort = runtimeModel?.availableThinkingLevels.find((level) => level === targetRuntime.thinkingLevel) ?? nextEffort
+    return queueRuntimeMutation(
       targetRuntime.runtimeId,
       async () => {
         if (modelChanged) {
@@ -261,14 +291,21 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
         if (fastChanged || (modelChanged && nextFast)) {
           await bridge.agent.command(targetRuntime.runtimeId, { type: 'set_service_tier', serviceTier: nextFast ? 'priority' : 'default' })
         }
-        rememberSelectionRef.current(pendingModel.key)
+        if (runtimeIdRef.current === targetRuntime.runtimeId) rememberSelectionRef.current(pendingModel.key)
       },
       () => { updateModel(previousModel); updateEffort(previousEffort); updateFast(previousFast) },
+      { model: pendingModel.key, effort: nextEffort, fast: nextFast },
     )
-    return true
-  }, [bridge, catalog, queueRuntimeMutation, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
-  const applyPendingSelectionToRuntimeRef = useRef(applyPendingSelectionToRuntime)
-  useLayoutEffect(() => { applyPendingSelectionToRuntimeRef.current = applyPendingSelectionToRuntime })
+  }, [bridge, catalog, queueRuntimeMutation, sessionId, slot, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
+  const flushPendingMutations = useCallback((targetRuntime?: RuntimeInfo, visible = true) => {
+    if (targetRuntime) {
+      const foreground = visible && activeSlot.current === slot
+      if (foreground) runtimeIdRef.current = targetRuntime.runtimeId
+      const operation = applyPendingSelectionToRuntime(targetRuntime, foreground)
+      if (operation) return operation
+    }
+    return mutationQueueRef.current
+  }, [applyPendingSelectionToRuntime, slot])
   // Starts undefined so the first render with a catalog counts as a switch and
   // restores the initial session's effort as well as its model.
   const activeSessionIdRef = useRef<string | undefined>(undefined)
@@ -277,14 +314,20 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
   const reconcileAttemptRef = useRef<string | null>(null)
   useEffect(() => {
     if (!catalog) return
-    const sessionChanged = activeSessionIdRef.current !== activeSession?.id
-    activeSessionIdRef.current = activeSession?.id
+    const sessionChanged = activeSessionIdRef.current !== sessionKey
+    activeSessionIdRef.current = sessionKey
 
     // Precedence: live runtime (when usable), then the tab's unsent selection,
     // then the session's persisted metadata. The latter two apply when the tab
     // changes so a catalog refresh cannot revert what the user picked.
-    if (runtime && pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
-    if (runtime && applyPendingSelectionToRuntime(runtime, sessionKey)) return
+    const inFlight = runtime && pendingMutations.current.get(runtime.runtimeId)
+    if (inFlight) {
+      updateModel(inFlight.selection.model)
+      updateEffort(inFlight.selection.effort)
+      updateFast(inFlight.selection.fast)
+      return
+    }
+    if (runtime && applyPendingSelectionToRuntime(runtime, true)) return
     const runtimeModel = runtime?.model?.provider && runtime.model.id
       ? catalog.models.find((candidate) => candidate.provider === runtime.model?.provider && candidate.id === runtime.model?.id && isUsable(candidate))
       : undefined
@@ -302,32 +345,14 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       return
     }
     if (sessionChanged) {
-      const pending = pendingSelectionsRef.current.get(sessionKey)
-      const pendingModel = pending && catalog.models.find((candidate) => candidate.key === pending.model && isUsable(candidate))
-      if (pending && pendingModel) {
-        if (modelRef.current !== pendingModel.key) updateModel(pendingModel.key)
-        if (pendingModel.availableThinkingLevels.includes(pending.effort) && effortRef.current !== pending.effort) updateEffort(pending.effort)
-        updateFast(pendingModel.fastModeSupported && pending.fast)
-      } else {
-        const sessionModel = findSessionModel(catalog, activeSession)
-        if (sessionModel) {
-          if (modelRef.current !== sessionModel.key) updateModel(sessionModel.key)
-          const sessionEffort = activeSession?.thinkingLevel && sessionModel.availableThinkingLevels.includes(activeSession.thinkingLevel as ApexThinkingLevel)
-            ? activeSession.thinkingLevel as ApexThinkingLevel
-            : effortRef.current
-          if (effortRef.current !== sessionEffort) updateEffort(sessionEffort)
-        } else if (sessionKey) {
-          const inherited = fallbackModel(catalog)
-          if (inherited) {
-            if (modelRef.current !== inherited.key) updateModel(inherited.key)
-            const inheritedEffort = inherited.availableThinkingLevels.includes(effortRef.current)
-              ? effortRef.current
-              : inherited.availableThinkingLevels.includes('medium') ? 'medium' : inherited.availableThinkingLevels[0] ?? 'off'
-            if (effortRef.current !== inheritedEffort) updateEffort(inheritedEffort)
-            // With a live runtime, the session records the fallback only once the runtime accepts it below.
-            if (!runtime) syncActiveSessionChoice(inherited.provider, inherited.id, inheritedEffort)
-          }
-        }
+      const pending = slot.pending
+      const next = sessionSelection(catalog, activeSession, lastSelectedModel, null, pending)
+      updateModel(next.model)
+      updateEffort(next.effort)
+      updateFast(runtime ? runtime.serviceTier === 'priority' : next.fast)
+      if (!runtime && !pending && activeSession && !findSessionModel(catalog, activeSession)) {
+        const inherited = fallbackModel(catalog)
+        if (inherited) syncActiveSessionChoice(inherited.provider, inherited.id, next.effort)
       }
     }
     // Never retarget a streaming runtime; the effect re-runs when the runtime settles.
@@ -353,7 +378,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
             if (!bridge) return
             await bridge.agent.command(runtime.runtimeId, { type: 'set_model', provider: targetModel.provider, modelId: targetModel.id })
             await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: targetEffort })
-            rememberSelectionRef.current(targetModel.key)
+            if (runtimeIdRef.current === runtime.runtimeId) rememberSelectionRef.current(targetModel.key)
             // A tab switch while the commands ran must not write this session's fallback onto the new tab.
             if (sessionKeyRef.current === originSessionKey) syncActiveSessionChoice(targetModel.provider, targetModel.id, targetEffort)
           },
@@ -361,12 +386,12 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
         )
       }
     }
-  }, [activeSession, applyPendingSelectionToRuntime, bridge, catalog, fallbackModel, queueRuntimeMutation, runtime, sessionKey, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
+  }, [activeSession, applyPendingSelectionToRuntime, bridge, catalog, fallbackModel, lastSelectedModel, queueRuntimeMutation, runtime, sessionKey, slot, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
   // Scoped to the runtime's reported tier so a catalog refresh cannot revert
   // an optimistic fast-mode toggle that the runtime has not confirmed yet.
   useEffect(() => {
-    if (!runtime || pendingMutationRuntimeRef.current?.runtimeId === runtime.runtimeId) return
+    if (!runtime || pendingMutations.current.has(runtime.runtimeId)) return
     updateFast(runtime.serviceTier === 'priority')
   }, [runtime?.runtimeId, runtime?.serviceTier, updateFast])
 
@@ -383,7 +408,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
     if (nextModel) syncActiveSessionChoice(nextModel.provider, nextModel.id, nextEffort)
     if (!bridge || !runtime || !nextModel) {
       if (nextModel) {
-        pendingSelectionsRef.current.set(sessionKeyRef.current, { model: nextModelKey, effort: nextEffort, fast: nextFast })
+        parkSelection({ model: nextModelKey, effort: nextEffort, fast: nextFast })
         rememberSelection(nextModelKey)
       }
       return
@@ -393,18 +418,18 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       async () => {
         await bridge.agent.command(runtime.runtimeId, { type: 'set_model', provider: nextModel.provider, modelId: nextModel.id })
         await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: nextEffort })
-        rememberSelectionRef.current(nextModelKey)
+        if (runtimeIdRef.current === runtime.runtimeId) rememberSelectionRef.current(nextModelKey)
       },
       () => { updateModel(previous.model); updateEffort(previous.effort); updateFast(previous.fast) },
     )
-  }, [bridge, catalog?.models, queueRuntimeMutation, rememberSelection, runtime, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
+  }, [bridge, catalog?.models, parkSelection, queueRuntimeMutation, rememberSelection, runtime, syncActiveSessionChoice, updateEffort, updateFast, updateModel])
 
   const changeEffort = useCallback((nextEffort: ApexThinkingLevel) => {
     const previous = effortRef.current
     updateEffort(nextEffort)
     syncActiveSessionChoice(undefined, undefined, nextEffort)
     if (!bridge || !runtime) {
-      pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: nextEffort, fast: fastRef.current })
+      parkSelection({ model: modelRef.current, effort: nextEffort, fast: fastRef.current })
       return
     }
     queueRuntimeMutation(
@@ -412,13 +437,13 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       async () => { await bridge.agent.command(runtime.runtimeId, { type: 'set_thinking_level', level: nextEffort }) },
       () => updateEffort(previous),
     )
-  }, [bridge, queueRuntimeMutation, runtime, syncActiveSessionChoice, updateEffort])
+  }, [bridge, parkSelection, queueRuntimeMutation, runtime, syncActiveSessionChoice, updateEffort])
 
   const changeFast = useCallback((enabled: boolean) => {
     const previous = fastRef.current
     updateFast(enabled)
     if (!bridge || !runtime) {
-      pendingSelectionsRef.current.set(sessionKeyRef.current, { model: modelRef.current, effort: effortRef.current, fast: enabled })
+      parkSelection({ model: modelRef.current, effort: effortRef.current, fast: enabled })
       return
     }
     queueRuntimeMutation(
@@ -426,7 +451,7 @@ export function useProviderCatalog({ bridge, ready = true, harness = 'pi', runti
       async () => { await bridge.agent.command(runtime.runtimeId, { type: 'set_service_tier', serviceTier: enabled ? 'priority' : 'default' }) },
       () => updateFast(previous),
     )
-  }, [bridge, queueRuntimeMutation, runtime, updateFast])
+  }, [bridge, parkSelection, queueRuntimeMutation, runtime, updateFast])
 
   const setEnabled = useCallback(async (providerId: string, enabled: boolean) => {
     if (!bridge) throw new Error('Providers can only be configured in the desktop app.')

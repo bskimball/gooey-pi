@@ -220,6 +220,7 @@ export default function App() {
     ready: settingsState.initialized,
     harness: activeHarness,
     runtime: workspace.runtime,
+    workspaceGeneration: workspace.workspaceGeneration,
     activeSession,
     setSessions,
     lastSelectedModel: settingsState.settings.lastSelectedModels[activeHarness],

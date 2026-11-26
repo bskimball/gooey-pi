@@ -489,7 +489,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
         submittedRuntimeId = activeRuntime.runtimeId
         workspace.attachRuntime(activeRuntime, generation)
         if (!activeRuntime.isStreaming && !modeCommand) {
-          await provider.flushPendingMutations?.(activeRuntime)
+          await provider.flushPendingMutations?.(activeRuntime, submissionIsCurrent())
           if (!submissionIsCurrent() && !continueInBackground) return
         }
         if (compactCommand) {

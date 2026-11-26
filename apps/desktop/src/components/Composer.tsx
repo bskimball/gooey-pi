@@ -479,7 +479,7 @@ export const Composer = memo(function Composer({
 		);
 	};
 	const {
-		menu,
+		menu: draftMenu,
 		setMenu,
 		suggestions,
 		activeSuggestion,
@@ -516,6 +516,8 @@ export const Composer = memo(function Composer({
 		onEffortChange,
 		runCommand: (action) => onCommand?.(action),
 	});
+	// Argument choices execute commands immediately rather than just editing the draft.
+	const menu = loading && draftMenu === "argument" ? null : draftMenu;
 	const chooseSuggestion = (index: number) => suggestions[index]?.choose();
 	useEffect(() => {
 		menuRef.current
@@ -964,7 +966,7 @@ export const Composer = memo(function Composer({
 						data-composer-draft-key={draftKey}
 						ref={textareaRef}
 						value={value}
-						disabled={disabled || loading}
+						disabled={disabled}
 						rows={2}
 						style={{ fieldSizing: "content" }}
 						placeholder={
